@@ -1,0 +1,3142 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Videos · Freeupper</title>
+    <link rel="icon" type="image/png" href="freeupper.png">
+    <link rel="stylesheet" href="global.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
+
+    <style>
+        /* ── TOKENS ── */
+        :root {
+            --bg: #000;
+            --surface: rgba(255, 255, 255, .08);
+            --brd: rgba(255, 255, 255, .1);
+            --text: #fff;
+            --muted: rgba(255, 255, 255, .6);
+            --muted2: rgba(255, 255, 255, .35);
+            --accent: #1d9bf0;
+            --red: #f91880;
+            --gold: #ffd700;
+            --sheet-bg: #111;
+            --sheet-bd: #2a2a2a;
+            --inp-bg: #1a1a1a;
+            --p: #8b5cf6;
+            --pd: #6c3fc5;
+            --pdim: rgba(139, 92, 246, .15);
+            --pbrd: rgba(139, 92, 246, .28);
+            --pglow: rgba(108, 63, 197, .45);
+            --navbg: rgba(0, 0, 0, .97);
+            --sidebg: #0a0a0a;
+        }
+
+        [data-theme="light"] {
+            --bg: #f2f2f7;
+            --surface: rgba(0, 0, 0, .06);
+            --brd: rgba(0, 0, 0, .1);
+            --text: #0d0d0d;
+            --muted: rgba(0, 0, 0, .55);
+            --muted2: rgba(0, 0, 0, .35);
+            --sheet-bg: #fff;
+            --sheet-bd: #e5e7eb;
+            --inp-bg: #f5f5f5;
+            --navbg: rgba(242, 242, 247, .97);
+            --sidebg: #fff;
+        }
+
+        /* ── RESET ── */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+            overscroll-behavior: none;
+            transition: background .3s, color .3s;
+        }
+
+        /* ══════════════════════════════════════
+           LAYOUT
+        ══════════════════════════════════════ */
+        .layout {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        /* Side nav */
+        .side-nav {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            padding: 28px 0 24px;
+            background: var(--sidebg);
+            border-right: 1px solid var(--brd);
+            width: 70px;
+            flex-shrink: 0;
+            gap: 2px;
+            z-index: 10;
+            transition: background .3s, border-color .3s;
+        }
+        .side-logo {
+            font-size: 20px;
+            font-weight: 900;
+            color: var(--p);
+            margin-bottom: 20px;
+            letter-spacing: -1px;
+            cursor: pointer;
+        }
+        .side-logo a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .side-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background .15s, transform .1s;
+            background: none;
+            border: none;
+            position: relative;
+            gap: 3px;
+            color: inherit;
+            text-decoration: none;
+        }
+        .side-btn:hover {
+            background: var(--pdim);
+            transform: scale(1.04);
+        }
+        .side-btn svg {
+            width: 22px;
+            height: 22px;
+            fill: none;
+            stroke: var(--muted);
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: stroke .15s;
+        }
+        .side-btn span {
+            font-size: 8px;
+            color: var(--muted2);
+            font-weight: 600;
+        }
+        .side-btn.active svg {
+            stroke: var(--p);
+        }
+        .side-btn.active span {
+            color: var(--p);
+        }
+        .side-btn .side-badge {
+            position: absolute;
+            top: 7px;
+            right: 7px;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--p);
+            border: 1.5px solid var(--sidebg);
+        }
+        .side-gap {
+            flex: 1;
+        }
+        .side-av {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid transparent;
+            background: linear-gradient(135deg, #1a1035, #3b1a6b);
+        }
+        .side-btn.active .side-av {
+            border-color: var(--p);
+        }
+
+        /* Main */
+        .main {
+            flex: 1;
+            overflow: hidden;
+            background: var(--bg);
+            transition: background .3s;
+            position: relative;
+        }
+
+        /* ══════════════════════════════════════
+           FEED TRACK
+        ══════════════════════════════════════ */
+        #feedTrack {
+            position: absolute;
+            inset: 0;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            padding-bottom: 80px;
+        }
+        #feedTrack::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* ══════════════════════════════════════
+           SINGLE VIDEO CARD
+        ══════════════════════════════════════ */
+        .v-card {
+            position: relative;
+            width: 100%;
+            height: 100dvh;
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .v-video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* YouTube iframe */
+        .v-yt-iframe {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* Tap overlay for YouTube */
+        .v-tap-yt {
+            position: absolute;
+            inset: 0;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        .v-tap {
+            position: absolute;
+            inset: 0;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        .v-pause-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            width: 68px;
+            height: 68px;
+            background: rgba(0, 0, 0, .5);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 11;
+            transition: transform .12s cubic-bezier(.34, 1.56, .64, 1), opacity .2s;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .v-pause-icon svg {
+            width: 28px;
+            height: 28px;
+            fill: #fff;
+        }
+        .v-pause-icon.show {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+        .v-pause-icon.hide {
+            transform: translate(-50%, -50%) scale(0.8);
+            opacity: 0;
+        }
+
+        /* YouTube mute badge */
+        .v-mute-badge {
+            position: absolute;
+            top: max(env(safe-area-inset-top), 14px);
+            left: 16px;
+            width: 34px;
+            height: 34px;
+            background: rgba(0, 0, 0, .5);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, .15);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            pointer-events: none;
+            opacity: .95;
+            transition: opacity .2s;
+        }
+        .v-mute-badge svg {
+            width: 17px;
+            height: 17px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* Gradients - pure black */
+        .v-grad-top {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 120px;
+            background: linear-gradient(to bottom, rgba(0, 0, 0, .7) 0%, transparent 100%);
+            z-index: 12;
+            pointer-events: none;
+        }
+        .v-grad-bot {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 300px;
+            background: linear-gradient(to top, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, .3) 60%, transparent 100%);
+            z-index: 12;
+            pointer-events: none;
+        }
+
+        /* ── TOP BAR ── */
+        .v-topbar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: env(safe-area-inset-top, 14px) 16px 0;
+            padding-top: max(env(safe-area-inset-top), 14px);
+            z-index: 20;
+        }
+        .v-topbar-title {
+            font-size: 17px;
+            font-weight: 800;
+            letter-spacing: -.3px;
+            color: #fff;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+        }
+        .v-top-ico {
+            width: 38px;
+            height: 38px;
+            background: rgba(0, 0, 0, .5);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255, 255, 255, .15);
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .v-top-ico svg {
+            width: 20px;
+            height: 20px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* ── RIGHT ACTIONS ── */
+        .v-actions {
+            position: absolute;
+            right: 12px;
+            bottom: 120px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            z-index: 20;
+        }
+        .v-action {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .v-action-btn {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, .5);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, .15);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform .15s cubic-bezier(.34, 1.56, .64, 1), background .18s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .v-action-btn:active {
+            transform: scale(.88);
+        }
+        .v-action-btn svg {
+            width: 22px;
+            height: 22px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: stroke .18s, fill .18s, transform .2s cubic-bezier(.34, 1.56, .64, 1);
+            pointer-events: none;
+        }
+        .v-action-lbl {
+            font-size: 12px;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, .8);
+        }
+
+        .v-action-btn.liked {
+            background: rgba(249, 24, 128, .3);
+            border-color: rgba(249, 24, 128, .4);
+        }
+        .v-action-btn.liked svg {
+            stroke: var(--red);
+            fill: var(--red);
+            transform: scale(1.15);
+        }
+
+        .v-action-btn.saved {
+            background: rgba(255, 215, 0, .2);
+            border-color: rgba(255, 215, 0, .3);
+        }
+        .v-action-btn.saved svg {
+            stroke: var(--gold);
+            fill: var(--gold);
+            transform: scale(1.15);
+        }
+
+        .v-avatar-wrap {
+            position: relative;
+            width: 46px;
+            height: 46px;
+            margin-bottom: 4px;
+        }
+        .v-avatar {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2.5px solid #fff;
+            display: block;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+        }
+        .v-follow-dot {
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 22px;
+            height: 22px;
+            background: var(--accent);
+            border-radius: 50%;
+            border: 2.5px solid #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform .2s cubic-bezier(.34, 1.56, .64, 1), background .18s;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .4);
+        }
+        .v-follow-dot.following {
+            background: #555;
+        }
+        .v-follow-dot svg {
+            width: 12px;
+            height: 12px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.5;
+        }
+
+        /* ── BOTTOM INFO ── */
+        .v-info {
+            position: absolute;
+            left: 14px;
+            right: 72px;
+            bottom: 80px;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .v-creator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .v-creator-name {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: -.2px;
+            color: #fff;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+        }
+        .v-verified {
+            width: 17px;
+            height: 17px;
+            background: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .v-verified svg {
+            width: 10px;
+            height: 10px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .v-caption {
+            font-size: 14px;
+            font-weight: 500;
+            line-height: 1.5;
+            color: #fff;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .v-caption .hashtag {
+            color: var(--accent);
+            font-weight: 700;
+        }
+        .v-caption.expanded {
+            -webkit-line-clamp: unset;
+            overflow: visible;
+        }
+        .v-see-more {
+            font-size: 13px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, .7);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            text-align: left;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+        }
+        .v-sound-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .v-sound-ico {
+            width: 16px;
+            height: 16px;
+            stroke: rgba(255, 255, 255, .7);
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+        .v-sound-lbl {
+            font-size: 12px;
+            color: rgba(255, 255, 255, .7);
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+        }
+        .v-sound-disc {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .1);
+            border: 1.5px solid rgba(255, 255, 255, .15);
+            overflow: hidden;
+            flex-shrink: 0;
+            animation: spinDisc 4s linear infinite;
+        }
+        .v-sound-disc img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        @keyframes spinDisc {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .v-progress {
+            position: absolute;
+            bottom: 54px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: rgba(255, 255, 255, .2);
+            z-index: 20;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .v-progress-fill {
+            height: 100%;
+            background: #fff;
+            border-radius: 0 2px 2px 0;
+            transition: width .1s linear;
+            pointer-events: none;
+        }
+        .v-progress-thumb {
+            position: absolute;
+            top: 50%;
+            right: calc(100% - var(--pct, 0%));
+            transform: translate(50%, -50%) scale(0);
+            width: 14px;
+            height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform .15s;
+            pointer-events: none;
+        }
+        .v-progress:hover .v-progress-thumb,
+        .v-progress:active .v-progress-thumb {
+            transform: translate(50%, -50%) scale(1);
+        }
+
+        /* ══════════════════════════════════════
+           BOTTOM NAV
+        ══════════════════════════════════════ */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--navbg);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            border-top: 1px solid var(--brd);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 10px 0 max(env(safe-area-inset-bottom), 16px);
+            z-index: 50;
+            transition: background .3s, border-color .3s;
+        }
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            padding: 6px clamp(8px, 3vw, 14px);
+            border-radius: 14px;
+            transition: background .15s;
+            position: relative;
+            background: none;
+            border: none;
+            text-decoration: none;
+            color: inherit;
+        }
+        .nav-item:hover {
+            background: var(--pdim);
+        }
+        .nav-item svg {
+            width: clamp(20px, 5vw, 24px);
+            height: clamp(20px, 5vw, 24px);
+            fill: none;
+            stroke: var(--muted);
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: stroke .15s;
+        }
+        .nav-item span {
+            font-size: clamp(9px, 2vw, 10px);
+            color: var(--muted);
+            font-weight: 600;
+            letter-spacing: .03em;
+        }
+        .nav-item.active svg {
+            stroke: var(--p);
+        }
+        .nav-item.active span {
+            color: var(--p);
+        }
+        .nav-av {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid transparent;
+            background: linear-gradient(135deg, #1a1035, #3b1a6b);
+        }
+        .nav-item.active .nav-av {
+            border-color: var(--p);
+        }
+        .nav-badge {
+            position: absolute;
+            top: 3px;
+            right: clamp(4px, 2vw, 6px);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--p);
+            border: 1.5px solid var(--bg);
+        }
+
+        /* ══════════════════════════════════════
+           SHEETS
+        ══════════════════════════════════════ */
+        .sheet-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .6);
+            z-index: 200;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity .25s, visibility .25s;
+        }
+        .sheet-backdrop.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .sheet {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--sheet-bg);
+            border-radius: 20px 20px 0 0;
+            z-index: 201;
+            transform: translateY(100%);
+            transition: transform .32s cubic-bezier(.4, 0, .2, 1);
+            max-height: 90dvh;
+            display: flex;
+            flex-direction: column;
+        }
+        .sheet.open {
+            transform: translateY(0);
+        }
+
+        .sheet-handle {
+            width: 36px;
+            height: 4px;
+            background: rgba(255, 255, 255, .2);
+            border-radius: 2px;
+            margin: 12px auto 0;
+            flex-shrink: 0;
+        }
+        .sheet-hdr {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px 12px;
+            border-bottom: 1px solid var(--sheet-bd);
+            flex-shrink: 0;
+        }
+        .sheet-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .sheet-close {
+            width: 30px;
+            height: 30px;
+            background: rgba(255, 255, 255, .08);
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .sheet-close svg {
+            width: 14px;
+            height: 14px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
+
+        /* ── COMMENTS SHEET ── */
+        #commentSheet .sheet-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 0 8px;
+            scrollbar-width: none;
+        }
+        #commentSheet .sheet-body::-webkit-scrollbar {
+            display: none;
+        }
+
+        .comment-item {
+            display: flex;
+            gap: 10px;
+            padding: 10px 18px;
+            align-items: flex-start;
+            width: 100%;
+            box-sizing: border-box;
+            border-bottom: 1px solid rgba(255, 255, 255, .05);
+        }
+        .comment-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--bg4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.8rem;
+            color: var(--muted);
+            flex-shrink: 0;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .comment-avatar.has-image {
+            background: transparent;
+            padding: 0;
+        }
+        .comment-avatar.has-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .comment-body {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .comment-username {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 2px;
+        }
+        .comment-text {
+            white-space: pre-wrap;
+            line-height: 1.55;
+            font-size: 0.92rem;
+            color: var(--text);
+            font-weight: 400;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        .comment-text.collapsed {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .comment-show-more {
+            font-size: 0.78rem;
+            color: var(--p);
+            font-weight: 600;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 2px 0 0 0;
+            display: block;
+        }
+        .comment-show-more:hover {
+            text-decoration: underline;
+        }
+        .comment-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 5px;
+            flex-wrap: wrap;
+        }
+        .comment-time {
+            font-size: 0.75rem;
+            color: var(--muted2);
+        }
+        .comment-reply-btn {
+            font-size: 0.75rem;
+            color: var(--muted);
+            font-weight: 600;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+        .comment-reply-btn:hover {
+            color: var(--p);
+        }
+        .comment-like-btn {
+            font-size: 0.75rem;
+            color: var(--muted2);
+            font-weight: 500;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .comment-like-btn.liked {
+            color: var(--red);
+        }
+        .like-heart {
+            fill: none;
+            stroke: var(--muted2);
+            width: 14px;
+            height: 14px;
+            transition: fill 0.15s, stroke 0.15s;
+        }
+        .comment-like-btn.liked .like-heart {
+            fill: var(--red);
+            stroke: var(--red);
+            animation: heartBeat 0.4s ease;
+        }
+        @keyframes heartBeat {
+            0% {
+                transform: scale(1);
+            }
+            25% {
+                transform: scale(1.35);
+            }
+            50% {
+                transform: scale(.9);
+            }
+            75% {
+                transform: scale(1.15);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .replies-thread {
+            border-left: 2px solid var(--brd);
+            margin-left: 20px;
+            padding-left: 0;
+            box-sizing: border-box;
+            width: calc(100% - 20px);
+        }
+        .reply-item {
+            display: flex;
+            gap: 8px;
+            padding: 8px 0 8px 16px;
+            align-items: flex-start;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .reply-avatar-dot {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--bg4);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.6rem;
+            color: var(--muted);
+            margin-left: -12px;
+            border: 2px solid var(--bg);
+            z-index: 2;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .reply-avatar-dot.has-image {
+            background: transparent;
+            padding: 0;
+        }
+        .reply-avatar-dot.has-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .reply-body {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .reply-username {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 1px;
+        }
+        .reply-text {
+            white-space: pre-wrap;
+            line-height: 1.5;
+            font-size: 0.88rem;
+            color: var(--text);
+            font-weight: 400;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        .reply-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 3px;
+            flex-wrap: wrap;
+        }
+        .reply-time {
+            font-size: 0.7rem;
+            color: var(--muted2);
+        }
+        .reply-reply-btn {
+            font-size: 0.7rem;
+            color: var(--muted);
+            font-weight: 600;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+        .reply-reply-btn:hover {
+            color: var(--p);
+        }
+        .reply-like-btn {
+            font-size: 0.7rem;
+            color: var(--muted2);
+            font-weight: 500;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .reply-like-btn.liked {
+            color: var(--red);
+        }
+
+        .view-replies-btn,
+        .hide-replies-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.78rem;
+            color: var(--p);
+            font-weight: 600;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            margin-top: 4px;
+        }
+        .view-replies-btn {
+            margin-left: 52px;
+        }
+        .hide-replies-btn {
+            margin-left: 20px;
+            padding-left: 16px;
+            color: var(--muted);
+        }
+        .hide-replies-btn:hover,
+        .view-replies-btn:hover {
+            text-decoration: underline;
+        }
+
+        .load-more-comments-btn {
+            margin-left: 0 !important;
+            padding: 8px 0;
+        }
+
+        .comment-inp-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+            border-top: 1px solid var(--sheet-bd);
+            background: var(--sheet-bg);
+            flex-shrink: 0;
+        }
+        .comment-inp-ava {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: var(--bg4);
+        }
+        .comment-inp-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            background: var(--inp-bg);
+            border: 1px solid var(--sheet-bd);
+            border-radius: 100px;
+            padding: 8px 14px;
+            gap: 8px;
+        }
+        .comment-inp {
+            flex: 1;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+        }
+        .comment-inp::placeholder {
+            color: var(--muted2);
+        }
+        .comment-send {
+            width: 32px;
+            height: 32px;
+            background: var(--p);
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: transform .15s;
+        }
+        .comment-send:active {
+            transform: scale(.88);
+        }
+        .comment-send svg {
+            width: 15px;
+            height: 15px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
+        .comment-emoji {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            flex-shrink: 0;
+        }
+
+        #reply-context-banner {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 18px;
+            font-size: 0.8rem;
+            color: var(--muted);
+            background: var(--inp-bg);
+            border-bottom: 1px solid var(--sheet-bd);
+        }
+        #reply-context-banner.show {
+            display: flex;
+        }
+        #reply-context-username {
+            font-weight: 600;
+            color: var(--p);
+        }
+        #reply-cancel-btn {
+            margin-left: auto;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 1rem;
+            color: var(--muted);
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: 1;
+        }
+        #reply-cancel-btn:hover {
+            color: var(--text);
+            background: var(--rowh);
+        }
+
+        /* ── SHARE SHEET ── */
+        .share-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            padding: 16px;
+        }
+        .share-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 8px;
+            border-radius: 14px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: background .18s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .share-item:hover {
+            background: rgba(255, 255, 255, .07);
+        }
+        .share-ico {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .share-ico svg {
+            width: 26px;
+            height: 26px;
+        }
+        .share-lbl {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .share-links {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 0 12px 16px;
+        }
+        .share-link-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 8px;
+            border-radius: 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            text-align: left;
+            transition: background .18s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .share-link-row:hover {
+            background: rgba(255, 255, 255, .07);
+        }
+        .share-link-ico {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, .08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .share-link-ico svg {
+            width: 20px;
+            height: 20px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .share-link-txt {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        /* ── REACTION SHEET ── */
+        .reaction-strip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 16px 20px 10px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .reaction-strip::-webkit-scrollbar {
+            display: none;
+        }
+        .r-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 16px;
+            border-radius: 100px;
+            background: rgba(255, 255, 255, .07);
+            border: 1.5px solid rgba(255, 255, 255, .1);
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+            transition: background .18s, border-color .18s, transform .12s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .r-chip:active {
+            transform: scale(.93);
+        }
+        .r-chip.active {
+            background: rgba(249, 24, 128, .18);
+            border-color: rgba(249, 24, 128, .4);
+            color: var(--red);
+        }
+        .r-chip .emoji {
+            font-size: 18px;
+        }
+
+        .reaction-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 0 8px;
+            scrollbar-width: none;
+        }
+        .reaction-list::-webkit-scrollbar {
+            display: none;
+        }
+        .r-user {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 18px;
+        }
+        .r-user-ava {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: var(--bg4);
+        }
+        .r-user-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .r-user-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .r-user-handle {
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .r-user-emoji {
+            font-size: 20px;
+        }
+        .r-follow-btn {
+            padding: 8px 18px;
+            border-radius: 100px;
+            background: #fff;
+            color: #000;
+            font-size: 13px;
+            font-weight: 800;
+            border: none;
+            cursor: pointer;
+            transition: background .18s, transform .12s;
+            flex-shrink: 0;
+        }
+        .r-follow-btn:active {
+            transform: scale(.95);
+        }
+        .r-follow-btn.following {
+            background: transparent;
+            color: #fff;
+            border: 1.5px solid rgba(255, 255, 255, .3);
+        }
+
+        /* ── MORE OPTIONS ── */
+        .more-list {
+            padding: 8px 12px calc(16px + env(safe-area-inset-bottom));
+        }
+        .more-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 8px;
+            border-radius: 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            text-align: left;
+            transition: background .18s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .more-row:hover {
+            background: rgba(255, 255, 255, .06);
+        }
+        .more-row-ico {
+            width: 22px;
+            height: 22px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            flex-shrink: 0;
+        }
+        .more-row-lbl {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .more-row.danger .more-row-ico {
+            stroke: var(--red);
+        }
+        .more-row.danger .more-row-lbl {
+            color: var(--red);
+        }
+        .more-row-sub {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 1px;
+        }
+
+        /* ── TOAST ── */
+        #toast {
+            position: fixed;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(30, 30, 30, .95);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 20px;
+            border-radius: 100px;
+            border: 1px solid rgba(255, 255, 255, .12);
+            z-index: 400;
+            opacity: 0;
+            transition: opacity .25s, transform .25s;
+            white-space: nowrap;
+            pointer-events: none;
+            backdrop-filter: blur(12px);
+        }
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ── HEART BURST ── */
+        @keyframes heartBurst {
+            0% {
+                transform: translate(-50%, -50%) scale(0);
+                opacity: 1;
+            }
+            50% {
+                transform: translate(-50%, -50%) scale(1.4);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(1.1);
+                opacity: 0;
+            }
+        }
+        .heart-burst {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            pointer-events: none;
+            z-index: 15;
+            animation: heartBurst .55s cubic-bezier(.22, 1, .36, 1) forwards;
+        }
+        .heart-burst svg {
+            width: 100%;
+            height: 100%;
+            fill: var(--red);
+        }
+
+        .v-skeleton {
+            position: absolute;
+            inset: 0;
+            background: #111;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .v-skeleton-pulse {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, .15);
+            border-top-color: rgba(255, 255, 255, .6);
+            animation: spin .9s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .v-badge {
+            display: inline-flex;
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border-radius: 50%;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .v-badge svg {
+            width: 9px;
+            height: 9px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .empty-videos {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px 20px;
+            background: var(--bg);
+            z-index: 1;
+        }
+        .empty-videos .empty-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--pdim);
+            border: 1.5px solid var(--pbrd);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+        .empty-videos .empty-icon svg {
+            width: 36px;
+            height: 36px;
+            stroke: var(--p);
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .empty-videos h3 {
+            font-size: clamp(18px, 4vw, 22px);
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+        .empty-videos p {
+            font-size: 14px;
+            color: var(--muted);
+            line-height: 1.6;
+            max-width: 300px;
+        }
+        .empty-videos .create-btn {
+            margin-top: 16px;
+            padding: 12px 28px;
+            border-radius: 100px;
+            background: linear-gradient(135deg, var(--p), var(--pd));
+            color: #fff;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: opacity .15s, transform .15s;
+        }
+        .empty-videos .create-btn:hover {
+            opacity: .85;
+            transform: translateY(-1px);
+        }
+
+        /* ══════════════════════════════════════
+           RESPONSIVE
+        ══════════════════════════════════════ */
+        @media (min-width: 768px) {
+            .side-nav {
+                display: flex;
+            }
+            .bottom-nav {
+                display: none;
+            }
+            #feedTrack {
+                padding-bottom: 0;
+            }
+        }
+        @media (min-width: 1024px) {
+            .side-nav {
+                width: 82px;
+            }
+        }
+
+        /* Light theme fixes */
+        [data-theme="light"] .v-topbar-title,
+        [data-theme="light"] .v-action-lbl,
+        [data-theme="light"] .v-caption,
+        [data-theme="light"] .v-creator-name {
+            color: #fff;
+        }
+        [data-theme="light"] .v-sound-lbl {
+            color: rgba(255, 255, 255, .7);
+        }
+        [data-theme="light"] .v-see-more {
+            color: rgba(255, 255, 255, .7);
+        }
+        [data-theme="light"] .v-sound-ico {
+            stroke: rgba(255, 255, 255, .7);
+        }
+        [data-theme="light"] .v-avatar {
+            border-color: #fff;
+        }
+        [data-theme="light"] .v-action-btn {
+            background: rgba(0, 0, 0, .5);
+        }
+        [data-theme="light"] .v-action-btn svg {
+            stroke: #fff;
+        }
+        [data-theme="light"] .v-progress {
+            background: rgba(255, 255, 255, .2);
+        }
+        [data-theme="light"] .v-progress-fill {
+            background: #fff;
+        }
+        [data-theme="light"] .v-progress-thumb {
+            background: #fff;
+        }
+        [data-theme="light"] .v-grad-top {
+            background: linear-gradient(to bottom, rgba(0, 0, 0, .7) 0%, transparent 100%);
+        }
+        [data-theme="light"] .v-grad-bot {
+            background: linear-gradient(to top, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, .3) 60%, transparent 100%);
+        }
+        [data-theme="light"] .v-follow-dot {
+            border-color: #000;
+        }
+        [data-theme="light"] .v-top-ico {
+            background: rgba(0, 0, 0, .5);
+        }
+        [data-theme="light"] .v-top-ico svg {
+            stroke: #fff;
+        }
+        [data-theme="light"] .v-action-btn.liked {
+            background: rgba(249, 24, 128, .3);
+        }
+        [data-theme="light"] .v-action-btn.liked svg {
+            stroke: var(--red);
+            fill: var(--red);
+        }
+        [data-theme="light"] .v-action-btn.saved {
+            background: rgba(255, 215, 0, .2);
+        }
+        [data-theme="light"] .v-action-btn.saved svg {
+            stroke: var(--gold);
+            fill: var(--gold);
+        }
+        [data-theme="light"] .v-sound-disc {
+            background: rgba(255, 255, 255, .1);
+            border-color: rgba(255, 255, 255, .15);
+        }
+        [data-theme="light"] .empty-videos {
+            background: var(--bg);
+        }
+        [data-theme="light"] .empty-videos .empty-icon {
+            background: var(--pdim);
+            border-color: var(--pbrd);
+        }
+        [data-theme="light"] .empty-videos .empty-icon svg {
+            stroke: var(--p);
+        }
+        [data-theme="light"] .empty-videos h3 {
+            color: var(--text);
+        }
+        [data-theme="light"] .empty-videos p {
+            color: var(--muted);
+        }
+        [data-theme="light"] .sheet-title,
+        [data-theme="light"] .more-row-lbl,
+        [data-theme="light"] .share-lbl,
+        [data-theme="light"] .share-link-txt,
+        [data-theme="light"] .r-chip,
+        [data-theme="light"] .r-user-name,
+        [data-theme="light"] .comment-username,
+        [data-theme="light"] .comment-text,
+        [data-theme="light"] .reply-username,
+        [data-theme="light"] .reply-text {
+            color: var(--text);
+        }
+        [data-theme="light"] .comment-inp {
+            color: var(--text);
+        }
+        [data-theme="light"] .sheet-close svg {
+            stroke: var(--text);
+        }
+        [data-theme="light"] .comment-avatar,
+        [data-theme="light"] .reply-avatar-dot {
+            background: var(--bg4);
+            color: var(--muted);
+        }
+        [data-theme="light"] .v-mute-badge {
+            background: rgba(0, 0, 0, .5);
+        }
+        [data-theme="light"] .v-mute-badge svg {
+            stroke: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="layout">
+
+        <!-- ════ SIDE NAV ════ -->
+        <nav class="side-nav">
+            <div class="side-logo"><a href="index.html">◈</a></div>
+
+            <a href="index.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg>
+                <span>Home</span>
+            </a>
+
+            <a href="search.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Search</span>
+            </a>
+
+            <a href="chat.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>Chat</span>
+                <div class="side-badge"></div>
+            </a>
+
+            <a href="create.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span>Create</span>
+            </a>
+
+            <a href="video.html" class="side-btn active">
+                <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                <span>Video</span>
+            </a>
+
+            <div class="side-gap"></div>
+
+            <a href="profile.html" class="side-btn" id="sideProfileBtn">
+                <img class="side-av" id="sideAv" src="" alt="" onerror="this.style.display='none'">
+                <span>Profile</span>
+            </a>
+        </nav>
+
+        <!-- ════ MAIN ════ -->
+        <div class="main" id="mainScroll">
+            <div id="feedTrack"></div>
+            <div class="empty-videos" id="emptyState" style="display:none;">
+                <div class="empty-icon">
+                    <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                </div>
+                <h3>No Videos Yet</h3>
+                <p>Videos you create or share will appear here. Upload your first video now!</p>
+                <button class="create-btn" onclick="window.location.href='create.html'">Create Video</button>
+            </div>
+        </div>
+
+        <!-- ════ BOTTOM NAV ════ -->
+        <nav class="bottom-nav">
+            <a href="index.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg>
+                <span>Home</span>
+            </a>
+
+            <a href="search.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Search</span>
+            </a>
+
+            <a href="chat.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>Chat</span>
+                <div class="nav-badge"></div>
+            </a>
+
+            <a href="create.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span>Create</span>
+            </a>
+
+            <a href="video.html" class="nav-item active">
+                <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                <span>Video</span>
+            </a>
+
+            <a href="profile.html" class="nav-item" id="navProfileBtn">
+                <img class="nav-av" id="navAv" src="" alt="" onerror="this.style.background='linear-gradient(135deg,#1a1035,#3b1a6b)'">
+                <span>Profile</span>
+            </a>
+        </nav>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         BACKDROP
+    ══════════════════════════════════════════════════════ -->
+    <div class="sheet-backdrop" id="backdrop" onclick="closeAllSheets()"></div>
+
+    <!-- ══════════════════════════════════════════════════════
+         COMMENT SHEET
+    ══════════════════════════════════════════════════════ -->
+    <div class="sheet" id="commentSheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-hdr">
+            <span class="sheet-title" id="commentCount">0 Replies</span>
+            <button class="sheet-close" onclick="closeSheet('commentSheet')">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <!-- Reply context banner -->
+        <div id="reply-context-banner">
+            <span>Replying to</span>
+            <span id="reply-context-username"></span>
+            <button id="reply-cancel-btn" onclick="cancelReply()">✕</button>
+        </div>
+        <div class="sheet-body" id="commentBody">
+            <div id="comments-list"></div>
+        </div>
+        <div class="comment-inp-row">
+            <img class="comment-inp-ava" id="commentUserAvatar" src="" alt="" onerror="this.style.display='none'">
+            <div class="comment-inp-wrap">
+                <button class="comment-emoji">😊</button>
+                <input class="comment-inp" id="commentInput" placeholder="Add a comment…" maxlength="280">
+            </div>
+            <button class="comment-send" onclick="submitCommentFromBar()">
+                <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         SHARE SHEET
+    ══════════════════════════════════════════════════════ -->
+    <div class="sheet" id="shareSheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-hdr">
+            <span class="sheet-title">Share</span>
+            <button class="sheet-close" onclick="closeSheet('shareSheet')">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="share-grid">
+            <button class="share-item" onclick="shareAction('Repost')">
+                <div class="share-ico" style="background:rgba(0,186,124,.15)">
+                    <svg viewBox="0 0 24 24" style="stroke:#00ba7c;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;width:26px;height:26px"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                </div>
+                <span class="share-lbl">Repost</span>
+            </button>
+            <button class="share-item" onclick="shareAction('Quote')">
+                <div class="share-ico" style="background:rgba(29,155,240,.15)">
+                    <svg viewBox="0 0 24 24" style="stroke:#1d9bf0;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;width:26px;height:26px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <span class="share-lbl">Quote</span>
+            </button>
+            <button class="share-item" onclick="shareAction('Send via DM')">
+                <div class="share-ico" style="background:rgba(139,92,246,.15)">
+                    <svg viewBox="0 0 24 24" style="stroke:#8b5cf6;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;width:26px;height:26px"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </div>
+                <span class="share-lbl">Send via DM</span>
+            </button>
+            <button class="share-item" onclick="shareAction('Copy link')">
+                <div class="share-ico" style="background:rgba(255,255,255,.08)">
+                    <svg viewBox="0 0 24 24" style="stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;width:26px;height:26px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                </div>
+                <span class="share-lbl">Copy link</span>
+            </button>
+        </div>
+        <div class="share-links">
+            <button class="share-link-row" onclick="shareAction('WhatsApp')">
+                <div class="share-link-ico" style="background:rgba(37,211,102,.15)">
+                    <svg viewBox="0 0 24 24" style="stroke:#25d366;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                </div>
+                <span class="share-link-txt">Share to WhatsApp</span>
+            </button>
+            <button class="share-link-row" onclick="shareAction('Instagram Stories')">
+                <div class="share-link-ico" style="background:rgba(225,48,108,.15)">
+                    <svg viewBox="0 0 24 24" style="stroke:#e1306c;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+                </div>
+                <span class="share-link-txt">Share to Instagram</span>
+            </button>
+            <button class="share-link-row" onclick="shareAction('Download video')">
+                <div class="share-link-ico">
+                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </div>
+                <span class="share-link-txt">Save Video</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         REACTION SHEET
+    ══════════════════════════════════════════════════════ -->
+    <div class="sheet" id="reactionSheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-hdr">
+            <span class="sheet-title" id="reactionCount">0 Likes</span>
+            <button class="sheet-close" onclick="closeSheet('reactionSheet')">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="reaction-strip" id="reactionStrip"></div>
+        <div class="reaction-list" id="reactionList"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         MORE OPTIONS SHEET
+    ══════════════════════════════════════════════════════ -->
+    <div class="sheet" id="moreSheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-hdr">
+            <span class="sheet-title">Options</span>
+            <button class="sheet-close" onclick="closeSheet('moreSheet')">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="more-list" id="moreList"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         TOAST
+    ══════════════════════════════════════════════════════ -->
+    <div id="toast"></div>
+
+    <!-- Global theme script -->
+    <script src="global.js"></script>
+
+    <script>
+        'use strict';
+
+        // ══════════════════════════════════════════
+        // CONFIG
+        // ══════════════════════════════════════════
+        const STORAGE_KEY = 'freeupper_blog_data_v2';
+        const USER_KEY = 'freeupper_user_profile';
+        const ALL_USERS_KEY = 'freeupper_all_users';
+        const FOLLOW_KEY = 'freeupper_follows';
+        const CVK = 'freeupper_comments_visible';
+        const REPLY_BATCH = 3;
+        const PAGE_SIZE = 5;
+
+        // ══════════════════════════════════════════
+        // DATA LAYER
+        // ══════════════════════════════════════════
+        function loadData() {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? JSON.parse(raw) : { posts: [], marketItems: [] };
+        }
+
+        function getCurrentUser() {
+            let user = JSON.parse(localStorage.getItem(USER_KEY));
+            if (!user) {
+                user = {
+                    id: 'FU-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    username: '',
+                    displayName: 'Guest',
+                    avatar: 'data:image/svg+xml,' + encodeURIComponent(
+                        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
+                    ),
+                    isLoggedIn: false,
+                    verified: false
+                };
+                localStorage.setItem(USER_KEY, JSON.stringify(user));
+            }
+            return user;
+        }
+
+        function getAllUsers() {
+            return JSON.parse(localStorage.getItem(ALL_USERS_KEY) || '[]');
+        }
+
+        function getFollows() {
+            const raw = localStorage.getItem(FOLLOW_KEY);
+            return raw ? JSON.parse(raw) : {};
+        }
+
+        function isFollowing(userId) {
+            const follows = getFollows();
+            return !!follows[userId];
+        }
+
+        function toggleFollowUser(userId) {
+            const follows = getFollows();
+            if (follows[userId]) {
+                delete follows[userId];
+            } else {
+                follows[userId] = true;
+            }
+            localStorage.setItem(FOLLOW_KEY, JSON.stringify(follows));
+            return !!follows[userId];
+        }
+
+        function getCommentsVisible() {
+            const r = localStorage.getItem(CVK);
+            return r ? JSON.parse(r) : {};
+        }
+
+        function setCommentsVisible(postId, count) {
+            const cv = getCommentsVisible();
+            cv[postId] = count;
+            localStorage.setItem(CVK, JSON.stringify(cv));
+        }
+
+        function getVisibleComments(postId) {
+            const cv = getCommentsVisible();
+            return cv[postId] || 5;
+        }
+
+        // ══════════════════════════════════════════
+        // COMMENT STATE
+        // ══════════════════════════════════════════
+        let expandedThreads = new Map();
+        let replyTarget = null;
+        let currentPostId = null;
+
+        // ══════════════════════════════════════════
+        // GET ALL DESCENDANTS (replies)
+        // ══════════════════════════════════════════
+        function getAllDescendants(pid, comments) {
+            const result = [];
+            const direct = comments.filter(c => c.parentId === pid);
+            for (const c of direct) {
+                result.push(c);
+                result.push(...getAllDescendants(c.id, comments));
+            }
+            return result;
+        }
+
+        // ══════════════════════════════════════════
+        // YOUTUBE STATE
+        // ══════════════════════════════════════════
+        let ytState = {};
+        let ytInfo = {};
+        let ytWindows = {};
+
+        // ══════════════════════════════════════════
+        // GET VIDEO POSTS
+        // ══════════════════════════════════════════
+        function getVideoPosts() {
+            const data = loadData();
+            const currentUser = getCurrentUser();
+            const allUsers = getAllUsers();
+
+            let posts = data.posts.filter(post =>
+                post.mediaType === 'video' && post.mediaUrl
+            );
+
+            posts = posts.filter(post => {
+                if (post.authorId === currentUser.id) return true;
+                const author = allUsers.find(u => u.id === post.authorId);
+                return !author || !author.isPrivate;
+            });
+
+            posts.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+
+            return posts.map(post => {
+                const isOwn = post.authorId === currentUser.id;
+                const author = isOwn ? currentUser : allUsers.find(u => u.id === post.authorId);
+                const authorName = isOwn ? currentUser.displayName : (author?.displayName || post.author ||
+                    'Anonymous');
+                const authorAvatar = isOwn ? currentUser.avatar : (author?.avatar || '');
+                const isVerified = isOwn ? currentUser.verified : (author?.verified || false);
+                const isFollowingUser = !isOwn && author ? isFollowing(author.id) : false;
+
+                const liked = !!data.userReactions?.[`${post.id}-love`];
+                const isYouTube = post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post.mediaUrl
+                    .includes('youtu.be'));
+
+                return {
+                    id: post.id,
+                    src: post.mediaUrl,
+                    poster: post.mediaUrl || '',
+                    creator: authorName,
+                    handle: isOwn ? `@${currentUser.username || 'me'}` : `@${author?.username || authorName.toLowerCase()}`,
+                    verified: isVerified,
+                    avatar: authorAvatar,
+                    caption: post.title + (post.description ? '\n' + post.description : '') + (post.tags ? ' ' + post
+                        .tags.map(t => '#' + t).join(' ') : ''),
+                    sound: 'Original Audio · ' + authorName,
+                    soundImg: authorAvatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + authorName,
+                    likes: (post.reactions?.love || 0) + (post.reactions?.laugh || 0) + (post.reactions?.cry || 0),
+                    comments: post.comments?.length || 0,
+                    reposts: 0,
+                    bookmarks: 0,
+                    liked: liked,
+                    saved: false,
+                    following: isFollowingUser,
+                    authorId: post.authorId,
+                    postData: post,
+                    isYouTube: isYouTube,
+                    ytId: isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] || post
+                        .mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null
+                };
+            });
+        }
+
+        // ══════════════════════════════════════════
+        // YOUTUBE POSTMESSAGE HELPERS
+        // ══════════════════════════════════════════
+        function ytPostMessage(idx, func, args = []) {
+            const iframe = document.getElementById('yt-' + idx);
+            if (!iframe || !iframe.contentWindow) return;
+            iframe.contentWindow.postMessage(JSON.stringify({
+                event: 'command',
+                func: func,
+                args: args
+            }), '*');
+        }
+
+        function _updateMuteBadge(idx) {
+            const badge = document.getElementById('muteBadge-' + idx);
+            const ico = document.getElementById('muteIco-' + idx);
+            if (!badge || !ico) return;
+            const state = ytState[idx] || { muted: true };
+
+            if (state.muted) {
+                ico.innerHTML =
+                    '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>';
+                badge.style.opacity = '.95';
+            } else {
+                ico.innerHTML =
+                    '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>';
+                badge.style.opacity = '.6';
+            }
+        }
+
+        function _showYtPauseIcon(idx, isPlaying) {
+            const icon = document.getElementById('pauseIcon-' + idx);
+            if (!icon) return;
+            icon.querySelector('svg').innerHTML = isPlaying ?
+                '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>' :
+                '<polygon points="5 3 19 12 5 21 5 3"/>';
+            _showPauseIcon(icon);
+        }
+
+        // ══════════════════════════════════════════
+        // SETS UP THE POSTMESSAGE HANDSHAKE
+        // ══════════════════════════════════════════
+        function initYtListener(idx) {
+            const iframe = document.getElementById('yt-' + idx);
+            if (!iframe || !iframe.contentWindow) return;
+            ytWindows[idx] = iframe.contentWindow;
+            iframe.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'yt-' + idx }), '*');
+        }
+
+        // ══════════════════════════════════════════
+        // UPDATE YOUTUBE PROGRESS UI
+        // ══════════════════════════════════════════
+        function updateYtProgressUI(idx, currentTime, duration) {
+            if (!duration) return;
+            const pct = (currentTime / duration) * 100;
+            const fill = document.getElementById('progFill-' + idx);
+            const thumb = document.getElementById('progThumb-' + idx);
+            if (fill) fill.style.width = pct + '%';
+            if (thumb) thumb.style.setProperty('--pct', pct + '%');
+        }
+
+        // ══════════════════════════════════════════
+        // TOGGLE YOUTUBE CONTROLS
+        // ══════════════════════════════════════════
+        function toggleYtControls(idx) {
+            if (!ytState[idx]) ytState[idx] = { muted: true, playing: true };
+            const state = ytState[idx];
+
+            if (state.muted) {
+                ytPostMessage(idx, 'unMute');
+                state.muted = false;
+                showToast('Sound on 🔊');
+                _showYtPauseIcon(idx, true);
+                _updateMuteBadge(idx);
+                return;
+            }
+
+            if (state.playing) {
+                ytPostMessage(idx, 'pauseVideo');
+                state.playing = false;
+                _showYtPauseIcon(idx, false);
+            } else {
+                ytPostMessage(idx, 'playVideo');
+                state.playing = true;
+                _showYtPauseIcon(idx, true);
+            }
+            _updateMuteBadge(idx);
+        }
+
+        // ══════════════════════════════════════════
+        // GLOBAL POSTMESSAGE LISTENER
+        // ══════════════════════════════════════════
+        window.addEventListener('message', function(event) {
+            if (typeof event.data !== 'string') return;
+            let data;
+            try { data = JSON.parse(event.data); } catch (e) { return; }
+            if (!data || data.event !== 'infoDelivery' || !data.info) return;
+
+            let idx = null;
+            for (const k in ytWindows) {
+                if (ytWindows[k] === event.source) { idx = k; break; }
+            }
+            if (idx === null) return;
+
+            const info = data.info;
+            if (typeof info.currentTime === 'number' && typeof info.duration === 'number' && info.duration > 0) {
+                ytInfo[idx] = { currentTime: info.currentTime, duration: info.duration };
+                updateYtProgressUI(idx, info.currentTime, info.duration);
+            }
+        });
+
+        // ══════════════════════════════════════════
+        // BUILD FEED
+        // ══════════════════════════════════════════
+        function buildFeed() {
+            videoPosts = getVideoPosts();
+            const track = document.getElementById('feedTrack');
+            const emptyState = document.getElementById('emptyState');
+
+            if (videoPosts.length === 0) {
+                track.innerHTML = '';
+                emptyState.style.display = 'flex';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            track.innerHTML = '';
+
+            videoPosts.forEach((v, i) => {
+                const card = document.createElement('div');
+                card.className = 'v-card';
+                card.id = 'card-' + i;
+                card.innerHTML = buildCard(v, i);
+                track.appendChild(card);
+            });
+
+            const io = new IntersectionObserver((entries) => {
+                entries.forEach(e => {
+                    const idx = parseInt(e.target.dataset.idx);
+                    if (e.isIntersecting && e.intersectionRatio >= 0.6) {
+                        onCardActive(idx);
+                    } else {
+                        pauseCard(idx);
+                    }
+                });
+            }, { threshold: 0.6 });
+
+            videoPosts.forEach((_, i) => {
+                const card = document.getElementById('card-' + i);
+                if (card) {
+                    card.dataset.idx = i;
+                    io.observe(card);
+                }
+            });
+
+            if (videoPosts.length > 0) {
+                onCardActive(0);
+            }
+        }
+
+        function buildCard(v, i) {
+            const likeClass = v.liked ? 'v-action-btn liked' : 'v-action-btn';
+            const saveClass = v.saved ? 'v-action-btn saved' : 'v-action-btn';
+            const followClass = v.following ? 'v-follow-dot following' : 'v-follow-dot';
+            const captionHtml = v.caption ? hashify(v.caption) : '';
+
+            let videoHtml = '';
+            if (v.isYouTube && v.ytId) {
+                videoHtml = `
+                    <iframe class="v-yt-iframe" id="yt-${i}" src="https://www.youtube.com/embed/${v.ytId}?autoplay=1&loop=1&playlist=${v.ytId}&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}" allow="autoplay; encrypted-media" allowfullscreen onload="initYtListener(${i})"></iframe>
+                    <div class="v-tap-yt" id="tapYt-${i}" onclick="toggleYtControls(${i})"></div>
+                    <video class="v-video" id="vid-${i}" style="display:none;"></video>
+                    <div class="v-mute-badge" id="muteBadge-${i}">
+                        <svg id="muteIco-${i}" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                    </div>
+                `;
+            } else {
+                videoHtml = `
+                    <video class="v-video" id="vid-${i}" src="${v.src}" poster="${v.poster}"
+                      playsinline loop preload="metadata" muted></video>
+                `;
+            }
+
+            return `
+            ${videoHtml}
+            <div class="v-skeleton" id="skel-${i}"><div class="v-skeleton-pulse"></div></div>
+            <div class="v-grad-top"></div>
+            <div class="v-grad-bot"></div>
+            ${!v.isYouTube ? `<div class="v-tap" id="tap-${i}" ondblclick="doubleTapLike(event,${i})" onclick="tapPause(${i})"></div>` : ''}
+            <div class="v-pause-icon" id="pauseIcon-${i}">
+              <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            </div>
+
+            <!-- TOP BAR -->
+            <div class="v-topbar">
+              <span class="v-topbar-title">Videos</span>
+              <div style="display:flex;gap:8px">
+                <button class="v-top-ico" onclick="openMore(${i})">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.2" fill="#fff" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="#fff" stroke="none"/><circle cx="12" cy="19" r="1.2" fill="#fff" stroke="none"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- RIGHT ACTIONS -->
+            <div class="v-actions">
+              <div class="v-action">
+                <div class="v-avatar-wrap">
+                  <img class="v-avatar" src="${v.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + v.creator}" alt="${v.creator}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'">
+                  <div class="${followClass}" id="followDot-${i}" onclick="toggleFollow(${i})">
+                    <svg id="followIco-${i}" viewBox="0 0 24 24">${v.following ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' : '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'}</svg>
+                  </div>
+                </div>
+              </div>
+
+              <div class="v-action">
+                <button class="${likeClass}" id="likeBtn-${i}" onclick="toggleLike(${i})">
+                  <svg id="likeIco-${i}" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                </button>
+                <span class="v-action-lbl" id="likeCount-${i}">${fmtNum(v.likes)}</span>
+              </div>
+
+              <div class="v-action">
+                <button class="v-action-btn" onclick="openComments(${i})">
+                  <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </button>
+                <span class="v-action-lbl">${fmtNum(v.comments)}</span>
+              </div>
+
+              <div class="v-action">
+                <button class="v-action-btn" id="repostBtn-${i}" onclick="toggleRepost(${i})">
+                  <svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                </button>
+                <span class="v-action-lbl" id="repostCount-${i}">${fmtNum(v.reposts)}</span>
+              </div>
+
+              <div class="v-action">
+                <button class="${saveClass}" id="saveBtn-${i}" onclick="toggleSave(${i})">
+                  <svg id="saveIco-${i}" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                </button>
+                <span class="v-action-lbl" id="saveCount-${i}">${fmtNum(v.bookmarks)}</span>
+              </div>
+
+              <div class="v-action">
+                <button class="v-action-btn" onclick="openShare(${i})">
+                  <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                </button>
+                <span class="v-action-lbl">${fmtNum(v.reposts)}</span>
+              </div>
+            </div>
+
+            <!-- BOTTOM INFO -->
+            <div class="v-info">
+              <div class="v-creator">
+                <span class="v-creator-name">${v.handle}</span>
+                ${v.verified ? `<span class="v-badge"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>` : ''}
+              </div>
+              <div>
+                <div class="v-caption" id="cap-${i}">${captionHtml}</div>
+                ${captionHtml.length > 80 ? `<button class="v-see-more" id="seeMore-${i}" onclick="toggleCaption(${i})">more</button>` : ''}
+              </div>
+              <div class="v-sound-row">
+                <svg class="v-sound-ico" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                <span class="v-sound-lbl">${v.sound}</span>
+                <div class="v-sound-disc"><img src="${v.soundImg || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + v.creator}" alt="" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'"></div>
+              </div>
+            </div>
+
+            <!-- PROGRESS BAR -->
+            <div class="v-progress" id="prog-${i}" onclick="seekVideo(event,${i})">
+              <div class="v-progress-fill" id="progFill-${i}" style="width:0%"></div>
+              <div class="v-progress-thumb" id="progThumb-${i}"></div>
+            </div>
+          `;
+        }
+
+        // ══════════════════════════════════════════
+        // PAUSE CARD
+        // ══════════════════════════════════════════
+        function pauseCard(idx) {
+            const v = videoPosts[idx];
+            if (!v) return;
+            if (v.isYouTube) {
+                ytPostMessage(idx, 'pauseVideo');
+                if (ytState[idx]) ytState[idx].playing = false;
+            } else {
+                const vid = document.getElementById('vid-' + idx);
+                if (vid) vid.pause();
+            }
+        }
+
+        // ══════════════════════════════════════════
+        // ACTIVE CARD
+        // ══════════════════════════════════════════
+        function onCardActive(idx) {
+            if (idx === _curIdx && idx !== 0) return;
+
+            pauseCard(_curIdx);
+
+            _curIdx = idx;
+            const v = videoPosts[idx];
+            currentPostId = v.id;
+
+            ytState[idx] = { muted: true, playing: true };
+
+            if (v.isYouTube) {
+                const iframe = document.getElementById('yt-' + idx);
+                if (iframe) {
+                    const src = iframe.src.split('?')[0];
+                    iframe.src = src +
+                        `?autoplay=1&loop=1&playlist=${v.ytId}&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`;
+                }
+                _updateMuteBadge(idx);
+                const sk = document.getElementById('skel-' + idx);
+                if (sk) sk.style.display = 'none';
+                return;
+            }
+
+            const vid = document.getElementById('vid-' + idx);
+            if (!vid) return;
+
+            const sk = document.getElementById('skel-' + idx);
+            if (sk) sk.style.display = 'none';
+
+            vid.muted = false;
+            vid.play().catch(() => { vid.muted = true;
+                vid.play(); });
+
+            if (vid._progTimer) clearInterval(vid._progTimer);
+            vid._progTimer = setInterval(() => updateProgress(idx), 250);
+        }
+
+        function updateProgress(idx) {
+            const vid = document.getElementById('vid-' + idx);
+            if (!vid || !vid.duration) return;
+            const pct = (vid.currentTime / vid.duration) * 100;
+            const fill = document.getElementById('progFill-' + idx);
+            const thumb = document.getElementById('progThumb-' + idx);
+            if (fill) fill.style.width = pct + '%';
+            if (thumb) thumb.style.setProperty('--pct', pct + '%');
+        }
+
+        // ══════════════════════════════════════════
+        // SEEK VIDEO (works for both types)
+        // ══════════════════════════════════════════
+        function seekVideo(e, idx) {
+            const v = videoPosts[idx];
+            const prog = document.getElementById('prog-' + idx);
+            if (!prog) return;
+            const rect = prog.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+
+            if (v && v.isYouTube) {
+                const info = ytInfo[idx];
+                if (!info || !info.duration) return;
+                const time = pct * info.duration;
+                ytPostMessage(idx, 'seekTo', [time, true]);
+                updateYtProgressUI(idx, time, info.duration);
+            } else {
+                const vid = document.getElementById('vid-' + idx);
+                if (!vid || !vid.duration) return;
+                vid.currentTime = pct * vid.duration;
+            }
+        }
+
+        // ══════════════════════════════════════════
+        // TAP TO PAUSE (non-YouTube)
+        // ══════════════════════════════════════════
+        let _tapTimer = null;
+
+        function tapPause(idx) {
+            const v = videoPosts[idx];
+            if (v.isYouTube) return;
+
+            if (_tapTimer) { clearTimeout(_tapTimer);
+                _tapTimer = null; return; }
+            _tapTimer = setTimeout(() => {
+                _tapTimer = null;
+                const vid = document.getElementById('vid-' + idx);
+                const icon = document.getElementById('pauseIcon-' + idx);
+                if (!vid) return;
+                if (vid.paused) {
+                    vid.play();
+                    icon.querySelector('svg').innerHTML =
+                        '<polygon points="5 3 19 12 5 21 5 3"/>';
+                    _showPauseIcon(icon);
+                } else {
+                    vid.pause();
+                    icon.querySelector('svg').innerHTML =
+                        '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+                    _showPauseIcon(icon);
+                }
+            }, 180);
+        }
+
+        function _showPauseIcon(icon) {
+            icon.classList.remove('hide');
+            icon.classList.add('show');
+            setTimeout(() => {
+                icon.classList.remove('show');
+                icon.classList.add('hide');
+                setTimeout(() => icon.classList.remove('hide'), 200);
+            }, 700);
+        }
+
+        // ══════════════════════════════════════════
+        // DOUBLE TAP LIKE
+        // ══════════════════════════════════════════
+        function doubleTapLike(e, idx) {
+            if (_tapTimer) { clearTimeout(_tapTimer);
+                _tapTimer = null; }
+            if (!videoPosts[idx].liked) toggleLike(idx);
+            const card = document.getElementById('card-' + idx);
+            const burst = document.createElement('div');
+            burst.className = 'heart-burst';
+            burst.style.left = e.clientX + 'px';
+            burst.style.top = e.clientY + 'px';
+            burst.innerHTML =
+                `<svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
+            card.appendChild(burst);
+            setTimeout(() => burst.remove(), 600);
+        }
+
+        // ══════════════════════════════════════════
+        // LIKE
+        // ══════════════════════════════════════════
+        function toggleLike(idx) {
+            const v = videoPosts[idx];
+            v.liked = !v.liked;
+            v.likes += v.liked ? 1 : -1;
+            const btn = document.getElementById('likeBtn-' + idx);
+            const lbl = document.getElementById('likeCount-' + idx);
+            btn.classList.toggle('liked', v.liked);
+            if (lbl) lbl.textContent = fmtNum(v.likes);
+            if (v.liked) {
+                btn.style.transform = 'scale(1.25)';
+                setTimeout(() => btn.style.transform = '', 200);
+            }
+
+            const data = loadData();
+            const post = data.posts.find(p => p.id === v.id);
+            if (post) {
+                const key = `${v.id}-love`;
+                if (v.liked) {
+                    if (!data.userReactions) data.userReactions = {};
+                    data.userReactions[key] = true;
+                    post.reactions.love = (post.reactions.love || 0) + 1;
+                } else {
+                    if (data.userReactions) {
+                        delete data.userReactions[key];
+                        post.reactions.love = Math.max(0, (post.reactions.love || 0) - 1);
+                    }
+                }
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                appData = data;
+            }
+        }
+
+        // ══════════════════════════════════════════
+        // REPOST / BOOKMARK / FOLLOW
+        // ══════════════════════════════════════════
+        function toggleRepost(idx) {
+            const v = videoPosts[idx];
+            v.reposted = !v.reposted;
+            v.reposts += v.reposted ? 1 : -1;
+            const btn = document.getElementById('repostBtn-' + idx);
+            const lbl = document.getElementById('repostCount-' + idx);
+            btn.style.background = v.reposted ? 'rgba(0,186,124,.2)' : '';
+            btn.querySelector('svg').style.stroke = v.reposted ? '#00ba7c' : '';
+            if (lbl) lbl.textContent = fmtNum(v.reposts);
+            showToast(v.reposted ? 'Reposted ✓' : 'Repost undone');
+        }
+
+        function toggleSave(idx) {
+            const v = videoPosts[idx];
+            v.saved = !v.saved;
+            v.bookmarks += v.saved ? 1 : -1;
+            const btn = document.getElementById('saveBtn-' + idx);
+            const lbl = document.getElementById('saveCount-' + idx);
+            btn.classList.toggle('saved', v.saved);
+            if (lbl) lbl.textContent = fmtNum(v.bookmarks);
+            if (v.saved) {
+                btn.style.transform = 'scale(1.25)';
+                setTimeout(() => btn.style.transform = '', 200);
+                showToast('Saved to Bookmarks ✓');
+            } else {
+                showToast('Removed from Bookmarks');
+            }
+        }
+
+        function toggleFollow(idx) {
+            const v = videoPosts[idx];
+            if (!v.authorId) return;
+            const newState = toggleFollowUser(v.authorId);
+            v.following = newState;
+            const dot = document.getElementById('followDot-' + idx);
+            const ico = document.getElementById('followIco-' + idx);
+            dot.classList.toggle('following', v.following);
+            ico.innerHTML = v.following ?
+                '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' :
+                '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>';
+            showToast(v.following ? 'Following ' + v.creator : 'Unfollowed');
+        }
+
+        // ══════════════════════════════════════════
+        // CAPTION EXPAND
+        // ══════════════════════════════════════════
+        function toggleCaption(idx) {
+            const cap = document.getElementById('cap-' + idx);
+            const btn = document.getElementById('seeMore-' + idx);
+            const expanded = cap.classList.toggle('expanded');
+            btn.textContent = expanded ? 'less' : 'more';
+        }
+
+        // ══════════════════════════════════════════
+        // SHEETS
+        // ══════════════════════════════════════════
+        function openSheet(id) {
+            document.getElementById('backdrop').classList.add('open');
+            document.getElementById(id).classList.add('open');
+            const v = videoPosts[_curIdx];
+            if (v && !v.isYouTube) {
+                const vid = document.getElementById('vid-' + _curIdx);
+                if (vid) vid.pause();
+            }
+        }
+
+        function closeSheet(id) {
+            document.getElementById(id).classList.remove('open');
+            const anyOpen = document.querySelectorAll('.sheet.open').length > 0;
+            if (!anyOpen) {
+                document.getElementById('backdrop').classList.remove('open');
+                const v = videoPosts[_curIdx];
+                if (v && !v.isYouTube) {
+                    const vid = document.getElementById('vid-' + _curIdx);
+                    if (vid) vid.play().catch(() => {});
+                }
+            }
+        }
+
+        function closeAllSheets() {
+            document.querySelectorAll('.sheet.open').forEach(s => s.classList.remove('open'));
+            document.getElementById('backdrop').classList.remove('open');
+            const v = videoPosts[_curIdx];
+            if (v && !v.isYouTube) {
+                const vid = document.getElementById('vid-' + _curIdx);
+                if (vid) vid.play().catch(() => {});
+            }
+        }
+
+        // ══════════════════════════════════════════
+        // COMMENTS RENDER FUNCTIONS
+        // ══════════════════════════════════════════
+        function renderCommentsHTML(comments, postId, visibleCount) {
+            const topLevel = comments.filter(c => c.parentId === null);
+
+            if (topLevel.length === 0) {
+                return '<p style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Be the first to comment.</p>';
+            }
+
+            const shown = topLevel.slice(0, visibleCount);
+            const hidden = topLevel.length - visibleCount;
+
+            let html = shown.map(c => renderCommentThread(c, comments, postId)).join('');
+
+            if (hidden > 0) {
+                html += `<button class="view-replies-btn load-more-comments-btn" onclick="loadMoreComments(${postId})">
+                    ▼ View ${hidden} more comment${hidden > 1 ? 's' : ''}
+                </button>`;
+            }
+
+            return html;
+        }
+
+        function renderCommentThread(comment, allComments, postId) {
+            const replies = getAllDescendants(comment.id, allComments);
+            const hasReplies = replies.length > 0;
+            const expandedCount = expandedThreads.get(comment.id) || 0;
+
+            let repliesHtml = '';
+
+            if (hasReplies && expandedCount > 0) {
+                const shownReplies = replies.slice(0, expandedCount);
+                const remaining = replies.length - expandedCount;
+
+                repliesHtml = `<div class="replies-thread">
+                    ${shownReplies.map(r => renderReplyItem(r, allComments, postId)).join('')}
+                </div>`;
+
+                if (remaining > 0) {
+                    repliesHtml += `<button class="view-replies-btn expand-replies-btn" data-comment-id="${comment.id}" onclick="expandReplies(${comment.id}, ${postId})">
+                        ▼ View ${remaining} more repl${remaining > 1 ? 'ies' : 'y'}
+                    </button>`;
+                } else {
+                    repliesHtml += `<button class="hide-replies-btn collapse-replies-btn" data-comment-id="${comment.id}" onclick="collapseReplies(${comment.id}, ${postId})">
+                        ▲ Hide replies
+                    </button>`;
+                }
+            } else if (hasReplies && expandedCount === 0) {
+                repliesHtml = `<button class="view-replies-btn expand-replies-btn" data-comment-id="${comment.id}" onclick="expandReplies(${comment.id}, ${postId})">
+                    ▼ View ${replies.length} repl${replies.length > 1 ? 'ies' : 'y'}
+                </button>`;
+            }
+
+            const isLong = comment.message.length > 160;
+            const likeCount = parseInt(localStorage.getItem('comment-like-' + comment.id) || '0');
+            const isLiked = likeCount > 0;
+
+            return `
+                <div class="comment-item" data-comment-id="${comment.id}">
+                    <div class="comment-avatar" data-username="${escapeHtml(comment.username)}">
+                        ${comment.username.charAt(0).toUpperCase()}
+                    </div>
+                    <div class="comment-body">
+                        <div class="comment-username">${escapeHtml(comment.username)}</div>
+                        <div class="comment-text${isLong ? ' collapsed' : ''}" data-cid="${comment.id}">
+                            ${escapeHtml(comment.message)}
+                        </div>
+                        ${isLong ? `<button class="comment-show-more" onclick="toggleCommentExpand(this, '${comment.id}')">Show more</button>` : ''}
+                        <div class="comment-meta">
+                            <span class="comment-time">${formatRelativeTime(comment.time)}</span>
+                            <button class="comment-reply-btn" onclick="replyToComment('${comment.id}', '${escapeHtml(comment.username)}')">Reply</button>
+                            <button class="comment-like-btn ${isLiked ? 'liked' : ''}" onclick="toggleCommentLikeUI(this, '${comment.id}')">
+                                <svg class="like-heart" viewBox="0 0 24 24" width="14" height="14"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                                <span class="like-count">${likeCount > 0 ? likeCount : ''}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                ${repliesHtml}
+            `;
+        }
+
+        function renderReplyItem(reply, allComments, postId) {
+            const parent = allComments.find(c => c.id === reply.parentId);
+            const parentName = parent ? parent.username : '';
+            const mention = (parentName && parentName !== reply.username) ?
+                `<span style="color:var(--p);font-weight:500;">@${escapeHtml(parentName)}</span> ` : '';
+
+            const isLong = reply.message.length > 160;
+            const likeCount = parseInt(localStorage.getItem('comment-like-' + reply.id) || '0');
+            const isLiked = likeCount > 0;
+
+            return `
+                <div class="reply-item" data-comment-id="${reply.id}">
+                    <div class="reply-avatar-dot" data-username="${escapeHtml(reply.username)}">
+                        ${reply.username.charAt(0).toUpperCase()}
+                    </div>
+                    <div class="reply-body">
+                        <div class="reply-username">${escapeHtml(reply.username)}</div>
+                        <div class="comment-text reply-text${isLong ? ' collapsed' : ''}" data-cid="${reply.id}">
+                            ${mention}${escapeHtml(reply.message)}
+                        </div>
+                        ${isLong ? `<button class="comment-show-more" onclick="toggleCommentExpand(this, '${reply.id}')">Show more</button>` : ''}
+                        <div class="reply-meta">
+                            <span class="reply-time">${formatRelativeTime(reply.time)}</span>
+                            <button class="reply-reply-btn" onclick="replyToComment('${reply.id}', '${escapeHtml(reply.username)}')">Reply</button>
+                            <button class="reply-like-btn ${isLiked ? 'liked' : ''}" onclick="toggleCommentLikeUI(this, '${reply.id}')">
+                                <svg class="like-heart" viewBox="0 0 24 24" width="12" height="12"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                                <span class="like-count">${likeCount > 0 ? likeCount : ''}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ══════════════════════════════════════════
+        // COMMENT ACTIONS
+        // ══════════════════════════════════════════
+        function addComment(postId, parentId, message) {
+            const post = appData.posts.find(p => p.id === postId);
+            if (!post) return;
+
+            const currentUser = getCurrentUser();
+
+            post.comments.push({
+                id: 'c' + Date.now(),
+                username: currentUser.displayName || 'Guest',
+                avatar: currentUser.avatar,
+                message: message,
+                time: new Date().toISOString(),
+                approved: true,
+                parentId: parentId || null
+            });
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+            appData = loadData();
+        }
+
+        function submitCommentFromBar() {
+            const textarea = document.getElementById('commentInput');
+            const message = textarea.value.trim();
+            if (!message) return showToast('Comment cannot be empty.');
+
+            const parentId = replyTarget ? replyTarget.commentId : null;
+            addComment(currentPostId, parentId, message);
+
+            textarea.value = '';
+            replyTarget = null;
+            updateReplyContextUI();
+
+            refreshCommentsList(currentPostId);
+            showToast(parentId ? 'Reply posted' : 'Comment posted');
+        }
+
+        function replyToComment(commentId, username) {
+            replyTarget = { commentId, username };
+            updateReplyContextUI();
+            document.getElementById('commentInput').focus();
+            document.getElementById('commentInput').placeholder = `Reply to @${username}...`;
+            showToast(`Replying to @${username}`);
+        }
+
+        function cancelReply() {
+            replyTarget = null;
+            updateReplyContextUI();
+            document.getElementById('commentInput').placeholder = 'Add a comment…';
+            document.getElementById('commentInput').value = '';
+        }
+
+        function updateReplyContextUI() {
+            const banner = document.getElementById('reply-context-banner');
+            const usernameEl = document.getElementById('reply-context-username');
+
+            if (replyTarget) {
+                banner.classList.add('show');
+                usernameEl.textContent = '@' + replyTarget.username;
+            } else {
+                banner.classList.remove('show');
+                usernameEl.textContent = '';
+            }
+        }
+
+        function toggleCommentLikeUI(btn, commentId) {
+            const isLiked = btn.classList.toggle('liked');
+            const key = 'comment-like-' + commentId;
+            let count = parseInt(localStorage.getItem(key) || '0');
+
+            if (isLiked) count++;
+            else count = Math.max(0, count - 1);
+
+            if (count === 0) localStorage.removeItem(key);
+            else localStorage.setItem(key, String(count));
+
+            const countEl = btn.querySelector('.like-count');
+            if (countEl) countEl.textContent = count > 0 ? count : '';
+        }
+
+        function toggleCommentExpand(btn, commentId) {
+            const textEl = document.querySelector(`.comment-text[data-cid="${commentId}"], .reply-text[data-cid="${commentId}"]`);
+            if (textEl) {
+                const collapsed = textEl.classList.toggle('collapsed');
+                btn.textContent = collapsed ? 'Show more' : 'Show less';
+            }
+        }
+
+        // ══════════════════════════════════════════
+        // EXPAND / COLLAPSE REPLIES
+        // ══════════════════════════════════════════
+        function expandReplies(commentId, postId) {
+            const current = expandedThreads.get(commentId) || 0;
+            expandedThreads.set(commentId, current + REPLY_BATCH);
+            refreshCommentsList(postId);
+        }
+
+        function collapseReplies(commentId, postId) {
+            expandedThreads.delete(commentId);
+            refreshCommentsList(postId);
+        }
+
+        function loadMoreComments(postId) {
+            const current = getVisibleComments(postId);
+            setCommentsVisible(postId, current + 5);
+            refreshCommentsList(postId);
+        }
+
+        function refreshCommentsList(postId) {
+            // Reload fresh data from localStorage
+            appData = loadData();
+            const post = appData.posts.find(p => p.id === postId);
+            if (!post) return;
+
+            const container = document.getElementById('comments-list');
+            if (!container) return;
+
+            const approvedComments = post.comments.filter(c => c.approved !== false);
+            const visibleCount = getVisibleComments(postId);
+
+            container.innerHTML = renderCommentsHTML(approvedComments, postId, visibleCount);
+        }
+
+        // ══════════════════════════════════════════
+        // OPEN COMMENTS
+        // ══════════════════════════════════════════
+        function openComments(idx) {
+            const v = videoPosts[idx];
+            currentPostId = v.id;
+
+            const countEl = document.getElementById('commentCount');
+            if (countEl) countEl.textContent = fmtNum(v.comments) + ' Replies';
+
+            replyTarget = null;
+            updateReplyContextUI();
+
+            const user = getCurrentUser();
+            const avatarEl = document.getElementById('commentUserAvatar');
+            if (avatarEl) {
+                avatarEl.src = user.avatar;
+                avatarEl.onerror = function() {
+                    this.style.display = 'none';
+                };
+            }
+
+            refreshCommentsList(v.id);
+
+            openSheet('commentSheet');
+        }
+
+        // ══════════════════════════════════════════
+        // SHARE / REACTIONS / MORE
+        // ══════════════════════════════════════════
+        function openShare(idx) { openSheet('shareSheet'); }
+
+        function shareAction(label) {
+            closeSheet('shareSheet');
+            showToast(label === 'Copy link' ? 'Link copied ✓' : label + ' ✓');
+        }
+
+        function openReactions(idx) {
+            const strip = document.getElementById('reactionStrip');
+            const list = document.getElementById('reactionList');
+            const countEl = document.getElementById('reactionCount');
+
+            const v = videoPosts[idx];
+            if (countEl) countEl.textContent = fmtNum(v.likes) + ' Likes';
+
+            const reactionTypes = [
+                { emoji: '❤️', label: 'Love', count: Math.floor(v.likes * 0.5) },
+                { emoji: '😂', label: 'Funny', count: Math.floor(v.likes * 0.2) },
+                { emoji: '😮', label: 'Wow', count: Math.floor(v.likes * 0.15) },
+                { emoji: '👏', label: 'Clap', count: Math.floor(v.likes * 0.1) },
+                { emoji: '🔥', label: 'Fire', count: Math.floor(v.likes * 0.05) },
+            ];
+
+            _activeReactionChip = 0;
+            strip.innerHTML = reactionTypes.map((r, i) => `
+                <button class="r-chip ${i === 0 ? 'active' : ''}" onclick="switchReactionTab(${i})">
+                    <span class="emoji">${r.emoji}</span>${r.label} ${fmtNum(r.count)}
+                </button>
+            `).join('');
+
+            renderReactionUsers(0, reactionTypes);
+            openSheet('reactionSheet');
+        }
+
+        function switchReactionTab(i) {
+            _activeReactionChip = i;
+            document.querySelectorAll('.r-chip').forEach((c, ci) => c.classList.toggle('active', ci === i));
+            const reactionTypes = [
+                { emoji: '❤️', label: 'Love' },
+                { emoji: '😂', label: 'Funny' },
+                { emoji: '😮', label: 'Wow' },
+                { emoji: '👏', label: 'Clap' },
+                { emoji: '🔥', label: 'Fire' },
+            ];
+            renderReactionUsers(i, reactionTypes);
+        }
+
+        function renderReactionUsers(i, reactionTypes) {
+            const list = document.getElementById('reactionList');
+            const r = reactionTypes[i] || reactionTypes[0];
+            const users = ['Tunde', 'Adaeze', 'Bayo', 'Ngozi', 'Emeka', 'Chisom', 'Sola', 'Kemi'];
+            list.innerHTML = users.slice(0, Math.floor(Math.random() * 5) + 3).map(u => {
+                const ava = `https://api.dicebear.com/7.x/avataaars/svg?seed=${u}`;
+                return `
+                    <div class="r-user">
+                        <img class="r-user-ava" src="${ava}" alt="${u}" onerror="this.src='${ava}'">
+                        <div class="r-user-info">
+                            <div class="r-user-name">${u}</div>
+                            <div class="r-user-handle">@${u.toLowerCase()}</div>
+                        </div>
+                        <span class="r-user-emoji">${r.emoji}</span>
+                        <button class="r-follow-btn" onclick="this.classList.toggle('following');this.textContent=this.classList.contains('following')?'Following':'Follow'">Follow</button>
+                    </div>`;
+            }).join('');
+        }
+
+        function openMore(idx) {
+            const list = document.getElementById('moreList');
+            const v = videoPosts[idx];
+            list.innerHTML = [
+                { ico: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+                    lbl: 'Not interested in this video' },
+                { ico: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+                    lbl: 'Follow ' + v.creator, sub: v.handle },
+                { ico: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+                    lbl: 'Find similar videos' },
+                { ico: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+                    lbl: 'Save video' },
+                { ico: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+                    lbl: 'Copy link to video' },
+                { ico: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+                    lbl: 'Report video', danger: true },
+            ].map(r => `
+                <button class="more-row ${r.danger ? 'danger' : ''}" onclick="moreAction('${r.lbl}')">
+                    <svg class="more-row-ico" viewBox="0 0 24 24">${r.ico}</svg>
+                    <div>
+                        <div class="more-row-lbl">${r.lbl}</div>
+                        ${r.sub ? `<div class="more-row-sub">${r.sub}</div>` : ''}
+                    </div>
+                </button>
+            `).join('');
+            openSheet('moreSheet');
+        }
+
+        function moreAction(label) {
+            closeSheet('moreSheet');
+            showToast(label);
+        }
+
+        // ══════════════════════════════════════════
+        // HELPERS
+        // ══════════════════════════════════════════
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.add('show');
+            clearTimeout(_toastTimer);
+            _toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+        }
+
+        function fmtNum(n) {
+            if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(1).replace('.0', '') + 'K';
+            return String(n);
+        }
+
+        function hashify(text) {
+            return text.replace(/#(\w+)/g, '<span class="hashtag">#$1</span>');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str || '';
+            return div.innerHTML;
+        }
+
+        function formatRelativeTime(iso) {
+            const d = new Date(iso);
+            const diff = Date.now() - d;
+            const m = Math.floor(diff / 60000);
+            if (m < 1) return 'Just now';
+            if (m < 60) return m + 'm ago';
+            const h = Math.floor(m / 60);
+            if (h < 24) return h + 'h ago';
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+
+        // ══════════════════════════════════════════
+        // UPDATE NAV AVATAR
+        // ══════════════════════════════════════════
+        function updateNavAvatar() {
+            const user = getCurrentUser();
+            const avatars = document.querySelectorAll('.side-av, .nav-av');
+            avatars.forEach(el => {
+                el.src = user.avatar;
+                el.onerror = function() {
+                    this.style.display = 'none';
+                };
+            });
+        }
+
+        // ══════════════════════════════════════════
+        // REFRESH FEED
+        // ══════════════════════════════════════════
+        function refreshFeed() {
+            document.querySelectorAll('.v-video').forEach(vid => {
+                if (vid._progTimer) clearInterval(vid._progTimer);
+                vid.pause();
+            });
+            buildFeed();
+        }
+
+        // ══════════════════════════════════════════
+        // STATE
+        // ══════════════════════════════════════════
+        let _curIdx = 0;
+        let _toastTimer = null;
+        let _activeReactionChip = 0;
+        let videoPosts = [];
+        let appData = loadData();
+
+        // ══════════════════════════════════════════
+        // INIT
+        // ══════════════════════════════════════════
+        function init() {
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.querySelector('.nav-item[href="video.html"]')?.classList.add('active');
+            document.querySelectorAll('.side-btn').forEach(el => el.classList.remove('active'));
+            document.querySelector('.side-btn[href="video.html"]')?.classList.add('active');
+
+            updateNavAvatar();
+
+            document.addEventListener('themeChanged', function(e) {
+                document.documentElement.setAttribute('data-theme', e.detail.theme);
+            });
+
+            buildFeed();
+
+            window.addEventListener('storage', function(e) {
+                if (e.key === STORAGE_KEY) {
+                    appData = loadData();
+                    refreshFeed();
+                }
+            });
+
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) {
+                    appData = loadData();
+                    refreshFeed();
+                }
+            });
+
+            document.getElementById('commentInput').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitCommentFromBar();
+                }
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+
+</body>
+</html>   

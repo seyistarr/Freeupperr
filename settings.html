@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Settings · Freeupper</title>
+    <link rel="icon" type="image/png" href="freeupper.png">
+    <link rel="stylesheet" href="global.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
+    <style>
+        /* ── Settings-specific styles ── */
+        .layout { display: flex; height: 100vh; width: 100%; overflow: hidden; }
+        .side-nav { display: none; flex-direction: column; align-items: center; padding: 28px 0 24px; background: var(--sidebg); border-right: 1px solid var(--brd); width: 70px; flex-shrink: 0; gap: 2px; z-index: 10; transition: background .3s, border-color .3s; }
+        .side-logo { font-size: 20px; font-weight: 900; color: var(--p); margin-bottom: 20px; letter-spacing: -1px; cursor: pointer; }
+        .side-logo a { color: inherit; text-decoration: none; }
+        .side-btn { width: 48px; height: 48px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: background .15s, transform .1s; background: none; border: none; position: relative; gap: 3px; color: inherit; text-decoration: none; }
+        .side-btn:hover { background: var(--pdim); transform: scale(1.04); }
+        .side-btn svg { width: 22px; height: 22px; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: stroke .15s; }
+        .side-btn span { font-size: 8px; color: var(--muted2); font-weight: 600; }
+        .side-btn.active svg { stroke: var(--p); }
+        .side-btn.active span { color: var(--p); }
+        .side-badge { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--p); border: 1.5px solid var(--sidebg); }
+        .side-gap { flex: 1; }
+        .side-av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid transparent; background: linear-gradient(135deg, #1a1035, #3b1a6b); }
+        .side-btn.active .side-av { border-color: var(--p); }
+
+        .main { flex: 1; overflow-y: auto; overflow-x: hidden; background: var(--bg); scroll-behavior: smooth; transition: background .3s; padding-bottom: 80px; }
+        .main::-webkit-scrollbar { width: 0; }
+        .settings-col { width: 100%; max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+
+        .settings-header { display: flex; justify-content: space-between; align-items: center; padding: clamp(44px, 8vw, 56px) 0 10px; position: sticky; top: 0; z-index: 30; background: var(--bg); transition: background .3s; }
+        .settings-header .back-btn { width: 38px; height: 38px; border-radius: 50%; background: var(--dotbg); border: 1.5px solid var(--brd2); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .18s, transform .15s; color: var(--text); }
+        .settings-header .back-btn:hover { background: var(--pdim); transform: scale(1.05); }
+        .settings-header .back-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+        .settings-header .title { font-size: clamp(18px, 5vw, 22px); font-weight: 800; letter-spacing: -.3px; }
+
+        .section { margin-bottom: 20px; }
+        .section-header { display: flex; align-items: center; gap: 8px; padding: 16px 4px 6px; }
+        .section-header .icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .section-header .icon svg { width: 14px; height: 14px; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .section-header .label { font-size: 11px; font-weight: 800; color: var(--muted2); text-transform: uppercase; letter-spacing: .09em; }
+        .card { background: var(--bg3); border-radius: 18px; margin: 4px 0; overflow: hidden; border: 1px solid var(--brd); transition: background .3s, border-color .3s; }
+        .row { display: flex; align-items: center; gap: 14px; padding: 16px clamp(14px, 4vw, 20px); cursor: pointer; transition: background .13s; position: relative; min-height: 64px; }
+        .row:not(:last-child) { border-bottom: 1px solid var(--brd); }
+        .row:hover { background: var(--rowh); }
+        .row:active { background: var(--pdim); }
+        .row.no-tap { cursor: default; }
+        .row.no-tap:hover { background: transparent; }
+        .row .r-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .row .r-icon svg { width: 19px; height: 19px; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+        .row .r-text { flex: 1; min-width: 0; }
+        .row .r-title { font-size: 15px; font-weight: 700; line-height: 1.2; }
+        .row .r-title.danger { color: var(--danger); }
+        .row .r-sub { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 500; }
+        .row .r-val { font-size: 13px; color: var(--muted); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .row .r-chev { color: var(--muted2); }
+        .row .r-chev svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+        .row .r-badge { background: var(--pdim); border: 1px solid var(--pbrd); color: var(--pl); font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 100px; letter-spacing: .04em; white-space: nowrap; }
+        .row .r-badge.ok { background: rgba(74, 222, 128, .12); border-color: rgba(74, 222, 128, .3); color: var(--ok); }
+        .row .r-badge.red { background: rgba(248, 113, 113, .12); border-color: rgba(248, 113, 113, .3); color: var(--danger); }
+        .row .r-badge.warn { background: rgba(251, 146, 60, .12); border-color: rgba(251, 146, 60, .3); color: var(--warn); }
+
+        .toggle { position: relative; width: 48px; height: 26px; flex-shrink: 0; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle .track { position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: 100px; background: rgba(150, 150, 150, .2); cursor: pointer; transition: background .22s; border: 1.5px solid var(--brd); }
+        .toggle input:checked + .track { background: var(--p); border-color: var(--p); }
+        .toggle .track::after { content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .22s cubic-bezier(.34, 1.4, .64, 1); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); }
+        .toggle input:checked + .track::after { transform: translateX(22px); }
+
+        .icon-purple { background: var(--pdim); }
+        .icon-purple svg { stroke: var(--pl); }
+        .icon-gray { background: var(--inp); }
+        .icon-gray svg { stroke: var(--muted); }
+        .icon-green { background: rgba(74, 222, 128, .1); border: 1px solid rgba(74, 222, 128, .22); }
+        .icon-green svg { stroke: var(--ok); }
+        .icon-red { background: rgba(248, 113, 113, .09); border: 1px solid rgba(248, 113, 113, .22); }
+        .icon-red svg { stroke: var(--danger); }
+        .icon-blue { background: rgba(96, 165, 250, .1); border: 1px solid rgba(96, 165, 250, .22); }
+        .icon-blue svg { stroke: var(--blue); }
+        .icon-orange { background: rgba(251, 146, 60, .1); border: 1px solid rgba(251, 146, 60, .22); }
+        .icon-orange svg { stroke: var(--warn); }
+
+        .hidden { display: none !important; }
+
+        /* Toast */
+        #tw { position: fixed; top: clamp(14px, 4vw, 22px); left: 50%; transform: translateX(-50%); z-index: 99999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: calc(100vw - 32px); }
+        .toast { background: var(--bg3); border: 1px solid var(--brd2); border-radius: 100px; padding: 11px 18px; font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; box-shadow: 0 8px 32px rgba(0, 0, 0, .55); animation: tIn .3s cubic-bezier(.34, 1.2, .64, 1) both; white-space: nowrap; }
+        .toast.out { animation: tOut .25s ease forwards; }
+        @keyframes tIn { from { transform: translateY(-14px); opacity: 0; } to { transform: none; opacity: 1; } }
+        @keyframes tOut { to { transform: translateY(-10px); opacity: 0; } }
+        .td { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .tg { background: var(--ok); } .tp { background: var(--p); } .tr { background: var(--danger); } .to { background: var(--warn); }
+
+        @media (min-width: 768px) { .side-nav { display: flex; } .main { padding-bottom: 24px; } }
+        @media (min-width: 1024px) { .side-nav { width: 82px; } .settings-col { max-width: 680px; } }
+
+        /* Bottom nav (hidden on desktop) */
+        .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: var(--navbg); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border-top: 1px solid var(--brd); justify-content: space-around; align-items: center; padding: 10px 0 max(env(safe-area-inset-bottom), 16px); z-index: 50; transition: background .3s, border-color .3s; }
+        .bottom-nav .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; padding: 6px clamp(8px, 3vw, 14px); border-radius: 14px; transition: background .15s; position: relative; background: none; border: none; text-decoration: none; color: inherit; }
+        .bottom-nav .nav-item:hover { background: var(--pdim); }
+        .bottom-nav .nav-item svg { width: clamp(20px, 5vw, 24px); height: clamp(20px, 5vw, 24px); fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: stroke .15s; }
+        .bottom-nav .nav-item span { font-size: clamp(9px, 2vw, 10px); color: var(--muted); font-weight: 600; letter-spacing: .03em; }
+        .bottom-nav .nav-item.active svg { stroke: var(--p); }
+        .bottom-nav .nav-item.active span { color: var(--p); }
+        .bottom-nav .nav-av { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 2px solid transparent; background: linear-gradient(135deg, #1a1035, #3b1a6b); }
+        .bottom-nav .nav-item.active .nav-av { border-color: var(--p); }
+        .bottom-nav .nav-badge { position: absolute; top: 3px; right: clamp(4px, 2vw, 6px); width: 8px; height: 8px; border-radius: 50%; background: var(--p); border: 1.5px solid var(--bg); }
+        @media (min-width: 768px) { .bottom-nav { display: none !important; } }
+    </style>
+</head>
+<body>
+
+    <div id="tw"></div>
+
+    <div class="layout">
+
+        <!-- Side nav (desktop) -->
+        <nav class="side-nav">
+            <div class="side-logo"><a href="index.html">◈</a></div>
+            <a href="index.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg>
+                <span>Home</span>
+            </a>
+            <a href="search.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Search</span>
+            </a>
+            <a href="chat.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>Chat</span>
+                <div class="side-badge"></div>
+            </a>
+            <a href="create.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span>Create</span>
+            </a>
+            <a href="video.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                <span>Video</span>
+            </a>
+            <div class="side-gap"></div>
+            <a href="profile.html" class="side-btn">
+                <img class="side-av" id="sideAv" src="" alt="" onerror="this.style.display='none'">
+                <span>Profile</span>
+            </a>
+        </nav>
+
+        <!-- Main -->
+        <div class="main">
+            <div class="settings-col">
+
+                <!-- Header -->
+                <div class="settings-header">
+                    <button class="back-btn" onclick="goBack()">
+                        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <span class="title">Settings</span>
+                    <div style="width:38px;"></div>
+                </div>
+
+                <!-- ─── ACCOUNT ─── -->
+                <div class="section">
+                    <div class="section-header">
+                        <div class="icon icon-purple"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
+                        <span class="label">Account Information</span>
+                    </div>
+                    <div class="card">
+                        <div class="row" onclick="showToast('Account details coming soon', 'p')">
+                            <div class="r-icon icon-purple"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
+                            <div class="r-text"><div class="r-title">Account Details</div><div class="r-sub">Username, email, phone</div></div>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                        <div class="row" onclick="window.location.href='profile.html'">
+                            <div class="r-icon icon-purple"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></div>
+                            <div class="r-text"><div class="r-title">Edit Profile</div><div class="r-sub">Name, bio, avatar, tags</div></div>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                        <div class="row" onclick="window.location.href='profile.html?tab=verification'">
+                            <div class="r-icon icon-purple"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+                            <div class="r-text"><div class="r-title">Verification</div><div class="r-sub">Request your verified badge</div></div>
+                            <span class="r-badge" id="vfyBadge">Unverified</span>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── PRIVACY ─── -->
+                <div class="section">
+                    <div class="section-header">
+                        <div class="icon icon-gray"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+                        <span class="label">Privacy</span>
+                    </div>
+                    <div class="card">
+                        <div class="row no-tap">
+                            <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+                            <div class="r-text"><div class="r-title">Private Account</div><div class="r-sub">Only approved followers see posts</div></div>
+                            <label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" id="privToggle" onchange="togglePrivate()"><div class="track"></div></label>
+                        </div>
+                        <div class="row no-tap">
+                            <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                            <div class="r-text"><div class="r-title">Hide Follower Count</div><div class="r-sub">Others won't see your count</div></div>
+                            <label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" id="hideCountTog" onchange="showToast('Follower count '+(this.checked?'hidden':'visible'),'p')"><div class="track"></div></label>
+                        </div>
+                        <div class="row no-tap">
+                            <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+                            <div class="r-text"><div class="r-title">Activity Status</div><div class="r-sub">Show when you're online</div></div>
+                            <label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" checked id="activityTog" onchange="toggleActivity()"><div class="track"></div></label>
+                        </div>
+                        <div class="row" onclick="showToast('Blocked users coming soon', 'p')">
+                            <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
+                            <div class="r-text"><div class="r-title">Blocked Users</div><div class="r-sub">Manage blocked accounts</div></div>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── APPEARANCE ─── -->
+                <div class="section">
+                    <div class="section-header">
+                        <div class="icon icon-blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></div>
+                        <span class="label">Appearance</span>
+                    </div>
+                    <div class="card">
+                        <div class="row no-tap">
+                            <div class="r-icon icon-blue"><svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div>
+                            <div class="r-text"><div class="r-title">Dark Mode</div><div class="r-sub" id="darkSub">Currently: Dark</div></div>
+                            <label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" id="darkTog" checked onchange="toggleDark(this.checked)"><div class="track"></div></label>
+                        </div>
+                        <div class="row" onclick="showToast('Language picker coming soon', 'p')">
+                            <div class="r-icon icon-blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+                            <div class="r-text"><div class="r-title">Language</div><div class="r-sub">Display language</div></div>
+                            <span class="r-val">English</span>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── SECURITY ─── -->
+                <div class="section">
+                    <div class="section-header">
+                        <div class="icon icon-green"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                        <span class="label">Security</span>
+                    </div>
+                    <div class="card">
+                        <div class="row" onclick="showToast('2FA coming soon', 'p')">
+                            <div class="r-icon icon-green"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                            <div class="r-text"><div class="r-title">Two-Factor Auth</div><div class="r-sub">Authenticator app protection</div></div>
+                            <span class="r-badge red">Not Enabled</span>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                        <div class="row" onclick="showToast('Change password coming soon', 'p')">
+                            <div class="r-icon icon-green"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></div>
+                            <div class="r-text"><div class="r-title">Change Password</div><div class="r-sub">Update your password regularly</div></div>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                        <div class="row" onclick="showToast('Active sessions coming soon', 'p')">
+                            <div class="r-icon icon-green"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+                            <div class="r-text"><div class="r-title">Active Sessions</div><div class="r-sub">Manage logged-in devices</div></div>
+                            <span class="r-badge">1 device</span>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── ACCOUNT ACTIONS ─── -->
+                <div class="section">
+                    <div class="section-header">
+                        <div class="icon icon-orange"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></div>
+                        <span class="label">Account Actions</span>
+                    </div>
+                    <div class="card">
+                        <div class="row" onclick="confirmLogout()">
+                            <div class="r-icon icon-orange"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></div>
+                            <div class="r-text"><div class="r-title">Log Out</div><div class="r-sub">Sign out of your account</div></div>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                        <div class="row" onclick="confirmDelete()">
+                            <div class="r-icon icon-red"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div>
+                            <div class="r-text"><div class="r-title danger">Delete Account</div><div class="r-sub">Permanently remove your account</div></div>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── SUPPORT ─── -->
+                <div class="section">
+                    <div class="section-header">
+                        <div class="icon icon-gray"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+                        <span class="label">Support &amp; About</span>
+                    </div>
+                    <div class="card">
+                        <div class="row" onclick="showToast('Help Center coming soon', 'p')">
+                            <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+                            <div class="r-text"><div class="r-title">Help Center</div><div class="r-sub">FAQs and support articles</div></div>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                        <div class="row" onclick="showToast('Privacy Center coming soon', 'p')">
+                            <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                            <div class="r-text"><div class="r-title">Privacy Center</div><div class="r-sub">How we handle your data</div></div>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                        <div class="row" onclick="showToast('Terms coming soon', 'p')">
+                            <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+                            <div class="r-text"><div class="r-title">Terms &amp; Policies</div><div class="r-sub">Legal information</div></div>
+                            <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </div>
+                        <div class="row no-tap">
+                            <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+                            <div class="r-text"><div class="r-title">App Version</div><div class="r-sub">Up to date</div></div>
+                            <span class="r-badge ok">v1.0.0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="height:32px;"></div>
+
+            </div>
+        </div>
+
+        <!-- Bottom nav (mobile) -->
+        <nav class="bottom-nav">
+            <a href="index.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg>
+                <span>Home</span>
+            </a>
+            <a href="search.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Search</span>
+            </a>
+            <a href="chat.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>Chat</span>
+                <div class="nav-badge"></div>
+            </a>
+            <a href="create.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span>Create</span>
+            </a>
+            <a href="video.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                <span>Video</span>
+            </a>
+            <a href="profile.html" class="nav-item" id="navProfileBtn">
+                <img class="nav-av" id="navAv" src="" alt="" onerror="this.style.background='linear-gradient(135deg,#1a1035,#3b1a6b)'">
+                <span>Profile</span>
+            </a>
+        </nav>
+
+    </div>
+
+    <script src="global.js"></script>
+    <script>
+        (function() {
+            'use strict';
+
+            const user = getCurrentUser();
+
+            // Theme toggle
+            document.getElementById('darkTog').checked = getCurrentTheme() === 'dark';
+            document.getElementById('darkSub').textContent = 'Currently: ' + (getCurrentTheme() === 'dark' ? 'Dark' : 'Light');
+
+            window.toggleDark = function(on) {
+                if (on) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    localStorage.setItem('freeupper_theme', 'dark');
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    localStorage.setItem('freeupper_theme', 'light');
+                }
+                document.getElementById('darkSub').textContent = 'Currently: ' + (on ? 'Dark' : 'Light');
+            };
+
+            // Private toggle
+            if (user.isPrivate) {
+                document.getElementById('privToggle').checked = true;
+            }
+            window.togglePrivate = function() {
+                const checked = document.getElementById('privToggle').checked;
+                user.isPrivate = checked;
+                saveCurrentUser(user);
+                showToast(checked ? 'Account is now private' : 'Account is now public', checked ? 'o' : 'g');
+            };
+
+            // Activity toggle
+            window.toggleActivity = function() {
+                const checked = document.getElementById('activityTog').checked;
+                user.activityStatus = checked;
+                saveCurrentUser(user);
+                showToast(checked ? 'Activity status visible' : 'Activity status hidden', 'p');
+            };
+
+            // Verification badge
+            const vfyBadge = document.getElementById('vfyBadge');
+            if (user.verified) {
+                vfyBadge.textContent = 'Verified';
+                vfyBadge.className = 'r-badge ok';
+            } else if (user.verificationStatus === 'pending') {
+                vfyBadge.textContent = 'Pending';
+                vfyBadge.className = 'r-badge warn';
+            } else {
+                vfyBadge.textContent = 'Unverified';
+                vfyBadge.className = 'r-badge';
+            }
+
+            // Navigation
+            window.goBack = function() {
+                window.location.href = 'profile.html';
+            };
+
+            window.confirmLogout = function() {
+                if (confirm('Log out of your account?')) {
+                    localStorage.removeItem('freeupper_user_profile');
+                    window.location.href = 'index.html';
+                }
+            };
+
+            window.confirmDelete = function() {
+                if (confirm('⚠️ Permanently delete your account? This cannot be undone.')) {
+                    if (confirm('Are you absolutely sure?')) {
+                        localStorage.removeItem('freeupper_user_profile');
+                        localStorage.removeItem('freeupper_all_users');
+                        localStorage.removeItem('freeupper_follows');
+                        localStorage.removeItem('freeupper_bookmarks');
+                        localStorage.removeItem('freeupper_shares');
+                        window.location.href = 'index.html';
+                    }
+                }
+            };
+
+            // Update nav avatar
+            updateNavAvatar();
+
+        })();
+    </script>
+
+</body>
+</html>
