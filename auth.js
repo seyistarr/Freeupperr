@@ -1,10 +1,5 @@
 /* ============================================================
    FreeUpper — auth.js
-   Drop this in AFTER global.js on every page.
-
-   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-   <script src="global.js"></script>
-   <script src="auth.js"></script>
    ============================================================ */
 (function () {
   'use strict';
@@ -139,70 +134,11 @@
   });
 
   // ─── AUTH MODAL ─────────────────────────────────────────────
-  const modalCSS = `
-  #fu-auth-overlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.7);
-    backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;
-    opacity:0;pointer-events:none;transition:opacity .25s;padding:20px}
-  #fu-auth-overlay.open{opacity:1;pointer-events:auto}
-  #fu-auth-card{width:100%;max-width:380px;background:var(--bg3,#111);border:1px solid var(--brd2,rgba(255,255,255,.1));
-    border-radius:24px;padding:28px 24px 24px;transform:scale(.94);transition:transform .25s;
-    box-shadow:0 24px 80px rgba(0,0,0,.6);color:var(--text,#fff);font-family:inherit;position:relative}
-  #fu-auth-overlay.open #fu-auth-card{transform:scale(1)}
-  #fu-auth-close{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:50%;
-    background:rgba(255,255,255,.08);border:none;color:var(--text,#fff);cursor:pointer;font-size:16px}
-  #fu-auth-logo{text-align:center;font-weight:900;font-size:22px;letter-spacing:-1px;margin-bottom:4px}
-  #fu-auth-logo span{color:#8b5cf6}
-  #fu-auth-title{text-align:center;font-weight:800;font-size:18px;margin-bottom:4px}
-  #fu-auth-sub{text-align:center;font-size:13px;color:var(--muted,rgba(255,255,255,.5));margin-bottom:18px;line-height:1.5}
-  .fu-field{margin-bottom:12px}
-  .fu-field input{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--brd2,rgba(255,255,255,.12));
-    background:var(--inp,rgba(255,255,255,.05));color:var(--text,#fff);font-size:14px;outline:none;box-sizing:border-box}
-  .fu-field input:focus{border-color:#8b5cf6}
-  #fu-auth-error{font-size:12px;color:#f87171;min-height:16px;margin-bottom:6px}
-  .fu-btn-primary{width:100%;padding:13px;border-radius:12px;border:none;cursor:pointer;
-    background:linear-gradient(135deg,#8b5cf6,#6c3fc5);color:#fff;font-weight:800;font-size:14px;
-    box-shadow:0 4px 18px rgba(108,63,197,.45)}
-  .fu-btn-primary:disabled{opacity:.5;cursor:default}
-  .fu-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted2,rgba(255,255,255,.35));font-size:12px}
-  .fu-divider::before,.fu-divider::after{content:'';flex:1;height:1px;background:var(--brd2,rgba(255,255,255,.12))}
-  .fu-btn-google{width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--brd2,rgba(255,255,255,.15));
-    background:transparent;color:var(--text,#fff);font-weight:700;font-size:13.5px;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;gap:8px}
-  #fu-auth-switch{text-align:center;font-size:13px;color:var(--muted,rgba(255,255,255,.55));margin-top:16px}
-  #fu-auth-switch button{background:none;border:none;color:#a78bfa;font-weight:700;cursor:pointer;font-size:13px}
-  `;
-
-  const style = document.createElement('style');
-  style.textContent = modalCSS;
-  document.head.appendChild(style);
-
-  const overlay = document.createElement('div');
-  overlay.id = 'fu-auth-overlay';
-  overlay.innerHTML = `
-    <div id="fu-auth-card">
-      <button id="fu-auth-close" type="button">&#10005;</button>
-      <div id="fu-auth-logo">Free<span>Upper</span></div>
-      <div id="fu-auth-title">Join FreeUpper</div>
-      <div id="fu-auth-sub">Create an account to post, comment, and save favorites.</div>
-      <div id="fu-auth-error"></div>
-      <div id="fu-name-field" class="fu-field"><input id="fu-name" type="text" placeholder="Full name" /></div>
-      <div class="fu-field"><input id="fu-email" type="email" placeholder="Email address" /></div>
-      <div class="fu-field"><input id="fu-password" type="password" placeholder="Password" /></div>
-      <button class="fu-btn-primary" id="fu-submit-btn" type="button">Create Account</button>
-      <div class="fu-divider">OR</div>
-      <button class="fu-btn-google" id="fu-google-btn" type="button">
-        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3 14.6 2 12 2 6.9 2 2.7 6.1 2.7 11.8S6.9 21.6 12 21.6c6.9 0 9.3-4.8 9.3-7.3 0-.5-.1-.9-.1-1.3H12z"/></svg>
-        Continue with Google
-      </button>
-      <div id="fu-auth-switch">Already have an account? <button id="fu-switch-btn" type="button">Sign In</button></div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-
   let mode = 'signup';
   let pendingAction = null;
+  let modalInitialized = false;
 
-  function render() {
+  function renderAuthForm() {
     document.getElementById('fu-auth-error').textContent = '';
     if (mode === 'signup') {
       document.getElementById('fu-auth-title').textContent = 'Join FreeUpper';
@@ -219,37 +155,141 @@
       document.getElementById('fu-auth-switch').innerHTML =
         "Don't have an account? <button id=\"fu-switch-btn\" type=\"button\">Sign Up</button>";
     }
-    document.getElementById('fu-switch-btn').addEventListener('click', () => {
-      mode = mode === 'signup' ? 'signin' : 'signup';
-      render();
-    });
+    const switchBtn = document.getElementById('fu-switch-btn');
+    if (switchBtn) {
+      switchBtn.addEventListener('click', function() {
+        mode = mode === 'signup' ? 'signin' : 'signup';
+        renderAuthForm();
+      });
+    }
   }
 
   function openModal(startMode, onSuccess) {
+    console.log('🔓 Opening auth modal, mode:', startMode);
     mode = startMode || 'signup';
     pendingAction = onSuccess || null;
-    render();
-    overlay.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    
+    // Ensure modal exists
+    if (!modalInitialized) {
+      createAuthModal();
+    }
+    
+    renderAuthForm();
+    const overlay = document.getElementById('fu-auth-overlay');
+    if (overlay) {
+      overlay.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    } else {
+      console.error('❌ Modal overlay not found!');
+    }
   }
 
   function closeModal() {
-    overlay.classList.remove('open');
-    document.body.style.overflow = '';
+    const overlay = document.getElementById('fu-auth-overlay');
+    if (overlay) {
+      overlay.classList.remove('open');
+      document.body.style.overflow = '';
+    }
     pendingAction = null;
   }
 
-  document.getElementById('fu-auth-close').addEventListener('click', closeModal);
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  function createAuthModal() {
+    if (modalInitialized) return;
+    if (!document.body) {
+      console.warn('⚠️ document.body not ready, retrying...');
+      setTimeout(createAuthModal, 100);
+      return;
+    }
+    if (document.getElementById('fu-auth-overlay')) {
+      modalInitialized = true;
+      return;
+    }
 
-  document.getElementById('fu-submit-btn').addEventListener('click', async () => {
+    const modalCSS = `
+    #fu-auth-overlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.7);
+      backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;
+      opacity:0;pointer-events:none;transition:opacity .25s;padding:20px}
+    #fu-auth-overlay.open{opacity:1;pointer-events:auto}
+    #fu-auth-card{width:100%;max-width:380px;background:var(--bg3,#111);border:1px solid var(--brd2,rgba(255,255,255,.1));
+      border-radius:24px;padding:28px 24px 24px;transform:scale(.94);transition:transform .25s;
+      box-shadow:0 24px 80px rgba(0,0,0,.6);color:var(--text,#fff);font-family:inherit;position:relative}
+    #fu-auth-overlay.open #fu-auth-card{transform:scale(1)}
+    #fu-auth-close{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:50%;
+      background:rgba(255,255,255,.08);border:none;color:var(--text,#fff);cursor:pointer;font-size:16px}
+    #fu-auth-logo{text-align:center;font-weight:900;font-size:22px;letter-spacing:-1px;margin-bottom:4px}
+    #fu-auth-logo span{color:#8b5cf6}
+    #fu-auth-title{text-align:center;font-weight:800;font-size:18px;margin-bottom:4px}
+    #fu-auth-sub{text-align:center;font-size:13px;color:var(--muted,rgba(255,255,255,.5));margin-bottom:18px;line-height:1.5}
+    .fu-field{margin-bottom:12px}
+    .fu-field input{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--brd2,rgba(255,255,255,.12));
+      background:var(--inp,rgba(255,255,255,.05));color:var(--text,#fff);font-size:14px;outline:none;box-sizing:border-box}
+    .fu-field input:focus{border-color:#8b5cf6}
+    #fu-auth-error{font-size:12px;color:#f87171;min-height:16px;margin-bottom:6px}
+    .fu-btn-primary{width:100%;padding:13px;border-radius:12px;border:none;cursor:pointer;
+      background:linear-gradient(135deg,#8b5cf6,#6c3fc5);color:#fff;font-weight:800;font-size:14px;
+      box-shadow:0 4px 18px rgba(108,63,197,.45)}
+    .fu-btn-primary:disabled{opacity:.5;cursor:default}
+    .fu-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted2,rgba(255,255,255,.35));font-size:12px}
+    .fu-divider::before,.fu-divider::after{content:'';flex:1;height:1px;background:var(--brd2,rgba(255,255,255,.12))}
+    .fu-btn-google{width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--brd2,rgba(255,255,255,.15));
+      background:transparent;color:var(--text,#fff);font-weight:700;font-size:13.5px;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;gap:8px}
+    #fu-auth-switch{text-align:center;font-size:13px;color:var(--muted,rgba(255,255,255,.55));margin-top:16px}
+    #fu-auth-switch button{background:none;border:none;color:#a78bfa;font-weight:700;cursor:pointer;font-size:13px}
+    `;
+
+    if (!document.getElementById('fu-auth-styles')) {
+      const style = document.createElement('style');
+      style.id = 'fu-auth-styles';
+      style.textContent = modalCSS;
+      document.head.appendChild(style);
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'fu-auth-overlay';
+    overlay.innerHTML = `
+      <div id="fu-auth-card">
+        <button id="fu-auth-close" type="button">&#10005;</button>
+        <div id="fu-auth-logo">Free<span>Upper</span></div>
+        <div id="fu-auth-title">Join FreeUpper</div>
+        <div id="fu-auth-sub">Create an account to post, comment, and save favorites.</div>
+        <div id="fu-auth-error"></div>
+        <div id="fu-name-field" class="fu-field"><input id="fu-name" type="text" placeholder="Full name" /></div>
+        <div class="fu-field"><input id="fu-email" type="email" placeholder="Email address" /></div>
+        <div class="fu-field"><input id="fu-password" type="password" placeholder="Password" /></div>
+        <button class="fu-btn-primary" id="fu-submit-btn" type="button">Create Account</button>
+        <div class="fu-divider">OR</div>
+        <button class="fu-btn-google" id="fu-google-btn" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3 14.6 2 12 2 6.9 2 2.7 6.1 2.7 11.8S6.9 21.6 12 21.6c6.9 0 9.3-4.8 9.3-7.3 0-.5-.1-.9-.1-1.3H12z"/></svg>
+          Continue with Google
+        </button>
+        <div id="fu-auth-switch">Already have an account? <button id="fu-switch-btn" type="button">Sign In</button></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById('fu-auth-close').addEventListener('click', closeModal);
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
+
+    document.getElementById('fu-submit-btn').addEventListener('click', handleAuthSubmit);
+    document.getElementById('fu-google-btn').addEventListener('click', handleGoogleAuth);
+
+    modalInitialized = true;
+    console.log('✅ Auth modal created');
+  }
+
+  // ─── AUTH HANDLERS ──────────────────────────────────────────
+  async function handleAuthSubmit() {
     const errEl = document.getElementById('fu-auth-error');
     const email = document.getElementById('fu-email').value.trim();
     const password = document.getElementById('fu-password').value;
     const name = document.getElementById('fu-name').value.trim();
     errEl.textContent = '';
 
-    if (!email || !password) { errEl.textContent = 'Please fill in email and password.'; return; }
+    if (!email || !password) {
+      errEl.textContent = 'Please fill in email and password.';
+      return;
+    }
 
     const btn = document.getElementById('fu-submit-btn');
     btn.disabled = true;
@@ -276,16 +316,28 @@
       btn.disabled = false;
       btn.textContent = mode === 'signup' ? 'Create Account' : 'Sign In';
     }
-  });
+  }
 
-  document.getElementById('fu-google-btn').addEventListener('click', async () => {
+  async function handleGoogleAuth() {
     await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.href } });
-  });
+  }
 
   // ─── PROTECTED ACTION WRAPPER ────────────────────────────
   function requireAuth(fn) {
     const user = getCurrentUser();
-    if (user.isLoggedIn) { fn(); return; }
+    console.log('🔐 requireAuth called, user logged in:', user.isLoggedIn);
+    
+    if (user && user.isLoggedIn) {
+      console.log('✅ User is logged in, executing action');
+      fn();
+      return;
+    }
+    
+    console.log('❌ User is not logged in, showing signup modal');
+    // Ensure modal exists before opening
+    if (!modalInitialized) {
+      createAuthModal();
+    }
     openModal('signup', fn);
   }
 
@@ -334,15 +386,30 @@
     await sb.auth.signOut();
   }
 
+  // ─── INIT ──────────────────────────────────────────────────
+  function initAuth() {
+    // Create modal on DOM ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', createAuthModal);
+    } else {
+      createAuthModal();
+    }
+  }
+
   // ─── EXPOSE ───────────────────────────────────────────────
   window.AuthUser = {
-    getCurrentUser,
-    requireAuth,
-    uploadAvatar,
-    signOut,
-    openModal,
-    closeModal
+    getCurrentUser: getCurrentUser,
+    requireAuth: requireAuth,
+    uploadAvatar: uploadAvatar,
+    signOut: signOut,
+    openModal: openModal,
+    closeModal: closeModal
   };
 
   window.getCurrentUser = getCurrentUser;
+
+  // Init
+  initAuth();
+
+  console.log('✅ AuthUser is ready:', window.AuthUser);
 })();

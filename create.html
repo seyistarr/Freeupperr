@@ -1429,8 +1429,6 @@
         // CONFIG & CONSTANTS
         // ══════════════════════════════════════════
         const STORAGE_KEY = 'freeupper_blog_data_v2';
-        const USER_KEY = 'freeupper_user_profile';
-        const ALL_USERS_KEY = 'freeupper_all_users';
         const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
         const CLOUDINARY_IMAGE_UPLOAD_PRESET = 'image_upload';
         const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload';
@@ -1473,6 +1471,7 @@
         let categoryModalMode = 'post';
         let fullscreenImages = [];
         let fullscreenIndex = 0;
+        let appData = loadBlogData();
 
         // ══════════════════════════════════════════
         // DATA LAYER (localStorage fallback for market items)
@@ -1493,7 +1492,7 @@
             };
         }
 
-        function loadData() {
+        function loadBlogData() {
             const raw = localStorage.getItem(STORAGE_KEY);
             const data = raw ? JSON.parse(raw) : getDefaultData();
             if (!data.marketItems) data.marketItems = [];
@@ -1503,18 +1502,13 @@
             return data;
         }
 
-        function saveData(data) {
+        function saveBlogData(data) {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         }
 
-        let appData = loadData();
-
         function persist() {
-            saveData(appData);
+            saveBlogData(appData);
         }
-
-        // ── getCurrentUser is now provided by auth.js ──
-        // we use window.getCurrentUser (from auth.js) which mirrors the old contract.
 
         // ══════════════════════════════════════════
         // TOAST
@@ -2090,140 +2084,203 @@
         // SUBMIT POST (with Supabase via PostsAPI)
         // ══════════════════════════════════════════
         function submitPost() {
-            // ✅ Require authentication using AuthUser from auth.js
-            window.AuthUser.requireAuth(async () => {
-                const user = window.getCurrentUser();
-                const title = document.getElementById('postTitle').value.trim();
-                const content = document.getElementById('postContent').value.trim();
-                const description = document.getElementById('postDescription').value.trim();
-                const category = document.getElementById('postCategory').value;
-                const mediaUrl = document.getElementById('postMediaUrl').value;
-                const mediaType = document.getElementById('postMediaType').value;
+            console.log('🔍 submitPost called');
 
-                if (!title || !content) {
-                    showToast('Please fill in both title and content', 'o');
-                    return;
+            // ✅ Check if AuthUser exists, if not show error
+            if (!window.AuthUser) {
+                showToast('Please sign in to create a post', 'o');
+                // Try to open auth modal directly
+                if (window.AuthUser && typeof window.AuthUser.openModal === 'function') {
+                    window.AuthUser.openModal('signup');
                 }
-                if (postTags.length > 3) {
-                    showToast('Max 3 tags allowed', 'o');
-                    return;
-                }
+                return;
+            }
 
+            // ✅ Let AuthUser.requireAuth handle authentication
+            window.AuthUser.requireAuth(async function() {
                 try {
-                    await window.PostsAPI.createPost({
-                        title,
-                        description,
-                        content,
-                        mediaUrl,
-                        mediaType,
-                        category: category || 'General',
-                        tags: [...postTags]
-                    });
+                    const user = window.getCurrentUser();
+                    console.log('✅ User authenticated:', user);
 
-                    // Reset form
-                    document.getElementById('postTitle').value = '';
-                    document.getElementById('postContent').value = '';
-                    document.getElementById('postDescription').value = '';
-                    document.getElementById('postCategory').value = '';
-                    document.getElementById('postCategoryDisplay').textContent = 'Select a category';
-                    document.getElementById('postCategoryDisplay').classList.add('placeholder');
-                    document.getElementById('postMediaUrl').value = '';
-                    document.getElementById('postMediaType').value = '';
-                    const input = document.getElementById('postMediaUrlInput');
-                    input.value = '';
-                    input.style.color = '';
-                    input.style.fontWeight = '';
-                    input.placeholder = 'Paste image or YouTube link...';
-                    document.getElementById('postImageGrid').innerHTML = '';
-                    postTags = [];
-                    renderPostTags();
-                    selectedPostCategory = '';
+                    const title = document.getElementById('postTitle').value.trim();
+                    const content = document.getElementById('postContent').value.trim();
+                    const description = document.getElementById('postDescription').value.trim();
+                    const category = document.getElementById('postCategory').value;
+                    const mediaUrl = document.getElementById('postMediaUrl').value;
+                    const mediaType = document.getElementById('postMediaType').value;
 
-                    showToast('Post published! 🎉', 'g');
+                    if (!title || !content) {
+                        showToast('Please fill in both title and content', 'o');
+                        return;
+                    }
+                    if (postTags.length > 3) {
+                        showToast('Max 3 tags allowed', 'o');
+                        return;
+                    }
+
+                    const btn = document.querySelector('.btn-primary[onclick="submitPost()"]');
+                    const originalText = btn.textContent;
+                    btn.textContent = 'Publishing...';
+                    btn.disabled = true;
+
+                    try {
+                        await window.PostsAPI.createPost({
+                            title: title,
+                            description: description,
+                            content: content,
+                            mediaUrl: mediaUrl,
+                            mediaType: mediaType,
+                            category: category || 'General',
+                            tags: postTags.slice()
+                        });
+
+                        console.log('✅ Post created successfully');
+
+                        document.getElementById('postTitle').value = '';
+                        document.getElementById('postContent').value = '';
+                        document.getElementById('postDescription').value = '';
+                        document.getElementById('postCategory').value = '';
+                        document.getElementById('postCategoryDisplay').textContent = 'Select a category';
+                        document.getElementById('postCategoryDisplay').classList.add('placeholder');
+                        document.getElementById('postMediaUrl').value = '';
+                        document.getElementById('postMediaType').value = '';
+                        var input = document.getElementById('postMediaUrlInput');
+                        input.value = '';
+                        input.style.color = '';
+                        input.style.fontWeight = '';
+                        input.placeholder = 'Paste image or YouTube link...';
+                        document.getElementById('postImageGrid').innerHTML = '';
+                        postTags = [];
+                        renderPostTags();
+                        selectedPostCategory = '';
+
+                        showToast('Post published! 🎉', 'g');
+                    } catch (err) {
+                        console.error('❌ Error creating post:', err);
+                        showToast(err.message || 'Failed to publish post. Please try again.', 'r');
+                    } finally {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    }
                 } catch (err) {
-                    showToast(err.message, 'r');
+                    console.error('❌ Error:', err);
+                    showToast('Please sign in to create a post', 'o');
                 }
             });
         }
 
         // ══════════════════════════════════════════
-        // SUBMIT ITEM (still uses localStorage - market not migrated yet)
+        // SUBMIT ITEM (with Supabase)
         // ══════════════════════════════════════════
         function submitItem() {
-            // ✅ Require authentication using AuthUser from auth.js
-            window.AuthUser.requireAuth(() => {
-                const user = window.getCurrentUser();
-                const title = document.getElementById('itemTitle').value.trim();
-                const priceInput = document.getElementById('itemPrice');
-                const price = priceInput.value.replace(/[^0-9]/g, '').trim();
-                const description = document.getElementById('itemDescription').value.trim();
-                const category = document.getElementById('itemCategory').value;
-                const location = document.getElementById('itemLocation').value.trim();
-                const condition = document.getElementById('itemCondition').value;
-                const lat = document.getElementById('itemLat').value;
-                const lng = document.getElementById('itemLng').value;
+            console.log('🔍 submitItem called');
 
-                if (!title || !price) {
-                    showToast('Item name and price are required', 'o');
-                    return;
+            // ✅ Check if AuthUser exists, if not show error
+            if (!window.AuthUser) {
+                showToast('Please sign in to list an item', 'o');
+                if (window.AuthUser && typeof window.AuthUser.openModal === 'function') {
+                    window.AuthUser.openModal('signup');
                 }
-                if (isNaN(Number(price)) || Number(price) <= 0) {
-                    showToast('Enter a valid price', 'o');
-                    return;
+                return;
+            }
+
+            // ✅ Let AuthUser.requireAuth handle authentication
+            window.AuthUser.requireAuth(async function() {
+                try {
+                    const user = window.getCurrentUser();
+
+                    const title = document.getElementById('itemTitle').value.trim();
+                    var priceInput = document.getElementById('itemPrice');
+                    var price = priceInput.value.replace(/[^0-9,]/g, '').replace(/,/g, '');
+                    const description = document.getElementById('itemDescription').value.trim();
+                    const category = document.getElementById('itemCategory').value;
+                    const location = document.getElementById('itemLocation').value.trim();
+                    const condition = document.getElementById('itemCondition').value;
+                    const lat = document.getElementById('itemLat').value;
+                    const lng = document.getElementById('itemLng').value;
+
+                    if (!title || !price) {
+                        showToast('Item name and price are required', 'o');
+                        return;
+                    }
+                    if (isNaN(Number(price)) || Number(price) <= 0) {
+                        showToast('Enter a valid price', 'o');
+                        return;
+                    }
+                    if (marketImages.some(function(i) { return i.uploading; })) {
+                        showToast('Please wait for images to finish uploading', 'o');
+                        return;
+                    }
+
+                    var imageUrls = marketImages.map(function(i) { return i.url; });
+
+                    var btn = document.querySelector('.btn-primary[onclick="submitItem()"]');
+                    var originalText = btn.textContent;
+                    btn.textContent = 'Listing...';
+                    btn.disabled = true;
+
+                    try {
+                        var result = await window.sb
+                            .from('market_items')
+                            .insert({
+                                seller_id: user.id,
+                                title: title,
+                                price: parseFloat(price),
+                                category: category || 'General',
+                                location: location || 'Campus',
+                                lat: lat ? parseFloat(lat) : null,
+                                lng: lng ? parseFloat(lng) : null,
+                                images: imageUrls,
+                                description: description || '',
+                                condition: condition || 'New',
+                                seller_name: user.displayName || 'Guest',
+                                seller_avatar: user.avatar || ''
+                            })
+                            .select()
+                            .single();
+
+                        if (result.error) throw result.error;
+
+                        console.log('✅ Item listed successfully');
+
+                        document.getElementById('itemTitle').value = '';
+                        document.getElementById('itemPrice').value = '';
+                        document.getElementById('itemDescription').value = '';
+                        document.getElementById('itemCategory').value = '';
+                        document.getElementById('marketCategoryDisplay').textContent = 'Select a category';
+                        document.getElementById('marketCategoryDisplay').classList.add('placeholder');
+                        document.getElementById('itemLocation').value = '';
+                        document.getElementById('itemLat').value = '';
+                        document.getElementById('itemLng').value = '';
+                        document.getElementById('locationStatus').textContent = '';
+                        var input = document.getElementById('marketImageUrlInput');
+                        input.value = '';
+                        input.style.color = '';
+                        input.style.fontWeight = '';
+                        marketImages = [];
+                        renderMarketImages();
+                        fullscreenImages = [];
+                        selectedMarketCategory = '';
+                        document.querySelectorAll('.condition-opt').forEach(function(c) { c.classList.remove(
+                            'active'); });
+                        document.querySelector('.condition-opt[data-condition="New"]').classList.add('active');
+                        selectedCondition = 'New';
+                        document.getElementById('itemCondition').value = 'New';
+
+                        showToast('Item listed! 🛍️', 'g');
+
+                    } catch (err) {
+                        console.error('❌ Error listing item:', err);
+                        showToast(err.message || 'Failed to list item', 'r');
+                    } finally {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    }
+
+                } catch (err) {
+                    console.error('❌ Error:', err);
+                    showToast('Please sign in to list an item', 'o');
                 }
-                if (marketImages.some(i => i.uploading)) {
-                    showToast('Please wait for images to finish uploading', 'o');
-                    return;
-                }
-
-                const imageUrls = marketImages.map(i => i.url);
-
-                const newItem = {
-                    id: appData.nextMarketId++,
-                    title: title,
-                    price: Number(price),
-                    category: category || 'General',
-                    location: location || 'Campus',
-                    lat: lat ? parseFloat(lat) : null,
-                    lng: lng ? parseFloat(lng) : null,
-                    images: imageUrls,
-                    description: description,
-                    condition: condition || 'New',
-                    sellerName: user.displayName || 'Guest',
-                    sellerId: user.id,
-                    sellerAvatar: user.avatar,
-                    date: new Date().toISOString().split('T')[0],
-                    createdAt: Date.now()
-                };
-
-                appData.marketItems.unshift(newItem);
-                persist();
-
-                // Reset form
-                document.getElementById('itemTitle').value = '';
-                document.getElementById('itemPrice').value = '';
-                document.getElementById('itemDescription').value = '';
-                document.getElementById('itemCategory').value = '';
-                document.getElementById('marketCategoryDisplay').textContent = 'Select a category';
-                document.getElementById('marketCategoryDisplay').classList.add('placeholder');
-                document.getElementById('itemLocation').value = '';
-                document.getElementById('itemLat').value = '';
-                document.getElementById('itemLng').value = '';
-                document.getElementById('locationStatus').textContent = '';
-                const input = document.getElementById('marketImageUrlInput');
-                input.value = '';
-                input.style.color = '';
-                input.style.fontWeight = '';
-                marketImages = [];
-                renderMarketImages();
-                fullscreenImages = [];
-                selectedMarketCategory = '';
-                document.querySelectorAll('.condition-opt').forEach(c => c.classList.remove('active'));
-                document.querySelector('.condition-opt[data-condition="New"]').classList.add('active');
-                selectedCondition = 'New';
-                document.getElementById('itemCondition').value = 'New';
-
-                showToast('Item listed! 🛍️', 'g');
             });
         }
 
@@ -2275,36 +2332,31 @@
             document.querySelectorAll('.side-btn').forEach(el => el.classList.remove('active'));
             document.querySelector('.side-btn[href="create.html"]')?.classList.add('active');
 
-            // listen for auth changes
+            const user = window.getCurrentUser();
+            if (user && user.isLoggedIn) {
+                updateNavAvatar();
+                document.querySelector('.topbar-title').textContent = 'Create';
+            }
+
             document.addEventListener('profileUpdated', function(e) {
                 if (e.detail?.user) {
                     updateNavAvatar();
+                    if (e.detail.user.isLoggedIn) {
+                        document.querySelector('.topbar-title').textContent = 'Create';
+                    }
                 }
             });
-
-            const user = window.getCurrentUser();
-            if (user) {
-                updateNavAvatar();
-            }
 
             document.addEventListener('themeChanged', function(e) {
                 document.documentElement.setAttribute('data-theme', e.detail.theme);
             });
         }
 
-        // Ensure AuthUser is ready before init
-        if (window.AuthUser) {
-            init();
+        // ✅ Simple init - auth.js should already be loaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
         } else {
-            document.addEventListener('DOMContentLoaded', function() {
-                // auth.js might load later; retry
-                const checkAuth = setInterval(() => {
-                    if (window.AuthUser) {
-                        clearInterval(checkAuth);
-                        init();
-                    }
-                }, 100);
-            });
+            init();
         }
     </script>
 
