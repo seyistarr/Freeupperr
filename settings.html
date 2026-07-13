@@ -86,7 +86,6 @@
             overflow: hidden;
         }
 
-        /* ─── LAYOUT ─── */
         .layout {
             display: flex;
             height: 100vh;
@@ -649,7 +648,7 @@
             }
         }
 
-        /* ─── MODAL SYSTEM (full-screen slide-up) ─── */
+        /* ─── MODAL SYSTEM ─── */
         .mfs {
             position: fixed;
             top: 0;
@@ -737,7 +736,6 @@
             stroke-linecap: round;
         }
 
-        /* ─── SHEET MODAL (bottom sheet) ─── */
         .mov {
             position: fixed;
             top: 0;
@@ -912,12 +910,6 @@
         }
 
         /* ─── VERIFICATION ─── */
-        .vfy-section {
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            margin-top: 4px;
-        }
         .vfy-status-card {
             display: flex;
             align-items: center;
@@ -3078,7 +3070,6 @@
             };
 
             // ─── EDIT PROFILE MODAL ──────────────────
-            // This opens the same edit profile modal used in profile.html
             window.openEditProfileModal = function() {
                 syncEditProfile();
                 openFS('editProfileModal');
@@ -3414,13 +3405,8 @@
                 // Start 2FA setup
                 tfaGo(0);
                 openFS('tfaModal');
-
-                // Generate QR code when user reaches step 1
-                // This will be triggered when they click continue
             };
 
-            // Override tfaGo to handle QR generation
-            const originalTfaGo = window.tfaGo;
             window.tfaGo = function(step) {
                 tfaStep = step;
                 for (var i = 0; i <= 3; i++) {
@@ -3434,14 +3420,12 @@
                 });
 
                 if (step === 1) {
-                    // Generate QR code for 2FA
                     generateTfaQR();
                 }
             };
 
             async function generateTfaQR() {
                 try {
-                    // Enroll in TOTP
                     const { data, error } = await window.supabase.auth.mfa.enroll({
                         factorType: 'totp'
                     });
@@ -3451,7 +3435,6 @@
                     tfaFactorId = data.id;
                     tfaSecret = data.totp.secret;
 
-                    // Display QR code
                     const qrImage = document.getElementById('tfaQrImage');
                     const qrPlaceholder = document.getElementById('tfaQrPlaceholder');
 
@@ -3460,13 +3443,11 @@
                         qrImage.style.display = 'block';
                         qrPlaceholder.style.display = 'none';
                     } else {
-                        // Fallback: generate QR using a library if needed
                         qrPlaceholder.textContent = 'QR code not available. Please enter the secret key manually.';
                     }
 
                     document.getElementById('tfaSecretKey').textContent = tfaSecret;
 
-                    // Focus first input
                     setTimeout(function() {
                         const e = document.getElementById('td0');
                         if (e) e.focus();
@@ -3548,7 +3529,6 @@
                 if (code.length < 6) return;
 
                 try {
-                    // Verify the code with Supabase
                     const { data, error } = await window.supabase.auth.mfa.challengeAndVerify({
                         factorId: tfaFactorId,
                         code: code
@@ -3556,7 +3536,6 @@
 
                     if (error) throw error;
 
-                    // Success - mark as correct
                     [0, 1, 2, 3, 4, 5].forEach(function(i) {
                         const e = document.getElementById('td' + i);
                         if (e) e.style.borderColor = 'var(--ok)';
@@ -3566,7 +3545,6 @@
                     if (btn) { btn.disabled = true;
                         btn.textContent = 'Verified ✓'; }
 
-                    // Generate backup codes
                     const codes = generateBackupCodes();
                     BACKUP_CODES.push(...codes);
                     const bc = document.getElementById('backupCodes');
@@ -3588,7 +3566,6 @@
                     });
                     const btn = document.getElementById('tfaVerifyBtn');
                     if (btn) btn.disabled = true;
-                    // Focus first input
                     const first = document.getElementById('td0');
                     if (first) first.focus();
                 }
@@ -3619,7 +3596,6 @@
 
             window.tfaDone = function() {
                 localStorage.setItem('freeupper_2fa_enabled', 'true');
-                // Save backup codes to localStorage
                 localStorage.setItem('freeupper_2fa_backup_codes', JSON.stringify(BACKUP_CODES));
                 document.getElementById('tfaBadge').textContent = 'Enabled';
                 document.getElementById('tfaBadge').className = 'r-badge ok';
@@ -3650,7 +3626,6 @@
 
             async function tfaDisableConfirm() {
                 try {
-                    // Unenroll from MFA
                     const { error } = await window.supabase.auth.mfa.unenroll({
                         factorId: tfaFactorId || localStorage.getItem('freeupper_2fa_factor_id')
                     });
@@ -3738,7 +3713,6 @@
                 if (nw.length < 8) { showToast('Password must be at least 8 characters', 'o'); return; }
 
                 try {
-                    // First verify current password
                     const { error: signInError } = await window.supabase.auth.signInWithPassword({
                         email: user.email,
                         password: cur
@@ -3749,7 +3723,6 @@
                         return;
                     }
 
-                    // Then update password
                     const { error: updateError } = await window.supabase.auth.updateUser({
                         password: nw
                     });
@@ -3769,13 +3742,8 @@
 
             async function loadSessions() {
                 try {
-                    // Get current session
                     const { data: { session } } = await window.supabase.auth.getSession();
 
-                    // Get all sessions using admin API
-                    const { data: { user: currentUser } } = await window.supabase.auth.getUser();
-
-                    // Build sessions list from available data
                     sessions = [];
 
                     if (session) {
@@ -3859,7 +3827,6 @@
 
             window.confirmSessLogout = function() {
                 closeMov('sessLogoutDlg');
-                // Since we don't have real session management, we'll just remove from list
                 sessions = sessions.filter(function(s) { return s.id !== pendingSessId; });
                 renderSessions();
                 showToast('Device logged out', 'g');
@@ -3888,7 +3855,6 @@
                 try {
                     const { error } = await window.supabase.auth.signOut();
                     if (error) throw error;
-                    // Clear local data
                     localStorage.removeItem('freeupper_user_profile');
                     localStorage.removeItem('freeupper_all_users');
                     localStorage.removeItem('freeupper_follows');
@@ -3940,7 +3906,6 @@
             };
 
             window.confirmDelete = function() {
-                // Reset delete state
                 document.getElementById('deleteConfirmInput').value = '';
                 document.getElementById('delBtn').disabled = true;
                 document.getElementById('deleteTimer').style.display = 'none';
@@ -3955,12 +3920,8 @@
                 closeMov('deleteDlg');
 
                 try {
-                    // Delete user using Supabase Admin API or RPC
-                    // This requires a secure backend function
-                    // For now, we'll sign out and clear data
                     const { error } = await window.supabase.auth.signOut();
 
-                    // Clear all local data
                     localStorage.removeItem('freeupper_user_profile');
                     localStorage.removeItem('freeupper_all_users');
                     localStorage.removeItem('freeupper_follows');
@@ -3990,7 +3951,6 @@
                 if (!grid) return;
                 const currentUser = getCurrentUser();
                 const currentAvatar = currentUser?.avatar || '';
-                // Find current avatar index
                 let foundIdx = AVATARS.indexOf(currentAvatar);
                 if (foundIdx === -1) foundIdx = -1;
                 selAvIdx = foundIdx;
@@ -4014,7 +3974,6 @@
                     if (e) e.src = src;
                 });
 
-                // Use global helper to save and sync
                 if (typeof updateUserProfile === 'function') {
                     updateUserProfile({ avatar: src });
                 } else {
@@ -4060,11 +4019,9 @@
                 document.getElementById('unC').textContent = (currentUser.username || '').length + ' / 30';
                 document.getElementById('bioC').textContent = (currentUser.bio || '').length + ' / 160';
 
-                // Pills
                 const tags = currentUser.tags || [];
                 renderPillsEd(tags);
 
-                // Gender
                 const gd = document.getElementById('eGenderDisplay');
                 if (currentUser.gender) {
                     const icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
@@ -4074,7 +4031,6 @@
                     gd.style.color = 'var(--text)';
                 }
 
-                // DOB
                 if (currentUser.dob) {
                     const d = new Date(currentUser.dob);
                     const dateStr = MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
@@ -4084,7 +4040,6 @@
                     document.getElementById('dobAgeHint').textContent = 'Age: ' + age + ' years old';
                 }
 
-                // Country
                 if (currentUser.country) {
                     const c = COUNTRIES.find(c => c.n === currentUser.country);
                     if (c) {
@@ -4137,7 +4092,6 @@
                     dob: currentUser.dob || ''
                 };
 
-                // Save to both localStorage and Supabase
                 if (typeof updateUserProfile === 'function') {
                     updateUserProfile(updates);
                 } else {
@@ -4146,7 +4100,6 @@
                     registerCurrentUserInDirectory(currentUser);
                 }
 
-                // Also update Supabase profiles table
                 try {
                     const sb = window.supabase;
                     if (sb) {
@@ -4169,7 +4122,6 @@
                 closeFS('editProfileModal');
                 showToast('Profile updated ✓', 'g');
 
-                // Dispatch event for other pages
                 document.dispatchEvent(new CustomEvent('profileUpdated', {
                     detail: { user: getCurrentUser() }
                 }));
@@ -4268,7 +4220,6 @@
                     disp.style.color = 'var(--text)'; }
                 if (hint) hint.textContent = 'Age: ' + age + ' years old';
 
-                // Save to user
                 const currentUser = getCurrentUser();
                 currentUser.dob = new Date(dobSel.year, dobSel.month - 1, dobSel.day).toISOString();
                 saveCurrentUser(currentUser);
@@ -4307,7 +4258,6 @@
                 if (disp) { disp.textContent = (icons[selGender] || '') + ' ' + (selGender || 'Prefer not to say');
                     disp.style.color = 'var(--text)'; }
 
-                // Save to user
                 const currentUser = getCurrentUser();
                 currentUser.gender = selGender;
                 saveCurrentUser(currentUser);
@@ -4400,7 +4350,6 @@
             }
 
             window.pickCountry = function(name, flag) {
-                // Save to user
                 const currentUser = getCurrentUser();
                 currentUser.country = name;
                 saveCurrentUser(currentUser);
@@ -4422,7 +4371,6 @@
                     if (e.key === 'freeupper_user_profile' || e.key === 'freeupper_all_users') {
                         const user = getCurrentUser();
                         updateNavAvatar();
-                        // Refresh verification status
                         window.SettingsAPI.getVerificationStatus().then(status => {
                             updateVfyStatusCard(status);
                         }).catch(() => {});
@@ -4463,14 +4411,13 @@
                 document.getElementById('tfaBadge').className = 'r-badge ok';
             }
 
-            // Load blocked users count
             window.SettingsAPI.listBlockedUsers().then(list => {
                 document.getElementById('blCountSub').textContent = list.length + ' accounts blocked';
             }).catch(() => {});
 
             document.getElementById('sessBadge').textContent = '1 device';
 
-            console.log('🔥 Settings fully loaded – all modals functional with Supabase integration!');
+            console.log('🔥 Settings fully loaded with Supabase integration!');
         })();
     </script>
 
