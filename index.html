@@ -1231,7 +1231,7 @@
             color: #7C3AED;
         }
 
-        /* ──────────────── COMMENTS — with avatar images ──────────────── */
+        /* ──────────────── COMMENTS ──────────────── */
         .comment-item {
             display: flex;
             gap: 10px;
@@ -3150,7 +3150,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // COMMENTS — with avatar images stored on each comment
+            // COMMENTS — with like for nested replies (fixed)
             // ───────────────────────────────────────────────────────────────
             function getAllDescendants(pid, comments) { const r = [];
                 const dc = comments.filter(c => c.parentId === pid); for (const c of dc) { r.push(c);
@@ -3177,21 +3177,6 @@
               </div>`;
                 }
                 return h;
-            }
-
-            // ─── Get avatar for a comment: stored avatar, or lookup from users ───
-            function getCommentAvatar(comment) {
-                if (comment.avatar && comment.avatar.startsWith('data:image')) return comment.avatar;
-                if (comment.avatar && comment.avatar.includes('http')) return comment.avatar;
-                // Lookup from users directory
-                const all = getAllUsers();
-                const found = all.find(u => u.displayName === comment.username || u.username === comment
-                .username);
-                if (found && found.avatar) return found.avatar;
-                // fallback: default avatar from current user if matching
-                const cu = getCurrentUser();
-                if (cu.displayName === comment.username && cu.avatar) return cu.avatar;
-                return null;
             }
 
             function renderCommentsHTML(comments, postId, vc) {
@@ -3225,12 +3210,8 @@
                 const lc = parseInt(localStorage.getItem('comment-like-' + c.id) || '0'),
                     isL = lc > 0,
                     il = c.message.length > 220;
-                const avatarUrl = getCommentAvatar(c);
-                const avatarHtml = avatarUrl ?
-                    `<img src="${avatarUrl}" alt="${escapeHtml(c.username)}">` :
-                    `<span>${c.username.charAt(0).toUpperCase()}</span>`;
                 return `<div class="comment-item" data-comment-id="${c.id}">
-                <div class="comment-avatar" data-username="${escapeHtml(c.username)}">${avatarHtml}</div>
+                <div class="comment-avatar" data-username="${escapeHtml(c.username)}">${c.username.charAt(0).toUpperCase()}</div>
                 <div class="comment-body">
                   <div class="comment-username">${escapeHtml(c.username)}</div>
                   <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${escapeHtml(c.message)}</div>
@@ -3255,12 +3236,8 @@
                 const mn = (ru && ru !== r.username) ? `<span style="color:#7C3AED;font-weight:600;">@${escapeHtml(ru)}</span> ` :
                     '';
                 const il = r.message.length > 220;
-                const avatarUrl = getCommentAvatar(r);
-                const avatarHtml = avatarUrl ?
-                    `<img src="${avatarUrl}" alt="${escapeHtml(r.username)}">` :
-                    `<span>${r.username.charAt(0).toUpperCase()}</span>`;
                 return `<div class="reply-item" data-comment-id="${r.id}">
-                <div class="reply-avatar-dot" data-username="${escapeHtml(r.username)}">${avatarHtml}</div>
+                <div class="reply-avatar-dot" data-username="${escapeHtml(r.username)}">${r.username.charAt(0).toUpperCase()}</div>
                 <div class="reply-body">
                   <div class="reply-username">${escapeHtml(r.username)}</div>
                   <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${escapeHtml(r.message)}</div>
@@ -3281,17 +3258,8 @@
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
                 const cu = getCurrentUser();
-                // Store avatar with comment for display
-                const avatar = cu.avatar || '';
-                p.comments.push({
-                    id: appData.nextCommentId++,
-                    username: cu.displayName,
-                    avatar: avatar,
-                    message,
-                    time: new Date().toISOString(),
-                    approved: true,
-                    parentId: parentId || null
-                });
+                p.comments.push({ id: appData.nextCommentId++, username: cu.displayName, message, time: new Date()
+                        .toISOString(), approved: true, parentId: parentId || null });
                 persist();
             }
 
@@ -4069,150 +4037,11 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // PROFILE SYNC SYSTEM — listen for profile updates across tabs
-            // ───────────────────────────────────────────────────────────────
-            function setupProfileSync(callback) {
-                // Storage event listener for cross-tab profile updates
-                window.addEventListener('storage', function(e) {
-                    if (e.key === UK || e.key === ALL_USERS_KEY) {
-                        const user = getCurrentUser();
-                        updateNavAvatar();
-                        // Refresh comment avatars in the current view
-                        refreshAllCommentAvatars();
-                        if (callback) callback(user);
-                        // Re-render feed if on home/explore/market to reflect avatar changes
-                        if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'market') {
-                            renderUI();
-                        } else if (uiPage === 'single-post-explore' && currentPostId) {
-                            refreshSinglePostView();
-                        }
-                    }
-                });
-
-                // Custom event for same-tab profile updates (from profile.html)
-                document.addEventListener('profileUpdated', function(e) {
-                    if (e.detail && e.detail.user) {
-                        const user = e.detail.user;
-                        updateNavAvatar();
-                        refreshAllCommentAvatars();
-                        if (callback) callback(user);
-                        if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'market') {
-                            renderUI();
-                        } else if (uiPage === 'single-post-explore' && currentPostId) {
-                            refreshSinglePostView();
-                        }
-                    }
-                });
-
-                // Also update avatar when the page becomes visible again
-                document.addEventListener('visibilitychange', () => {
-                    if (document.visibilityState === 'visible') {
-                        const user = getCurrentUser();
-                        updateNavAvatar();
-                        // Refresh comment avatars without full re-render if possible
-                        refreshAllCommentAvatars();
-                    }
-                });
-            }
-
-            // ─── Refresh all comment avatars in the current view ───
-            function refreshAllCommentAvatars() {
-                // Update all comment-avatar and reply-avatar-dot elements
-                document.querySelectorAll('.comment-avatar, .reply-avatar-dot').forEach(el => {
-                    const username = el.dataset.username;
-                    if (!username) return;
-                    // Find user in directory
-                    const all = getAllUsers();
-                    const found = all.find(u => u.displayName === username || u.username === username);
-                    if (found && found.avatar) {
-                        // Check if it already has an image
-                        const existingImg = el.querySelector('img');
-                        if (existingImg) {
-                            existingImg.src = found.avatar;
-                        } else {
-                            // Replace content with image
-                            el.innerHTML = `<img src="${found.avatar}" alt="${escapeHtml(username)}">`;
-                        }
-                    }
-                });
-            }
-
-            // ─── Refresh single post view ───
-            function refreshSinglePostView() {
-                if (!currentPostId) return;
-                const post = appData.posts.find(p => p.id === currentPostId);
-                if (!post) return;
-                const fc = document.getElementById('explore-fullscreen-content');
-                if (!fc) return;
-                // Only update comments list if it exists
-                const cl = document.getElementById('comments-list');
-                if (cl) {
-                    const vc = getVisibleComments(currentPostId);
-                    const ac = post.comments.filter(c => c.approved !== false);
-                    cl.innerHTML = renderCommentsHTML(ac, currentPostId, vc);
-                }
-                updateCommentCount(currentPostId);
-                // Update author avatar if visible in the post header
-                const avatarImg = fc.querySelector('article .w-10.h-10.rounded-full');
-                if (avatarImg) {
-                    const cu = getCurrentUser();
-                    const isOwn = post.authorId && post.authorId === cu.id;
-                    avatarImg.src = isOwn ? cu.avatar : (post.authorAvatar || cu.avatar);
-                }
-                const nameEl = fc.querySelector('article .font-bold.text-sm.cursor-pointer');
-                if (nameEl) {
-                    const cu = getCurrentUser();
-                    const isOwn = post.authorId && post.authorId === cu.id;
-                    nameEl.textContent = isOwn ? cu.displayName : (post.author || 'Anonymous');
-                }
-            }
-
-            // ─── Refresh user content in feed posts ───
-            function refreshUserContent(user) {
-                document.querySelectorAll('.feed-post[data-post-id]').forEach(post => {
-                    const pid = parseInt(post.dataset.postId);
-                    const p = appData.posts.find(p => p.id === pid);
-                    if (!p) return;
-                    const isOwn = p.authorId && p.authorId === user.id;
-                    if (!isOwn) return;
-                    const avatarEl = post.querySelector('.user-mini-avatar');
-                    if (avatarEl) avatarEl.src = user.avatar;
-                    const nameEl = post.querySelector('.font-bold.text-sm');
-                    if (nameEl && nameEl.closest('.feed-post')) {
-                        nameEl.textContent = user.displayName;
-                    }
-                });
-                // Also update explore grid avatars if they belong to this user
-                document.querySelectorAll('.explore-card[data-post-id]').forEach(card => {
-                    const pid = parseInt(card.dataset.postId);
-                    const p = appData.posts.find(p => p.id === pid);
-                    if (!p) return;
-                    const isOwn = p.authorId && p.authorId === user.id;
-                    if (!isOwn) return;
-                    const avatarEl = card.querySelector('.explore-card-avatar img');
-                    if (avatarEl) avatarEl.src = user.avatar;
-                });
-            }
-
-            // ───────────────────────────────────────────────────────────────
             // INIT
             // ───────────────────────────────────────────────────────────────
             function init() {
                 updateNavAvatar();
                 registerCurrentUserInDirectory();
-
-                // ── Setup profile sync (runs on page load) ──
-                setupProfileSync(function(user) {
-                    // This runs whenever profile is updated
-                    console.log('Profile updated:', user.displayName);
-                    refreshUserContent(user);
-                    // Re-render feed to reflect changes
-                    if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'market') {
-                        renderUI();
-                    } else if (uiPage === 'single-post-explore' && currentPostId) {
-                        refreshSinglePostView();
-                    }
-                });
 
                 // Messenger icon -> chat.html
                 document.getElementById('topMsgBtn').addEventListener('click', () => {
@@ -4321,12 +4150,19 @@
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'visible') {
                         reloadData();
-                        // Update comment avatars
-                        refreshAllCommentAvatars();
                         if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'market') {
                             renderUI();
                         } else if (uiPage === 'single-post-explore' && currentPostId) {
-                            refreshSinglePostView();
+                            const post = appData.posts.find(p => p.id === currentPostId);
+                            if (post) {
+                                const cl = document.getElementById('comments-list');
+                                if (cl) {
+                                    const vc = getVisibleComments(currentPostId);
+                                    const ac = post.comments.filter(c => c.approved !== false);
+                                    cl.innerHTML = renderCommentsHTML(ac, currentPostId, vc);
+                                }
+                                updateCommentCount(currentPostId);
+                            }
                         }
                     }
                 });
@@ -4337,7 +4173,16 @@
                         if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'market') {
                             renderUI();
                         } else if (uiPage === 'single-post-explore' && currentPostId) {
-                            refreshSinglePostView();
+                            const post = appData.posts.find(p => p.id === currentPostId);
+                            if (post) {
+                                const cl = document.getElementById('comments-list');
+                                if (cl) {
+                                    const vc = getVisibleComments(currentPostId);
+                                    const ac = post.comments.filter(c => c.approved !== false);
+                                    cl.innerHTML = renderCommentsHTML(ac, currentPostId, vc);
+                                }
+                                updateCommentCount(currentPostId);
+                            }
                         }
                     }
                 });
@@ -4371,8 +4216,6 @@
             window.toggleFollowHandler = toggleFollowHandler;
             window.openShareModal = openShareModal;
             window.closeShareModal = closeShareModal;
-            window.setupProfileSync = setupProfileSync;
-            window.refreshAllCommentAvatars = refreshAllCommentAvatars;
 
         })();
     </script>
