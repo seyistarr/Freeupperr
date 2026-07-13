@@ -485,3 +485,56 @@
   });
 
 })();
+
+// ─── PROFILE UPDATE HELPER ──────────────────────
+window.updateUserProfile = function(updates) {
+    const user = getCurrentUser();
+    Object.assign(user, updates);
+    saveCurrentUser(user);
+    
+    // Update nav avatar immediately
+    updateNavAvatar();
+    
+    // Dispatch custom event for same-tab listeners
+    document.dispatchEvent(new CustomEvent('profileUpdated', {
+        detail: { user: user }
+    }));
+    
+    // Attempt to trigger storage event for other tabs
+    try {
+        window.dispatchEvent(new StorageEvent('storage', {
+            key: 'freeupper_user_profile',
+            newValue: JSON.stringify(user)
+        }));
+    } catch(e) {
+        // Some browsers don't allow manual StorageEvent dispatch
+        // The custom event will handle same-tab, and storage events
+        // will trigger naturally when other tabs read localStorage
+    }
+    
+    return user;
+};
+
+// ─── SYNC HELPER FOR ANY PAGE ──────────────────
+window.setupProfileSync = function(refreshCallback) {
+    // Listen for storage events (cross-tab)
+    window.addEventListener('storage', function(e) {
+        if (e.key === 'freeupper_user_profile' || e.key === 'freeupper_all_users') {
+            const user = getCurrentUser();
+            updateNavAvatar();
+            if (typeof refreshCallback === 'function') {
+                refreshCallback(user);
+            }
+        }
+    });
+    
+    // Listen for custom profileUpdated event (same-tab)
+    document.addEventListener('profileUpdated', function(e) {
+        if (e.detail && e.detail.user) {
+            updateNavAvatar();
+            if (typeof refreshCallback === 'function') {
+                refreshCallback(e.detail.user);
+            }
+        }
+    });
+};
