@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Admin · Freeupper</title>
+    <link rel="icon" type="image/png" href="freeupper.png">
+    <link rel="stylesheet" href="global.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
+    <style>
+        /* ============================================================
+           ADMIN-SPECIFIC STYLES
+           ============================================================ */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+        button, input, select, textarea {
+            font-family: inherit;
+        }
+        svg {
+            overflow: visible;
+        }
+
+        :root {
+            --p: #8b5cf6;
+            --pd: #6c3fc5;
+            --pl: #a78bfa;
+            --pdim: rgba(139, 92, 246, .15);
+            --pbrd: rgba(139, 92, 246, .28);
+            --pglow: rgba(108, 63, 197, .45);
+            --danger: #f87171;
+            --warn: #fb923c;
+            --ok: #4ade80;
+            --blue: #60a5fa;
+        }
+
+        [data-theme="dark"] {
+            --bg: #000;
+            --bg2: #0a0a0a;
+            --bg3: #111;
+            --bg4: #1a1a1a;
+            --bg5: #222;
+            --brd: rgba(255, 255, 255, .07);
+            --brd2: rgba(255, 255, 255, .12);
+            --text: #fff;
+            --muted: rgba(255, 255, 255, .4);
+            --muted2: rgba(255, 255, 255, .22);
+            --inp: rgba(255, 255, 255, .05);
+            --rowh: rgba(255, 255, 255, .04);
+            --navbg: rgba(0, 0, 0, .97);
+            --sidebg: #0a0a0a;
+            --dotbg: rgba(255, 255, 255, .07);
+            --dotc: #fff;
+            --cardsh: 0 2px 16px rgba(0, 0, 0, .5);
+        }
+
+        [data-theme="light"] {
+            --bg: #f2f2f7;
+            --bg2: #fff;
+            --bg3: #fff;
+            --bg4: #e8e8ed;
+            --bg5: #d8d8de;
+            --brd: rgba(0, 0, 0, .08);
+            --brd2: rgba(0, 0, 0, .13);
+            --text: #0d0d0d;
+            --muted: rgba(0, 0, 0, .44);
+            --muted2: rgba(0, 0, 0, .26);
+            --inp: rgba(0, 0, 0, .05);
+            --rowh: rgba(0, 0, 0, .04);
+            --navbg: rgba(242, 242, 247, .97);
+            --sidebg: #fff;
+            --dotbg: rgba(0, 0, 0, .07);
+            --dotc: #0d0d0d;
+            --cardsh: 0 2px 16px rgba(0, 0, 0, .1);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            transition: background .3s, color .3s;
+            overflow: hidden;
+        }
+
+        /* ─── LAYOUT ─── */
+        .layout {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .side-nav {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            padding: 28px 0 24px;
+            background: var(--sidebg);
+            border-right: 1px solid var(--brd);
+            width: 70px;
+            flex-shrink: 0;
+            gap: 2px;
+            z-index: 10;
+            transition: background .3s, border-color .3s;
+        }
+        .side-logo {
+            font-size: 20px;
+            font-weight: 900;
+            color: var(--p);
+            margin-bottom: 20px;
+            letter-spacing: -1px;
+            cursor: pointer;
+        }
+        .side-logo a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .side-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background .15s, transform .1s;
+            background: none;
+            border: none;
+            position: relative;
+            gap: 3px;
+            color: inherit;
+            text-decoration: none;
+        }
+        .side-btn:hover {
+            background: var(--pdim);
+            transform: scale(1.04);
+        }
+        .side-btn svg {
+            width: 22px;
+            height: 22px;
+            fill: none;
+            stroke: var(--muted);
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: stroke .15s;
+        }
+        .side-btn span {
+            font-size: 8px;
+            color: var(--muted2);
+            font-weight: 600;
+        }
+        .side-btn.active svg {
+            stroke: var(--p);
+        }
+        .side-btn.active span {
+            color: var(--p);
+        }
+        .side-badge {
+            position: absolute;
+            top: 7px;
+            right: 7px;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--p);
+            border: 1.5px solid var(--sidebg);
+        }
+        .side-gap {
+            flex: 1;
+        }
+        .side-av {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid transparent;
+            background: linear-gradient(135deg, #1a1035, #3b1a6b);
+        }
+        .side-btn.active .side-av {
+            border-color: var(--p);
+        }
+
+        .main {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: var(--bg);
+            scroll-behavior: smooth;
+            transition: background .3s;
+            padding-bottom: 24px;
+        }
+        .main::-webkit-scrollbar {
+            width: 0;
+        }
+        .admin-col {
+            width: 100%;
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 20px 16px 40px;
+        }
+
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: clamp(44px, 8vw, 56px) 0 10px;
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            background: var(--bg);
+            transition: background .3s;
+        }
+        .admin-header .back-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--dotbg);
+            border: 1.5px solid var(--brd2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background .18s, transform .15s;
+            color: var(--text);
+        }
+        .admin-header .back-btn:hover {
+            background: var(--pdim);
+            transform: scale(1.05);
+        }
+        .admin-header .back-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .admin-header .title {
+            font-size: clamp(18px, 5vw, 22px);
+            font-weight: 800;
+            letter-spacing: -.3px;
+        }
+        .admin-header .admin-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 100px;
+            background: var(--pdim);
+            border: 1px solid var(--pbrd);
+            color: var(--pl);
+        }
+        .admin-header .sign-out-btn {
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 700;
+            background: rgba(248, 113, 113, .1);
+            border: 1.5px solid rgba(248, 113, 113, .3);
+            color: var(--danger);
+            cursor: pointer;
+            transition: all .15s;
+        }
+        .admin-header .sign-out-btn:hover {
+            background: rgba(248, 113, 113, .2);
+        }
+
+        /* ─── AUTH OVERLAY ─── */
+        .auth-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 20000;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .auth-overlay.hidden {
+            display: none;
+        }
+        .auth-card {
+            width: 100%;
+            max-width: 400px;
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            border-radius: 24px;
+            padding: 32px 28px 28px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, .5);
+        }
+        .auth-logo {
+            text-align: center;
+            font-weight: 900;
+            font-size: 26px;
+            letter-spacing: -1px;
+            margin-bottom: 4px;
+        }
+        .auth-logo span {
+            color: var(--p);
+        }
+        .auth-title {
+            text-align: center;
+            font-weight: 800;
+            font-size: 20px;
+            margin-bottom: 4px;
+            color: var(--text);
+        }
+        .auth-sub {
+            text-align: center;
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .auth-field {
+            margin-bottom: 14px;
+        }
+        .auth-field input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: border-color .15s;
+            box-sizing: border-box;
+        }
+        .auth-field input:focus {
+            border-color: var(--p);
+        }
+        .auth-field input::placeholder {
+            color: var(--muted2);
+        }
+        .auth-error {
+            font-size: 12px;
+            color: var(--danger);
+            min-height: 20px;
+            margin-bottom: 6px;
+        }
+        .auth-btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--p), var(--pd));
+            color: #fff;
+            font-weight: 800;
+            font-size: 15px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 18px var(--pglow);
+            transition: opacity .15s, transform .15s;
+        }
+        .auth-btn:hover {
+            opacity: .9;
+            transform: translateY(-1px);
+        }
+        .auth-btn:disabled {
+            opacity: .5;
+            cursor: default;
+            transform: none;
+        }
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 16px 0;
+            color: var(--muted2);
+            font-size: 12px;
+        }
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--brd);
+        }
+        .auth-switch {
+            text-align: center;
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 16px;
+        }
+        .auth-switch button {
+            background: none;
+            border: none;
+            color: var(--p);
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .auth-switch button:hover {
+            text-decoration: underline;
+        }
+
+        /* ─── STATS ─── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: var(--bg3);
+            border: 1px solid var(--brd);
+            border-radius: 16px;
+            padding: 14px 12px;
+            text-align: center;
+        }
+        .stat-card .num {
+            font-size: 24px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--pl), var(--p));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-card .lbl {
+            font-size: 11px;
+            color: var(--muted);
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        /* ─── FILTER TABS ─── */
+        .filter-tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .filter-tab {
+            padding: 6px 16px;
+            border-radius: 20px;
+            border: 1.5px solid var(--brd);
+            background: transparent;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: .15s;
+        }
+        .filter-tab:hover {
+            border-color: var(--pbrd);
+            color: var(--pl);
+        }
+        .filter-tab.active {
+            background: var(--pdim);
+            border-color: var(--p);
+            color: var(--pl);
+        }
+
+        /* ─── REQUEST CARD ─── */
+        .req-card {
+            background: var(--bg3);
+            border: 1px solid var(--brd);
+            border-radius: 18px;
+            padding: 16px;
+            margin-bottom: 12px;
+            transition: background .15s;
+        }
+        .req-card:hover {
+            background: var(--rowh);
+        }
+        .req-card .top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .req-card .top .avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: var(--bg4);
+        }
+        .req-card .top .info {
+            flex: 1;
+            min-width: 0;
+        }
+        .req-card .top .info .name {
+            font-weight: 700;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .req-card .top .info .handle {
+            font-size: 13px;
+            color: var(--muted);
+        }
+        .req-card .top .info .meta {
+            font-size: 12px;
+            color: var(--muted2);
+            margin-top: 2px;
+        }
+        .req-card .top .badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 100px;
+            flex-shrink: 0;
+        }
+        .req-card .top .badge.pending {
+            background: rgba(251, 146, 60, .15);
+            color: var(--warn);
+        }
+        .req-card .top .badge.approved {
+            background: rgba(74, 222, 128, .15);
+            color: var(--ok);
+        }
+        .req-card .top .badge.rejected {
+            background: rgba(248, 113, 113, .15);
+            color: var(--danger);
+        }
+        .req-card .details {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--brd);
+        }
+        .req-card .details .reason {
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+        .req-card .details .reason strong {
+            color: var(--text);
+        }
+        .req-card .details .link {
+            font-size: 12px;
+            color: var(--p);
+            word-break: break-all;
+            margin-top: 4px;
+            display: block;
+        }
+        .req-card .details .link a {
+            color: var(--p);
+            text-decoration: underline;
+        }
+        .req-card .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .req-card .actions button {
+            padding: 8px 18px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 13px;
+            border: none;
+            cursor: pointer;
+            transition: .15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .req-card .actions .approve {
+            background: linear-gradient(135deg, var(--ok), #22c55e);
+            color: #fff;
+            box-shadow: 0 2px 10px rgba(74, 222, 128, .3);
+        }
+        .req-card .actions .approve:hover {
+            opacity: .85;
+            transform: scale(1.02);
+        }
+        .req-card .actions .reject {
+            background: rgba(248, 113, 113, .15);
+            color: var(--danger);
+            border: 1.5px solid rgba(248, 113, 113, .3);
+        }
+        .req-card .actions .reject:hover {
+            background: rgba(248, 113, 113, .25);
+        }
+        .req-card .actions .view-btn {
+            background: var(--inp);
+            color: var(--muted);
+            border: 1.5px solid var(--brd2);
+        }
+        .req-card .actions .view-btn:hover {
+            background: var(--rowh);
+        }
+
+        /* ─── EXPANDED DETAILS ─── */
+        .req-card .expanded-details {
+            display: none;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--brd);
+        }
+        .req-card .expanded-details.open {
+            display: block;
+        }
+        .req-card .expanded-details .field {
+            margin-bottom: 8px;
+        }
+        .req-card .expanded-details .field-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--muted2);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+        }
+        .req-card .expanded-details .field-value {
+            font-size: 13px;
+            color: var(--text);
+            margin-top: 2px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* ─── REJECT REASON MODAL ─── */
+        .reject-modal .sheet {
+            max-width: 420px;
+        }
+        .reject-modal .reject-textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            color: var(--text);
+            font-size: 14px;
+            resize: vertical;
+            font-family: inherit;
+            transition: border-color .15s;
+            line-height: 1.5;
+        }
+        .reject-modal .reject-textarea:focus {
+            outline: none;
+            border-color: var(--p);
+        }
+        .reject-modal .reject-textarea::placeholder {
+            color: var(--muted2);
+        }
+
+        /* ─── EMPTY STATE ─── */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            gap: 14px;
+            text-align: center;
+        }
+        .empty-state .icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: var(--pdim);
+            border: 1.5px solid var(--pbrd);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .empty-state .icon svg {
+            width: 32px;
+            height: 32px;
+            stroke: var(--p);
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .empty-state h3 {
+            font-size: 18px;
+            font-weight: 800;
+        }
+        .empty-state p {
+            font-size: 13px;
+            color: var(--muted);
+            max-width: 240px;
+            line-height: 1.5;
+        }
+
+        /* ─── RESPONSIVE ─── */
+        @media (min-width: 768px) {
+            .side-nav {
+                display: flex;
+            }
+            .main {
+                padding-bottom: 24px;
+            }
+        }
+        @media (min-width: 1024px) {
+            .side-nav {
+                width: 82px;
+            }
+            .admin-col {
+                max-width: 760px;
+            }
+        }
+
+        /* ─── TOAST ─── */
+        #tw {
+            position: fixed;
+            top: clamp(14px, 4vw, 22px);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+            max-width: calc(100vw - 32px);
+        }
+        .toast {
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            border-radius: 100px;
+            padding: 11px 18px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .55);
+            animation: tIn .3s cubic-bezier(.34, 1.2, .64, 1) both;
+            white-space: nowrap;
+        }
+        .toast.out {
+            animation: tOut .25s ease forwards;
+        }
+        @keyframes tIn {
+            from {
+                transform: translateY(-14px);
+                opacity: 0;
+            }
+            to {
+                transform: none;
+                opacity: 1;
+            }
+        }
+        @keyframes tOut {
+            to {
+                transform: translateY(-10px);
+                opacity: 0;
+            }
+        }
+        .td {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .tg {
+            background: var(--ok);
+        }
+        .tp {
+            background: var(--p);
+        }
+        .tr {
+            background: var(--danger);
+        }
+        .to {
+            background: var(--warn);
+        }
+
+        /* ─── MOV (overlay) ─── */
+        .mov {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: rgba(0, 0, 0, .78);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            z-index: 11000;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity .25s, visibility .25s;
+        }
+        .mov.open {
+            visibility: visible;
+            opacity: 1;
+        }
+        .mov.center {
+            align-items: center;
+            padding: 20px;
+        }
+        .sheet {
+            width: 100%;
+            max-width: 560px;
+            background: var(--bg3);
+            border-radius: 24px 24px 0 0;
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            transform: translateY(60px);
+            transition: transform .34s cubic-bezier(.32, 1, .64, 1), background .3s;
+            overflow: hidden;
+            border-top: 1px solid var(--brd2);
+        }
+        .mov.open .sheet {
+            transform: translateY(0);
+        }
+        .mov.center .sheet {
+            transform: none;
+        }
+        .dialog {
+            transform: none !important;
+            background: var(--bg3);
+            border-radius: 22px;
+            width: 100%;
+            max-width: 380px;
+            overflow: hidden;
+            border: 1px solid var(--brd2);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, .65);
+            animation: popIn .28s cubic-bezier(.34, 1.2, .64, 1) both;
+            transition: background .3s;
+        }
+        @keyframes popIn {
+            from {
+                transform: scale(.92);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        .m-handle {
+            width: 40px;
+            height: 4px;
+            border-radius: 100px;
+            background: var(--brd2);
+            margin: 14px auto 0;
+            flex-shrink: 0;
+        }
+
+        .dlg-ico {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 22px auto 14px;
+        }
+        .dlg-ico svg {
+            width: 26px;
+            height: 26px;
+            fill: none;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+        }
+        .dlg-ico.danger {
+            background: rgba(248, 113, 113, .1);
+            border: 1.5px solid rgba(248, 113, 113, .25);
+        }
+        .dlg-ico.danger svg {
+            stroke: var(--danger);
+        }
+        .dlg-ico.warn {
+            background: rgba(251, 146, 60, .1);
+            border: 1.5px solid rgba(251, 146, 60, .25);
+        }
+        .dlg-ico.warn svg {
+            stroke: var(--warn);
+        }
+        .dlg-ttl {
+            font-size: 18px;
+            font-weight: 800;
+            text-align: center;
+            padding: 0 20px;
+        }
+        .dlg-desc {
+            font-size: 13px;
+            color: var(--muted);
+            text-align: center;
+            line-height: 1.6;
+            padding: 10px 24px 16px;
+        }
+        .dlg-btns {
+            display: flex;
+            gap: 10px;
+            padding: 0 20px 22px;
+        }
+        .dlg-cancel {
+            flex: 1;
+            padding: 13px;
+            border-radius: 14px;
+            border: 1.5px solid var(--brd2);
+            background: var(--inp);
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background .15s;
+        }
+        .dlg-cancel:hover {
+            background: var(--rowh);
+        }
+        .dlg-danger {
+            flex: 1;
+            padding: 13px;
+            border-radius: 14px;
+            background: var(--danger);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 800;
+            border: none;
+            cursor: pointer;
+            opacity: .35;
+            transition: opacity .2s;
+        }
+        .dlg-danger:not(:disabled) {
+            opacity: 1;
+        }
+        .dlg-danger:not(:disabled):hover {
+            opacity: .88;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="tw"></div>
+
+    <div class="layout">
+
+        <!-- ─── SIDE NAV ─── -->
+        <nav class="side-nav">
+            <div class="side-logo"><a href="index.html">◈</a></div>
+            <a href="index.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg>
+                <span>Home</span>
+            </a>
+            <a href="search.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Search</span>
+            </a>
+            <a href="create.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span>Create</span>
+            </a>
+            <a href="video.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                <span>Video</span>
+            </a>
+            <div class="side-gap"></div>
+            <a href="profile.html" class="side-btn" id="sideProfileBtn">
+                <img class="side-av" id="sideAv" src="" alt="" onerror="this.style.display='none'">
+                <span>Profile</span>
+            </a>
+        </nav>
+
+        <!-- ─── MAIN ─── -->
+        <div class="main">
+            <div class="admin-col">
+
+                <!-- Header -->
+                <div class="admin-header">
+                    <button class="back-btn" onclick="window.location.href='profile.html'">
+                        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <span class="title">Admin Dashboard</span>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span class="admin-badge" id="adminBadge">Admin</span>
+                        <button class="sign-out-btn" onclick="adminSignOut()">Sign Out</button>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card"><div class="num" id="statUsers">0</div><div class="lbl">Users</div></div>
+                    <div class="stat-card"><div class="num" id="statPosts">0</div><div class="lbl">Posts</div></div>
+                    <div class="stat-card"><div class="num" id="statMarket">0</div><div class="lbl">Listings</div></div>
+                    <div class="stat-card"><div class="num" id="statPending">0</div><div class="lbl">Pending</div></div>
+                </div>
+
+                <!-- Filter tabs -->
+                <div class="filter-tabs">
+                    <button class="filter-tab active" data-filter="all" onclick="setFilter(this, 'all')">All</button>
+                    <button class="filter-tab" data-filter="pending" onclick="setFilter(this, 'pending')">Pending</button>
+                    <button class="filter-tab" data-filter="approved" onclick="setFilter(this, 'approved')">Approved</button>
+                    <button class="filter-tab" data-filter="rejected" onclick="setFilter(this, 'rejected')">Rejected</button>
+                </div>
+
+                <!-- Requests list -->
+                <div id="requestsList"></div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ─── AUTH OVERLAY ─── -->
+    <div class="auth-overlay" id="authOverlay">
+        <div class="auth-card" id="authCard">
+            <div class="auth-logo">Free<span>Upper</span></div>
+            <div class="auth-title" id="authTitle">Admin Access</div>
+            <div class="auth-sub" id="authSub">Sign in to manage verification requests.</div>
+            <div class="auth-error" id="authError"></div>
+
+            <div class="auth-field" id="adminNameField">
+                <input type="text" id="adminName" placeholder="Full name">
+            </div>
+            <div class="auth-field">
+                <input type="email" id="adminEmail" placeholder="Email address">
+            </div>
+            <div class="auth-field">
+                <input type="password" id="adminPassword" placeholder="Password">
+            </div>
+
+            <button class="auth-btn" id="authSubmitBtn">Sign In</button>
+
+            <div class="auth-divider">OR</div>
+
+            <button class="auth-btn" id="authGoogleBtn" style="background:transparent;border:1.5px solid var(--brd2);color:var(--text);box-shadow:none;">
+                <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3 14.6 2 12 2 6.9 2 2.7 6.1 2.7 11.8S6.9 21.6 12 21.6c6.9 0 9.3-4.8 9.3-7.3 0-.5-.1-.9-.1-1.3H12z"/></svg>
+                Continue with Google
+            </button>
+
+            <div class="auth-switch" id="authSwitch">
+                Already have an account? <button id="authSwitchBtn">Sign In</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── REJECT REASON MODAL ─── -->
+    <div class="mov center reject-modal" id="rejectModal">
+        <div class="dialog" style="max-width:420px;width:100%;padding:0 0 20px">
+            <div class="m-handle"></div>
+            <div style="padding:20px 24px 16px">
+                <div style="font-size:18px;font-weight:800;margin-bottom:4px">Reject Verification</div>
+                <div style="font-size:13px;color:var(--muted)">Provide a reason for rejecting this verification request.</div>
+            </div>
+            <div style="padding:0 24px">
+                <textarea class="reject-textarea" id="rejectReasonInput" placeholder="Reason for rejection (optional)…" maxlength="500"></textarea>
+                <div style="display:flex;justify-content:space-between;margin-top:4px">
+                    <span style="font-size:11px;color:var(--muted2)" id="rejectCharCount">0 / 500</span>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;padding:16px 24px 0">
+                <button class="dlg-cancel" onclick="closeMov('rejectModal')">Cancel</button>
+                <button class="dlg-danger" id="rejectConfirmBtn" onclick="confirmReject()" style="opacity:1;background:var(--danger)">Reject</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="global.js"></script>
+    <script src="auth.js"></script>
+    <script src="settings.js"></script>
+    <script>
+        (function() {
+            'use strict';
+
+            // ─── STATE ──────────────────────────────────
+            let currentFilter = 'all';
+            let requests = [];
+            let allUsers = [];
+            let posts = [];
+            let marketItems = [];
+            let pendingRequestId = null;
+            let authMode = 'signin'; // 'signin' | 'signup'
+
+            // ─── HELPERS ──────────────────────────────
+            function fmtNum(n) {
+                if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M';
+                if (n >= 1000) return (n / 1000).toFixed(1).replace('.0', '') + 'K';
+                return String(n);
+            }
+
+            function escapeHtml(s) {
+                const d = document.createElement('div');
+                d.textContent = s || '';
+                return d.innerHTML;
+            }
+
+            function formatDate(iso) {
+                if (!iso) return '—';
+                return new Date(iso).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+            }
+
+            function getStatusBadgeClass(status) {
+                switch (status) {
+                    case 'pending':
+                        return 'pending';
+                    case 'approved':
+                        return 'approved';
+                    case 'rejected':
+                        return 'rejected';
+                    default:
+                        return '';
+                }
+            }
+
+            function getStatusLabel(status) {
+                switch (status) {
+                    case 'pending':
+                        return 'Pending';
+                    case 'approved':
+                        return 'Approved';
+                    case 'rejected':
+                        return 'Rejected';
+                    default:
+                        return status || 'Unknown';
+                }
+            }
+
+            // ─── AUTH ──────────────────────────────────
+            const sb = window.sb;
+
+            function renderAuth() {
+                const title = document.getElementById('authTitle');
+                const sub = document.getElementById('authSub');
+                const nameField = document.getElementById('adminNameField');
+                const submitBtn = document.getElementById('authSubmitBtn');
+                const switchBtn = document.getElementById('authSwitchBtn');
+                const switchText = document.getElementById('authSwitch');
+
+                if (authMode === 'signup') {
+                    title.textContent = 'Create Admin Account';
+                    sub.textContent = 'Sign up as an admin to manage verification requests.';
+                    nameField.style.display = 'block';
+                    submitBtn.textContent = 'Create Account';
+                    switchText.innerHTML = 'Already have an account? <button id="authSwitchBtn">Sign In</button>';
+                } else {
+                    title.textContent = 'Admin Access';
+                    sub.textContent = 'Sign in to manage verification requests.';
+                    nameField.style.display = 'none';
+                    submitBtn.textContent = 'Sign In';
+                    switchText.innerHTML = "Don't have an account? <button id=\"authSwitchBtn\">Sign Up</button>";
+                }
+                document.getElementById('authSwitchBtn').addEventListener('click', function() {
+                    authMode = authMode === 'signin' ? 'signup' : 'signin';
+                    renderAuth();
+                });
+            }
+
+            async function handleAuth() {
+                const email = document.getElementById('adminEmail').value.trim();
+                const password = document.getElementById('adminPassword').value;
+                const name = document.getElementById('adminName').value.trim();
+                const errorEl = document.getElementById('authError');
+                const btn = document.getElementById('authSubmitBtn');
+
+                errorEl.textContent = '';
+                if (!email || !password) {
+                    errorEl.textContent = 'Please fill in email and password.';
+                    return;
+                }
+                if (authMode === 'signup' && !name) {
+                    errorEl.textContent = 'Please enter your full name.';
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.textContent = 'Please wait…';
+
+                try {
+                    let result;
+                    if (authMode === 'signup') {
+                        result = await sb.auth.signUp({
+                            email,
+                            password,
+                            options: {
+                                data: {
+                                    display_name: name,
+                                    username: name.toLowerCase().replace(/\s+/g, ''),
+                                    is_admin: true
+                                }
+                            }
+                        });
+                        if (result.error) throw result.error;
+                        if (result.data.session) {
+                            // Wait for profile trigger to create profile
+                            await new Promise(r => setTimeout(r, 1000));
+                            // Set admin flag manually
+                            await sb.from('profiles').update({ is_admin: true }).eq('id', result.data.session.user.id);
+                        }
+                    } else {
+                        result = await sb.auth.signInWithPassword({ email, password });
+                        if (result.error) throw result.error;
+                    }
+
+                    // Hide auth overlay and load admin data
+                    document.getElementById('authOverlay').classList.add('hidden');
+                    loadData();
+
+                } catch (e) {
+                    errorEl.textContent = e.message || 'Something went wrong.';
+                    btn.disabled = false;
+                    btn.textContent = authMode === 'signup' ? 'Create Account' : 'Sign In';
+                }
+            }
+
+            document.getElementById('authSubmitBtn').addEventListener('click', handleAuth);
+            document.getElementById('adminPassword').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') handleAuth();
+            });
+            document.getElementById('adminEmail').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') handleAuth();
+            });
+
+            // ─── GOOGLE AUTH ──────────────────────────
+            document.getElementById('authGoogleBtn').addEventListener('click', async function() {
+                const { error } = await sb.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: { redirectTo: window.location.origin + '/admin.html' }
+                });
+                if (error) {
+                    document.getElementById('authError').textContent = error.message;
+                }
+            });
+
+            // ─── ADMIN SIGN OUT ──────────────────────
+            window.adminSignOut = async function() {
+                await sb.auth.signOut();
+                document.getElementById('authOverlay').classList.remove('hidden');
+                document.getElementById('requestsList').innerHTML = '';
+                renderAuth();
+            };
+
+            // ─── CHECK ADMIN STATUS ──────────────────
+            async function checkAdminStatus() {
+                const user = getCurrentUser();
+
+                // Check if user is logged in
+                if (!user.isLoggedIn && user.id.startsWith('GUEST-')) {
+                    document.getElementById('authOverlay').classList.remove('hidden');
+                    renderAuth();
+                    return false;
+                }
+
+                // Check if user is admin
+                try {
+                    const { data, error } = await sb
+                        .from('profiles')
+                        .select('is_admin')
+                        .eq('id', user.id)
+                        .single();
+
+                    if (error) throw error;
+
+                    if (data && data.is_admin) {
+                        user.isAdmin = true;
+                        saveCurrentUser(user);
+                        document.getElementById('authOverlay').classList.add('hidden');
+                        return true;
+                    } else {
+                        // Not admin - show access denied
+                        document.getElementById('authOverlay').classList.add('hidden');
+                        showToast('Access denied. Admin privileges required.', 'r');
+                        setTimeout(() => {
+                            window.location.href = 'index.html';
+                        }, 1500);
+                        return false;
+                    }
+                } catch (err) {
+                    console.error('Failed to check admin status:', err);
+                    // If profile doesn't exist yet, show auth overlay
+                    document.getElementById('authOverlay').classList.remove('hidden');
+                    renderAuth();
+                    return false;
+                }
+            }
+
+            // ─── LOAD DATA ─────────────────────────────
+            async function loadData() {
+                try {
+                    // Load verification requests
+                    const { data: reqData, error: reqError } = await sb
+                        .from('verification_requests')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    if (reqError) throw reqError;
+                    requests = reqData || [];
+
+                    // Load all users
+                    const { data: userData, error: userError } = await sb
+                        .from('profiles')
+                        .select('*');
+
+                    if (userError) throw userError;
+                    allUsers = userData || [];
+
+                    // Load posts count
+                    const { data: postData, error: postError } = await sb
+                        .from('posts')
+                        .select('id', { count: 'exact' });
+
+                    if (postError) throw postError;
+                    posts = postData || [];
+
+                    // Load market items (still from localStorage)
+                    const blogData = loadBlogData();
+                    marketItems = blogData.marketItems || [];
+
+                    // Update stats
+                    renderStats();
+                    renderRequests();
+
+                } catch (err) {
+                    console.error('Failed to load admin data:', err);
+                    showToast('Failed to load data: ' + err.message, 'r');
+                }
+            }
+
+            // ─── RENDER STATS ──────────────────────────
+            function renderStats() {
+                const pendingCount = requests.filter(r => r.status === 'pending').length;
+                document.getElementById('statUsers').textContent = fmtNum(allUsers.length);
+                document.getElementById('statPosts').textContent = fmtNum(posts.length);
+                document.getElementById('statMarket').textContent = fmtNum(marketItems.length);
+                document.getElementById('statPending').textContent = fmtNum(pendingCount);
+
+                // Update admin badge with pending count
+                const badge = document.getElementById('adminBadge');
+                if (pendingCount > 0) {
+                    badge.textContent = 'Admin · ' + pendingCount + ' pending';
+                    badge.style.background = 'rgba(251, 146, 60, .15)';
+                    badge.style.borderColor = 'rgba(251, 146, 60, .3)';
+                    badge.style.color = 'var(--warn)';
+                } else {
+                    badge.textContent = 'Admin';
+                    badge.style.background = 'var(--pdim)';
+                    badge.style.borderColor = 'var(--pbrd)';
+                    badge.style.color = 'var(--pl)';
+                }
+            }
+
+            // ─── RENDER REQUESTS ──────────────────────
+            function renderRequests() {
+                const list = document.getElementById('requestsList');
+                const filtered = requests.filter(r => currentFilter === 'all' || r.status === currentFilter);
+
+                if (!filtered.length) {
+                    const msg = currentFilter === 'pending' ?
+                        'All caught up! No pending verification requests.' :
+                        'No requests in this status.';
+                    list.innerHTML = `
+                        <div class="empty-state">
+                            <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+                            <h3>No verification requests</h3>
+                            <p>${msg}</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                list.innerHTML = filtered.map(req => {
+                    const reqUser = allUsers.find(u => u.id === req.user_id);
+                    const name = reqUser ? reqUser.display_name || 'Unknown User' : 'Unknown User';
+                    const username = reqUser ? reqUser.username || '' : '';
+                    const avatar = reqUser ? reqUser.avatar_url : '';
+                    const statusClass = getStatusBadgeClass(req.status);
+                    const statusLabel = getStatusLabel(req.status);
+                    const isPending = req.status === 'pending';
+
+                    let actionsHtml = '';
+                    if (isPending) {
+                        actionsHtml = `
+                            <div class="actions">
+                                <button class="approve" onclick="approveRequest('${req.id}')">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                    Approve
+                                </button>
+                                <button class="reject" onclick="openRejectModal('${req.id}')">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                    Reject
+                                </button>
+                                <button class="view-btn" onclick="toggleExpand(this)">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                    View Details
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        actionsHtml = `
+                            <div class="actions">
+                                <button class="view-btn" onclick="toggleExpand(this)">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                    View Details
+                                </button>
+                                ${req.rejection_reason ? `<span style="font-size:12px;color:var(--muted);margin-left:8px;">Rejected: ${escapeHtml(req.rejection_reason)}</span>` : ''}
+                            </div>
+                        `;
+                    }
+
+                    return `
+                        <div class="req-card" data-request-id="${req.id}">
+                            <div class="top">
+                                ${avatar ? `<img class="avatar" src="${avatar}" onerror="this.style.display='none'" alt="">` : `<div class="avatar" style="display:flex;align-items:center;justify-content:center;background:var(--bg4);font-weight:700;font-size:18px;color:var(--muted);">${name.charAt(0).toUpperCase()}</div>`}
+                                <div class="info">
+                                    <div class="name">
+                                        ${escapeHtml(name)}
+                                        ${reqUser && reqUser.verified ? `<span style="color:var(--ok);font-size:14px;">✅</span>` : ''}
+                                    </div>
+                                    <div class="handle">${username ? '@' + escapeHtml(username) : ''}</div>
+                                    <div class="meta">
+                                        Category: <strong>${escapeHtml(req.category || '—')}</strong>
+                                        · Submitted ${formatDate(req.created_at)}
+                                    </div>
+                                </div>
+                                <span class="badge ${statusClass}">${statusLabel}</span>
+                            </div>
+                            <div class="details">
+                                <div class="reason"><strong>Reason:</strong> ${escapeHtml(req.reason || '—')}</div>
+                                ${req.link ? `<div class="link"><strong>Link:</strong> <a href="${escapeHtml(req.link)}" target="_blank" rel="noopener">${escapeHtml(req.link)}</a></div>` : ''}
+                            </div>
+                            <div class="expanded-details" id="expanded-${req.id}">
+                                <div class="field">
+                                    <div class="field-label">Full Reason</div>
+                                    <div class="field-value">${escapeHtml(req.reason || '—')}</div>
+                                </div>
+                                ${req.link ? `<div class="field"><div class="field-label">Supporting Link</div><div class="field-value"><a href="${escapeHtml(req.link)}" target="_blank" rel="noopener">${escapeHtml(req.link)}</a></div></div>` : ''}
+                                ${req.reviewed_at ? `<div class="field"><div class="field-label">Reviewed At</div><div class="field-value">${new Date(req.reviewed_at).toLocaleString()}</div></div>` : ''}
+                                ${req.rejection_reason ? `<div class="field"><div class="field-label">Rejection Reason</div><div class="field-value" style="color:var(--danger)">${escapeHtml(req.rejection_reason)}</div></div>` : ''}
+                            </div>
+                            ${actionsHtml}
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // ─── FILTER ──────────────────────────────────
+            window.setFilter = function(el, filter) {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                el.classList.add('active');
+                currentFilter = filter;
+                renderRequests();
+            };
+
+            // ─── EXPAND / COLLAPSE ────────────────────
+            window.toggleExpand = function(btn) {
+                const card = btn.closest('.req-card');
+                if (!card) return;
+                const details = card.querySelector('.expanded-details');
+                if (!details) return;
+                details.classList.toggle('open');
+                btn.innerHTML = details.classList.contains('open') ?
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg> Hide Details' :
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg> View Details';
+            };
+
+            // ─── APPROVE REQUEST ──────────────────────
+            window.approveRequest = async function(requestId) {
+                if (!confirm('Approve this verification request? The user will receive the verified badge.')) return;
+
+                try {
+                    // Get the request
+                    const { data: reqData, error: reqError } = await sb
+                        .from('verification_requests')
+                        .select('*')
+                        .eq('id', requestId)
+                        .single();
+
+                    if (reqError) throw reqError;
+
+                    // Update verification request status
+                    const { error: updateError } = await sb
+                        .from('verification_requests')
+                        .update({
+                            status: 'approved',
+                            reviewed_at: new Date().toISOString()
+                        })
+                        .eq('id', requestId);
+
+                    if (updateError) throw updateError;
+
+                    // Update user's verified flag in profiles
+                    const { error: profileError } = await sb
+                        .from('profiles')
+                        .update({ verified: true })
+                        .eq('id', reqData.user_id);
+
+                    if (profileError) throw profileError;
+
+                    showToast('✅ Verification approved!', 'g');
+
+                    // Refresh data
+                    await loadData();
+
+                } catch (err) {
+                    showToast('Failed to approve: ' + err.message, 'r');
+                }
+            };
+
+            // ─── REJECT MODAL ──────────────────────────
+            window.openRejectModal = function(requestId) {
+                pendingRequestId = requestId;
+                document.getElementById('rejectReasonInput').value = '';
+                document.getElementById('rejectCharCount').textContent = '0 / 500';
+                document.getElementById('rejectConfirmBtn').disabled = false;
+                openMov('rejectModal');
+            };
+
+            // Character counter for reject reason
+            document.getElementById('rejectReasonInput')?.addEventListener('input', function() {
+                const count = this.value.length;
+                document.getElementById('rejectCharCount').textContent = count + ' / 500';
+            });
+
+            // ─── CONFIRM REJECT ──────────────────────
+            window.confirmReject = async function() {
+                if (!pendingRequestId) return;
+
+                const reason = document.getElementById('rejectReasonInput').value.trim();
+
+                try {
+                    const btn = document.getElementById('rejectConfirmBtn');
+                    btn.disabled = true;
+                    btn.textContent = 'Processing…';
+
+                    // Get the request
+                    const { data: reqData, error: reqError } = await sb
+                        .from('verification_requests')
+                        .select('*')
+                        .eq('id', pendingRequestId)
+                        .single();
+
+                    if (reqError) throw reqError;
+
+                    // Update verification request status
+                    const { error: updateError } = await sb
+                        .from('verification_requests')
+                        .update({
+                            status: 'rejected',
+                            reviewed_at: new Date().toISOString(),
+                            rejection_reason: reason || null
+                        })
+                        .eq('id', pendingRequestId);
+
+                    if (updateError) throw updateError;
+
+                    closeMov('rejectModal');
+                    showToast('❌ Verification rejected', 'o');
+
+                    // Refresh data
+                    await loadData();
+
+                } catch (err) {
+                    showToast('Failed to reject: ' + err.message, 'r');
+                    document.getElementById('rejectConfirmBtn').disabled = false;
+                    document.getElementById('rejectConfirmBtn').textContent = 'Reject';
+                } finally {
+                    pendingRequestId = null;
+                }
+            };
+
+            // ─── MODAL HELPERS ──────────────────────────
+            window.openMov = function(id) {
+                document.getElementById(id).classList.add('open');
+                document.body.style.overflow = 'hidden';
+            };
+            window.closeMov = function(id) {
+                document.getElementById(id).classList.remove('open');
+                document.body.style.overflow = '';
+            };
+
+            // ─── INIT ──────────────────────────────────
+            async function init() {
+                // Show loading state
+                document.getElementById('requestsList').innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon"><div class="spinner" style="width:32px;height:32px;border:3px solid var(--brd);border-top-color:var(--p);border-radius:50%;animation:spin 0.8s linear infinite;"></div></div>
+                        <h3>Loading...</h3>
+                        <p>Fetching verification requests</p>
+                    </div>
+                `;
+
+                // Check if user is admin
+                const isAdmin = await checkAdminStatus();
+
+                if (isAdmin) {
+                    await loadData();
+                    // Setup profile sync
+                    setupProfileSync(function(user) {
+                        loadData();
+                    });
+                }
+            }
+
+            // Run init on DOM ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+
+        })();
+    </script>
+</body>
+</html>
