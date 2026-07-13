@@ -51,6 +51,7 @@
     const user = window.AuthUser.getCurrentUser();
     if (!user.isLoggedIn) throw new Error('Please sign in to request verification.');
 
+    // Check if already pending
     const { data: existing } = await sb
       .from('verification_requests')
       .select('id')
@@ -60,6 +61,7 @@
 
     if (existing) throw new Error('You already have a pending request');
 
+    // Insert into verification_requests table only (don't update profiles)
     const { data, error } = await sb
       .from('verification_requests')
       .insert({ user_id: user.id, category, reason, link: link || '' })
@@ -68,6 +70,7 @@
 
     if (error) throw error;
 
+    // ✅ Only update localStorage, NOT Supabase profiles
     const localUser = window.AuthUser.getCurrentUser();
     localUser.verificationStatus = 'pending';
     localStorage.setItem('freeupper_user_profile', JSON.stringify(localUser));
@@ -87,6 +90,7 @@
 
     if (error) throw error;
 
+    // ✅ Only update localStorage, NOT Supabase profiles
     const localUser = window.AuthUser.getCurrentUser();
     localUser.verificationStatus = 'none';
     localStorage.setItem('freeupper_user_profile', JSON.stringify(localUser));
