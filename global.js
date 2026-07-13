@@ -13,11 +13,11 @@
   const FOLLOW_KEY = 'freeupper_follows';
   const BLOG_KEY = 'freeupper_blog_data_v2';
   const BOOKMARK_KEY = 'freeupper_bookmarks';
-  const SHARE_KEY = 'freeupper_shares';               // ← NEW
-  const VERIFICATION_KEY = 'freeupper_verification_requests'; // ← NEW
+  const SHARE_KEY = 'freeupper_shares';
+  const VERIFICATION_KEY = 'freeupper_verification_requests';
   const MARKET_SAVED_KEY = 'freeupper_market_saved';
 
-  // ─── THEME CONTROLLER (already provided) ──
+  // ─── THEME CONTROLLER ──────────────────
   let currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
 
   function applyTheme(theme) {
@@ -64,6 +64,7 @@
       }
     });
   }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initTheme);
   } else {
@@ -85,8 +86,8 @@
       isLoggedIn: false,
       isPrivate: false,
       verified: false,
-      verificationStatus: 'none', // 'none' | 'pending' | 'approved' | 'rejected'
-      isAdmin: false,            // only admins can access admin.html
+      verificationStatus: 'none',
+      isAdmin: false,
       gender: '',
       dob: null,
       country: '',
@@ -108,7 +109,6 @@
 
   window.saveCurrentUser = function (user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
-    // Also update directory
     registerCurrentUserInDirectory(user);
   };
 
@@ -266,7 +266,7 @@
 
   // ─── REACTIONS ────────────────────────────
   window.toggleReaction = function (postId, type) {
-    type = type || 'like'; // we only use 'like' for now
+    type = type || 'like';
     const data = loadBlogData();
     const key = postId + '-' + type;
     const post = data.posts.find(p => p.id === postId);
@@ -352,10 +352,9 @@
 
   window.submitVerificationRequest = function (userId, category, reason, link) {
     const requests = getVerificationRequests();
-    // Check if already pending
     const existing = requests.find(r => r.userId === userId && r.status === 'pending');
     if (existing) {
-      return false; // already pending
+      return false;
     }
     const newRequest = {
       id: 'vreq-' + Date.now(),
@@ -363,14 +362,13 @@
       category: category,
       reason: reason,
       link: link || '',
-      status: 'pending', // pending | approved | rejected
+      status: 'pending',
       submittedAt: new Date().toISOString(),
       reviewedAt: null,
       rejectionReason: null
     };
     requests.push(newRequest);
     saveVerificationRequests(requests);
-    // Update user's verificationStatus
     const user = getCurrentUser();
     if (user.id === userId) {
       user.verificationStatus = 'pending';
@@ -386,14 +384,12 @@
     req.status = 'approved';
     req.reviewedAt = new Date().toISOString();
     saveVerificationRequests(requests);
-    // Update user's verified flag
     const allUsers = getAllUsers();
     const user = allUsers.find(u => u.id === req.userId);
     if (user) {
       user.verified = true;
       user.verificationStatus = 'approved';
       localStorage.setItem(ALL_USERS_KEY, JSON.stringify(allUsers));
-      // Also update current user if same
       const current = getCurrentUser();
       if (current.id === req.userId) {
         current.verified = true;
@@ -412,7 +408,6 @@
     req.reviewedAt = new Date().toISOString();
     req.rejectionReason = reason || '';
     saveVerificationRequests(requests);
-    // Update user's verificationStatus
     const allUsers = getAllUsers();
     const user = allUsers.find(u => u.id === req.userId);
     if (user) {
@@ -478,10 +473,25 @@
     }, 2600);
   };
 
+  // ─── VERIFICATION BADGE HELPER ────────────
+  window.updateVerificationBadge = function () {
+    const user = getCurrentUser();
+    const badges = document.querySelectorAll('.verified-badge');
+    badges.forEach(badge => {
+      if (user.verified) {
+        badge.classList.remove('hidden');
+        badge.style.display = 'inline-flex';
+      } else {
+        badge.classList.add('hidden');
+        badge.style.display = 'none';
+      }
+    });
+  };
+
   // ─── INIT ──────────────────────────────────
-  // Auto-update nav avatar on page load
   document.addEventListener('DOMContentLoaded', function () {
     updateNavAvatar();
+    updateVerificationBadge();
   });
 
 })();
@@ -491,16 +501,11 @@ window.updateUserProfile = function(updates) {
     const user = getCurrentUser();
     Object.assign(user, updates);
     saveCurrentUser(user);
-    
-    // Update nav avatar immediately
     updateNavAvatar();
-    
-    // Dispatch custom event for same-tab listeners
+    updateVerificationBadge();
     document.dispatchEvent(new CustomEvent('profileUpdated', {
         detail: { user: user }
     }));
-    
-    // Attempt to trigger storage event for other tabs
     try {
         window.dispatchEvent(new StorageEvent('storage', {
             key: 'freeupper_user_profile',
@@ -508,34 +513,30 @@ window.updateUserProfile = function(updates) {
         }));
     } catch(e) {
         // Some browsers don't allow manual StorageEvent dispatch
-        // The custom event will handle same-tab, and storage events
-        // will trigger naturally when other tabs read localStorage
     }
-    
     return user;
 };
 
 // ─── SYNC HELPER FOR ANY PAGE ──────────────────
 window.setupProfileSync = function(refreshCallback) {
-    // Listen for storage events (cross-tab)
     window.addEventListener('storage', function(e) {
         if (e.key === 'freeupper_user_profile' || e.key === 'freeupper_all_users') {
             const user = getCurrentUser();
             updateNavAvatar();
+            updateVerificationBadge();
             if (typeof refreshCallback === 'function') {
                 refreshCallback(user);
             }
         }
     });
     
-    // Listen for custom profileUpdated event (same-tab)
     document.addEventListener('profileUpdated', function(e) {
         if (e.detail && e.detail.user) {
             updateNavAvatar();
+            updateVerificationBadge();
             if (typeof refreshCallback === 'function') {
                 refreshCallback(e.detail.user);
             }
         }
     });
 };
-
