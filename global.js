@@ -476,9 +476,9 @@
   // ─── VERIFICATION BADGE HELPER ────────────
   window.updateVerificationBadge = function () {
     const user = getCurrentUser();
-    const badges = document.querySelectorAll('.verified-badge');
+    const badges = document.querySelectorAll('.verified-badge, .verified-badge-sm, .verified-badge-lg');
     badges.forEach(badge => {
-      if (user.verified) {
+      if (user && user.verified) {
         badge.classList.remove('hidden');
         badge.style.display = 'inline-flex';
       } else {
@@ -488,55 +488,104 @@
     });
   };
 
+  // ─── CHECK IF USER IS VERIFIED ────────────
+  window.isUserVerified = function (userId) {
+    if (!userId) {
+      const user = getCurrentUser();
+      return user && user.verified === true;
+    }
+    const allUsers = getAllUsers();
+    const user = allUsers.find(u => u.id === userId);
+    return user && user.verified === true;
+  };
+
+  // ─── GET VERIFIED BADGE HTML ──────────────
+  window.getVerifiedBadgeHTML = function (size) {
+    const user = getCurrentUser();
+    if (!user || !user.verified) return '';
+
+    const sizeClass = size === 'sm' ? 'verified-badge-sm' :
+      size === 'lg' ? 'verified-badge-lg' : 'verified-badge';
+
+    return `<span class="${sizeClass}">
+      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    </span>`;
+  };
+
+  // ─── VERIFICATION BADGE SYNC ──────────────
+  window.setupVerificationBadgeSync = function () {
+    // Update on page load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', updateVerificationBadge);
+    } else {
+      updateVerificationBadge();
+    }
+
+    // Same-tab profile updates
+    document.addEventListener('profileUpdated', function (e) {
+      if (e.detail && e.detail.user) {
+        updateVerificationBadge();
+      }
+    });
+
+    // Cross-tab profile updates
+    window.addEventListener('storage', function (e) {
+      if (e.key === 'freeupper_user_profile' || e.key === 'freeupper_all_users') {
+        updateVerificationBadge();
+      }
+    });
+  };
+
   // ─── INIT ──────────────────────────────────
   document.addEventListener('DOMContentLoaded', function () {
     updateNavAvatar();
     updateVerificationBadge();
+    setupVerificationBadgeSync();
   });
 
 })();
 
 // ─── PROFILE UPDATE HELPER ──────────────────────
-window.updateUserProfile = function(updates) {
-    const user = getCurrentUser();
-    Object.assign(user, updates);
-    saveCurrentUser(user);
-    updateNavAvatar();
-    updateVerificationBadge();
-    document.dispatchEvent(new CustomEvent('profileUpdated', {
-        detail: { user: user }
+window.updateUserProfile = function (updates) {
+  const user = getCurrentUser();
+  Object.assign(user, updates);
+  saveCurrentUser(user);
+  updateNavAvatar();
+  updateVerificationBadge();
+  document.dispatchEvent(new CustomEvent('profileUpdated', {
+    detail: { user: user }
+  }));
+  try {
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: 'freeupper_user_profile',
+      newValue: JSON.stringify(user)
     }));
-    try {
-        window.dispatchEvent(new StorageEvent('storage', {
-            key: 'freeupper_user_profile',
-            newValue: JSON.stringify(user)
-        }));
-    } catch(e) {
-        // Some browsers don't allow manual StorageEvent dispatch
-    }
-    return user;
+  } catch (e) {
+    // Some browsers don't allow manual StorageEvent dispatch
+  }
+  return user;
 };
 
 // ─── SYNC HELPER FOR ANY PAGE ──────────────────
-window.setupProfileSync = function(refreshCallback) {
-    window.addEventListener('storage', function(e) {
-        if (e.key === 'freeupper_user_profile' || e.key === 'freeupper_all_users') {
-            const user = getCurrentUser();
-            updateNavAvatar();
-            updateVerificationBadge();
-            if (typeof refreshCallback === 'function') {
-                refreshCallback(user);
-            }
-        }
-    });
-    
-    document.addEventListener('profileUpdated', function(e) {
-        if (e.detail && e.detail.user) {
-            updateNavAvatar();
-            updateVerificationBadge();
-            if (typeof refreshCallback === 'function') {
-                refreshCallback(e.detail.user);
-            }
-        }
-    });
+window.setupProfileSync = function (refreshCallback) {
+  window.addEventListener('storage', function (e) {
+    if (e.key === 'freeupper_user_profile' || e.key === 'freeupper_all_users') {
+      const user = getCurrentUser();
+      updateNavAvatar();
+      updateVerificationBadge();
+      if (typeof refreshCallback === 'function') {
+        refreshCallback(user);
+      }
+    }
+  });
+
+  document.addEventListener('profileUpdated', function (e) {
+    if (e.detail && e.detail.user) {
+      updateNavAvatar();
+      updateVerificationBadge();
+      if (typeof refreshCallback === 'function') {
+        refreshCallback(e.detail.user);
+      }
+    }
+  });
 };
