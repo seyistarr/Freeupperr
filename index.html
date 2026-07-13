@@ -425,7 +425,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 0 16px 6px;
+            padding: 0 16px 4px;
         }
         .post-author-avatar {
             width: 38px;
@@ -500,9 +500,21 @@
             height: 10px;
         }
 
+        /* ——— post title ——— */
+        .post-title {
+            font-family: 'Poppins', 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 1.05rem;
+            line-height: 1.3;
+            color: var(--text);
+            padding: 2px 16px 4px;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
         /* ——— media ——— */
         .post-media-wrap {
-            margin: 6px 0 4px;
+            margin: 4px 0 4px;
             background: #000;
             overflow: hidden;
             display: flex;
@@ -540,7 +552,7 @@
             border: none;
         }
 
-        /* ——— caption & content ——— */
+        /* ——— caption / content ——— */
         .post-caption {
             padding: 4px 16px 0;
             font-size: .92rem;
@@ -858,7 +870,6 @@
             color: var(--p);
         }
 
-        /* brand colors for icons */
         .share-option.share-copy .share-icon-wrap {
             background: rgba(59, 130, 246, .1);
         }
@@ -1000,6 +1011,17 @@
             #share-modal .share-sheet .share-option svg {
                 width: 18px;
                 height: 18px;
+            }
+            .post-title {
+                font-size: .95rem;
+                padding: 2px 12px 2px;
+            }
+            .post-caption {
+                padding: 2px 12px 0;
+                font-size: .85rem;
+            }
+            .post-author-row {
+                padding: 0 12px 4px;
             }
         }
 
@@ -1880,6 +1902,30 @@
         .comment-skeleton .skeleton-line-sm.w90 {
             width: 90%;
         }
+
+        /* ────────────────── EXPLORE FULLSCREEN HEADER ────────────────── */
+        .explore-fullscreen-header {
+            position: relative;
+            z-index: 10;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--brd);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+            justify-content: space-between;
+        }
+        .explore-fullscreen-header .explore-category-name {
+            font-weight: 600;
+            font-size: .85rem;
+            color: var(--muted);
+            max-width: 60%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -2586,12 +2632,9 @@
                 // Content: use description if available, else content
                 let contentToShow = p.content || '';
                 let description = p.description || '';
-                // If description exists and content is just a repeat, we might show description as caption and content as full text
-                // We'll show description as caption (if present) and content as full text with read-more
                 const hasCaption = description.length > 0;
                 const hasContent = contentToShow.length > 0;
 
-                // For read-more: we'll show content truncated
                 const contentPreview = contentToShow.substring(0, 250);
                 const isLong = contentToShow.length > 250;
 
@@ -2603,7 +2646,6 @@
                     `<span class="verified-badge" title="Verified"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>` :
                     '';
 
-                // Build content area
                 let contentHtml = '';
                 if (hasContent) {
                     contentHtml += `
@@ -2612,6 +2654,9 @@
                 ${isLong ? `<button type="button" class="read-more-btn" data-pid="${p.id}">Show more</button>` : ''}
               `;
                 }
+
+                // Title comes after author row, before media
+                const titleHtml = p.title ? `<div class="post-title">${escapeHtml(p.title)}</div>` : '';
 
                 return `<article class="feed-post" data-post-id="${p.id}">
                 <!-- author row -->
@@ -2625,6 +2670,9 @@
                     <span class="post-category-pill">${escapeHtml(p.category||'General')}</span>
                   </div>
                 </div>
+
+                <!-- title -->
+                ${titleHtml}
 
                 <!-- media -->
                 ${mh}
@@ -2669,17 +2717,19 @@
                 currentlyPlayingVideo = null;
             }
 
+            function pauseAllVideosForFullscreen() {
+                pauseAllVideos();
+            }
+
             function setupVideoAutoplay() {
                 if (videoObserver) videoObserver.disconnect();
 
-                // Observe both video elements and YouTube wrappers
                 const videoElements = document.querySelectorAll('.ig-video-wrap video, .video-container video');
                 const ytWraps = document.querySelectorAll('.ig-video-wrap .yt-wrap');
 
                 if (!videoElements.length && !ytWraps.length) return;
 
                 videoObserver = new IntersectionObserver((entries) => {
-                    // Find the most visible video (highest ratio)
                     let bestVideo = null;
                     let bestRatio = 0;
                     for (const entry of entries) {
@@ -2697,7 +2747,6 @@
                         if (currentlyPlayingVideo === vid) currentlyPlayingVideo = null;
                     });
 
-                    // Pause all YouTube iframes except the best one
                     const allYtIframes = document.querySelectorAll('.ig-video-wrap iframe');
                     allYtIframes.forEach(iframe => {
                         const idx = iframe.id.replace('yt-', '');
@@ -2711,7 +2760,6 @@
                         }
                     });
 
-                    // Play the best video if it's visible enough (ratio >= 0.6)
                     if (bestVideo && bestRatio >= 0.6) {
                         const vid = bestVideo.querySelector('video');
                         if (vid) {
@@ -2727,7 +2775,6 @@
                                 }
                             }
                         }
-                        // Check if it's a YouTube wrap
                         const iframe = bestVideo.querySelector('iframe');
                         if (iframe) {
                             const idx = iframe.id.replace('yt-', '');
@@ -2743,19 +2790,12 @@
                     }
                 }, { threshold: [0.2, 0.6], rootMargin: '0px' });
 
-                // Observe each video element
                 videoElements.forEach(vid => videoObserver.observe(vid));
-                // Observe each YouTube wrap
                 ytWraps.forEach(wrap => {
                     if (wrap._observed) return;
                     wrap._observed = true;
                     videoObserver.observe(wrap);
                 });
-            }
-
-            // Pause videos when lightbox opens
-            function pauseAllVideosForLightbox() {
-                pauseAllVideos();
             }
 
             // ───────────────────────────────────────────────────────────────
@@ -2901,10 +2941,6 @@
                 });
                 setTimeout(() => {
                     setupVideoAutoplay();
-                    // Also play the first visible video after setup
-                    setTimeout(() => {
-                        // The observer will handle it
-                    }, 300);
                 }, 300);
             }
 
@@ -2956,13 +2992,12 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // POST EVENT DELEGATION (with read-more fix)
+            // POST EVENT DELEGATION
             // ───────────────────────────────────────────────────────────────
             function setupPostEventDelegation(article) {
                 article.addEventListener('click', function(e) {
                     const t = e.target,
                         pid = parseInt(article.dataset.postId);
-                    // Read more button
                     if (t.closest('.read-more-btn')) {
                         e.stopPropagation();
                         const btn = t.closest('.read-more-btn');
@@ -2979,7 +3014,9 @@
                         openShareModal(postId);
                         return; }
                     if (t.closest('.comment-btn')) { e.stopPropagation();
-                        openExplorePost(pid, 'home', true); return; }
+                        // Open fullscreen modal with comments focused
+                        openExplorePost(pid, 'home', true);
+                        return; }
                     if (t.closest('.post-author-avatar') || t.closest('.post-author-name')) {
                         e.stopPropagation();
                         const p = appData.posts.find(p => p.id === pid);
@@ -2995,8 +3032,7 @@
                     if (t.closest('[data-full-img]')) {
                         const c = t.closest('[data-full-img]');
                         e.stopPropagation();
-                        // Pause all videos before opening lightbox
-                        pauseAllVideosForLightbox();
+                        pauseAllVideosForFullscreen();
                         openLightbox(c.dataset.fullImg);
                         return;
                     }
@@ -3013,7 +3049,6 @@
                 });
             }
 
-            // ── toggleReadMore function ──
             function toggleReadMore(btn, pid) {
                 const article = btn.closest('article');
                 if (!article) return;
@@ -3031,7 +3066,6 @@
                 }
             }
 
-            // ── toggleBookmarkUI with bounce ──
             function toggleBookmarkUI(article, pid) {
                 const postId = pid || parseInt(article.dataset.postId);
                 const nb = toggleBookmark(postId);
@@ -3476,6 +3510,9 @@
                     contentHtml = `<div class="content-text" style="padding:0;">${linkifyContent(post.content)}</div>`;
                 }
 
+                const titleHtml = post.title ? `<h1 class="font-heading font-extrabold mt-1 mb-1" style="font-size:clamp(1.25rem,4vw,1.7rem);word-break:break-word;overflow-wrap:anywhere;line-height:1.3;color:var(--text);">${escapeHtml(post.title)}</h1>` :
+                    '';
+
                 return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}">
                 <article>
                   <div class="flex items-center gap-3 mb-3">
@@ -3489,6 +3526,7 @@
                       <div class="text-xs flex items-center gap-1" style="color:var(--muted);">${svgClock()} ${formatRelativeTime(post.date)}</div>
                     </div>
                   </div>
+                  ${titleHtml}
                   ${mh}
                   ${post.description ? `<div class="post-caption" style="padding:8px 0 0;font-size:1rem;">${linkifyContent(post.description)}</div>` : ''}
                   ${contentHtml}
@@ -3543,7 +3581,6 @@
                 requestAnimationFrame(() => {
                     initPlayers(fc);
                     setTimeout(() => {
-                        // The video autoplay will handle playing the first visible video
                         setupVideoAutoplay();
                     }, 400);
                 });
@@ -3606,7 +3643,7 @@
                     if (t.closest('.reaction-btn')) { toggleReaction(postId); return; }
                     if (t.closest('[data-full-img]')) {
                         const c = t.closest('[data-full-img]');
-                        pauseAllVideosForLightbox();
+                        pauseAllVideosForFullscreen();
                         openLightbox(c.dataset.fullImg);
                         return;
                     }
@@ -3723,7 +3760,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MARKET (unchanged, kept as is)
+            // MARKET (unchanged)
             // ───────────────────────────────────────────────────────────────
             function getMarketItems() { if (!appData.marketItems || !Array.isArray(appData.marketItems)) appData
                     .marketItems = []; return appData.marketItems; }
@@ -4012,14 +4049,12 @@
                 img.src = src;
                 modal.classList.add('show');
                 document.body.style.overflow = 'hidden';
-                // Pause all videos when lightbox opens
-                pauseAllVideosForLightbox();
+                pauseAllVideosForFullscreen();
             }
 
             function closeLightbox() {
                 document.getElementById('lightbox').classList.remove('show');
                 document.body.style.overflow = '';
-                // Resume video autoplay after lightbox closes
                 setTimeout(setupVideoAutoplay, 300);
             }
 
@@ -4128,6 +4163,10 @@
                 if (r) { try { const d = JSON.parse(r); return { marketItems: d.marketItems || [],
                         nextMarketId: d.nextMarketId || 1 }; } catch (e) {} }
                 return { marketItems: [], nextMarketId: 1 };
+            }
+
+            function pauseHomepageVideos() {
+                pauseAllVideos();
             }
 
             // ───────────────────────────────────────────────────────────────
