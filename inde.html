@@ -540,7 +540,7 @@
             border: none;
         }
 
-        /* ——— caption ——— */
+        /* ——— caption & content ——— */
         .post-caption {
             padding: 4px 16px 0;
             font-size: .92rem;
@@ -553,6 +553,45 @@
             color: var(--p);
             text-decoration: underline;
             font-weight: 500;
+        }
+
+        .content-preview {
+            padding: 0 16px;
+            font-size: .92rem;
+            line-height: 1.5;
+            color: var(--text);
+            white-space: pre-wrap;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            word-break: break-word;
+        }
+        .content-text {
+            padding: 0 16px;
+            font-size: .92rem;
+            line-height: 1.5;
+            color: var(--text);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .content-text a {
+            color: var(--p);
+            text-decoration: underline;
+            font-weight: 500;
+        }
+        .read-more-btn {
+            margin: 4px 16px 0;
+            background: none;
+            border: none;
+            color: var(--p);
+            font-weight: 700;
+            font-size: .85rem;
+            cursor: pointer;
+            padding: 4px 0;
+        }
+        .read-more-btn:hover {
+            text-decoration: underline;
         }
 
         /* ——— actions row ——— */
@@ -1100,7 +1139,7 @@
             background: #7C3AED;
         }
 
-        /* ────────────────── COMMENTS (unchanged) ────────────────── */
+        /* ────────────────── COMMENTS ────────────────── */
         .comment-item {
             display: flex;
             gap: 10px;
@@ -1451,7 +1490,7 @@
             backdrop-filter: blur(4px);
         }
 
-        /* ────────────────── MARKET (unchanged) ────────────────── */
+        /* ────────────────── MARKET ────────────────── */
         .market-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1806,6 +1845,40 @@
             background: #F5F3FF;
             border-color: #7C3AED;
             color: #7C3AED;
+        }
+
+        /* ────────────────── SKELETON FOR COMMENTS ────────────────── */
+        .comment-skeleton {
+            display: flex;
+            gap: 10px;
+            padding: 10px 0;
+            align-items: flex-start;
+        }
+        .comment-skeleton .skeleton-avatar-sm {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+            flex-shrink: 0;
+        }
+        .comment-skeleton .skeleton-line-sm {
+            height: 10px;
+            border-radius: 5px;
+            background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+            margin-bottom: 6px;
+        }
+        .comment-skeleton .skeleton-line-sm.w70 {
+            width: 70%;
+        }
+        .comment-skeleton .skeleton-line-sm.w50 {
+            width: 50%;
+        }
+        .comment-skeleton .skeleton-line-sm.w90 {
+            width: 90%;
         }
     </style>
 </head>
@@ -2510,20 +2583,35 @@
                     p.comments.filter(c => c.approved !== false).length :
                     (p.commentCount || 0);
 
-                // Caption: use description, or fallback to content snippet
-                let caption = p.description || '';
-                if (!caption && p.content) {
-                    caption = p.content.length > 300 ? p.content.substring(0, 300) + '...' : p.content;
-                }
+                // Content: use description if available, else content
+                let contentToShow = p.content || '';
+                let description = p.description || '';
+                // If description exists and content is just a repeat, we might show description as caption and content as full text
+                // We'll show description as caption (if present) and content as full text with read-more
+                const hasCaption = description.length > 0;
+                const hasContent = contentToShow.length > 0;
+
+                // For read-more: we'll show content truncated
+                const contentPreview = contentToShow.substring(0, 250);
+                const isLong = contentToShow.length > 250;
 
                 const mh = buildMediaHTML(p, index);
                 const followBtn = buildFollowButton(p.authorId, da);
 
-                // Verified badge
                 const verified = p.authorVerified || false;
                 const badgeHtml = verified ?
                     `<span class="verified-badge" title="Verified"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>` :
                     '';
+
+                // Build content area
+                let contentHtml = '';
+                if (hasContent) {
+                    contentHtml += `
+                <div class="content-preview preview-text-${p.id}">${linkifyContent(contentPreview)}</div>
+                <div class="content-text full-text-${p.id} ${isLong ? 'hidden' : ''}">${linkifyContent(contentToShow)}</div>
+                ${isLong ? `<button type="button" class="read-more-btn" data-pid="${p.id}">Show more</button>` : ''}
+              `;
+                }
 
                 return `<article class="feed-post" data-post-id="${p.id}">
                 <!-- author row -->
@@ -2541,8 +2629,11 @@
                 <!-- media -->
                 ${mh}
 
-                <!-- caption -->
-                ${caption ? `<div class="post-caption">${linkifyContent(caption)}</div>` : ''}
+                <!-- caption (description) -->
+                ${hasCaption ? `<div class="post-caption">${linkifyContent(description)}</div>` : ''}
+
+                <!-- content with read-more -->
+                ${contentHtml}
 
                 <!-- actions -->
                 <div class="post-actions-row" data-post-reactions="${p.id}">
@@ -2556,7 +2647,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // VIDEO AUTO-PLAY
+            // VIDEO AUTO-PLAY (single video at a time)
             // ───────────────────────────────────────────────────────────────
             let videoObserver = null;
             let currentlyPlayingVideo = null;
@@ -2581,26 +2672,37 @@
             function setupVideoAutoplay() {
                 if (videoObserver) videoObserver.disconnect();
 
+                // Observe both video elements and YouTube wrappers
                 const videoElements = document.querySelectorAll('.ig-video-wrap video, .video-container video');
-                if (!videoElements.length) return;
+                const ytWraps = document.querySelectorAll('.ig-video-wrap .yt-wrap');
+
+                if (!videoElements.length && !ytWraps.length) return;
 
                 videoObserver = new IntersectionObserver((entries) => {
-                    let visibleVideo = null;
+                    // Find the most visible video (highest ratio)
+                    let bestVideo = null;
+                    let bestRatio = 0;
                     for (const entry of entries) {
-                        if (entry.isIntersecting && entry.intersectionRatio >= 0.75) {
-                            visibleVideo = entry.target;
-                            break;
+                        if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
+                            bestVideo = entry.target;
+                            bestRatio = entry.intersectionRatio;
                         }
                     }
 
-                    document.querySelectorAll('.ig-video-wrap video, .video-container video').forEach(vid => {
-                        if (vid === visibleVideo) return;
+                    // Pause all videos except the best one
+                    const allVideos = document.querySelectorAll('.ig-video-wrap video, .video-container video');
+                    allVideos.forEach(vid => {
+                        if (vid === bestVideo) return;
                         if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
                         if (currentlyPlayingVideo === vid) currentlyPlayingVideo = null;
                     });
 
-                    document.querySelectorAll('.ig-video-wrap iframe').forEach(iframe => {
+                    // Pause all YouTube iframes except the best one
+                    const allYtIframes = document.querySelectorAll('.ig-video-wrap iframe');
+                    allYtIframes.forEach(iframe => {
                         const idx = iframe.id.replace('yt-', '');
+                        const wrap = iframe.closest('.yt-wrap');
+                        if (wrap === bestVideo) return;
                         if (ytState[idx] && ytState[idx].playing) {
                             ytPostMessage(idx, 'pauseVideo');
                             ytState[idx].playing = false;
@@ -2609,54 +2711,50 @@
                         }
                     });
 
-                    if (visibleVideo) {
-                        if (visibleVideo.plyr) {
-                            if (currentlyPlayingVideo !== visibleVideo) {
-                                visibleVideo.plyr.play().catch(() => {});
-                                currentlyPlayingVideo = visibleVideo;
+                    // Play the best video if it's visible enough (ratio >= 0.6)
+                    if (bestVideo && bestRatio >= 0.6) {
+                        const vid = bestVideo.querySelector('video');
+                        if (vid) {
+                            if (vid.plyr) {
+                                if (currentlyPlayingVideo !== vid) {
+                                    vid.plyr.play().catch(() => {});
+                                    currentlyPlayingVideo = vid;
+                                }
+                            } else {
+                                if (currentlyPlayingVideo !== vid) {
+                                    vid.play().catch(() => {});
+                                    currentlyPlayingVideo = vid;
+                                }
                             }
-                        } else {
-                            if (currentlyPlayingVideo !== visibleVideo) {
-                                visibleVideo.play().catch(() => {});
-                                currentlyPlayingVideo = visibleVideo;
+                        }
+                        // Check if it's a YouTube wrap
+                        const iframe = bestVideo.querySelector('iframe');
+                        if (iframe) {
+                            const idx = iframe.id.replace('yt-', '');
+                            if (!ytState[idx]) ytState[idx] = { muted: true, playing: true };
+                            if (!ytState[idx].playing) {
+                                ytPostMessage(idx, 'playVideo');
+                                ytState[idx].playing = true;
+                                _showYtPauseIcon(idx, true);
+                                _updateMuteBadge(idx);
+                                currentlyPlayingVideo = idx;
                             }
                         }
                     }
+                }, { threshold: [0.2, 0.6], rootMargin: '0px' });
 
-                    document.querySelectorAll('.ig-video-wrap .yt-wrap').forEach(wrap => {
-                        const rect = wrap.getBoundingClientRect();
-                        const isVisible = rect.top < window.innerHeight - 100 && rect.bottom > 100;
-                        const iframe = wrap.querySelector('iframe');
-                        if (iframe) {
-                            const idx = iframe.id.replace('yt-', '');
-                            if (isVisible && (!ytState[idx] || !ytState[idx].playing)) {
-                                if (!ytState[idx]) ytState[idx] = { muted: true, playing: true };
-                                if (!ytState[idx].playing) {
-                                    ytPostMessage(idx, 'playVideo');
-                                    ytState[idx].playing = true;
-                                    _showYtPauseIcon(idx, true);
-                                    _updateMuteBadge(idx);
-                                    currentlyPlayingVideo = idx;
-                                }
-                            } else if (!isVisible && ytState[idx] && ytState[idx].playing) {
-                                ytPostMessage(idx, 'pauseVideo');
-                                ytState[idx].playing = false;
-                                _showYtPauseIcon(idx, false);
-                                if (currentlyPlayingVideo === idx) currentlyPlayingVideo = null;
-                            }
-                        }
-                    });
-                }, { threshold: 0.75, rootMargin: '0px 0px -20px 0px' });
-
+                // Observe each video element
                 videoElements.forEach(vid => videoObserver.observe(vid));
-                document.querySelectorAll('.ig-video-wrap .yt-wrap').forEach(wrap => {
+                // Observe each YouTube wrap
+                ytWraps.forEach(wrap => {
                     if (wrap._observed) return;
                     wrap._observed = true;
                     videoObserver.observe(wrap);
                 });
             }
 
-            function pauseHomepageVideos() {
+            // Pause videos when lightbox opens
+            function pauseAllVideosForLightbox() {
                 pauseAllVideos();
             }
 
@@ -2803,41 +2901,10 @@
                 });
                 setTimeout(() => {
                     setupVideoAutoplay();
+                    // Also play the first visible video after setup
                     setTimeout(() => {
-                        const visibleWraps = document.querySelectorAll(
-                            '.ig-video-wrap, .video-container');
-                        let firstVisible = null;
-                        for (const w of visibleWraps) {
-                            const rect = w.getBoundingClientRect();
-                            if (rect.top < window.innerHeight && rect.bottom > 0) {
-                                firstVisible = w;
-                                break;
-                            }
-                        }
-                        if (firstVisible) {
-                            const vid = firstVisible.querySelector('video');
-                            if (vid && vid.plyr) {
-                                vid.plyr.play().catch(() => {});
-                                currentlyPlayingVideo = vid;
-                            } else if (vid) {
-                                vid.play().catch(() => {});
-                                currentlyPlayingVideo = vid;
-                            }
-                            const ytIframe = firstVisible.querySelector('iframe');
-                            if (ytIframe) {
-                                const idx = ytIframe.id.replace('yt-', '');
-                                if (!ytState[idx]) ytState[idx] = { muted: true,
-                                playing: true };
-                                if (!ytState[idx].playing) {
-                                    ytPostMessage(idx, 'playVideo');
-                                    ytState[idx].playing = true;
-                                    _showYtPauseIcon(idx, true);
-                                    _updateMuteBadge(idx);
-                                    currentlyPlayingVideo = idx;
-                                }
-                            }
-                        }
-                    }, 400);
+                        // The observer will handle it
+                    }, 300);
                 }, 300);
             }
 
@@ -2889,12 +2956,19 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // POST EVENT DELEGATION (with bounce for bookmark)
+            // POST EVENT DELEGATION (with read-more fix)
             // ───────────────────────────────────────────────────────────────
             function setupPostEventDelegation(article) {
                 article.addEventListener('click', function(e) {
                     const t = e.target,
                         pid = parseInt(article.dataset.postId);
+                    // Read more button
+                    if (t.closest('.read-more-btn')) {
+                        e.stopPropagation();
+                        const btn = t.closest('.read-more-btn');
+                        toggleReadMore(btn, pid);
+                        return;
+                    }
                     if (t.closest('.reaction-btn')) { e.stopPropagation();
                         toggleReaction(pid); return; }
                     if (t.closest('.bookmark-badge')) { e.stopPropagation();
@@ -2921,6 +2995,8 @@
                     if (t.closest('[data-full-img]')) {
                         const c = t.closest('[data-full-img]');
                         e.stopPropagation();
+                        // Pause all videos before opening lightbox
+                        pauseAllVideosForLightbox();
                         openLightbox(c.dataset.fullImg);
                         return;
                     }
@@ -2937,12 +3013,29 @@
                 });
             }
 
+            // ── toggleReadMore function ──
+            function toggleReadMore(btn, pid) {
+                const article = btn.closest('article');
+                if (!article) return;
+                const preview = article.querySelector(`.preview-text-${pid}`);
+                const full = article.querySelector(`.full-text-${pid}`);
+                if (!preview || !full) return;
+                if (full.classList.contains('hidden')) {
+                    preview.classList.add('hidden');
+                    full.classList.remove('hidden');
+                    btn.textContent = 'Show less';
+                } else {
+                    preview.classList.remove('hidden');
+                    full.classList.add('hidden');
+                    btn.textContent = 'Show more';
+                }
+            }
+
             // ── toggleBookmarkUI with bounce ──
             function toggleBookmarkUI(article, pid) {
                 const postId = pid || parseInt(article.dataset.postId);
                 const nb = toggleBookmark(postId);
 
-                // Bounce animation on all bookmark icons for this post
                 document.querySelectorAll(`[data-post-id="${postId}"] .bookmark-badge, #single-bookmark-${postId}`)
                     .forEach(el => {
                         el.classList.toggle('bookmarked', nb);
@@ -3373,16 +3466,14 @@
                     vc = getVisibleComments(post.id);
                 const followBtn = buildFollowButton(post.authorId, da);
 
-                // Verified badge
                 const verified = post.authorVerified || false;
                 const badgeHtml = verified ?
                     `<span class="verified-badge verified-badge-sm" title="Verified"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>` :
                     '';
 
-                // Caption
-                let caption = post.description || '';
-                if (!caption && post.content) {
-                    caption = post.content.length > 300 ? post.content.substring(0, 300) + '...' : post.content;
+                let contentHtml = '';
+                if (post.content) {
+                    contentHtml = `<div class="content-text" style="padding:0;">${linkifyContent(post.content)}</div>`;
                 }
 
                 return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}">
@@ -3399,7 +3490,8 @@
                     </div>
                   </div>
                   ${mh}
-                  ${caption ? `<div class="post-caption" style="padding:8px 0 0;font-size:1rem;">${linkifyContent(caption)}</div>` : ''}
+                  ${post.description ? `<div class="post-caption" style="padding:8px 0 0;font-size:1rem;">${linkifyContent(post.description)}</div>` : ''}
+                  ${contentHtml}
                 </article>
                 <hr class="my-4" style="border-color:var(--brd);">
                 <div class="post-actions-row" style="max-width:100%;justify-content:space-between;" data-post-reactions="${post.id}">
@@ -3451,26 +3543,8 @@
                 requestAnimationFrame(() => {
                     initPlayers(fc);
                     setTimeout(() => {
-                        const vid = fc.querySelector('.ig-video-wrap video, .video-container video');
-                        if (vid && vid.plyr) {
-                            vid.plyr.play().catch(() => {});
-                            currentlyPlayingVideo = vid;
-                        } else if (vid) {
-                            vid.play().catch(() => {});
-                            currentlyPlayingVideo = vid;
-                        }
-                        const ytIframe = fc.querySelector('.ig-video-wrap iframe');
-                        if (ytIframe) {
-                            const idx = ytIframe.id.replace('yt-', '');
-                            if (!ytState[idx]) ytState[idx] = { muted: true, playing: true };
-                            if (!ytState[idx].playing) {
-                                ytPostMessage(idx, 'playVideo');
-                                ytState[idx].playing = true;
-                                _showYtPauseIcon(idx, true);
-                                _updateMuteBadge(idx);
-                                currentlyPlayingVideo = idx;
-                            }
-                        }
+                        // The video autoplay will handle playing the first visible video
+                        setupVideoAutoplay();
                     }, 400);
                 });
                 fs.classList.add('open');
@@ -3530,8 +3604,12 @@
                         return;
                     }
                     if (t.closest('.reaction-btn')) { toggleReaction(postId); return; }
-                    if (t.closest('[data-full-img]')) { const c = t.closest('[data-full-img]');
-                        openLightbox(c.dataset.fullImg); return; }
+                    if (t.closest('[data-full-img]')) {
+                        const c = t.closest('[data-full-img]');
+                        pauseAllVideosForLightbox();
+                        openLightbox(c.dataset.fullImg);
+                        return;
+                    }
                     if (t.closest('[data-extlink]')) { openInAppWebView(decodeURIComponent(t.closest(
                         '[data-extlink]').dataset.extlink)); return; }
                     if (t.closest('.font-bold.text-sm') || t.closest('.w-10.h-10.rounded-full')) {
@@ -3645,7 +3723,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MARKET
+            // MARKET (unchanged, kept as is)
             // ───────────────────────────────────────────────────────────────
             function getMarketItems() { if (!appData.marketItems || !Array.isArray(appData.marketItems)) appData
                     .marketItems = []; return appData.marketItems; }
@@ -3934,11 +4012,15 @@
                 img.src = src;
                 modal.classList.add('show');
                 document.body.style.overflow = 'hidden';
+                // Pause all videos when lightbox opens
+                pauseAllVideosForLightbox();
             }
 
             function closeLightbox() {
                 document.getElementById('lightbox').classList.remove('show');
                 document.body.style.overflow = '';
+                // Resume video autoplay after lightbox closes
+                setTimeout(setupVideoAutoplay, 300);
             }
 
             // ───────────────────────────────────────────────────────────────
