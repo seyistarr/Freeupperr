@@ -24,6 +24,17 @@
         };
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+    <!-- ═══════════════════ SUPABASE + AUTH + POSTS ═══════════════════ -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+    </script>
+    <script src="global.js">
+    </script>
+    <script src="auth.js">
+    </script>
+    <script src="posts.js">
+    </script>
+
     <style>
         /* ===== CSS VARIABLES ===== */
         :root {
@@ -64,7 +75,6 @@
             --sidebg: #0f0f0f;
         }
 
-        /* ── System font stack (Facebook-style) ── */
         * {
             margin: 0;
             padding: 0;
@@ -409,7 +419,6 @@
             border-bottom: 1px solid var(--brd);
         }
 
-        /* ── Facebook-style post content ── */
         .content-text {
             white-space: pre-wrap;
             line-height: 1.5;
@@ -437,13 +446,11 @@
             -webkit-box-orient: vertical;
         }
 
-        /* ── Card padding ── */
         .feed-post .post-body {
             padding: 0 16px;
             max-width: 100%;
         }
 
-        /* ────── FULL-WIDTH MEDIA (Homepage) ────── */
         .ig-media-container {
             width: calc(100% + 32px);
             margin-left: -16px;
@@ -496,7 +503,6 @@
             background: #7C3AED;
         }
 
-        /* YouTube embed inside full-width container */
         .ig-video-wrap .yt-wrap {
             position: relative;
             width: 100%;
@@ -612,7 +618,7 @@
             transform: translate(50%, -50%) scale(1);
         }
 
-        /* ──────────────── EXPLORE GRID (Square) ──────────────── */
+        /* ──────────────── EXPLORE GRID ──────────────── */
         .explore-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1016,6 +1022,9 @@
             height: 100%;
             object-fit: cover;
         }
+        .comment-avatar.has-image {
+            background: transparent;
+        }
         .comment-body {
             flex: 1;
             min-width: 0;
@@ -1131,6 +1140,9 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+        .reply-avatar-dot.has-image {
+            background: transparent;
         }
         .reply-body {
             flex: 1;
@@ -1681,7 +1693,6 @@
             transition: all .3s cubic-bezier(.68, -.55, .265, 1.55);
         }
 
-        /* ──────────────── RESPONSIVE TWEAKS ──────────────── */
         @media (max-width: 640px) {
             .top-header .brand {
                 font-size: 1.05rem;
@@ -1739,7 +1750,6 @@
             }
         }
 
-        /* ──────────────── VIDEO AUTO-PLAY ──────────────── */
         .video-container {
             position: relative;
             width: 100%;
@@ -1776,7 +1786,6 @@
             opacity: 1;
         }
 
-        /* ──────────────── POST ACTIONS ROW - ORIGINAL INLINE LAYOUT ──────────────── */
         .post-actions-row {
             display: flex;
             align-items: center;
@@ -1843,7 +1852,6 @@
             font-weight: 500;
         }
 
-        /* ──────────────── TAB PILLS - FIXED UNDERLINE ──────────────── */
         .tab-pill {
             padding: 14px 16px;
             font-size: .9rem;
@@ -1927,7 +1935,7 @@
         <span id="pull-text">Pull down to refresh</span>
     </div>
 
-    <!-- ═══════════════════ TOP HEADER (Messenger icon) ═══════════════════ -->
+    <!-- ═══════════════════ TOP HEADER ═══════════════════ -->
     <header class="top-header">
         <div class="brand" id="logo-text">Free<span>Upper</span></div>
         <div class="header-actions">
@@ -2101,8 +2109,6 @@
     </nav>
 
     <!-- ═══════════════════ SCRIPTS ═══════════════════ -->
-    <script src="global.js">
-    </script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js">
     </script>
     <script>
@@ -2110,7 +2116,8 @@
             'use strict';
 
             // ───────────────────────────────────────────────────────────────
-            // DATA LAYER
+            // DATA LAYER — posts now come from Supabase via PostsAPI
+            // But we keep appData as a local cache mirroring Supabase
             // ───────────────────────────────────────────────────────────────
             const SK = 'freeupper_blog_data_v2',
                 UK = 'freeupper_user_profile',
@@ -2154,35 +2161,24 @@
             const INITIAL_COMMENT_DISPLAY = 3;
             const COMMENT_LOAD_MORE = 5;
 
-            function getDefaultData() { return { posts: [], nextId: 1, nextCommentId: 1, userReactions: {},
-                    marketItems: [], nextMarketId: 1 }; }
-
-            function loadData() { const r = localStorage.getItem(SK); if (r) { try { return JSON.parse(r); } catch (
-                    e) {} } const d = getDefaultData();
-                saveData(d); return d; }
-
-            function saveData(d) { localStorage.setItem(SK, JSON.stringify(d)); }
-            let appData = loadData();
-
-            function persist() { saveData(appData); }
-            if (!appData.marketItems || !Array.isArray(appData.marketItems)) { appData.marketItems = [];
-                persist(); }
-
-            function reloadData() {
-                const fresh = loadData();
-                appData.posts = fresh.posts || [];
-                appData.nextId = fresh.nextId || 1;
-                appData.nextCommentId = fresh.nextCommentId || 1;
-                appData.userReactions = fresh.userReactions || {};
-                appData.marketItems = fresh.marketItems || [];
-                appData.nextMarketId = fresh.nextMarketId || 1;
-                return appData;
-            }
+            // ── appData is now a cache; posts come from Supabase ──
+            let appData = {
+                posts: [],
+                nextId: 1,
+                nextCommentId: 1,
+                userReactions: {},
+                marketItems: [],
+                nextMarketId: 1
+            };
 
             // ───────────────────────────────────────────────────────────────
-            // USER
+            // USER — using window.AuthUser from auth.js
             // ───────────────────────────────────────────────────────────────
             function getCurrentUser() {
+                if (window.AuthUser && window.AuthUser.getCurrentUser) {
+                    return window.AuthUser.getCurrentUser();
+                }
+                // fallback to localStorage (should not happen if auth.js loaded)
                 let u = JSON.parse(localStorage.getItem(UK));
                 if (!u) {
                     u = { id: 'FU-' + Math.random().toString(36).substr(2, 9).toUpperCase(), username: '',
@@ -2220,7 +2216,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // FOLLOW SYSTEM
+            // FOLLOW SYSTEM (unchanged, localStorage-based)
             // ───────────────────────────────────────────────────────────────
             function getFollows() { const raw = localStorage.getItem(FOLLOW_KEY); return raw ? JSON.parse(raw) : {}; }
 
@@ -2289,7 +2285,6 @@
 
             function svgEye() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19V10"/><path d="M12 19V5"/><path d="M20 19V14"/></svg>'; }
 
-            // ── MODERN COMMENT ICON ──
             function svgComment() {
                 return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
             }
@@ -2315,7 +2310,7 @@
             function bookmarkIcon(filled) { const color = filled ? 'var(--gold)' : 'none'; return `<svg width="19" height="19" viewBox="0 0 24 24" fill="${color}" stroke="var(--gold)" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`; }
 
             // ───────────────────────────────────────────────────────────────
-            // BOOKMARKS / REACTIONS
+            // BOOKMARKS / REACTIONS — reactions now use PostsAPI
             // ───────────────────────────────────────────────────────────────
             function getBookmarks() { const b = localStorage.getItem(BK); return b ? JSON.parse(b) : []; }
 
@@ -2338,22 +2333,42 @@
 
             function isMarketSaved(id) { return getMarketSaved().includes(id); }
 
-            function toggleReaction(postId) {
+            // ── toggleReaction now uses PostsAPI ──
+            async function toggleReaction(postId) {
                 const post = appData.posts.find(p => p.id === postId);
                 if (!post) return;
-                const key = `${postId}-like`;
-                if (appData.userReactions[key]) { delete appData.userReactions[key];
-                    post.reactions.like = Math.max(0, (post.reactions.like || 0) - 1); } else { appData
-                        .userReactions[key] = true;
-                    post.reactions.like = (post.reactions.like || 0) + 1; }
-                persist();
-                updateReactionsUI(postId);
+
+                // requireAuth from auth.js
+                if (window.AuthUser && window.AuthUser.requireAuth) {
+                    window.AuthUser.requireAuth(async () => {
+                        try {
+                            const { liked, count } = await window.PostsAPI.toggleLike(postId);
+                            post.likedByMe = liked;
+                            post.reactions.like = count;
+                            updateReactionsUI(postId);
+                        } catch (err) {
+                            showToast(err.message, 'r');
+                        }
+                    });
+                } else {
+                    // fallback to old localStorage behavior if auth.js not loaded
+                    const key = `${postId}-like`;
+                    if (appData.userReactions[key]) {
+                        delete appData.userReactions[key];
+                        post.reactions.like = Math.max(0, (post.reactions.like || 0) - 1);
+                    } else {
+                        appData.userReactions[key] = true;
+                        post.reactions.like = (post.reactions.like || 0) + 1;
+                    }
+                    post.likedByMe = !!appData.userReactions[key];
+                    updateReactionsUI(postId);
+                }
             }
 
             function updateReactionsUI(postId) {
                 const post = appData.posts.find(p => p.id === postId);
                 if (!post) return;
-                const reacted = !!appData.userReactions[`${postId}-like`];
+                const reacted = !!post.likedByMe;
                 document.querySelectorAll(`[data-post-reactions="${postId}"] .reaction-btn`).forEach(btn => {
                     btn.classList.toggle('reacted', reacted);
                     const icon = btn.querySelector('.heart-icon-wrap');
@@ -2366,7 +2381,7 @@
             function buildReactionButton(postId) {
                 const post = appData.posts.find(p => p.id === postId);
                 const count = post ? post.reactions.like || 0 : 0;
-                const reacted = !!appData.userReactions[`${postId}-like`];
+                const reacted = post ? !!post.likedByMe : false;
                 return `<button type="button" class="reaction-btn ${reacted?'reacted':''}" data-reaction="like">
                 <span class="heart-icon-wrap">${svgHeart(reacted)}</span>
                 <span class="reaction-count">${formatCount(count)}</span>
@@ -2374,7 +2389,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // YOUTUBE PLAYER
+            // YOUTUBE PLAYER (unchanged)
             // ───────────────────────────────────────────────────────────────
             let ytState = {};
             let ytInfo = {};
@@ -2474,7 +2489,7 @@
             window.seekYoutube = seekYoutube;
 
             // ───────────────────────────────────────────────────────────────
-            // PLYR SETUP
+            // PLYR SETUP (unchanged)
             // ───────────────────────────────────────────────────────────────
             function setupPlyrPlayer(videoElement) {
                 if (videoElement.plyr) return;
@@ -2492,7 +2507,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // DETECT YOUTUBE URL
+            // DETECT YOUTUBE URL (unchanged)
             // ───────────────────────────────────────────────────────────────
             function isYouTubeUrl(url) {
                 if (!url) return false;
@@ -2508,7 +2523,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD MEDIA HTML — FULL WIDTH, NO BORDER RADIUS
+            // BUILD MEDIA HTML (unchanged)
             // ───────────────────────────────────────────────────────────────
             function buildMediaHTML(p, postIndex) {
                 if (!p.mediaUrl) return '';
@@ -2546,7 +2561,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD FOLLOW BUTTON
+            // BUILD FOLLOW BUTTON (unchanged)
             // ───────────────────────────────────────────────────────────────
             function buildFollowButton(authorId, authorName) {
                 const cu = getCurrentUser();
@@ -2571,11 +2586,14 @@
             };
 
             // ───────────────────────────────────────────────────────────────
-            // POST HTML — ORIGINAL INLINE LAYOUT
+            // POST HTML — uses commentCount from Supabase
             // ───────────────────────────────────────────────────────────────
             function buildActionsRow(p) {
-                const bm = isBookmarked(p.id),
-                    cc = p.comments.filter(c => c.approved !== false).length;
+                const bm = isBookmarked(p.id);
+                // Use p.commentCount if comments array is empty or not loaded
+                const cc = (p.comments && p.comments.length) ?
+                    p.comments.filter(c => c.approved !== false).length :
+                    (p.commentCount || 0);
                 return `<div class="post-actions-row" data-post-reactions="${p.id}">
                 <span class="comment-btn">${svgComment()}<span class="comment-count">${formatCount(cc)}</span></span>
                 ${buildReactionButton(p.id)}
@@ -2623,7 +2641,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // VIDEO AUTO-PLAY
+            // VIDEO AUTO-PLAY (unchanged)
             // ───────────────────────────────────────────────────────────────
             let videoObserver = null;
             let currentlyPlayingVideo = null;
@@ -3029,7 +3047,7 @@
                 renderUI(); }
 
             // ───────────────────────────────────────────────────────────────
-            // SHARE MODAL
+            // SHARE MODAL (unchanged)
             // ───────────────────────────────────────────────────────────────
             let sharePostId = null;
 
@@ -3091,7 +3109,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // COMMENTS
+            // COMMENTS — now use PostsAPI
             // ───────────────────────────────────────────────────────────────
             function getAllDescendants(pid, comments) { const r = [];
                 const dc = comments.filter(c => c.parentId === pid); for (const c of dc) { r.push(c);
@@ -3120,17 +3138,7 @@
                 return h;
             }
 
-            function renderCommentsHTML(comments, postId, vc) {
-                const tl = comments.filter(c => c.parentId === null);
-                if (tl.length === 0) return '<p class="text-sm py-8 text-center" style="color:var(--muted);">No replies yet. Be the first.</p>';
-                const sh = tl.slice(0, vc),
-                    hi = tl.length > vc;
-                let h = sh.map(c => renderCommentThread(c, comments, postId)).join('');
-                if (hi) h +=
-                    `<button type="button" class="view-replies-btn load-more-comments-btn" style="margin-left:0;" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(tl.length-vc)} more repl${tl.length-vc!==1?'ies':'y'}</button>`;
-                return h;
-            }
-
+            // ── renderCommentThread with avatar has-image support ──
             function renderCommentThread(c, allComments, postId) {
                 const ds = getAllDescendants(c.id, allComments),
                     hr = ds.length > 0,
@@ -3151,8 +3159,12 @@
                 const lc = parseInt(localStorage.getItem('comment-like-' + c.id) || '0'),
                     isL = lc > 0,
                     il = c.message.length > 220;
+                const avatarHtml = c.avatar ?
+                    `<img src="${c.avatar}" alt="">` :
+                    c.username.charAt(0).toUpperCase();
+                const avatarClass = c.avatar ? 'comment-avatar has-image' : 'comment-avatar';
                 return `<div class="comment-item" data-comment-id="${c.id}">
-                <div class="comment-avatar" data-username="${escapeHtml(c.username)}">${c.username.charAt(0).toUpperCase()}</div>
+                <div class="${avatarClass}" data-username="${escapeHtml(c.username)}">${avatarHtml}</div>
                 <div class="comment-body">
                   <div class="comment-username">${escapeHtml(c.username)}</div>
                   <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${escapeHtml(c.message)}</div>
@@ -3169,6 +3181,7 @@
               </div>${rh}`;
             }
 
+            // ── renderReplyItem with avatar has-image support ──
             function renderReplyItem(r, allComments, postId) {
                 const lc = parseInt(localStorage.getItem('comment-like-' + r.id) || '0'),
                     isL = lc > 0;
@@ -3177,8 +3190,12 @@
                 const mn = (ru && ru !== r.username) ? `<span style="color:#7C3AED;font-weight:600;">@${escapeHtml(ru)}</span> ` :
                     '';
                 const il = r.message.length > 220;
+                const avatarHtml = r.avatar ?
+                    `<img src="${r.avatar}" alt="">` :
+                    r.username.charAt(0).toUpperCase();
+                const avatarClass = r.avatar ? 'reply-avatar-dot has-image' : 'reply-avatar-dot';
                 return `<div class="reply-item" data-comment-id="${r.id}">
-                <div class="reply-avatar-dot" data-username="${escapeHtml(r.username)}">${r.username.charAt(0).toUpperCase()}</div>
+                <div class="${avatarClass}" data-username="${escapeHtml(r.username)}">${avatarHtml}</div>
                 <div class="reply-body">
                   <div class="reply-username">${escapeHtml(r.username)}</div>
                   <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${escapeHtml(r.message)}</div>
@@ -3195,13 +3212,44 @@
               </div>`;
             }
 
-            function addComment(postId, parentId, message) {
+            // ── addComment now uses PostsAPI ──
+            async function addComment(postId, parentId, message) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
-                const cu = getCurrentUser();
-                p.comments.push({ id: appData.nextCommentId++, username: cu.displayName, message, time: new Date()
-                        .toISOString(), approved: true, parentId: parentId || null });
-                persist();
+
+                // Use AuthUser.requireAuth if available
+                if (window.AuthUser && window.AuthUser.requireAuth) {
+                    return new Promise((resolve, reject) => {
+                        window.AuthUser.requireAuth(async () => {
+                            try {
+                                const comment = await window.PostsAPI.addComment(postId, parentId,
+                                message);
+                                // Append the avatar from the returned comment
+                                p.comments.push(comment);
+                                p.commentCount = (p.commentCount || 0) + 1;
+                                resolve(comment);
+                            } catch (err) {
+                                showToast(err.message, 'r');
+                                reject(err);
+                            }
+                        });
+                    });
+                } else {
+                    // fallback to localStorage
+                    const cu = getCurrentUser();
+                    const comment = {
+                        id: appData.nextCommentId++,
+                        username: cu.displayName,
+                        avatar: cu.avatar,
+                        message,
+                        time: new Date().toISOString(),
+                        approved: true,
+                        parentId: parentId || null
+                    };
+                    p.comments.push(comment);
+                    p.commentCount = (p.commentCount || 0) + 1;
+                    return comment;
+                }
             }
 
             function refreshCommentsList(postId, listId) {
@@ -3215,6 +3263,17 @@
                 setTimeout(() => {
                     cl.innerHTML = renderCommentsHTML(ac, postId, vc);
                 }, 200);
+            }
+
+            function renderCommentsHTML(comments, postId, vc) {
+                const tl = comments.filter(c => c.parentId === null);
+                if (tl.length === 0) return '<p class="text-sm py-8 text-center" style="color:var(--muted);">No replies yet. Be the first.</p>';
+                const sh = tl.slice(0, vc),
+                    hi = tl.length > vc;
+                let h = sh.map(c => renderCommentThread(c, comments, postId)).join('');
+                if (hi) h +=
+                    `<button type="button" class="view-replies-btn load-more-comments-btn" style="margin-left:0;" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(tl.length-vc)} more repl${tl.length-vc!==1?'ies':'y'}</button>`;
+                return h;
             }
 
             function updateCommentCount(postId) {
@@ -3340,33 +3399,43 @@
                 updateExploreReplyContextUI(); const ta = document.getElementById('explore-comment-textarea'); if (
                     ta) ta.value = ''; }
 
-            function submitCommentFromBar() {
+            // ── submitCommentFromBar async ──
+            async function submitCommentFromBar() {
                 const ta = document.getElementById('global-comment-textarea');
                 const m = ta.value.trim();
                 if (!m) return showToast('Reply cannot be empty.');
                 const pi = replyTarget ? replyTarget.commentId : null;
-                addComment(currentPostId, pi, m);
                 ta.value = '';
                 ta.style.height = '40px';
                 replyTarget = null;
                 updateReplyContextUI();
-                updateCommentCount(currentPostId);
-                showToast(pi ? 'Reply posted' : 'Reply posted');
+                try {
+                    await addComment(currentPostId, pi, m);
+                    updateCommentCount(currentPostId);
+                    showToast(pi ? 'Reply posted' : 'Reply posted');
+                } catch (err) {
+                    showToast(err.message || 'Failed to post reply', 'r');
+                }
             }
 
-            function submitExploreComment() {
+            // ── submitExploreComment async ──
+            async function submitExploreComment() {
                 const ta = document.getElementById('explore-comment-textarea');
                 const m = ta.value.trim();
                 if (!m) return showToast('Reply cannot be empty.');
                 const pi = exploreReplyTarget ? exploreReplyTarget.commentId : null;
-                addComment(currentPostId, pi, m);
                 ta.value = '';
                 ta.style.height = '40px';
                 exploreReplyTarget = null;
                 updateExploreReplyContextUI();
-                refreshCommentsList(currentPostId, 'comments-list');
-                updateCommentCount(currentPostId);
-                showToast(pi ? 'Reply posted' : 'Reply posted');
+                try {
+                    await addComment(currentPostId, pi, m);
+                    refreshCommentsList(currentPostId, 'comments-list');
+                    updateCommentCount(currentPostId);
+                    showToast(pi ? 'Reply posted' : 'Reply posted');
+                } catch (err) {
+                    showToast(err.message || 'Failed to post reply', 'r');
+                }
             }
 
             function setCommentBarVisible(show, focus) {
@@ -3380,7 +3449,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // EXPLORE FULLSCREEN
+            // EXPLORE FULLSCREEN — loads comments from Supabase
             // ───────────────────────────────────────────────────────────────
             function buildSinglePostHTML(post) {
                 if (!post) return '<div class="p-8 text-center" style="color:var(--muted);">Post not found</div>';
@@ -3423,7 +3492,8 @@
               </div>`;
             }
 
-            function openExplorePost(id, returnPage, focusComment) {
+            // ── openExplorePost now loads comments from Supabase ──
+            async function openExplorePost(id, returnPage, focusComment) {
                 pauseHomepageVideos();
                 const fs = document.getElementById('explore-fullscreen'),
                     fc = document.getElementById('explore-fullscreen-content');
@@ -3433,9 +3503,27 @@
                 window._fullscreenReturnPage = returnPage || uiPage || 'home';
                 exploreReplyTarget = null;
                 expandedThreads.clear();
+
                 const post = appData.posts.find(p => p.id === id);
-                if (post) { post.views = (post.views || 0) + 1;
-                    persist(); }
+                if (post) {
+                    // Increment view in Supabase
+                    if (window.PostsAPI && window.PostsAPI.incrementView) {
+                        window.PostsAPI.incrementView(id);
+                    }
+                    post.views = (post.views || 0) + 1;
+                    // Load comments if not already loaded
+                    if (!post.comments || post.comments.length === 0) {
+                        if (window.PostsAPI && window.PostsAPI.loadComments) {
+                            try {
+                                post.comments = await window.PostsAPI.loadComments(id);
+                            } catch (err) {
+                                console.error('Failed to load comments:', err);
+                                post.comments = [];
+                            }
+                        }
+                    }
+                }
+
                 const catNameEl = document.getElementById('explore-category-name');
                 if (catNameEl) catNameEl.textContent = post ? (post.category || 'Post') : 'Post';
                 fc.innerHTML = buildSinglePostHTML(post);
@@ -3534,7 +3622,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // EXPLORE GRID (Square)
+            // EXPLORE GRID (unchanged)
             // ───────────────────────────────────────────────────────────────
             function renderExploreGrid() {
                 const co = document.getElementById('user-content');
@@ -3634,7 +3722,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MARKET
+            // MARKET (unchanged from original)
             // ───────────────────────────────────────────────────────────────
             function getMarketItems() { if (!appData.marketItems || !Array.isArray(appData.marketItems)) appData
                     .marketItems = []; return appData.marketItems; }
@@ -3789,8 +3877,8 @@
             // ───────────────────────────────────────────────────────────────
             // TABS / NAV
             // ───────────────────────────────────────────────────────────────
-            function refreshHome() {
-                reloadData();
+            async function refreshHome() {
+                await reloadData();
                 currentCategoryFilter = '';
                 searchQuery = '';
                 currentSortMethod = 'foryou';
@@ -3929,7 +4017,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // PULL TO REFRESH
+            // PULL TO REFRESH (unchanged)
             // ───────────────────────────────────────────────────────────────
             function setupPullToRefresh() {
                 let sy = 0,
@@ -3961,10 +4049,10 @@
                         pt.textContent = 'Pull down to refresh';
                         pi.style.transform = 'rotate(0deg)';
                         document.getElementById('refresh-spinner').classList.remove('hidden');
-                        setTimeout(() => document.getElementById('refresh-spinner').classList
-                            .add('hidden'), 1000);
-                        reloadData();
-                        renderUI();
+                        setTimeout(() => {
+                            document.getElementById('refresh-spinner').classList.add('hidden');
+                            refreshHome();
+                        }, 400);
                     }
                 });
             }
@@ -3993,11 +4081,67 @@
             }
 
             // ───────────────────────────────────────────────────────────────
+            // LOAD DATA FROM SUPABASE
+            // ───────────────────────────────────────────────────────────────
+            async function reloadData() {
+                if (window.PostsAPI && window.PostsAPI.loadAllPosts) {
+                    try {
+                        const posts = await window.PostsAPI.loadAllPosts();
+                        appData.posts = posts;
+                        // Also load market items from localStorage (unchanged)
+                        const fresh = loadMarketFromLocal();
+                        appData.marketItems = fresh.marketItems || [];
+                        appData.nextMarketId = fresh.nextMarketId || 1;
+                        return appData;
+                    } catch (err) {
+                        console.error('Failed to load posts from Supabase:', err);
+                        showToast('Failed to load feed', 'r');
+                        return appData;
+                    }
+                } else {
+                    // fallback to localStorage
+                    const fresh = loadDataFromLocal();
+                    appData.posts = fresh.posts || [];
+                    appData.nextId = fresh.nextId || 1;
+                    appData.nextCommentId = fresh.nextCommentId || 1;
+                    appData.userReactions = fresh.userReactions || {};
+                    appData.marketItems = fresh.marketItems || [];
+                    appData.nextMarketId = fresh.nextMarketId || 1;
+                    return appData;
+                }
+            }
+
+            function loadDataFromLocal() {
+                const r = localStorage.getItem(SK);
+                if (r) { try { return JSON.parse(r); } catch (e) {} }
+                return { posts: [], nextId: 1, nextCommentId: 1, userReactions: {}, marketItems: [],
+                nextMarketId: 1 };
+            }
+
+            function loadMarketFromLocal() {
+                const r = localStorage.getItem(SK);
+                if (r) { try { const d = JSON.parse(r); return { marketItems: d.marketItems || [],
+                        nextMarketId: d.nextMarketId || 1 }; } catch (e) {} }
+                return { marketItems: [], nextMarketId: 1 };
+            }
+
+            // ───────────────────────────────────────────────────────────────
             // INIT
             // ───────────────────────────────────────────────────────────────
-            function init() {
+            async function init() {
+                // Wait for auth to be ready
+                if (window.AuthUser && window.AuthUser.getCurrentUser) {
+                    // Auth is ready
+                } else {
+                    // Wait a bit for auth.js to load
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
                 updateNavAvatar();
                 registerCurrentUserInDirectory();
+
+                // Load posts from Supabase
+                await reloadData();
 
                 document.getElementById('topMsgBtn').addEventListener('click', () => {
                     window.location.href = 'chat.html';
@@ -4099,41 +4243,49 @@
 
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'visible') {
-                        reloadData();
-                        if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'market') {
-                            renderUI();
-                        } else if (uiPage === 'single-post-explore' && currentPostId) {
-                            const post = appData.posts.find(p => p.id === currentPostId);
-                            if (post) {
-                                const cl = document.getElementById('comments-list');
-                                if (cl) {
-                                    const vc = getVisibleComments(currentPostId);
-                                    const ac = post.comments.filter(c => c.approved !== false);
-                                    cl.innerHTML = renderCommentsHTML(ac, currentPostId, vc);
+                        reloadData().then(() => {
+                            if (uiPage === 'home' || uiPage === 'explore' || uiPage ===
+                                'market') {
+                                renderUI();
+                            } else if (uiPage === 'single-post-explore' && currentPostId) {
+                                const post = appData.posts.find(p => p.id === currentPostId);
+                                if (post) {
+                                    const cl = document.getElementById('comments-list');
+                                    if (cl) {
+                                        const vc = getVisibleComments(currentPostId);
+                                        const ac = post.comments.filter(c => c.approved !==
+                                            false);
+                                        cl.innerHTML = renderCommentsHTML(ac,
+                                        currentPostId, vc);
+                                    }
+                                    updateCommentCount(currentPostId);
                                 }
-                                updateCommentCount(currentPostId);
                             }
-                        }
+                        });
                     }
                 });
 
                 window.addEventListener('storage', (e) => {
-                    if (e.key === SK || e.key === UK || e.key === BK || e.key === FOLLOW_KEY) {
-                        reloadData();
-                        if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'market') {
-                            renderUI();
-                        } else if (uiPage === 'single-post-explore' && currentPostId) {
-                            const post = appData.posts.find(p => p.id === currentPostId);
-                            if (post) {
-                                const cl = document.getElementById('comments-list');
-                                if (cl) {
-                                    const vc = getVisibleComments(currentPostId);
-                                    const ac = post.comments.filter(c => c.approved !== false);
-                                    cl.innerHTML = renderCommentsHTML(ac, currentPostId, vc);
+                    if (e.key === UK || e.key === BK || e.key === FOLLOW_KEY) {
+                        reloadData().then(() => {
+                            if (uiPage === 'home' || uiPage === 'explore' || uiPage ===
+                                'market') {
+                                renderUI();
+                            } else if (uiPage === 'single-post-explore' && currentPostId) {
+                                const post = appData.posts.find(p => p.id === currentPostId);
+                                if (post) {
+                                    const cl = document.getElementById('comments-list');
+                                    if (cl) {
+                                        const vc = getVisibleComments(currentPostId);
+                                        const ac = post.comments.filter(c => c.approved !==
+                                            false);
+                                        cl.innerHTML = renderCommentsHTML(ac,
+                                        currentPostId, vc);
+                                    }
+                                    updateCommentCount(currentPostId);
                                 }
-                                updateCommentCount(currentPostId);
                             }
-                        }
+                        });
                     }
                 });
 
@@ -4155,6 +4307,7 @@
             if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
             else init();
 
+            // Expose functions to global scope
             window.toggleReaction = toggleReaction;
             window.openExplorePost = openExplorePost;
             window.closeExploreFullscreen = closeExploreFullscreen;
@@ -4165,6 +4318,8 @@
             window.toggleFollowHandler = toggleFollowHandler;
             window.openShareModal = openShareModal;
             window.closeShareModal = closeShareModal;
+            window.reloadData = reloadData;
+            window.refreshHome = refreshHome;
 
         })();
     </script>

@@ -2268,6 +2268,11 @@
                 <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <span>Search</span>
             </a>
+            <a href="chat.html" class="side-btn">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>Chat</span>
+                <div class="side-badge"></div>
+            </a>
             <a href="create.html" class="side-btn">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                 <span>Create</span>
@@ -2409,17 +2414,17 @@
                 <div class="section">
                     <div class="section-header"><div class="icon icon-gray"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><span class="label">Support &amp; About</span></div>
                     <div class="card">
-                        <div class="row" onclick="window.location.href='help.html'">
+                        <div class="row" onclick="showToast('Help Center: freeupper.com/help','p')">
                             <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
                             <div class="r-text"><div class="r-title">Help Center</div><div class="r-sub">FAQs and support articles</div></div>
                             <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
                         </div>
-                        <div class="row" onclick="window.location.href='privacy.html'">
+                        <div class="row" onclick="showToast('Privacy Center: freeupper.com/privacy','p')">
                             <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
                             <div class="r-text"><div class="r-title">Privacy Center</div><div class="r-sub">How we handle your data</div></div>
                             <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
                         </div>
-                        <div class="row" onclick="window.location.href='policy.html'">
+                        <div class="row" onclick="showToast('Terms: freeupper.com/terms','p')">
                             <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
                             <div class="r-text"><div class="r-title">Terms &amp; Policies</div><div class="r-sub">Legal information</div></div>
                             <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
@@ -2446,6 +2451,11 @@
             <a href="search.html" class="nav-item">
                 <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <span>Search</span>
+            </a>
+            <a href="chat.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>Chat</span>
+                <div class="nav-badge"></div>
             </a>
             <a href="create.html" class="nav-item">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
@@ -2796,10 +2806,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="global.js"></script>
-    <script src="auth.js"></script>
-    <script src="settings.js"></script>
     <script>
         (function() {
             'use strict';
@@ -2852,38 +2859,29 @@
             };
 
             // ─── PRIVACY TOGGLES ──────────────────────
-            // These now use SettingsAPI which syncs to Supabase
-            window.togglePrivate = async function() {
+            if (user.isPrivate) document.getElementById('privToggle').checked = true;
+            window.togglePrivate = function() {
                 const checked = document.getElementById('privToggle').checked;
-                try {
-                    await window.SettingsAPI.updateFlags({ isPrivate: checked });
-                    showToast(checked ? 'Account is now private' : 'Account is now public', checked ? 'o' : 'g');
-                } catch (err) {
-                    document.getElementById('privToggle').checked = !checked;
-                    showToast(err.message, 'r');
-                }
+                user.isPrivate = checked;
+                saveCurrentUser(user);
+                showToast(checked ? 'Account is now private' : 'Account is now public', checked ? 'o' : 'g');
             };
 
-            window.toggleHideCount = async function() {
+            if (user.hideFollowerCount) document.getElementById('hideCountTog').checked = true;
+            window.toggleHideCount = function() {
                 const checked = document.getElementById('hideCountTog').checked;
-                try {
-                    await window.SettingsAPI.updateFlags({ hideFollowerCount: checked });
-                    showToast(checked ? 'Follower count hidden' : 'Follower count visible', 'p');
-                } catch (err) {
-                    document.getElementById('hideCountTog').checked = !checked;
-                    showToast(err.message, 'r');
-                }
+                user.hideFollowerCount = checked;
+                saveCurrentUser(user);
+                showToast(checked ? 'Follower count hidden' : 'Follower count visible', 'p');
             };
 
-            window.toggleActivity = async function() {
+            if (user.activityStatus !== undefined && !user.activityStatus) document.getElementById('activityTog')
+                .checked = false;
+            window.toggleActivity = function() {
                 const checked = document.getElementById('activityTog').checked;
-                try {
-                    await window.SettingsAPI.updateFlags({ activityStatus: checked });
-                    showToast(checked ? 'Activity status visible' : 'Activity status hidden', 'p');
-                } catch (err) {
-                    document.getElementById('activityTog').checked = !checked;
-                    showToast(err.message, 'r');
-                }
+                user.activityStatus = checked;
+                saveCurrentUser(user);
+                showToast(checked ? 'Activity status visible' : 'Activity status hidden', 'p');
             };
 
             // ─── ACCOUNT DETAILS ──────────────────────
@@ -2901,15 +2899,15 @@
                 btn.disabled = inp.value === (user.phone || '');
             };
 
-            window.savePhone = async function() {
+            window.savePhone = function() {
                 const val = document.getElementById('phoneInp').value.trim();
-                if (!val) { showToast('Please enter a valid phone number', 'o'); return; }
-                try {
-                    await window.SettingsAPI.updateFlags({ phone: val });
+                if (val) {
+                    user.phone = val;
+                    saveCurrentUser(user);
                     showToast('Phone number updated ✓', 'g');
                     closeFS('accountDetailsModal');
-                } catch (err) {
-                    showToast(err.message, 'r');
+                } else {
+                    showToast('Please enter a valid phone number', 'o');
                 }
             };
 
@@ -2917,14 +2915,14 @@
             let vfyCat = '';
             let vfyState = user.verificationStatus || 'none';
 
-            function updateVfyStatusCard(status) {
+            function updateVfyStatusCard() {
                 const badge = document.getElementById('vfyBadgeIcon');
                 const lbl = document.getElementById('vfyStatusLbl');
                 const sub = document.getElementById('vfyStatusSub');
                 const pill = document.getElementById('vfyPill');
                 const settingsBadge = document.getElementById('vfySettingsBadge');
 
-                if (status?.status === 'approved') {
+                if (user.verified) {
                     badge.className = 'vfy-badge verified';
                     badge.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
                     lbl.textContent = 'Verified';
@@ -2933,7 +2931,7 @@
                     pill.className = 'vfy-pill verified';
                     if (settingsBadge) { settingsBadge.textContent = 'Verified';
                         settingsBadge.className = 'r-badge ok'; }
-                } else if (status?.status === 'pending') {
+                } else if (user.verificationStatus === 'pending') {
                     badge.className = 'vfy-badge pending';
                     badge.innerHTML =
                         '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
@@ -2954,7 +2952,6 @@
                     if (settingsBadge) { settingsBadge.textContent = 'Unverified';
                         settingsBadge.className = 'r-badge'; }
                 }
-                // Update eligibility requirements
                 const reqList = document.getElementById('vfyReqList');
                 const reqs = [
                     { icon: 'pass', name: 'Complete profile', hint: 'Display name, bio, and avatar set' },
@@ -2969,16 +2966,7 @@
                     </div>
                 `).join('');
             }
-
-            // Load initial verification status
-            (async function loadVfyStatus() {
-                try {
-                    const status = await window.SettingsAPI.getVerificationStatus();
-                    updateVfyStatusCard(status);
-                } catch (e) {
-                    console.log('No verification status yet');
-                }
-            })();
+            updateVfyStatusCard();
 
             window.openVerification = function() {
                 openFS('verificationModal');
@@ -3005,15 +2993,15 @@
                 btn.disabled = !(vfyCat && reason.trim().length >= 30);
             };
 
-            window.vfySubmit = async function() {
+            window.vfySubmit = function() {
                 const reason = document.getElementById('vfyReason').value.trim();
                 const link = document.getElementById('vfyLink').value.trim();
                 if (!vfyCat || reason.length < 30) return;
-
-                try {
-                    await window.SettingsAPI.submitVerification({ category: vfyCat, reason, link });
-                    const status = await window.SettingsAPI.getVerificationStatus();
-                    updateVfyStatusCard(status);
+                const success = submitVerificationRequest(user.id, vfyCat, reason, link);
+                if (success) {
+                    user.verificationStatus = 'pending';
+                    saveCurrentUser(user);
+                    updateVfyStatusCard();
                     document.getElementById('vfyMetaCat').textContent = vfyCat;
                     document.getElementById('vfyMetaDate').textContent = new Date().toLocaleDateString('en-GB', {
                         day: 'numeric',
@@ -3022,35 +3010,31 @@
                     });
                     vfyGoStep(2);
                     showToast('Verification request submitted ✓', 'g');
-                } catch (err) {
-                    showToast(err.message, 'o');
+                } else {
+                    showToast('You already have a pending request', 'o');
                 }
             };
 
-            window.vfyWithdraw = async function() {
+            window.vfyWithdraw = function() {
                 if (!confirm('Withdraw your verification request?')) return;
-                try {
-                    await window.SettingsAPI.withdrawVerification();
-                    const status = await window.SettingsAPI.getVerificationStatus();
-                    updateVfyStatusCard(status);
-                    vfyGoStep(0);
-                    showToast('Request withdrawn', 'o');
-                } catch (err) {
-                    showToast(err.message, 'r');
-                }
+                const requests = getVerificationRequests();
+                const updated = requests.filter(r => !(r.userId === user.id && r.status === 'pending'));
+                saveVerificationRequests(updated);
+                user.verificationStatus = 'none';
+                saveCurrentUser(user);
+                updateVfyStatusCard();
+                vfyGoStep(0);
+                showToast('Request withdrawn', 'o');
             };
 
             // ─── BLOCKED USERS ─────────────────────────
             let blockedUsers = [];
 
-            async function loadBlockedUsers() {
-                try {
-                    blockedUsers = await window.SettingsAPI.listBlockedUsers();
-                    renderBlockedUsers(blockedUsers);
-                    document.getElementById('blCountSub').textContent = blockedUsers.length + ' accounts blocked';
-                } catch (err) {
-                    showToast(err.message, 'r');
-                }
+            function loadBlockedUsers() {
+                const raw = localStorage.getItem('freeupper_blocked');
+                blockedUsers = raw ? JSON.parse(raw) : [];
+                renderBlockedUsers(blockedUsers);
+                document.getElementById('blCountSub').textContent = blockedUsers.length + ' accounts blocked';
             }
 
             function renderBlockedUsers(list) {
@@ -3062,9 +3046,7 @@
                 }
                 container.innerHTML = list.map((u, i) => `
                     <div class="bl-row">
-                        <div class="bl-av" style="background:${u.avatar ? `url(${u.avatar})` : 'var(--bg4)'};background-size:cover;">
-                            ${!u.avatar ? (u.name ? u.name.charAt(0).toUpperCase() : '?') : ''}
-                        </div>
+                        <div class="bl-av" style="background:${u.bg || 'var(--bg4)'}">${u.emoji || '🚫'}</div>
                         <div class="u-info"><div class="u-name">${u.name || 'Unknown'}</div><div class="u-handle">${u.handle || ''}</div></div>
                         <button class="unblock-btn" onclick="unblockUser(${i})">Unblock</button>
                     </div>
@@ -3080,18 +3062,15 @@
                 ));
             };
 
-            window.unblockUser = async function(idx) {
+            window.unblockUser = function(idx) {
                 const user = blockedUsers[idx];
                 if (!user) return;
-                if (!confirm('Unblock ' + (user.name || 'this user') + '?')) return;
-                try {
-                    await window.SettingsAPI.unblockUser(user.id);
+                if (confirm('Unblock ' + (user.name || 'this user') + '?')) {
                     blockedUsers.splice(idx, 1);
+                    localStorage.setItem('freeupper_blocked', JSON.stringify(blockedUsers));
                     renderBlockedUsers(blockedUsers);
                     document.getElementById('blCountSub').textContent = blockedUsers.length + ' accounts blocked';
                     showToast('User unblocked', 'g');
-                } catch (err) {
-                    showToast(err.message, 'r');
                 }
             };
 
@@ -3423,21 +3402,15 @@
                 openFS('pwModal');
             };
 
-            window.savePassword = async function() {
+            window.savePassword = function() {
                 const cur = document.getElementById('pwCur').value;
                 const nw = document.getElementById('pwNew').value;
                 const cf = document.getElementById('pwConf').value;
                 if (!cur || !nw || !cf) { showToast('Fill all fields', 'o'); return; }
                 if (nw !== cf) { showToast('Passwords do not match', 'o'); return; }
                 if (nw.length < 8) { showToast('Password must be at least 8 characters', 'o'); return; }
-
-                try {
-                    await window.SettingsAPI.changePassword(cur, nw);
-                    closeFS('pwModal');
-                    showToast('Password updated ✓', 'g');
-                } catch (err) {
-                    showToast(err.message, 'r');
-                }
+                closeFS('pwModal');
+                showToast('Password updated ✓', 'g');
             };
 
             // ─── ACTIVE SESSIONS ─────────────────────
@@ -3541,14 +3514,10 @@
                 openMov('logoutDlg');
             };
 
-            window.confirmLogoutAction = async function() {
+            window.confirmLogoutAction = function() {
                 closeMov('logoutDlg');
-                try {
-                    await window.SettingsAPI.signOut();
-                    window.location.href = 'index.html';
-                } catch (err) {
-                    showToast(err.message, 'r');
-                }
+                localStorage.removeItem('freeupper_user_profile');
+                window.location.href = 'index.html';
             };
 
             window.confirmDelete = function() {
@@ -3596,7 +3565,7 @@
                     if (e) e.src = src;
                 });
 
-                // Use global helper to save and sync
+                // ✅ Use global helper to save and sync
                 if (typeof updateUserProfile === 'function') {
                     updateUserProfile({ avatar: src });
                 } else {
@@ -3610,53 +3579,31 @@
                 showToast('Profile photo updated ✓', 'g');
             };
 
-            window.handleUpload = async function(e) {
+            window.handleUpload = function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
-                try {
-                    showToast('Uploading photo…', 'p');
-                    await window.AuthUser.uploadAvatar(file);
-                    closeFS('avatarModal');
-                    showToast('Profile photo updated ✓', 'g');
-                } catch (err) {
-                    showToast(err.message, 'r');
+                const url = URL.createObjectURL(file);
+
+                ['profileAvatar', 'editAv', 'navAv', 'sideAv', 'qrAvatar'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.src = url;
+                });
+
+                if (typeof updateUserProfile === 'function') {
+                    updateUserProfile({ avatar: url });
+                } else {
+                    const user = getCurrentUser();
+                    user.avatar = url;
+                    saveCurrentUser(user);
+                    registerCurrentUserInDirectory(user);
                 }
+
+                closeFS('avatarModal');
+                showToast('Photo uploaded ✓', 'g');
             };
 
             // ─── NAV ────────────────────────────────────
             updateNavAvatar();
-
-            // ─── SETUP PROFILE SYNC ──────────────────
-            function setupSettingsSync() {
-                window.addEventListener('storage', function(e) {
-                    if (e.key === 'freeupper_user_profile' || e.key === 'freeupper_all_users') {
-                        const user = getCurrentUser();
-                        updateNavAvatar();
-                        // Refresh verification status
-                        window.SettingsAPI.getVerificationStatus().then(status => {
-                            updateVfyStatusCard(status);
-                        }).catch(() => {});
-                        document.getElementById('acctUsername').textContent = '@' + (user.username || 'user');
-                        document.getElementById('acctEmail').textContent = user.email || 'user@email.com';
-                        document.getElementById('phoneInp').value = user.phone || '';
-                    }
-                });
-
-                document.addEventListener('profileUpdated', function(e) {
-                    if (e.detail && e.detail.user) {
-                        const user = e.detail.user;
-                        updateNavAvatar();
-                        window.SettingsAPI.getVerificationStatus().then(status => {
-                            updateVfyStatusCard(status);
-                        }).catch(() => {});
-                        document.getElementById('acctUsername').textContent = '@' + (user.username || 'user');
-                        document.getElementById('acctEmail').textContent = user.email || 'user@email.com';
-                        document.getElementById('phoneInp').value = user.phone || '';
-                    }
-                });
-            }
-
-            setupSettingsSync();
 
             // ─── INIT ──────────────────────────────────
             const savedLang = localStorage.getItem('freeupper_lang');
@@ -3673,16 +3620,42 @@
                 document.getElementById('tfaBadge').className = 'r-badge ok';
             }
 
-            // Load blocked users count
-            window.SettingsAPI.listBlockedUsers().then(list => {
-                document.getElementById('blCountSub').textContent = list.length + ' accounts blocked';
-            }).catch(() => {});
+            const blockedRaw = localStorage.getItem('freeupper_blocked');
+            const blockedCount = blockedRaw ? JSON.parse(blockedRaw).length : 0;
+            document.getElementById('blCountSub').textContent = blockedCount + ' accounts blocked';
 
             document.getElementById('sessBadge').textContent = sessions.length + ' devices';
+
+            // ─── SETUP PROFILE SYNC ──────────────────
+            function setupSettingsSync() {
+                window.addEventListener('storage', function(e) {
+                    if (e.key === 'freeupper_user_profile' || e.key === 'freeupper_all_users') {
+                        const user = getCurrentUser();
+                        updateNavAvatar();
+                        updateVfyStatusCard();
+                        // Update account details if modal is open
+                        document.getElementById('acctUsername').textContent = '@' + (user.username || 'user');
+                        document.getElementById('acctEmail').textContent = user.email || 'user@email.com';
+                        document.getElementById('phoneInp').value = user.phone || '';
+                    }
+                });
+
+                document.addEventListener('profileUpdated', function(e) {
+                    if (e.detail && e.detail.user) {
+                        const user = e.detail.user;
+                        updateNavAvatar();
+                        updateVfyStatusCard();
+                        document.getElementById('acctUsername').textContent = '@' + (user.username || 'user');
+                        document.getElementById('acctEmail').textContent = user.email || 'user@email.com';
+                        document.getElementById('phoneInp').value = user.phone || '';
+                    }
+                });
+            }
+
+            setupSettingsSync();
 
             console.log('🔥 Settings fully loaded – all modals functional!');
         })();
     </script>
-
 </body>
 </html>

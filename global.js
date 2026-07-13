@@ -538,3 +538,4 @@ window.setupProfileSync = function(refreshCallback) {
         }
     });
 };
+
