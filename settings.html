@@ -2273,6 +2273,135 @@
             text-align: center;
             padding: 8px;
         }
+
+        /* ─── DOB PICKER ─── */
+        .dob-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+        }
+        .dob-col-lbl {
+            font-size: 11px;
+            font-weight: 800;
+            color: var(--muted2);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+        .dob-scroll {
+            height: 200px;
+            overflow-y: auto;
+            width: 100%;
+            border-radius: 16px;
+            background: var(--inp);
+            border: 1.5px solid var(--brd);
+            scroll-snap-type: y mandatory;
+            scrollbar-width: none;
+            position: relative;
+        }
+        .dob-scroll::-webkit-scrollbar {
+            width: 0;
+        }
+        .dob-item {
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            scroll-snap-align: center;
+            transition: all .15s;
+            border-radius: 10px;
+            margin: 2px 4px;
+        }
+        .dob-item:hover {
+            color: var(--text);
+            background: var(--rowh);
+        }
+        .dob-item.sel {
+            color: var(--p);
+            font-weight: 800;
+            font-size: 17px;
+            background: var(--pdim);
+        }
+
+        /* ─── GENDER PICKER ─── */
+        .gen-opt {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1.5px solid var(--brd);
+            cursor: pointer;
+            transition: all .15s;
+            position: relative;
+        }
+        .gen-opt:hover {
+            background: var(--rowh);
+            border-color: var(--brd2);
+        }
+        .gen-opt.sel {
+            background: var(--pdim);
+            border-color: var(--pbrd);
+        }
+        .gen-ico {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+            border: 1px solid var(--brd);
+        }
+        .gen-txt {
+            flex: 1;
+        }
+        .gen-lbl {
+            font-size: 15px;
+            font-weight: 700;
+        }
+        .gen-sub {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+        .gen-check {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--p);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            animation: popIn .2s cubic-bezier(.34, 1.4, .64, 1) both;
+        }
+        .gen-check svg {
+            width: 12px;
+            height: 12px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+        }
+
+        .char-c {
+            font-size: 11px;
+            color: var(--muted2);
+            text-align: right;
+        }
+        .char-c.warn {
+            color: var(--warn);
+        }
+        .char-c.err {
+            color: var(--danger);
+        }
     </style>
 </head>
 <body>
@@ -2488,7 +2617,7 @@
     </div>
 
     <!-- ══════════════════════════════════════════
-         MODALS (full-screen)
+         MODALS
     ══════════════════════════════════════════ -->
 
     <!-- ─── ACCOUNT DETAILS ─── -->
@@ -2815,7 +2944,7 @@
         </div>
     </div>
 
-    <!-- ─── EDIT PROFILE MODAL (full-screen) ─── -->
+    <!-- ─── EDIT PROFILE MODAL ─── -->
     <div class="mfs" id="editProfileModal">
         <div class="fs-hdr">
             <span class="fs-title">Edit Profile</span>
@@ -2901,7 +3030,7 @@
         <div class="av-grid" id="avGrid"></div>
     </div>
 
-    <!-- ─── DOB MODAL ─── -->
+    <!-- ─── DOB MODAL (scroll pickers) ─── -->
     <div class="mfs" id="dobModal">
         <div class="fs-hdr"><span class="fs-title">Date of Birth</span><button class="fs-x" onclick="closeFS('dobModal')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
         <div style="overflow-y:auto;flex:1;padding:20px clamp(14px,5vw,24px) 40px;display:flex;flex-direction:column;gap:20px;align-items:center;max-width:480px;width:100%;margin:0 auto">
@@ -2961,13 +3090,71 @@
         (function() {
             'use strict';
 
-            // ─── USER ──────────────────────────────────
-            const user = getCurrentUser();
+            // ─── HELPERS ────────────────────────────────────────
+            function getCurrentUser() {
+                if (window.AuthUser && window.AuthUser.getCurrentUser) {
+                    return window.AuthUser.getCurrentUser();
+                }
+                return null;
+            }
 
-            // ─── TOAST ─────────────────────────────────
-            // Already in global.js
+            function showToast(msg, type) {
+                if (typeof window.showToast === 'function') {
+                    window.showToast(msg, type);
+                } else {
+                    alert(msg);
+                }
+            }
 
-            // ─── MODAL HELPERS ────────────────────────
+            function updateNavAvatar() {
+                if (typeof window.updateNavAvatar === 'function') {
+                    window.updateNavAvatar();
+                }
+            }
+
+            // ─── FETCH PROFILE FROM SUPABASE ───────────────────
+            async function fetchProfile(userId) {
+                const { data, error } = await window.sb
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', userId)
+                    .single();
+                if (error) throw error;
+                return data;
+            }
+
+            // ─── UPDATE PROFILE IN SUPABASE ────────────────────
+            async function updateProfileSupabase(updates) {
+                const user = getCurrentUser();
+                if (!user || !user.id) throw new Error('No user logged in');
+
+                const payload = {
+                    display_name: updates.displayName,
+                    username: updates.username,
+                    bio: updates.bio,
+                    gender: updates.gender || '',
+                    country: updates.country || '',
+                    dob: updates.dob || '',
+                    tags: updates.tags || [],
+                    avatar_url: updates.avatar || ''
+                };
+
+                const { error } = await window.sb
+                    .from('profiles')
+                    .update(payload)
+                    .eq('id', user.id);
+
+                if (error) throw error;
+
+                // Update the user object in AuthUser cache
+                if (window.AuthUser && window.AuthUser.updateCurrentUser) {
+                    window.AuthUser.updateCurrentUser(payload);
+                }
+
+                return true;
+            }
+
+            // ─── MODAL HELPERS ──────────────────────────────────
             window.openFS = function(id) {
                 document.getElementById(id).classList.add('open');
                 document.body.style.overflow = 'hidden';
@@ -2991,10 +3178,14 @@
                 });
             });
 
-            // ─── THEME ──────────────────────────────────
+            // ─── THEME ──────────────────────────────────────────
+            function getCurrentTheme() {
+                return document.documentElement.getAttribute('data-theme') || 'dark';
+            }
+
             document.getElementById('darkTog').checked = getCurrentTheme() === 'dark';
             document.getElementById('darkSub').textContent = 'Currently: ' + (getCurrentTheme() === 'dark' ? 'Dark' :
-                'Light');
+            'Light');
 
             window.toggleDark = function(on) {
                 if (on) {
@@ -3008,7 +3199,7 @@
                 showToast(on ? 'Dark mode enabled' : 'Light mode enabled', 'p');
             };
 
-            // ─── PRIVACY TOGGLES ──────────────────────
+            // ─── PRIVACY TOGGLES ──────────────────────────────
             window.togglePrivate = async function() {
                 const checked = document.getElementById('privToggle').checked;
                 try {
@@ -3042,19 +3233,21 @@
                 }
             };
 
-            // ─── ACCOUNT DETAILS ──────────────────────
+            // ─── ACCOUNT DETAILS ──────────────────────────────
             window.openAccountDetails = function() {
-                document.getElementById('acctUsername').textContent = '@' + (user.username || 'user');
-                document.getElementById('acctEmail').textContent = user.email || 'user@email.com';
-                document.getElementById('phoneInp').value = user.phone || '';
+                const user = getCurrentUser();
+                document.getElementById('acctUsername').textContent = '@' + (user?.username || 'user');
+                document.getElementById('acctEmail').textContent = user?.email || 'user@email.com';
+                document.getElementById('phoneInp').value = user?.phone || '';
                 document.getElementById('phoneSaveBtn').disabled = true;
                 openFS('accountDetailsModal');
             };
 
             window.onPhoneChange = function() {
+                const user = getCurrentUser();
                 const inp = document.getElementById('phoneInp');
                 const btn = document.getElementById('phoneSaveBtn');
-                btn.disabled = inp.value === (user.phone || '');
+                btn.disabled = inp.value === (user?.phone || '');
             };
 
             window.savePhone = async function() {
@@ -3069,15 +3262,146 @@
                 }
             };
 
-            // ─── EDIT PROFILE MODAL ──────────────────
+            // ─── EDIT PROFILE ──────────────────────────────────
             window.openEditProfileModal = function() {
                 syncEditProfile();
                 openFS('editProfileModal');
             };
 
-            // ─── VERIFICATION ──────────────────────────
+            function syncEditProfile() {
+                const user = getCurrentUser();
+                if (!user) return;
+
+                const avatarSrc = user.avatar || '';
+                document.getElementById('editAv').src = avatarSrc;
+
+                document.getElementById('eDN').value = user.displayName || '';
+                document.getElementById('eUN').value = user.username || '';
+                document.getElementById('eBio').value = user.bio || '';
+
+                document.getElementById('dnC').textContent = (user.displayName || '').length + ' / 40';
+                document.getElementById('unC').textContent = (user.username || '').length + ' / 30';
+                document.getElementById('bioC').textContent = (user.bio || '').length + ' / 160';
+
+                const tags = user.tags || [];
+                renderPillsEd(tags);
+                window._pendingPills = tags.slice();
+
+                const gd = document.getElementById('eGenderDisplay');
+                if (user.gender) {
+                    const icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
+                        'Other': '✦' };
+                    gd.textContent = (icons[user.gender] || '') + ' ' + (user.gender || 'Prefer not to say');
+                    gd.style.color = 'var(--text)';
+                    window._selGender = user.gender;
+                } else {
+                    gd.textContent = 'Prefer not to say';
+                    gd.style.color = 'var(--muted2)';
+                    window._selGender = '';
+                }
+
+                if (user.dob) {
+                    const d = new Date(user.dob);
+                    if (!isNaN(d.getTime())) {
+                        const dateStr = MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+                        document.getElementById('eDOBDisplay').textContent = dateStr;
+                        document.getElementById('eDOBDisplay').style.color = 'var(--text)';
+                        const age = new Date().getFullYear() - d.getFullYear();
+                        document.getElementById('dobAgeHint').textContent = 'Age: ' + age + ' years old';
+                        window._dobSel = { month: d.getMonth() + 1, day: d.getDate(), year: d.getFullYear() };
+                    }
+                } else {
+                    document.getElementById('eDOBDisplay').textContent = 'Select date of birth';
+                    document.getElementById('eDOBDisplay').style.color = 'var(--muted2)';
+                    document.getElementById('dobAgeHint').textContent = '';
+                    window._dobSel = { month: null, day: null, year: null };
+                }
+
+                if (user.country) {
+                    const c = COUNTRIES.find(c => c.n === user.country);
+                    if (c) {
+                        document.getElementById('eCountryDisplay').textContent = c.f + ' ' + c.n;
+                        document.getElementById('eCountryDisplay').style.color = 'var(--text)';
+                        window._selCountry = c.n;
+                    }
+                } else {
+                    document.getElementById('eCountryDisplay').textContent = 'Select country';
+                    document.getElementById('eCountryDisplay').style.color = 'var(--muted2)';
+                    window._selCountry = '';
+                }
+            }
+
+            function renderPillsEd(tags) {
+                const container = document.getElementById('pillsEd');
+                const wrap = document.getElementById('pillWrap');
+                container.innerHTML = (tags || []).map((p, i) =>
+                    `<span class="pill-chip">${p}<button onclick="removePill(${i})">×</button></span>`
+                ).join('');
+                wrap.style.display = (tags || []).length >= 3 ? 'none' : 'flex';
+            }
+
+            window.addPill = function() {
+                const inp = document.getElementById('pillInp');
+                const val = inp.value.trim();
+                const tags = window._pendingPills || [];
+                if (!val || tags.length >= 3) return;
+                tags.push(val);
+                inp.value = '';
+                window._pendingPills = tags;
+                renderPillsEd(tags);
+            };
+
+            window.removePill = function(i) {
+                const tags = window._pendingPills || [];
+                tags.splice(i, 1);
+                window._pendingPills = tags;
+                renderPillsEd(tags);
+            };
+
+            window.saveProfile = async function() {
+                const dn = document.getElementById('eDN').value.trim();
+                const un = document.getElementById('eUN').value.trim();
+                const bio = document.getElementById('eBio').value.trim();
+
+                const updates = {
+                    displayName: dn || 'Guest',
+                    username: un || 'user',
+                    bio: bio,
+                    tags: window._pendingPills || [],
+                    gender: window._selGender || '',
+                    country: window._selCountry || '',
+                    dob: window._dobSel && window._dobSel.month && window._dobSel.day && window._dobSel.year ?
+                        new Date(window._dobSel.year, window._dobSel.month - 1, window._dobSel.day).toISOString() :
+                        ''
+                };
+
+                try {
+                    await updateProfileSupabase(updates);
+
+                    // Update local AuthUser cache
+                    if (window.AuthUser && window.AuthUser.updateCurrentUser) {
+                        const user = getCurrentUser();
+                        if (user) {
+                            Object.assign(user, updates);
+                            window.AuthUser.updateCurrentUser(user);
+                        }
+                    }
+
+                    closeFS('editProfileModal');
+                    showToast('Profile updated ✓', 'g');
+
+                    // Notify other tabs/pages
+                    document.dispatchEvent(new CustomEvent('profileUpdated', {
+                        detail: { user: getCurrentUser() }
+                    }));
+                } catch (err) {
+                    showToast(err.message, 'r');
+                }
+            };
+
+            // ─── VERIFICATION ──────────────────────────────────
             let vfyCat = '';
-            let vfyState = user.verificationStatus || 'none';
+            let vfyState = 'none';
 
             function updateVfyStatusCard(status) {
                 const badge = document.getElementById('vfyBadgeIcon');
@@ -3116,11 +3440,14 @@
                     if (settingsBadge) { settingsBadge.textContent = 'Unverified';
                         settingsBadge.className = 'r-badge'; }
                 }
-                // Update eligibility requirements
+                // Eligibility requirements
                 const reqList = document.getElementById('vfyReqList');
+                const user = getCurrentUser();
                 const reqs = [
-                    { icon: 'pass', name: 'Complete profile', hint: 'Display name, bio, and avatar set' },
-                    { icon: 'pass', name: 'Phone number linked', hint: 'Account must have a verified phone' },
+                    { icon: user?.displayName && user?.bio ? 'pass' : 'fail', name: 'Complete profile',
+                        hint: 'Display name, bio, and avatar set' },
+                    { icon: user?.phone ? 'pass' : 'fail', name: 'Phone number linked',
+                        hint: 'Account must have a verified phone' },
                     { icon: 'fail', name: '100+ followers', hint: 'You currently have 0 followers' },
                     { icon: 'pass', name: 'Account age 30+ days', hint: 'Your account is old enough' }
                 ];
@@ -3132,7 +3459,6 @@
                 `).join('');
             }
 
-            // Load initial verification status
             (async function loadVfyStatus() {
                 try {
                     const status = await window.SettingsAPI.getVerificationStatus();
@@ -3202,7 +3528,7 @@
                 }
             };
 
-            // ─── BLOCKED USERS ─────────────────────────
+            // ─── BLOCKED USERS ──────────────────────────────────
             let blockedUsers = [];
 
             async function loadBlockedUsers() {
@@ -3262,7 +3588,7 @@
                 openFS('blockedModal');
             };
 
-            // ─── LANGUAGE PICKER ──────────────────────
+            // ─── LANGUAGE PICKER ──────────────────────────────
             const LANGS = [
                 { g: 'Global', langs: [
                         { code: 'en', native: 'English', english: 'English (UK)', flag: '🇬🇧' },
@@ -3355,13 +3681,12 @@
                 pendingLang = null;
             };
 
-            // ─── 2FA ────────────────────────────────────
+            // ─── 2FA ─────────────────────────────────────────────
             let tfaStep = 0;
             let tfaFactorId = null;
             let tfaSecret = null;
             const BACKUP_CODES = [];
 
-            // Generate random backup codes
             function generateBackupCodes() {
                 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
                 const codes = [];
@@ -3376,14 +3701,12 @@
             }
 
             window.openTFA = function() {
-                // Check if 2FA is already enabled
                 if (localStorage.getItem('freeupper_2fa_enabled') === 'true') {
                     tfaGoDisable();
                     openFS('tfaModal');
                     return;
                 }
 
-                // Reset state
                 tfaStep = 0;
                 tfaFactorId = null;
                 tfaSecret = null;
@@ -3396,13 +3719,11 @@
                 document.getElementById('backupChk').checked = false;
                 document.getElementById('tfaContinueBtn').disabled = true;
 
-                // Reset QR display
                 document.getElementById('tfaQrImage').style.display = 'none';
                 document.getElementById('tfaQrPlaceholder').style.display = 'block';
                 document.getElementById('tfaQrPlaceholder').textContent = 'Generating QR code...\nPlease wait';
                 document.getElementById('tfaSecretKey').textContent = '—';
 
-                // Start 2FA setup
                 tfaGo(0);
                 openFS('tfaModal');
             };
@@ -3597,12 +3918,19 @@
             window.tfaDone = function() {
                 localStorage.setItem('freeupper_2fa_enabled', 'true');
                 localStorage.setItem('freeupper_2fa_backup_codes', JSON.stringify(BACKUP_CODES));
+                if (tfaFactorId) localStorage.setItem('freeupper_2fa_factor_id', tfaFactorId);
                 document.getElementById('tfaBadge').textContent = 'Enabled';
                 document.getElementById('tfaBadge').className = 'r-badge ok';
                 tfaRestoreStep0();
                 closeFS('tfaModal');
                 showToast('2FA enabled ✓', 'g');
             };
+
+            function tfaRestoreStep0() {
+                const box = document.getElementById('tfas0');
+                box.innerHTML =
+                    '<div class="tfa-intro-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><div class="tfa-h">Secure Your Account</div><div class="tfa-p">Add an extra layer of security by requiring a verification code from your authenticator app when logging in.</div><div class="tfa-info">💡 Once enabled, you\'ll enter a 6-digit code from your app after your password each time you sign in.</div><button class="tfa-btn" onclick="tfaGo(1)">Continue →</button>';
+            }
 
             function tfaGoDisable() {
                 const box = document.getElementById('tfas0');
@@ -3618,20 +3946,13 @@
                 });
             }
 
-            function tfaRestoreStep0() {
-                const box = document.getElementById('tfas0');
-                box.innerHTML =
-                    '<div class="tfa-intro-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><div class="tfa-h">Secure Your Account</div><div class="tfa-p">Add an extra layer of security by requiring a verification code from your authenticator app when logging in.</div><div class="tfa-info">💡 Once enabled, you\'ll enter a 6-digit code from your app after your password each time you sign in.</div><button class="tfa-btn" onclick="tfaGo(1)">Continue →</button>';
-            }
-
             async function tfaDisableConfirm() {
                 try {
-                    const { error } = await window.supabase.auth.mfa.unenroll({
-                        factorId: tfaFactorId || localStorage.getItem('freeupper_2fa_factor_id')
-                    });
-
-                    if (error) throw error;
-
+                    const factorId = localStorage.getItem('freeupper_2fa_factor_id');
+                    if (factorId) {
+                        const { error } = await window.supabase.auth.mfa.unenroll({ factorId });
+                        if (error) throw error;
+                    }
                     localStorage.removeItem('freeupper_2fa_enabled');
                     localStorage.removeItem('freeupper_2fa_backup_codes');
                     localStorage.removeItem('freeupper_2fa_factor_id');
@@ -3645,7 +3966,7 @@
                 }
             }
 
-            // ─── CHANGE PASSWORD ─────────────────────
+            // ─── CHANGE PASSWORD ──────────────────────────────
             window.toggleEye = function(id) {
                 const inp = document.getElementById(id);
                 if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
@@ -3708,6 +4029,7 @@
                 const cur = document.getElementById('pwCur').value;
                 const nw = document.getElementById('pwNew').value;
                 const cf = document.getElementById('pwConf').value;
+                const user = getCurrentUser();
                 if (!cur || !nw || !cf) { showToast('Fill all fields', 'o'); return; }
                 if (nw !== cf) { showToast('Passwords do not match', 'o'); return; }
                 if (nw.length < 8) { showToast('Password must be at least 8 characters', 'o'); return; }
@@ -3736,7 +4058,7 @@
                 }
             };
 
-            // ─── ACTIVE SESSIONS ─────────────────────
+            // ─── ACTIVE SESSIONS ──────────────────────────────
             let sessions = [];
             let pendingSessId = null;
 
@@ -3845,7 +4167,7 @@
                 openFS('sessionsModal');
             };
 
-            // ─── LOGOUT ────────────────────────────────
+            // ─── LOGOUT ─────────────────────────────────────────
             window.confirmLogout = function() {
                 openMov('logoutDlg');
             };
@@ -3855,18 +4177,13 @@
                 try {
                     const { error } = await window.supabase.auth.signOut();
                     if (error) throw error;
-                    localStorage.removeItem('freeupper_user_profile');
-                    localStorage.removeItem('freeupper_all_users');
-                    localStorage.removeItem('freeupper_follows');
-                    localStorage.removeItem('freeupper_bookmarks');
-                    localStorage.removeItem('freeupper_shares');
                     window.location.href = 'index.html';
                 } catch (err) {
                     showToast(err.message, 'r');
                 }
             };
 
-            // ─── DELETE ACCOUNT ──────────────────────
+            // ─── DELETE ACCOUNT ──────────────────────────────
             let deleteTimer = null;
             let deleteCountdown = 30;
 
@@ -3917,27 +4234,39 @@
             };
 
             window.confirmDeleteAction = async function() {
-                closeMov('deleteDlg');
+  closeMov('deleteDlg');
 
-                try {
-                    const { error } = await window.supabase.auth.signOut();
+  try {
+    showToast('Deleting account...', 'p');
 
-                    localStorage.removeItem('freeupper_user_profile');
-                    localStorage.removeItem('freeupper_all_users');
-                    localStorage.removeItem('freeupper_follows');
-                    localStorage.removeItem('freeupper_bookmarks');
-                    localStorage.removeItem('freeupper_shares');
-                    localStorage.removeItem('freeupper_2fa_enabled');
-                    localStorage.removeItem('freeupper_2fa_backup_codes');
+    // 1. Call your Edge Function
+    const { data, error } = await window.supabase.functions.invoke('delete-account', {
+      method: 'POST',
+      headers: {
+        // The JWT token is automatically attached by supabase-js
+        // but we can also pass it explicitly if needed
+      },
+    });
 
-                    showToast('Account deleted successfully', 'g');
-                    window.location.href = 'index.html';
-                } catch (err) {
-                    showToast('Failed to delete account: ' + err.message, 'r');
-                }
-            };
+    if (error) throw new Error(error.message);
 
-            // ─── AVATAR PICKER ────────────────────────
+    // 2. Sign out locally (supabase-js will clear session)
+    await window.supabase.auth.signOut();
+
+    // 3. Clear any app-specific local data
+    localStorage.clear();
+
+    // 4. Redirect to home
+    showToast('Account deleted successfully', 'g');
+    window.location.href = 'index.html';
+
+  } catch (err) {
+    console.error('Delete account error:', err);
+    showToast('Failed to delete account: ' + err.message, 'r');
+  }
+};
+
+            // ─── AVATAR PICKER ──────────────────────────────────
             const AVATARS = ['assets/photo1.png', 'assets/photo2.png', 'assets/photo3.png', 'assets/photo4.png',
                 'assets/photo5.png', 'assets/photo6.png', 'assets/photo7.png', 'assets/photo8.png', 'assets/photo9.png'
             ];
@@ -3949,8 +4278,8 @@
             function initAvatarGrid() {
                 const grid = document.getElementById('avGrid');
                 if (!grid) return;
-                const currentUser = getCurrentUser();
-                const currentAvatar = currentUser?.avatar || '';
+                const user = getCurrentUser();
+                const currentAvatar = user?.avatar || '';
                 let foundIdx = AVATARS.indexOf(currentAvatar);
                 if (foundIdx === -1) foundIdx = -1;
                 selAvIdx = foundIdx;
@@ -3974,17 +4303,19 @@
                     if (e) e.src = src;
                 });
 
-                if (typeof updateUserProfile === 'function') {
-                    updateUserProfile({ avatar: src });
-                } else {
-                    const user = getCurrentUser();
-                    user.avatar = src;
-                    saveCurrentUser(user);
-                    registerCurrentUserInDirectory(user);
+                // Update Supabase with new avatar
+                const user = getCurrentUser();
+                if (user) {
+                    updateProfileSupabase({ avatar: src }).then(() => {
+                        showToast('Profile photo updated ✓', 'g');
+                        if (window.AuthUser && window.AuthUser.updateCurrentUser) {
+                            const updated = { ...user, avatar: src };
+                            window.AuthUser.updateCurrentUser(updated);
+                        }
+                    }).catch(err => showToast(err.message, 'r'));
                 }
 
                 closeFS('avatarModal');
-                showToast('Profile photo updated ✓', 'g');
             };
 
             window.handleUpload = async function(e) {
@@ -4000,140 +4331,23 @@
                 }
             };
 
-            // ─── EDIT PROFILE SYNC ────────────────────
-            function syncEditProfile() {
-                const currentUser = getCurrentUser();
-                if (!currentUser) return;
-
-                document.getElementById('editAv').src = currentUser.avatar || '';
-
-                const dn = document.getElementById('eDN');
-                const un = document.getElementById('eUN');
-                const bio = document.getElementById('eBio');
-
-                dn.value = currentUser.displayName || '';
-                un.value = currentUser.username || '';
-                bio.value = currentUser.bio || '';
-
-                document.getElementById('dnC').textContent = (currentUser.displayName || '').length + ' / 40';
-                document.getElementById('unC').textContent = (currentUser.username || '').length + ' / 30';
-                document.getElementById('bioC').textContent = (currentUser.bio || '').length + ' / 160';
-
-                const tags = currentUser.tags || [];
-                renderPillsEd(tags);
-
-                const gd = document.getElementById('eGenderDisplay');
-                if (currentUser.gender) {
-                    const icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
-                        'Other': '✦' };
-                    gd.textContent = (icons[currentUser.gender] || '') + ' ' + (currentUser.gender ||
-                    'Prefer not to say');
-                    gd.style.color = 'var(--text)';
-                }
-
-                if (currentUser.dob) {
-                    const d = new Date(currentUser.dob);
-                    const dateStr = MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
-                    document.getElementById('eDOBDisplay').textContent = dateStr;
-                    document.getElementById('eDOBDisplay').style.color = 'var(--text)';
-                    const age = new Date().getFullYear() - d.getFullYear();
-                    document.getElementById('dobAgeHint').textContent = 'Age: ' + age + ' years old';
-                }
-
-                if (currentUser.country) {
-                    const c = COUNTRIES.find(c => c.n === currentUser.country);
-                    if (c) {
-                        document.getElementById('eCountryDisplay').textContent = c.f + ' ' + c.n;
-                        document.getElementById('eCountryDisplay').style.color = 'var(--text)';
-                    }
-                }
-            }
-
-            function renderPillsEd(tags) {
-                const container = document.getElementById('pillsEd');
-                const wrap = document.getElementById('pillWrap');
-                container.innerHTML = tags.map((p, i) =>
-                    `<span class="pill-chip">${p}<button onclick="removePill(${i})">×</button></span>`
-                ).join('');
-                wrap.style.display = tags.length >= 3 ? 'none' : 'flex';
-            }
-
-            window.addPill = function() {
-                const inp = document.getElementById('pillInp');
-                const val = inp.value.trim();
-                const currentUser = getCurrentUser();
-                const tags = currentUser.tags || [];
-                if (!val || tags.length >= 3) return;
-                tags.push(val);
-                inp.value = '';
-                renderPillsEd(tags);
-            };
-
-            window.removePill = function(i) {
-                const currentUser = getCurrentUser();
-                const tags = currentUser.tags || [];
-                tags.splice(i, 1);
-                renderPillsEd(tags);
-            };
-
-            window.saveProfile = async function() {
-                const dn = document.getElementById('eDN').value.trim();
-                const un = document.getElementById('eUN').value.trim();
-                const bio = document.getElementById('eBio').value.trim();
-                const currentUser = getCurrentUser();
-
-                const updates = {
-                    displayName: dn || 'Guest',
-                    username: un || 'user',
-                    bio: bio,
-                    tags: currentUser.tags || [],
-                    gender: currentUser.gender || '',
-                    country: currentUser.country || '',
-                    dob: currentUser.dob || ''
-                };
-
-                if (typeof updateUserProfile === 'function') {
-                    updateUserProfile(updates);
-                } else {
-                    Object.assign(currentUser, updates);
-                    saveCurrentUser(currentUser);
-                    registerCurrentUserInDirectory(currentUser);
-                }
-
-                try {
-                    const sb = window.supabase;
-                    if (sb) {
-                        const payload = {
-                            display_name: updates.displayName,
-                            username: updates.username,
-                            bio: updates.bio,
-                            gender: updates.gender,
-                            country: updates.country,
-                            dob: updates.dob,
-                            tags: updates.tags
-                        };
-                        await sb.from('profiles').update(payload).eq('id', currentUser.id);
-                        console.log('✅ Profile saved to Supabase');
-                    }
-                } catch (e) {
-                    console.error('Supabase update error:', e);
-                }
-
-                closeFS('editProfileModal');
-                showToast('Profile updated ✓', 'g');
-
-                document.dispatchEvent(new CustomEvent('profileUpdated', {
-                    detail: { user: getCurrentUser() }
-                }));
-            };
-
-            // ─── DOB PICKER ─────────────────────────────
+            // ─── DOB PICKER ─────────────────────────────────────
             const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
                 'October', 'November', 'December'
             ];
-            let dobSel = { month: null, day: null, year: null };
+            window._dobSel = { month: null, day: null, year: null };
 
             window.openDOBModal = function() {
+                // Load existing DOB from user
+                const user = getCurrentUser();
+                if (user?.dob) {
+                    const d = new Date(user.dob);
+                    if (!isNaN(d.getTime())) {
+                        window._dobSel = { month: d.getMonth() + 1, day: d.getDate(), year: d.getFullYear() };
+                    }
+                } else {
+                    window._dobSel = { month: null, day: null, year: null };
+                }
                 initDOBPickers();
                 openFS('dobModal');
             };
@@ -4142,21 +4356,21 @@
                 const curY = new Date().getFullYear();
                 const ms = document.getElementById('dobMonthScroll');
                 ms.innerHTML = MONTHS.map((m, i) =>
-                    `<div class="dob-item${dobSel.month===i+1 ? ' sel' : ''}" onclick="selDOB('month',${i+1},this)">${m}</div>`
-                    ).join('');
+                    `<div class="dob-item${window._dobSel.month===i+1 ? ' sel' : ''}" onclick="selDOB('month',${i+1},this)">${m}</div>`
+                ).join('');
                 const ds = document.getElementById('dobDayScroll');
                 ds.innerHTML = Array.from({ length: 31 }, (_, i) =>
-                    `<div class="dob-item${dobSel.day===i+1 ? ' sel' : ''}" onclick="selDOB('day',${i+1},this)">${String(i+1).padStart(2,'0')}</div>`
-                    ).join('');
+                    `<div class="dob-item${window._dobSel.day===i+1 ? ' sel' : ''}" onclick="selDOB('day',${i+1},this)">${String(i+1).padStart(2,'0')}</div>`
+                ).join('');
                 const ys = document.getElementById('dobYearScroll');
                 const years = [];
                 for (let y = curY - 13; y >= curY - 120; y--) years.push(y);
                 ys.innerHTML = years.map(y =>
-                    `<div class="dob-item${dobSel.year===y ? ' sel' : ''}" onclick="selDOB('year',${y},this)">${y}</div>`
-                    ).join('');
-                if (dobSel.month) scrollToDOB(ms, dobSel.month - 1);
-                if (dobSel.day) scrollToDOB(ds, dobSel.day - 1);
-                if (dobSel.year) scrollToDOB(ys, years.indexOf(dobSel.year));
+                    `<div class="dob-item${window._dobSel.year===y ? ' sel' : ''}" onclick="selDOB('year',${y},this)">${y}</div>`
+                ).join('');
+                if (window._dobSel.month) scrollToDOB(ms, window._dobSel.month - 1);
+                if (window._dobSel.day) scrollToDOB(ds, window._dobSel.day - 1);
+                if (window._dobSel.year) scrollToDOB(ys, years.indexOf(window._dobSel.year));
                 updateDOBResult();
             }
 
@@ -4166,7 +4380,7 @@
             }
 
             window.selDOB = function(field, val, el) {
-                dobSel[field] = val;
+                window._dobSel[field] = val;
                 const scroll = el.closest('.dob-scroll');
                 scroll.querySelectorAll('.dob-item').forEach(i => i.classList.remove('sel'));
                 el.classList.add('sel');
@@ -4179,18 +4393,19 @@
                 const res = document.getElementById('dobResult');
                 const warn = document.getElementById('dobWarn');
                 const saveBtn = document.getElementById('dobSaveBtn');
-                if (!dobSel.month || !dobSel.day || !dobSel.year) {
+                if (!window._dobSel.month || !window._dobSel.day || !window._dobSel.year) {
                     res.textContent = 'Select your date of birth above';
                     warn.style.display = 'none';
                     if (saveBtn) saveBtn.disabled = false;
                     return;
                 }
-                const dob = new Date(dobSel.year, dobSel.month - 1, dobSel.day);
+                const dob = new Date(window._dobSel.year, window._dobSel.month - 1, window._dobSel.day);
                 const today = new Date();
                 let age = today.getFullYear() - dob.getFullYear();
                 const mDiff = today.getMonth() - dob.getMonth();
                 if (mDiff < 0 || (mDiff === 0 && today.getDate() < dob.getDate())) age--;
-                const dateStr = MONTHS[dobSel.month - 1] + ' ' + dobSel.day + ', ' + dobSel.year;
+                const dateStr = MONTHS[window._dobSel.month - 1] + ' ' + window._dobSel.day + ', ' + window._dobSel
+                .year;
                 if (age < 13) {
                     res.innerHTML =
                         `<span style="color:var(--danger);font-weight:700">${dateStr}</span><br><span style="font-size:12px;color:var(--muted)">That makes you ${age} years old</span>`;
@@ -4205,39 +4420,50 @@
             }
 
             window.saveDOB = function() {
-                if (!dobSel.month || !dobSel.day || !dobSel.year) { showToast('Please select your full date of birth',
-                        'o'); return; }
-                const dob = new Date(dobSel.year, dobSel.month - 1, dobSel.day);
+                if (!window._dobSel.month || !window._dobSel.day || !window._dobSel.year) {
+                    showToast('Please select your full date of birth', 'o');
+                    return;
+                }
+                const dob = new Date(window._dobSel.year, window._dobSel.month - 1, window._dobSel.day);
                 const today = new Date();
                 let age = today.getFullYear() - dob.getFullYear();
                 const mDiff = today.getMonth() - dob.getMonth();
                 if (mDiff < 0 || (mDiff === 0 && today.getDate() < dob.getDate())) age--;
                 if (age < 13) { showToast('You must be at least 13 years old', 'r'); return; }
-                const dateStr = MONTHS[dobSel.month - 1] + ' ' + dobSel.day + ', ' + dobSel.year;
+                const dateStr = MONTHS[window._dobSel.month - 1] + ' ' + window._dobSel.day + ', ' + window._dobSel
+                .year;
                 const disp = document.getElementById('eDOBDisplay');
                 const hint = document.getElementById('dobAgeHint');
                 if (disp) { disp.textContent = dateStr;
                     disp.style.color = 'var(--text)'; }
                 if (hint) hint.textContent = 'Age: ' + age + ' years old';
 
-                const currentUser = getCurrentUser();
-                currentUser.dob = new Date(dobSel.year, dobSel.month - 1, dobSel.day).toISOString();
-                saveCurrentUser(currentUser);
-                registerCurrentUserInDirectory(currentUser);
-
-                closeFS('dobModal');
-                showToast('Date of birth saved ✓', 'g');
+                // Save to Supabase
+                const user = getCurrentUser();
+                if (user) {
+                    updateProfileSupabase({ dob: dob.toISOString() }).then(() => {
+                        closeFS('dobModal');
+                        showToast('Date of birth saved ✓', 'g');
+                        if (window.AuthUser && window.AuthUser.updateCurrentUser) {
+                            const updated = { ...user, dob: dob.toISOString() };
+                            window.AuthUser.updateCurrentUser(updated);
+                        }
+                    }).catch(err => showToast(err.message, 'r'));
+                } else {
+                    closeFS('dobModal');
+                    showToast('Date of birth saved ✓', 'g');
+                }
             };
 
-            // ─── GENDER MODAL ──────────────────────────
-            let selGender = '';
+            // ─── GENDER MODAL ──────────────────────────────────
+            window._selGender = '';
 
             window.openGenderModal = function() {
-                const currentUser = getCurrentUser();
-                selGender = currentUser.gender || '';
+                const user = getCurrentUser();
+                window._selGender = user?.gender || '';
 
                 document.querySelectorAll('.gen-opt').forEach(o => {
-                    const isSel = o.dataset.val === selGender;
+                    const isSel = o.dataset.val === window._selGender;
                     o.classList.toggle('sel', isSel);
                     const existing = o.querySelector('.gen-check');
                     if (isSel && !existing) {
@@ -4251,24 +4477,29 @@
             };
 
             window.pickGender = function(el) {
-                selGender = el.dataset.val;
+                window._selGender = el.dataset.val;
                 const icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
                     'Other': '✦' };
                 const disp = document.getElementById('eGenderDisplay');
-                if (disp) { disp.textContent = (icons[selGender] || '') + ' ' + (selGender || 'Prefer not to say');
+                if (disp) { disp.textContent = (icons[window._selGender] || '') + ' ' + (window._selGender ||
+                        'Prefer not to say');
                     disp.style.color = 'var(--text)'; }
 
-                const currentUser = getCurrentUser();
-                currentUser.gender = selGender;
-                saveCurrentUser(currentUser);
-                registerCurrentUserInDirectory(currentUser);
+                const user = getCurrentUser();
+                if (user) {
+                    updateProfileSupabase({ gender: window._selGender }).then(() => {
+                        if (window.AuthUser && window.AuthUser.updateCurrentUser) {
+                            const updated = { ...user, gender: window._selGender };
+                            window.AuthUser.updateCurrentUser(updated);
+                        }
+                    }).catch(err => showToast(err.message, 'r'));
+                }
 
                 closeMov('genderOverlay');
             };
 
-            // ─── COUNTRY PICKER ────────────────────────
+            // ─── COUNTRY PICKER ────────────────────────────────
             const COUNTRIES = [
-                // Africa
                 { f: '🇳🇬', n: 'Nigeria', r: 'Africa' },
                 { f: '🇬🇭', n: 'Ghana', r: 'Africa' },
                 { f: '🇰🇪', n: 'Kenya', r: 'Africa' },
@@ -4287,27 +4518,26 @@
                 { f: '🇹🇳', n: 'Tunisia', r: 'Africa' },
                 { f: '🇲🇦', n: 'Morocco', r: 'Africa' },
                 { f: '🇪🇬', n: 'Egypt', r: 'Africa' },
-                // Americas
                 { f: '🇺🇸', n: 'United States', r: 'Americas' },
                 { f: '🇨🇦', n: 'Canada', r: 'Americas' },
                 { f: '🇧🇷', n: 'Brazil', r: 'Americas' },
                 { f: '🇲🇽', n: 'Mexico', r: 'Americas' },
-                // Asia
                 { f: '🇨🇳', n: 'China', r: 'Asia' },
                 { f: '🇯🇵', n: 'Japan', r: 'Asia' },
                 { f: '🇮🇳', n: 'India', r: 'Asia' },
                 { f: '🇰🇷', n: 'South Korea', r: 'Asia' },
-                // Europe
                 { f: '🇬🇧', n: 'United Kingdom', r: 'Europe' },
                 { f: '🇩🇪', n: 'Germany', r: 'Europe' },
                 { f: '🇫🇷', n: 'France', r: 'Europe' },
                 { f: '🇪🇸', n: 'Spain', r: 'Europe' },
-                // Oceania
                 { f: '🇦🇺', n: 'Australia', r: 'Oceania' },
                 { f: '🇳🇿', n: 'New Zealand', r: 'Oceania' }
             ];
+            window._selCountry = '';
 
             window.openCountryModal = function() {
+                const user = getCurrentUser();
+                window._selCountry = user?.country || '';
                 renderCountries(COUNTRIES, false);
                 openFS('countryModal');
             };
@@ -4325,9 +4555,6 @@
 
             function renderCountries(list, flat) {
                 const el = document.getElementById('countryList');
-                const currentUser = getCurrentUser();
-                const selCountry = currentUser?.country || '';
-
                 if (!list.length) {
                     el.innerHTML =
                         '<div style="text-align:center;padding:48px;color:var(--muted)"><div style="font-size:28px;margin-bottom:12px">🌍</div><div style="font-size:14px;font-weight:700">No countries found</div></div>';
@@ -4335,48 +4562,55 @@
                 }
                 if (flat) {
                     el.innerHTML = list.map(c =>
-                        `<div class="ctr-row${selCountry===c.n ? ' sel' : ''}" onclick="pickCountry('${c.n.replace(/'/g,"\\'")}','${c.f}')"><span class="ctr-flag">${c.f}</span><span class="ctr-name">${c.n}</span>${selCountry===c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : ''}</div>`
-                        ).join('');
+                        `<div class="ctr-row${window._selCountry===c.n ? ' sel' : ''}" onclick="pickCountry('${c.n.replace(/'/g,"\\'")}','${c.f}')"><span class="ctr-flag">${c.f}</span><span class="ctr-name">${c.n}</span>${window._selCountry===c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : ''}</div>`
+                    ).join('');
                 } else {
                     const regions = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
                     el.innerHTML = regions.map(r => {
                         const items = list.filter(c => c.r === r);
                         if (!items.length) return '';
                         return `<div class="ctr-section-hdr">${r}</div>` + items.map(c =>
-                            `<div class="ctr-row${selCountry===c.n ? ' sel' : ''}" onclick="pickCountry('${c.n.replace(/'/g,"\\'")}','${c.f}')"><span class="ctr-flag">${c.f}</span><span class="ctr-name">${c.n}</span>${selCountry===c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : ''}</div>`
-                            ).join('');
+                            `<div class="ctr-row${window._selCountry===c.n ? ' sel' : ''}" onclick="pickCountry('${c.n.replace(/'/g,"\\'")}','${c.f}')"><span class="ctr-flag">${c.f}</span><span class="ctr-name">${c.n}</span>${window._selCountry===c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : ''}</div>`
+                        ).join('');
                     }).join('');
                 }
             }
 
             window.pickCountry = function(name, flag) {
-                const currentUser = getCurrentUser();
-                currentUser.country = name;
-                saveCurrentUser(currentUser);
-                registerCurrentUserInDirectory(currentUser);
-
+                window._selCountry = name;
                 const disp = document.getElementById('eCountryDisplay');
                 if (disp) { disp.textContent = flag + ' ' + name;
                     disp.style.color = 'var(--text)'; }
+
+                const user = getCurrentUser();
+                if (user) {
+                    updateProfileSupabase({ country: name }).then(() => {
+                        if (window.AuthUser && window.AuthUser.updateCurrentUser) {
+                            const updated = { ...user, country: name };
+                            window.AuthUser.updateCurrentUser(updated);
+                        }
+                    }).catch(err => showToast(err.message, 'r'));
+                }
+
                 closeFS('countryModal');
                 showToast(flag + ' ' + name + ' selected', 'g');
             };
 
-            // ─── NAV ────────────────────────────────────
+            // ─── NAV ─────────────────────────────────────────────
             updateNavAvatar();
 
-            // ─── SETUP PROFILE SYNC ──────────────────
+            // ─── SETUP PROFILE SYNC ─────────────────────────────
             function setupSettingsSync() {
                 window.addEventListener('storage', function(e) {
-                    if (e.key === 'freeupper_user_profile' || e.key === 'freeupper_all_users') {
+                    if (e.key === 'freeupper_user_profile') {
                         const user = getCurrentUser();
                         updateNavAvatar();
                         window.SettingsAPI.getVerificationStatus().then(status => {
                             updateVfyStatusCard(status);
                         }).catch(() => {});
-                        document.getElementById('acctUsername').textContent = '@' + (user.username || 'user');
-                        document.getElementById('acctEmail').textContent = user.email || 'user@email.com';
-                        document.getElementById('phoneInp').value = user.phone || '';
+                        document.getElementById('acctUsername').textContent = '@' + (user?.username || 'user');
+                        document.getElementById('acctEmail').textContent = user?.email || 'user@email.com';
+                        document.getElementById('phoneInp').value = user?.phone || '';
                     }
                 });
 
@@ -4392,11 +4626,28 @@
                         document.getElementById('phoneInp').value = user.phone || '';
                     }
                 });
+
+                // Also listen for AuthUser changes
+                if (window.AuthUser && window.AuthUser.onChange) {
+                    window.AuthUser.onChange(function(user) {
+                        if (user) {
+                            updateNavAvatar();
+                            window.SettingsAPI.getVerificationStatus().then(status => {
+                                updateVfyStatusCard(status);
+                            }).catch(() => {});
+                            document.getElementById('acctUsername').textContent = '@' + (user.username ||
+                            'user');
+                            document.getElementById('acctEmail').textContent = user.email ||
+                                'user@email.com';
+                            document.getElementById('phoneInp').value = user.phone || '';
+                        }
+                    });
+                }
             }
 
             setupSettingsSync();
 
-            // ─── INIT ──────────────────────────────────
+            // ─── INIT ────────────────────────────────────────────
             const savedLang = localStorage.getItem('freeupper_lang');
             if (savedLang) {
                 selLang = savedLang;
@@ -4417,7 +4668,7 @@
 
             document.getElementById('sessBadge').textContent = '1 device';
 
-            console.log('🔥 Settings fully loaded with Supabase integration!');
+            console.log('🔥 Settings fully loaded with Supabase integration (profile.html flow)!');
         })();
     </script>
 

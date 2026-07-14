@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-    <!-- ═══ YOUR ORIGINAL HEAD (unchanged) ═══ -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Profile · Freeupper</title>
@@ -11,7 +10,6 @@
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" async onerror="window.jsQR=null"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
-        /* ═══ YOUR ORIGINAL CSS (unchanged) ═══ */
         /* ============================================================
            PROFILE-SPECIFIC STYLES
            ============================================================ */
@@ -2320,7 +2318,6 @@
 </head>
 <body>
 
-    <!-- ═══ YOUR ORIGINAL HTML (unchanged) ═══ -->
     <div id="tw"></div>
 
     <div class="layout">
@@ -2460,9 +2457,8 @@
 
     </div>
 
-    <!-- ═══ YOUR ORIGINAL MODALS (unchanged) ═══ -->
-    <!-- postsModal, followModal, shareModal, editModal, avatarModal, dobModal, countryModal, genderOverlay -->
-    <!-- ... all your modal HTML remains exactly as before ... -->
+    <!-- ─── MODALS ────────────────────────────────────────────── -->
+
     <div class="mco" id="postsModal">
         <div class="mbox" id="postsBox">
             <div class="m-handle"></div>
@@ -2746,7 +2742,7 @@
 
     <script>
         // ════════════════════════════════════════════════════════════════
-        // REPLACED JAVASCRIPT – Supabase only, no localStorage for profile data
+        // PROFILE CONTROLLER – Supabase only, error-resilient
         // ════════════════════════════════════════════════════════════════
         (function() {
             'use strict';
@@ -2837,20 +2833,25 @@
                 return data;
             }
 
-            // ─── FETCH FOLLOW COUNTS ─────────────────────────────
+            // ─── FETCH FOLLOW COUNTS (error-resilient) ──────────
             async function fetchFollowCounts(userId) {
-                const { count: followers, error: e1 } = await window.sb
-                    .from('follows')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('following_id', userId);
+                try {
+                    const { count: followers, error: e1 } = await window.sb
+                        .from('follows')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('following_id', userId);
 
-                const { count: following, error: e2 } = await window.sb
-                    .from('follows')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('follower_id', userId);
+                    const { count: following, error: e2 } = await window.sb
+                        .from('follows')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('follower_id', userId);
 
-                if (e1 || e2) throw e1 || e2;
-                return { followers: followers || 0, following: following || 0 };
+                    if (e1 || e2) throw e1 || e2;
+                    return { followers: followers || 0, following: following || 0 };
+                } catch (err) {
+                    console.warn('Failed to fetch follow counts:', err);
+                    return { followers: 0, following: 0 };
+                }
             }
 
             // ─── FETCH FOLLOWERS / FOLLOWING LISTS ──────────────
@@ -2859,7 +2860,10 @@
                     .from('follows')
                     .select('follower_id, profiles:follower_id (id, username, display_name, avatar_url, verified)')
                     .eq('following_id', userId);
-                if (error) throw error;
+                if (error) {
+                    console.warn('fetchFollowers error:', error);
+                    return [];
+                }
                 return data.map(f => f.profiles).filter(p => p);
             }
 
@@ -2868,7 +2872,10 @@
                     .from('follows')
                     .select('following_id, profiles:following_id (id, username, display_name, avatar_url, verified)')
                     .eq('follower_id', userId);
-                if (error) throw error;
+                if (error) {
+                    console.warn('fetchFollowing error:', error);
+                    return [];
+                }
                 return data.map(f => f.profiles).filter(p => p);
             }
 
@@ -2880,7 +2887,10 @@
                     .eq('follower_id', followerId)
                     .eq('following_id', targetId)
                     .maybeSingle();
-                if (error) throw error;
+                if (error) {
+                    console.warn('isFollowing error:', error);
+                    return false;
+                }
                 return !!data;
             }
 
@@ -2911,7 +2921,10 @@
                     .from('post_likes')
                     .select('post_id')
                     .eq('user_id', userId);
-                if (error) throw error;
+                if (error) {
+                    console.warn('getUserLikes error:', error);
+                    return [];
+                }
                 return data.map(l => l.post_id);
             }
 
@@ -2920,7 +2933,10 @@
                     .from('bookmarks')
                     .select('post_id')
                     .eq('user_id', userId);
-                if (error) throw error;
+                if (error) {
+                    console.warn('getUserBookmarks error:', error);
+                    return [];
+                }
                 return data.map(b => b.post_id);
             }
 
@@ -2929,7 +2945,10 @@
                     .from('shares')
                     .select('post_id')
                     .eq('user_id', userId);
-                if (error) throw error;
+                if (error) {
+                    console.warn('getUserShares error:', error);
+                    return [];
+                }
                 return data.map(s => s.post_id);
             }
 
@@ -2940,7 +2959,10 @@
                     .select('*')
                     .eq('seller_id', userId)
                     .order('created_at', { ascending: false });
-                if (error) throw error;
+                if (error) {
+                    console.warn('getUserMarketItems error:', error);
+                    return [];
+                }
                 return data || [];
             }
 
@@ -2982,10 +3004,15 @@
                 try {
                     const profile = await fetchProfile(targetId);
                     targetUser = profile;
+
+                    // Graceful follow counts (fallback to 0)
                     const counts = await fetchFollowCounts(targetId);
+
+                    // Load posts
                     await loadPosts();
                     const userPosts = getUserPosts(targetId);
 
+                    // For owner: get likes/bookmarks/shares
                     let likedIds = [],
                         bookmarkedIds = [],
                         sharedIds = [];
@@ -3040,7 +3067,7 @@
 
                 document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
                 document.getElementById('fsTabFgCount').textContent = fmtNum(counts.following);
-                document.getElementById('fsTabFrCount').textContent = fmtNum(0); // will be computed in modal
+                document.getElementById('fsTabFrCount').textContent = fmtNum(0);
 
                 const ownerTabs = document.querySelectorAll('.fw-owner-only');
                 ownerTabs.forEach(t => t.style.display = isOwner ? '' : 'none');
@@ -3847,7 +3874,7 @@
                     _fwFiltered = _fwList.slice();
                 } else {
                     const q2 = q.toLowerCase();
-                    _fwFiltered = _fwList.filter(u =>
+                    _fwFiltered = _fwFiltered.filter(u =>
                         (u.displayName || '').toLowerCase().includes(q2) ||
                         (u.handle || '').toLowerCase().includes(q2)
                     );
@@ -4333,7 +4360,7 @@
                 init();
             }
 
-            // Expose to global
+            // ─── EXPOSE TO GLOBAL ──────────────────────────────
             window.switchTab = switchTab;
             window.openFS = openFS;
             window.closeFS = closeFS;
