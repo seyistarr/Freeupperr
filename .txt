@@ -1,0 +1,250 @@
+create table public.blocked_users (
+
+  id uuid not null default gen_random_uuid (),
+
+  blocker_id uuid null,
+
+  blocked_id uuid null,
+
+  reason text null,
+
+  created_at timestamp with time zone null default now(),
+
+  constraint blocked_users_pkey primary key (id),
+
+  constraint blocked_users_blocker_id_blocked_id_key unique (blocker_id, blocked_id),
+
+  constraint blocked_users_blocked_id_fkey foreign KEY (blocked_id) references profiles (id) on delete CASCADE,
+
+  constraint blocked_users_blocker_id_fkey foreign KEY (blocker_id) references profiles (id) on delete CASCADE
+
+) TABLESPACE pg_default;   create table public.blocked_users (
+
+  id uuid not null default gen_random_uuid (),
+
+  blocker_id uuid null,
+
+  blocked_id uuid null,
+
+  reason text null,
+
+  created_at timestamp with time zone null default now(),
+
+  constraint blocked_users_pkey primary key (id),
+
+  constraint blocked_users_blocker_id_blocked_id_key unique (blocker_id, blocked_id),
+
+  constraint blocked_users_blocked_id_fkey foreign KEY (blocked_id) references profiles (id) on delete CASCADE,
+
+  constraint blocked_users_blocker_id_fkey foreign KEY (blocker_id) references profiles (id) on delete CASCADE
+
+) TABLESPACE pg_default;    create table public.comments (
+
+  id uuid not null default gen_random_uuid (),
+
+  post_id uuid null,
+
+  user_id uuid null,
+
+  content text not null,
+
+  parent_id uuid null,
+
+  created_at timestamp with time zone null default now(),
+
+  updated_at timestamp with time zone null default now(),
+
+  constraint comments_pkey primary key (id),
+
+  constraint comments_parent_id_fkey foreign KEY (parent_id) references comments (id) on delete CASCADE,
+
+  constraint comments_post_id_fkey foreign KEY (post_id) references posts (id) on delete CASCADE,
+
+  constraint comments_user_id_fkey foreign KEY (user_id) references profiles (id) on delete CASCADE
+
+) TABLESPACE pg_default;
+
+
+
+create index IF not exists idx_comments_post_id on public.comments using btree (post_id) TABLESPACE pg_default;  create table public.follows (
+
+  id uuid not null default gen_random_uuid (),
+
+  follower_id uuid null,
+
+  following_id uuid null,
+
+  status text null default 'active'::text,
+
+  created_at timestamp with time zone null default now(),
+
+  constraint follows_pkey primary key (id),
+
+  constraint follows_follower_id_following_id_key unique (follower_id, following_id),
+
+  constraint follows_follower_id_fkey foreign KEY (follower_id) references profiles (id) on delete CASCADE,
+
+  constraint follows_following_id_fkey foreign KEY (following_id) references profiles (id) on delete CASCADE
+
+) TABLESPACE pg_default;
+
+
+
+create index IF not exists idx_follows_follower_id on public.follows using btree (follower_id) TABLESPACE pg_default;
+
+
+
+create index IF not exists idx_follows_following_id on public.follows using btree (following_id) TABLESPACE pg_default;  
+
+create table public.notifications (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid null,
+  type text not null,
+  sender_id uuid null,
+  post_id uuid null,
+  comment_id uuid null,
+  read boolean null default false,
+  data jsonb null,
+  created_at timestamp with time zone null default now(),
+  constraint notifications_pkey primary key (id),
+  constraint notifications_comment_id_fkey foreign KEY (comment_id) references comments (id) on delete CASCADE,
+  constraint notifications_post_id_fkey foreign KEY (post_id) references posts (id) on delete CASCADE,
+  constraint notifications_sender_id_fkey foreign KEY (sender_id) references profiles (id) on delete CASCADE,
+  constraint notifications_user_id_fkey foreign KEY (user_id) references profiles (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_notifications_user_id on public.notifications using btree (user_id) TABLESPACE pg_default;
+
+create index IF not exists idx_notifications_read on public.notifications using btree (read) TABLESPACE pg_default;
+
+create table public.post_likes (
+  post_id bigint not null,
+  user_id uuid not null,
+  created_at timestamp with time zone null default now(),
+  constraint post_likes_pkey primary key (post_id, user_id)
+) TABLESPACE pg_default;
+
+create table public.posts (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid null,
+  title text not null,
+  content text null,
+  media_url text null,
+  media_type text null,
+  category text null default 'General'::text,
+  author text null,
+  author_avatar text null,
+  likes_count integer null default 0,
+  comments_count integer null default 0,
+  shares_count integer null default 0,
+  timestamp timestamp with time zone null default now(),
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint posts_pkey primary key (id),
+  constraint posts_user_id_fkey foreign KEY (user_id) references profiles (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_posts_user_id on public.posts using btree (user_id) TABLESPACE pg_default;
+
+create index IF not exists idx_posts_timestamp on public.posts using btree ("timestamp") TABLESPACE pg_default;
+
+create trigger update_posts_updated_at BEFORE
+update on posts for EACH row
+execute FUNCTION update_updated_at ();
+
+
+create table public.profiles (
+  id uuid not null,
+  username text not null,
+  display_name text null,
+  avatar_url text null,
+  bio text null,
+  phone text null,
+  gender text null,
+  dob date null,
+  country text null,
+  tags text[] null default '{}'::text[],
+  verified boolean null default false,
+  is_private boolean null default false,
+  hide_follower_count boolean null default false,
+  activity_status boolean null default true,
+  verification_status text null default 'none'::text,
+  verification_category text null,
+  verification_reason text null,
+  verification_link text null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint profiles_pkey primary key (id),
+  constraint profiles_username_key unique (username),
+  constraint profiles_id_fkey foreign KEY (id) references auth.users (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_profiles_username on public.profiles using btree (username) TABLESPACE pg_default;
+
+create index IF not exists idx_profiles_verified on public.profiles using btree (verified) TABLESPACE pg_default;
+
+create trigger update_profiles_updated_at BEFORE
+update on profiles for EACH row
+execute FUNCTION update_updated_at ();
+
+create table public.reactions (
+  id uuid not null default gen_random_uuid (),
+  post_id uuid null,
+  user_id uuid null,
+  type text not null,
+  created_at timestamp with time zone null default now(),
+  constraint reactions_pkey primary key (id),
+  constraint reactions_post_id_user_id_type_key unique (post_id, user_id, type),
+  constraint reactions_post_id_fkey foreign KEY (post_id) references posts (id) on delete CASCADE,
+  constraint reactions_user_id_fkey foreign KEY (user_id) references profiles (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_reactions_post_id on public.reactions using btree (post_id) TABLESPACE pg_default;
+
+create index IF not exists idx_reactions_user_id on public.reactions using btree (user_id) TABLESPACE pg_default;
+
+create trigger update_post_likes_trigger
+after INSERT
+or DELETE on reactions for EACH row
+execute FUNCTION update_post_likes_count ();
+
+create table public.shares (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid null,
+  post_id uuid null,
+  platform text null,
+  created_at timestamp with time zone null default now(),
+  constraint shares_pkey primary key (id),
+  constraint shares_user_id_post_id_key unique (user_id, post_id),
+  constraint shares_post_id_fkey foreign KEY (post_id) references posts (id) on delete CASCADE,
+  constraint shares_user_id_fkey foreign KEY (user_id) references profiles (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create table public.verification_requests (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid null,
+  category text not null,
+  reason text not null,
+  link text null,
+  status text null default 'pending'::text,
+  admin_notes text null,
+  reviewed_by uuid null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint verification_requests_pkey primary key (id),
+  constraint verification_requests_reviewed_by_fkey foreign KEY (reviewed_by) references profiles (id),
+  constraint verification_requests_user_id_fkey foreign KEY (user_id) references profiles (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create trigger update_verification_requests_updated_at BEFORE
+update on verification_requests for EACH row
+execute FUNCTION update_updated_at ();
+
+create table public.views (
+  id bigint generated always as identity not null,
+  post_id bigint not null,
+  user_id uuid null,
+  viewed_at timestamp with time zone null default now(),
+  constraint views_pkey primary key (id),
+  constraint views_user_id_fkey foreign KEY (user_id) references auth.users (id) on delete set null
+) TABLESPACE pg_default;
