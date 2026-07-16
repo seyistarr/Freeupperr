@@ -3030,7 +3030,7 @@
         <div class="av-grid" id="avGrid"></div>
     </div>
 
-    <!-- ─── DOB MODAL (scroll pickers) ─── -->
+    <!-- ─── DOB MODAL ─── -->
     <div class="mfs" id="dobModal">
         <div class="fs-hdr"><span class="fs-title">Date of Birth</span><button class="fs-x" onclick="closeFS('dobModal')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
         <div style="overflow-y:auto;flex:1;padding:20px clamp(14px,5vw,24px) 40px;display:flex;flex-direction:column;gap:20px;align-items:center;max-width:480px;width:100%;margin:0 auto">
@@ -4058,108 +4058,155 @@
                 }
             };
 
-            // ─── ACTIVE SESSIONS ──────────────────────────────
+            // ─── ACTIVE SESSIONS (REAL EDGE FUNCTION) ──────────
             let sessions = [];
             let pendingSessId = null;
 
             async function loadSessions() {
                 try {
-                    const { data: { session } } = await window.supabase.auth.getSession();
+                    // 1. Call Edge Function
+                    const { data, error } = await window.supabase.functions.invoke('manage-sessions', {
+                        body: { action: 'list' }
+                    });
+                    if (error) throw new Error(error.message || 'Failed to load sessions');
 
-                    sessions = [];
-
-                    if (session) {
-                        sessions.push({
-                            id: session.access_token || 'current',
-                            isCurrent: true,
-                            name: navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser',
-                            isPhone: navigator.userAgent.includes('Mobile'),
-                            loc: 'Current Location',
-                            ip: 'Current IP',
-                            lastActive: 'Active now',
-                            os: navigator.platform || 'Unknown',
-                            userAgent: navigator.userAgent
-                        });
+                    // 2. Get current session id from JWT
+                    const { data: sessionData } = await window.supabase.auth.getSession();
+                    let currentSessionId = null;
+                    if (sessionData && sessionData.session) {
+                        try {
+                            const payload = JSON.parse(atob(sessionData.session.access_token.split('.')[1]));
+                            currentSessionId = payload.session_id || null;
+                        } catch (e) { console.warn('Could not decode session_id', e); }
                     }
 
-                    document.getElementById('sessBadge').textContent = sessions.length + ' devices';
+                    // 3. Map sessions
+                    sessions = (data.sessions || []).map(function(s) {
+                        const isCurrent = s.id === currentSessionId;
+                        const name = /mobile/i.test(s.user_agent || '') ? 'Mobile Device' : 'Desktop Browser';
+                        const isPhone = /mobile/i.test(s.user_agent || '');
+                        return {
+                            id: s.id,
+                            isCurrent: isCurrent,
+                            name: name,
+                            isPhone: isPhone,
+                            loc: s.ip || 'Unknown',
+                            ip: s.ip || 'Unknown',
+                            lastActive: s.updated_at || 'Unknown',
+                            os: s.user_agent || 'Unknown'
+                        };
+                    });
+
                     renderSessions();
+                    document.getElementById('sessBadge').textContent = sessions.length + ' devices';
                 } catch (err) {
-                    console.error('Failed to load sessions:', err);
+                    console.error('loadSessions error:', err);
+                    document.getElementById('sessBody').innerHTML =
+                        '<div style="text-align:center;padding:40px;color:var(--muted)">Failed to load sessions. Please refresh.</div>';
                     showToast('Failed to load sessions', 'r');
                 }
             }
 
             function renderSessions() {
-                const curr = sessions.find(function(s) { return s.isCurrent; });
-                const others = sessions.filter(function(s) { return !s.isCurrent; });
+                const body = document.getElementById('sessBody');
+                if (!sessions.length) {
+                    body.innerHTML =
+                        '<div class="sess-empty"><div class="sess-empty-ico"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><h3>No active sessions</h3><p>You are not logged in on any device.</p></div>';
+                    return;
+                }
+
+                const curr = sessions.find(s => s.isCurrent);
+                const others = sessions.filter(s => !s.isCurrent);
+
                 let html = '';
-                if (curr) html +=
-                    '<div style="padding:4px 16px 6px;font-size:11px;font-weight:800;color:var(--muted2);text-transform:uppercase;letter-spacing:.08em">Current Device</div>' +
-                    sessCard(curr, true);
+                if (curr) {
+                    html +=
+                        '<div class="sess-section-hdr" style="padding-top:6px">Current Device</div>' +
+                        sessCard(curr);
+                }
                 if (others.length) {
+                    html += '<div class="sess-section-hdr">Other Devices</div>' +
+                        others.map(s => sessCard(s)).join('');
                     html +=
-                        '<div style="padding:12px 16px 6px;font-size:11px;font-weight:800;color:var(--muted2);text-transform:uppercase;letter-spacing:.08em">Other Devices</div>' +
-                        others.map(function(s) { return sessCard(s, false); }).join('');
-                    html +=
-                        '<div style="padding:12px 16px 20px"><button onclick="openMov(\'sessLogoutAllDlg\')" style="width:100%;padding:13px;border-radius:14px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log Out of All Other Sessions</button></div>';
+                        '<div style="margin:16px 16px 0;"><button onclick="openMov(\'sessLogoutAllDlg\')" class="sess-logout-all"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log Out of All Other Sessions</button></div>';
                 } else {
                     html +=
-                        '<div style="text-align:center;padding:40px 20px"><div style="width:60px;height:60px;border-radius:50%;background:rgba(74,222,128,.1);display:flex;align-items:center;justify-content:center;margin:0 auto 12px"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.8" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><div style="font-weight:800;font-size:16px">You\'re only logged in here</div><div style="color:var(--muted);font-size:13px;margin-top:6px">If you notice anything unusual, secure your account immediately.</div></div>';
+                        '<div style="text-align:center;padding:40px 20px;color:var(--muted)">You\'re only logged in on this device.</div>';
                 }
-                document.getElementById('sessBody').innerHTML = html;
-                document.getElementById('sessBadge').textContent = sessions.length + ' devices';
+                body.innerHTML = html;
             }
 
-            function sessCard(s, isCurr) {
+            function sessCard(s) {
                 const icon = s.isPhone ?
                     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>' :
                     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
-                return '<div class="sess-card' + (isCurr ? ' curr' : '') + '" id="sc-' + s.id + '">' +
-                    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
-                    '<div style="width:44px;height:44px;border-radius:14px;background:' + (isCurr ? 'var(--pdim)' :
-                        'var(--inp)') + ';border:1.5px solid ' + (isCurr ? 'var(--pbrd)' : 'var(--brd)') +
-                    ';display:flex;align-items:center;justify-content:center;color:' + (isCurr ? 'var(--p)' :
-                        'var(--muted)') + ';flex-shrink:0">' + icon + '</div>' +
-                    '<div style="flex:1"><div style="font-weight:800;font-size:15px">' + s.name +
-                    '</div><div style="font-size:12px;color:var(--muted);margin-top:2px">' + s.os + '</div></div>' +
-                    (isCurr ?
-                        '<span style="font-size:11px;font-weight:800;background:rgba(74,222,128,.12);color:#4ade80;padding:3px 10px;border-radius:100px;border:1px solid rgba(74,222,128,.25)">This Device</span>' :
-                        '') +
-                    '</div>' +
-                    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--muted)">' +
-                    '<div><div style="font-weight:700;color:var(--text);font-size:13px">' + s.loc +
-                    '</div><div>Location</div></div>' +
-                    '<div><div style="font-weight:700;color:var(--text);font-size:13px">' + s.ip +
-                    '</div><div>IP Address</div></div>' +
-                    '<div><div style="font-weight:700;color:' + (s.lastActive === 'Active now' ? '#4ade80' :
-                        'var(--text)') + ';font-size:13px">' + s.lastActive +
-                    '</div><div>Last Active</div></div>' +
-                    '<div><div style="font-weight:700;color:var(--text);font-size:13px">' + s.os +
-                    '</div><div>Platform</div></div></div>' +
-                    (!isCurr ?
-                        '<button onclick="askSessLogout(\'' + s.id +
-                        '\')" style="margin-top:12px;width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-size:13px;font-weight:800;cursor:pointer">Log Out This Device</button>' :
-                        '') +
-                    '</div>';
+                const lastActive = s.lastActive === 'Active now' ? 'Active now' :
+                    s.lastActive && s.lastActive !== 'Unknown' ? new Date(s.lastActive).toLocaleString() : 'Unknown';
+                return `<div class="sess-card${s.isCurrent ? ' current' : ''}">
+                    <div class="sess-card-top">
+                        <div class="sess-dev-ico">${icon}</div>
+                        <div class="sess-dev-info">
+                            <div class="sess-dev-name">${s.name}${s.isCurrent ? ' <span class="sess-curr-badge">Current</span>' : ''}</div>
+                            <div class="sess-dev-detail">${s.os || 'Unknown OS'}</div>
+                        </div>
+                    </div>
+                    <div class="sess-meta">
+                        <div class="sess-meta-item"><span class="sess-meta-lbl">IP</span><span class="sess-meta-val">${s.ip || 'Unknown'}</span></div>
+                        <div class="sess-meta-item"><span class="sess-meta-lbl">Last active</span><span class="sess-meta-val${s.lastActive === 'Active now' ? ' active-now' : ''}">${lastActive}</span></div>
+                    </div>
+                    ${!s.isCurrent ? `<button class="sess-logout-btn" onclick="askSessLogout('${s.id}')">Log Out This Device</button>` : ''}
+                </div>`;
             }
 
-            window.askSessLogout = function(id) { pendingSessId = id;
-                openMov('sessLogoutDlg'); };
+            window.askSessLogout = function(id) {
+                pendingSessId = id;
+                openMov('sessLogoutDlg');
+            };
 
             window.confirmSessLogout = function() {
                 closeMov('sessLogoutDlg');
-                sessions = sessions.filter(function(s) { return s.id !== pendingSessId; });
-                renderSessions();
-                showToast('Device logged out', 'g');
-                pendingSessId = null;
+                if (!pendingSessId) return;
+                window.supabase.functions.invoke('manage-sessions', {
+                    body: { action: 'revoke', session_id: pendingSessId }
+                }).then(function({ error }) {
+                    if (error) { showToast(error.message, 'r'); return; }
+                    sessions = sessions.filter(s => s.id !== pendingSessId);
+                    renderSessions();
+                    document.getElementById('sessBadge').textContent = sessions.length + ' devices';
+                    showToast('Device logged out', 'g');
+                    pendingSessId = null;
+                }).catch(function(err) { showToast(err.message, 'r');
+                    pendingSessId = null; });
             };
 
             window.confirmLogoutAll = function() {
                 closeMov('sessLogoutAllDlg');
-                sessions = sessions.filter(function(s) { return s.isCurrent; });
-                renderSessions();
-                showToast('All other sessions logged out', 'g');
+                // Need current session id
+                window.supabase.auth.getSession().then(function({ data }) {
+                    if (data && data.session) {
+                        let currentSessionId = null;
+                        try {
+                            const payload = JSON.parse(atob(data.session.access_token.split('.')[1]));
+                            currentSessionId = payload.session_id || null;
+                        } catch (e) {}
+                        if (currentSessionId) {
+                            window.supabase.functions.invoke('manage-sessions', {
+                                body: { action: 'revoke_others', current_session_id: currentSessionId }
+                            }).then(function({ error }) {
+                                if (error) { showToast(error.message, 'r'); return; }
+                                sessions = sessions.filter(s => s.isCurrent);
+                                renderSessions();
+                                document.getElementById('sessBadge').textContent = sessions.length +
+                                    ' devices';
+                                showToast('All other devices logged out', 'g');
+                            }).catch(function(err) { showToast(err.message, 'r'); });
+                        } else {
+                            showToast('Could not identify current session', 'r');
+                        }
+                    } else {
+                        showToast('No session found', 'r');
+                    }
+                });
             };
 
             window.openSessions = function() {
@@ -4183,7 +4230,7 @@
                 }
             };
 
-            // ─── DELETE ACCOUNT ──────────────────────────────
+            // ─── DELETE ACCOUNT (REAL EDGE FUNCTION) ────────────
             let deleteTimer = null;
             let deleteCountdown = 30;
 
@@ -4234,37 +4281,21 @@
             };
 
             window.confirmDeleteAction = async function() {
-  closeMov('deleteDlg');
-
-  try {
-    showToast('Deleting account...', 'p');
-
-    // 1. Call your Edge Function
-    const { data, error } = await window.supabase.functions.invoke('delete-account', {
-      method: 'POST',
-      headers: {
-        // The JWT token is automatically attached by supabase-js
-        // but we can also pass it explicitly if needed
-      },
-    });
-
-    if (error) throw new Error(error.message);
-
-    // 2. Sign out locally (supabase-js will clear session)
-    await window.supabase.auth.signOut();
-
-    // 3. Clear any app-specific local data
-    localStorage.clear();
-
-    // 4. Redirect to home
-    showToast('Account deleted successfully', 'g');
-    window.location.href = 'index.html';
-
-  } catch (err) {
-    console.error('Delete account error:', err);
-    showToast('Failed to delete account: ' + err.message, 'r');
-  }
-};
+                closeMov('deleteDlg');
+                try {
+                    const response = await window.supabase.functions.invoke('delete-account', {
+                        method: 'POST',
+                        body: {}
+                    });
+                    if (response.error) throw new Error(response.error.message);
+                    await window.AuthUser.signOut();
+                    localStorage.clear();
+                    showToast('Account deleted successfully', 'g');
+                    window.location.href = 'index.html';
+                } catch (err) {
+                    showToast('Failed to delete account: ' + err.message, 'r');
+                }
+            };
 
             // ─── AVATAR PICKER ──────────────────────────────────
             const AVATARS = ['assets/photo1.png', 'assets/photo2.png', 'assets/photo3.png', 'assets/photo4.png',
@@ -4303,7 +4334,6 @@
                     if (e) e.src = src;
                 });
 
-                // Update Supabase with new avatar
                 const user = getCurrentUser();
                 if (user) {
                     updateProfileSupabase({ avatar: src }).then(() => {
@@ -4338,7 +4368,6 @@
             window._dobSel = { month: null, day: null, year: null };
 
             window.openDOBModal = function() {
-                // Load existing DOB from user
                 const user = getCurrentUser();
                 if (user?.dob) {
                     const d = new Date(user.dob);
@@ -4438,7 +4467,6 @@
                     disp.style.color = 'var(--text)'; }
                 if (hint) hint.textContent = 'Age: ' + age + ' years old';
 
-                // Save to Supabase
                 const user = getCurrentUser();
                 if (user) {
                     updateProfileSupabase({ dob: dob.toISOString() }).then(() => {
@@ -4601,6 +4629,7 @@
 
             // ─── SETUP PROFILE SYNC ─────────────────────────────
             function setupSettingsSync() {
+                // Listen for storage events (from other tabs)
                 window.addEventListener('storage', function(e) {
                     if (e.key === 'freeupper_user_profile') {
                         const user = getCurrentUser();
@@ -4614,6 +4643,7 @@
                     }
                 });
 
+                // Listen for profileUpdated events (from edit profile)
                 document.addEventListener('profileUpdated', function(e) {
                     if (e.detail && e.detail.user) {
                         const user = e.detail.user;
@@ -4627,7 +4657,7 @@
                     }
                 });
 
-                // Also listen for AuthUser changes
+                // Listen for AuthUser changes via onChange (from auth.js)
                 if (window.AuthUser && window.AuthUser.onChange) {
                     window.AuthUser.onChange(function(user) {
                         if (user) {
@@ -4643,6 +4673,20 @@
                         }
                     });
                 }
+
+                // Also listen for the userRefreshed event from auth.js
+                document.addEventListener('userRefreshed', function() {
+                    const user = getCurrentUser();
+                    if (user) {
+                        updateNavAvatar();
+                        window.SettingsAPI.getVerificationStatus().then(status => {
+                            updateVfyStatusCard(status);
+                        }).catch(() => {});
+                        document.getElementById('acctUsername').textContent = '@' + (user.username || 'user');
+                        document.getElementById('acctEmail').textContent = user.email || 'user@email.com';
+                        document.getElementById('phoneInp').value = user.phone || '';
+                    }
+                });
             }
 
             setupSettingsSync();
@@ -4668,7 +4712,7 @@
 
             document.getElementById('sessBadge').textContent = '1 device';
 
-            console.log('🔥 Settings fully loaded with Supabase integration (profile.html flow)!');
+            console.log('🔥 Settings fully loaded with real session management and Edge Function integration.');
         })();
     </script>
 
