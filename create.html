@@ -1199,7 +1199,7 @@
                                 <button onclick="addPostTag()">Add</button>
                             </div>
                         </div>
-                        <!-- ✅ UPDATED: label and duration limit -->
+                        <!-- ✅ UPDATED LABEL: images/videos, 2 min -->
                         <div class="form-group">
                             <label class="form-lbl">Media <span class="text-muted text-xs">(up to 5 images/videos, videos ≤ 2 min)</span></label>
                             <div class="upload-row">
@@ -1366,11 +1366,9 @@
         const USER_KEY = 'freeupper_user_profile';
         const ALL_USERS_KEY = 'freeupper_all_users';
 
-        // ⚠️ SECURITY: These are now only used for display/transformation.
-        // The actual upload uses signed requests via the server.
-        // For production, rotate these presets and use signed uploads.
+        // Cloudinary config – rotate presets and switch to signed uploads in production
         const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
-        const CLOUDINARY_UPLOAD_PRESET = 'unsigned_demo'; // Rotate this in production!
+        const CLOUDINARY_UPLOAD_PRESET = 'unsigned_demo'; // Replace with your own
 
         const PREDEFINED_CATEGORIES = [
             "Technology", "Education", "Campus gist", "News & Updates",
@@ -1395,11 +1393,12 @@
             "Rental", "Repairs", "Maintenance", "Others"
         ];
 
-        const MAX_FILE_SIZE = 5 * 1024 * 1024;
-        const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
-        const MAX_POST_MEDIA = 5;
+        // ─── Limits ───
+        const MAX_FILE_SIZE = 5 * 1024 * 1024;          // 5 MB for images
+        const MAX_VIDEO_SIZE = 100 * 1024 * 1024;       // 100 MB for videos
+        const MAX_POST_MEDIA = 5;                       // total media (images + videos) per post
         const MAX_MARKET_IMAGES = 5;
-        const MAX_VIDEO_DURATION = 120; // 2 minutes
+        const MAX_VIDEO_DURATION = 120;                 // 2 minutes
 
         // ─── State ───
         let postTags = [];
@@ -1501,37 +1500,21 @@
         }
 
         // ═══════════════════════════════════════════════════
-        //  🔐 SECURE CLOUDINARY UPLOAD (Signed)
-        //  For production: Replace with your own backend endpoint
-        //  that signs upload requests with your API secret.
+        //  🔐 CLOUDINARY UPLOAD (signed-ready)
         // ═══════════════════════════════════════════════════
-
-        /**
-         * Upload a file to Cloudinary using a signed request.
-         * 
-         * 🔐 SECURITY: This uses a backend signing endpoint.
-         * Never expose your Cloudinary API secret in client code.
-         * 
-         * For local dev without a backend, you can use an unsigned preset,
-         * but for production you MUST implement signed uploads.
-         */
         async function uploadToCloudinary(file, mode = 'post') {
             const isVideo = file.type.startsWith('video');
             const resourceType = isVideo ? 'video' : 'image';
 
-            // ─── Option A: Signed upload via your backend (RECOMMENDED) ───
-            // Uncomment this block and implement your signing endpoint
+            // ─── Option A: Signed upload via backend (recommended) ───
+            // Uncomment and implement your signing endpoint
             /*
-            const signatureRes = await fetch('/api/cloudinary-sign', {
+            const sigRes = await fetch('/api/cloudinary-sign', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                resourceType,
-                mode,
-                filename: file.name
-              })
+              body: JSON.stringify({ resourceType, mode, filename: file.name })
             });
-            const { signature, timestamp, api_key, public_id, folder } = await signatureRes.json();
+            const { signature, timestamp, api_key, public_id, folder } = await sigRes.json();
 
             const formData = new FormData();
             formData.append('file', file);
@@ -1540,26 +1523,21 @@
             formData.append('signature', signature);
             formData.append('public_id', public_id);
             formData.append('folder', folder);
-
             const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
             const res = await fetch(url, { method: 'POST', body: formData });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
             */
 
-            // ─── Option B: Unsigned preset (DEV ONLY – rotate presets!) ───
-            // ⚠️ WARNING: This uses an unsigned upload preset.
-            // For production, implement signed uploads (Option A).
+            // ─── Option B: Unsigned preset (DEV only – rotate presets!) ───
             const preset = mode === 'market' ? 'market_upload' :
                 isVideo ? 'video_upload' : 'image_upload';
 
             const formData = new FormData();
             formData.append('file', file);
             formData.append('upload_preset', preset);
-
-            // Add moderation for posts (optional)
             if (mode === 'post') {
-                formData.append('moderation', 'cloudinary'); // Auto-moderate
+                formData.append('moderation', 'cloudinary'); // optional auto-moderation
             }
 
             const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
@@ -1608,7 +1586,7 @@
         }
 
         // ═══════════════════════════════════════════════════
-        //  TABS
+        //  TABS, CATEGORY, TAGS, CONDITION, PRICE, LOCATION
         // ═══════════════════════════════════════════════════
         function switchTab(el, tab) {
             document.querySelectorAll('.create-tab').forEach(t => t.classList.remove('active'));
@@ -1617,9 +1595,6 @@
             document.getElementById('panel-' + tab).classList.add('active');
         }
 
-        // ═══════════════════════════════════════════════════
-        //  CATEGORY MODAL
-        // ═══════════════════════════════════════════════════
         function openCategoryModal(mode) {
             categoryModalMode = mode;
             const grid = document.getElementById('categoryModalGrid');
@@ -1655,9 +1630,6 @@
             });
         }
 
-        // ═══════════════════════════════════════════════════
-        //  TAGS
-        // ═══════════════════════════════════════════════════
         function addPostTag() {
             const input = document.getElementById('postTagInput');
             const tag = input.value.trim();
@@ -1681,9 +1653,6 @@
             ).join('');
         }
 
-        // ═══════════════════════════════════════════════════
-        //  CONDITION
-        // ═══════════════════════════════════════════════════
         function selectCondition(el) {
             document.querySelectorAll('.condition-opt').forEach(c => c.classList.remove('active'));
             el.classList.add('active');
@@ -1691,9 +1660,6 @@
             document.getElementById('itemCondition').value = selectedCondition;
         }
 
-        // ═══════════════════════════════════════════════════
-        //  PRICE
-        // ═══════════════════════════════════════════════════
         function formatPrice(input) {
             let raw = input.value.replace(/[^0-9,]/g, '');
             let digits = raw.replace(/,/g, '');
@@ -1701,9 +1667,6 @@
             input.value = digits.length > 0 ? Number(digits).toLocaleString('en-US') : '';
         }
 
-        // ═══════════════════════════════════════════════════
-        //  LOCATION
-        // ═══════════════════════════════════════════════════
         function detectLocation() {
             const status = document.getElementById('locationStatus');
             if (!navigator.geolocation) {
@@ -1757,7 +1720,7 @@
         }
 
         // ═══════════════════════════════════════════════════
-        //  POST MEDIA
+        //  POST MEDIA (multiple images/videos)
         // ═══════════════════════════════════════════════════
         function previewPostMediaUrl() {
             const input = document.getElementById('postMediaUrlInput');
@@ -1835,7 +1798,6 @@
                 let duration = 0;
                 if (isVideo) {
                     duration = await getVideoDuration(file);
-                    // ✅ Updated: allow up to 2 minutes (120 seconds)
                     if (duration > MAX_VIDEO_DURATION) {
                         showToast(`Video must be ${MAX_VIDEO_DURATION} seconds or less`, 'o');
                         continue;
@@ -2331,10 +2293,10 @@
                 document.documentElement.setAttribute('data-theme', e.detail.theme);
             });
 
-            console.log('🔐 Cloudinary uploads are using unsigned presets (DEV MODE).');
-            console.log('📌 For production, implement signed uploads via your backend.');
-            console.log('📌 Rotate your upload presets before launch.');
-            console.log('📹 Video duration limit: 2 minutes (120s), file size: 100MB');
+            console.log('🔐 Cloudinary uploads: using unsigned presets (DEV).');
+            console.log('📌 For production: implement signed uploads & rotate presets.');
+            console.log('📹 Video limit: 2 min, 100 MB.');
+            console.log('🖼️ Max media per post: 5 (images/videos combined).');
         }
 
         init();
