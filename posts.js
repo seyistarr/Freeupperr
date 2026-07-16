@@ -15,10 +15,10 @@
     return raw ? JSON.parse(raw) : null;
   }
   
-  // ── mapPost: now reads `media` (JSONB) and falls back to old columns ──
+  // ── mapPost: prefer `media` array, fallback to old columns ──
   function mapPost(row, userLikes) {
     let media = row.media;
-    // If no media array, try to build one from old columns
+    // If media is null, undefined, or empty array, try old columns
     if (!media || !Array.isArray(media) || media.length === 0) {
       if (row.media_url) {
         media = [{ url: row.media_url, type: row.media_type || 'image' }];
@@ -26,6 +26,9 @@
         media = [];
       }
     }
+    // Ensure each media item has a type (default to 'image')
+    media = media.map(item => ({ ...item, type: item.type || 'image' }));
+    
     return {
       id: row.id,
       author: row.author || 'Anonymous',
@@ -34,9 +37,8 @@
       title: row.title,
       description: row.description || '',
       content: row.content || '',
-      media: media,                               // new: array of objects
-      // Keep old fields for backward compatibility
-      mediaUrl: row.media_url,
+      media: media,                               // primary
+      mediaUrl: row.media_url,                   // legacy
       mediaType: row.media_type,
       category: row.category || 'General',
       tags: row.tags || [],
@@ -61,6 +63,13 @@
       return [];
     }
     
+    // Debug logs – check browser console
+    if (rows && rows.length > 0) {
+      console.log('First post row:', rows[0]);
+      console.log('media column:', rows[0].media);
+      console.log('media_url column:', rows[0].media_url);
+    }
+    
     const user = getCurrentUser();
     let likedIds = new Set();
     if (user && user.isLoggedIn) {
@@ -71,7 +80,12 @@
       likedIds = new Set((likes || []).map(l => l.post_id));
     }
     
-    return rows.map(row => mapPost(row, likedIds));
+    const posts = rows.map(row => mapPost(row, likedIds));
+    if (posts.length > 0) {
+      console.log('First mapped post:', posts[0]);
+      console.log('media array:', posts[0].media);
+    }
+    return posts;
   }
   
   async function loadComments(postId) {
@@ -116,11 +130,11 @@
       tags: fields.tags || [],
       author: user.displayName || 'User',
       author_avatar: user.avatar || null,
-      // Save the new media array as JSONB
+      // Store the new media array as JSONB
       media: fields.media || []
     };
     
-    // Keep old columns for backward compatibility (optional)
+    // Also fill legacy columns for backward compatibility
     if (fields.media && fields.media.length > 0) {
       payload.media_url = fields.media[0].url || null;
       payload.media_type = fields.media[0].type || null;
@@ -129,6 +143,8 @@
       payload.media_type = fields.mediaType || null;
     }
     
+    console.log('Creating post with payload:', payload);
+    
     const { data, error } = await sb
       .from('posts')
       .insert(payload)
@@ -136,16 +152,11 @@
       .single();
     
     if (error) throw error;
+    console.log('Post created:', data);
     return mapPost(data, new Set());
   }
   
-  // ── market items: add `images` JSONB support ──
-  // This assumes you have a separate API for market items.
-  // If not, you can add a function here.
-  // For now, we'll just keep the existing functions for posts.
-  
-  // ... rest of posts.js (addComment, toggleLike, etc.) unchanged ...
-  
+  // ── Add comment ──
   async function addComment(postId, parentId, message) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -179,6 +190,7 @@
     };
   }
   
+  // ── Toggle like ──
   async function toggleLike(postId) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
