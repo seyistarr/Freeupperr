@@ -37,7 +37,7 @@
 
     <style>
         /* ══════════════════════════════════════════
-           CSS VARIABLES & RESET (unchanged from original)
+           CSS VARIABLES & RESET
         ══════════════════════════════════════════ */
         :root {
             --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -438,7 +438,7 @@
             max-width: 100%;
         }
 
-        /* ── Media (original full-width, no badges) ── */
+        /* ── Media (full-width, no badges) ── */
         .ig-media-container {
             width: calc(100% + 32px);
             margin-left: -16px;
@@ -491,7 +491,6 @@
             background: #7C3AED;
         }
 
-        /* YouTube embed inside full-width container */
         .ig-video-wrap .yt-wrap {
             position: relative;
             width: 100%;
@@ -607,7 +606,7 @@
             transform: translate(50%, -50%) scale(1);
         }
 
-        /* ── Carousel for multiple images (only when >1) ── */
+        /* ── Carousel (multiple images) ── */
         .media-carousel {
             width: calc(100% + 32px);
             margin-left: -16px;
@@ -1906,6 +1905,84 @@
             background: var(--inp);
         }
 
+        /* ── Market Filter Modal ── */
+        .market-filter-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 86;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            transform: translateY(100%);
+            transition: transform .35s cubic-bezier(.4, 0, .2, 1);
+            padding-top: var(--safe-top);
+        }
+        .market-filter-modal.open {
+            transform: translateY(0);
+        }
+        .market-filter-header {
+            position: relative;
+            z-index: 10;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--brd);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+        .market-filter-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .category-group-header {
+            font-weight: 700;
+            font-size: .72rem;
+            color: #7C3AED;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            padding: 12px 4px 6px;
+        }
+        .category-option {
+            width: 100%;
+            text-align: left;
+            padding: 12px;
+            border-radius: 10px;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            font-size: .9rem;
+            cursor: pointer;
+            transition: .12s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .category-option:hover {
+            background: var(--bg4);
+        }
+        .category-option.selected {
+            background: var(--pdim);
+            color: var(--p);
+            font-weight: 700;
+        }
+        .category-option.selected::after {
+            content: '✓';
+            color: var(--p);
+            font-weight: 700;
+        }
+        .market-filter-footer {
+            padding: 12px 16px;
+            border-top: 1px solid var(--brd);
+            flex-shrink: 0;
+        }
+        .market-filter-footer .btn-ghost {
+            width: 100%;
+            justify-content: center;
+        }
+
         /* ── Share Sheet ── */
         .sheet-backdrop {
             position: fixed;
@@ -2395,6 +2472,20 @@
         <div class="market-fullscreen-body" id="market-fullscreen-body"></div>
     </div>
 
+    <!-- ═══════════════════ MARKET FILTER MODAL ═══════════════════ -->
+    <div id="market-filter-modal" class="market-filter-modal">
+        <div class="market-filter-header">
+            <button id="market-filter-back-btn" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;padding:8px;border-radius:8px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+            </button>
+            <span class="font-heading font-bold" style="color:var(--text);">Select Category</span>
+        </div>
+        <div class="market-filter-body" id="market-filter-body"></div>
+        <div class="market-filter-footer">
+            <button class="btn-ghost" id="market-filter-clear-btn">Clear Filter</button>
+        </div>
+    </div>
+
     <!-- ═══════════════════ LIGHTBOX ═══════════════════ -->
     <div class="lightbox-modal" id="lightbox">
         <button class="lightbox-close">&times;</button>
@@ -2499,7 +2590,7 @@
             'use strict';
 
             // ───────────────────────────────────────────────────────────────
-            // DATA LAYER - SUPABASE (unchanged from original)
+            // DATA LAYER - SUPABASE
             // ───────────────────────────────────────────────────────────────
 
             const CVK = 'freeupper_comments_visible';
@@ -2527,7 +2618,7 @@
             let carouselTimers = {};
 
             // ───────────────────────────────────────────────────────────────
-            // HELPERS (identical to original)
+            // HELPERS
             // ───────────────────────────────────────────────────────────────
 
             function getCurrentUser() {
@@ -2583,6 +2674,7 @@
                 year: 'numeric' });
             }
 
+            // ── Icons ──
             function svgClock() { return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'; }
 
             function svgEye() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19V10"/><path d="M12 19V5"/><path d="M20 19V14"/></svg>'; }
@@ -2612,7 +2704,7 @@
             function bookmarkIcon(filled) { const color = filled ? 'var(--gold)' : 'none'; return `<svg width="19" height="19" viewBox="0 0 24 24" fill="${color}" stroke="var(--gold)" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`; }
 
             // ───────────────────────────────────────────────────────────────
-            // YOUTUBE HELPERS (unchanged)
+            // YOUTUBE HELPERS
             // ───────────────────────────────────────────────────────────────
 
             let ytState = {};
@@ -2723,7 +2815,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MEDIA HELPERS
+            // MEDIA HELPERS (supports both new `media` array and old `mediaUrl`)
             // ───────────────────────────────────────────────────────────────
 
             function isYouTubeUrl(url) {
@@ -2739,10 +2831,6 @@
                 return match ? match[1] : null;
             }
 
-            // ───────────────────────────────────────────────────────────────
-            // BUILD MEDIA HTML — original full-width style, no badges
-            // ───────────────────────────────────────────────────────────────
-
             function getMediaItems(post) {
                 if (post.media && Array.isArray(post.media) && post.media.length > 0) {
                     return post.media;
@@ -2753,16 +2841,18 @@
                 return [];
             }
 
+            // ───────────────────────────────────────────────────────────────
+            // BUILD MEDIA HTML (original full-width, no badges)
+            // ───────────────────────────────────────────────────────────────
+
             function buildMediaHTML(post, postId) {
                 const mediaItems = getMediaItems(post);
                 if (!mediaItems || mediaItems.length === 0) return '';
 
-                // Single item: use original full‑width layout (no badges)
                 if (mediaItems.length === 1) {
                     const item = mediaItems[0];
                     const isVideo = item.type === 'video' || (item.url && isYouTubeUrl(item.url));
                     if (isVideo) {
-                        // YouTube embed
                         if (isYouTubeUrl(item.url)) {
                             const ytId = extractYouTubeId(item.url);
                             if (ytId) {
@@ -2787,24 +2877,22 @@
                         `;
                             }
                         }
-                        // Direct video
                         return `<div class="ig-video-wrap" data-full-img="${item.url}">
                           <video src="${item.url}" playsinline webkit-playsinline="true" muted preload="metadata"></video>
                         </div>`;
                     } else {
-                        // Single image
                         return `<div class="ig-media-container" data-full-img="${item.url}">
                           <img src="${item.url}" class="fade-in-image" loading="lazy" onload="this.classList.add('loaded')" />
                         </div>`;
                     }
                 }
 
-                // ── Multiple items → carousel (no badges, full-width) ──
+                // Multiple items → carousel
                 return buildCarousel(mediaItems, postId);
             }
 
             // ───────────────────────────────────────────────────────────────
-            // CAROUSEL (no badges, auto-slide 3s, arrows visible for 3s)
+            // CAROUSEL (only for multiple items, no badges)
             // ───────────────────────────────────────────────────────────────
 
             function buildCarousel(mediaItems, postId) {
@@ -2846,7 +2934,6 @@
                             `<img src="${item.url}" class="fade-in-image" loading="lazy" onload="this.classList.add('loaded')" style="width:100%;height:100%;object-fit:contain;background:#000;" />`;
                     }
 
-                    // No badges added
                     return `<div class="media-carousel-slide" data-slide="${idx}">${contentHtml}</div>`;
                 }).join('');
 
@@ -2879,7 +2966,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // CAROUSEL EVENTS (auto-slide, arrows hide after 3s)
+            // CAROUSEL EVENTS
             // ───────────────────────────────────────────────────────────────
 
             function initCarousel(carouselEl) {
@@ -2896,7 +2983,6 @@
                 let current = 0;
                 const total = slides.length;
                 let autoTimer = null;
-                let arrowsVisible = true;
                 let arrowTimeout = null;
 
                 function goToSlide(idx) {
@@ -2914,7 +3000,6 @@
                     autoTimer = setInterval(nextSlide, 3000);
                 }
 
-                // Dot clicks
                 dots.forEach((dot, i) => {
                     dot.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -2923,7 +3008,6 @@
                     });
                 });
 
-                // Arrow clicks
                 if (leftArrow) {
                     leftArrow.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -2942,19 +3026,15 @@
                 function showArrowsTemporarily() {
                     if (leftArrow) leftArrow.classList.remove('hidden');
                     if (rightArrow) rightArrow.classList.remove('hidden');
-                    arrowsVisible = true;
                     if (arrowTimeout) clearTimeout(arrowTimeout);
                     arrowTimeout = setTimeout(() => {
                         if (leftArrow) leftArrow.classList.add('hidden');
                         if (rightArrow) rightArrow.classList.add('hidden');
-                        arrowsVisible = false;
                     }, 3000);
                 }
 
-                // Initially show arrows for 3s
                 setTimeout(showArrowsTemporarily, 500);
 
-                // Touch swipe
                 let startX = 0;
                 let isDragging = false;
                 carouselEl.addEventListener('touchstart', (e) => {
@@ -2991,10 +3071,69 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // REST OF THE APP (unchanged from original)
+            // VIDEO AUTO-PLAY
             // ───────────────────────────────────────────────────────────────
 
-            // ── FOLLOW, BOOKMARK, SHARE ── (identical to original)
+            let videoObserver = null;
+            let currentlyPlayingVideo = null;
+
+            function pauseAllVideos() {
+                document.querySelectorAll('video').forEach(vid => {
+                    if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
+                });
+                document.querySelectorAll('iframe').forEach(iframe => {
+                    if (iframe.src && iframe.src.includes('youtube.com/embed')) {
+                        const idx = iframe.id.replace('yt-', '');
+                        if (ytState[idx] && ytState[idx].playing) {
+                            ytPostMessage(idx, 'pauseVideo');
+                            ytState[idx].playing = false;
+                        }
+                    }
+                });
+                currentlyPlayingVideo = null;
+            }
+
+            function setupVideoAutoplay(scope) {
+                if (videoObserver) videoObserver.disconnect();
+                const root = scope || document;
+                const videoElements = root.querySelectorAll('.ig-video-wrap video, .media-carousel-slide video');
+
+                videoObserver = new IntersectionObserver((entries) => {
+                    let visibleVideo = null;
+                    for (const entry of entries) {
+                        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+                            visibleVideo = entry.target;
+                            break;
+                        }
+                    }
+
+                    root.querySelectorAll('.ig-video-wrap video, .media-carousel-slide video').forEach(vid => {
+                        if (vid === visibleVideo) return;
+                        if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
+                        if (currentlyPlayingVideo === vid) currentlyPlayingVideo = null;
+                    });
+
+                    if (visibleVideo) {
+                        if (visibleVideo.plyr) {
+                            if (currentlyPlayingVideo !== visibleVideo) {
+                                visibleVideo.plyr.play().catch(() => {});
+                                currentlyPlayingVideo = visibleVideo;
+                            }
+                        } else {
+                            if (currentlyPlayingVideo !== visibleVideo) {
+                                visibleVideo.play().catch(() => {});
+                                currentlyPlayingVideo = visibleVideo;
+                            }
+                        }
+                    }
+                }, { threshold: 0.5, rootMargin: '0px 0px -20px 0px' });
+
+                videoElements.forEach(vid => videoObserver.observe(vid));
+            }
+
+            // ───────────────────────────────────────────────────────────────
+            // FOLLOW, BOOKMARK, SHARE
+            // ───────────────────────────────────────────────────────────────
 
             async function loadFollows() {
                 const user = getCurrentUser();
@@ -3066,7 +3205,9 @@
                 }
             }
 
-            // ── POSTS, COMMENTS, LIKES ──
+            // ───────────────────────────────────────────────────────────────
+            // POSTS, COMMENTS, LIKES
+            // ───────────────────────────────────────────────────────────────
 
             async function reloadPosts() {
                 try {
@@ -3179,7 +3320,9 @@
                 showToast(newState ? 'Following ✓' : 'Unfollowed');
             };
 
-            // ── BUILD POST HTML ──
+            // ───────────────────────────────────────────────────────────────
+            // BUILD POST HTML
+            // ───────────────────────────────────────────────────────────────
 
             function buildPostHTML(p, index) {
                 const cu = getCurrentUser(),
@@ -3227,66 +3370,9 @@
               </article>`;
             }
 
-            // ── VIDEO AUTO-PLAY ──
-
-            let videoObserver = null;
-            let currentlyPlayingVideo = null;
-
-            function pauseAllVideos() {
-                document.querySelectorAll('video').forEach(vid => {
-                    if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
-                });
-                document.querySelectorAll('iframe').forEach(iframe => {
-                    if (iframe.src && iframe.src.includes('youtube.com/embed')) {
-                        const idx = iframe.id.replace('yt-', '');
-                        if (ytState[idx] && ytState[idx].playing) {
-                            ytPostMessage(idx, 'pauseVideo');
-                            ytState[idx].playing = false;
-                        }
-                    }
-                });
-                currentlyPlayingVideo = null;
-            }
-
-            function setupVideoAutoplay(scope) {
-                if (videoObserver) videoObserver.disconnect();
-                const root = scope || document;
-                const videoElements = root.querySelectorAll('.ig-video-wrap video, .media-carousel-slide video');
-
-                videoObserver = new IntersectionObserver((entries) => {
-                    let visibleVideo = null;
-                    for (const entry of entries) {
-                        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-                            visibleVideo = entry.target;
-                            break;
-                        }
-                    }
-
-                    root.querySelectorAll('.ig-video-wrap video, .media-carousel-slide video').forEach(vid => {
-                        if (vid === visibleVideo) return;
-                        if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
-                        if (currentlyPlayingVideo === vid) currentlyPlayingVideo = null;
-                    });
-
-                    if (visibleVideo) {
-                        if (visibleVideo.plyr) {
-                            if (currentlyPlayingVideo !== visibleVideo) {
-                                visibleVideo.plyr.play().catch(() => {});
-                                currentlyPlayingVideo = visibleVideo;
-                            }
-                        } else {
-                            if (currentlyPlayingVideo !== visibleVideo) {
-                                visibleVideo.play().catch(() => {});
-                                currentlyPlayingVideo = visibleVideo;
-                            }
-                        }
-                    }
-                }, { threshold: 0.5, rootMargin: '0px 0px -20px 0px' });
-
-                videoElements.forEach(vid => videoObserver.observe(vid));
-            }
-
-            // ── FEED RENDER ──
+            // ───────────────────────────────────────────────────────────────
+            // FEED RENDER
+            // ───────────────────────────────────────────────────────────────
 
             let uiPage = 'home',
                 currentCategoryFilter = '',
@@ -4252,12 +4338,21 @@
             }
 
             function buildMarketCard(item) {
-                const imageUrls = item.images && Array.isArray(item.images) ?
-                    item.images.map(img => typeof img === 'object' ? img.url : img) :
-                    (item.imageUrl ? [item.imageUrl] : []);
+                let imageUrls = [];
+                if (item.images && Array.isArray(item.images)) {
+                    if (item.images.length > 0 && typeof item.images[0] === 'object' && item.images[0].url) {
+                        imageUrls = item.images.map(img => img.url);
+                    } else {
+                        imageUrls = item.images;
+                    }
+                } else if (item.imageUrl) {
+                    imageUrls = [item.imageUrl];
+                }
+
                 const ih = imageUrls.length > 0 ?
                     `<img src="${imageUrls[0]}" alt="${escapeHtml(item.title)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'market-card-no-image\\'><svg width=\\'32\\' height=\\'32\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'#D1D5DB\\' stroke-width=\\'1.5\\'><rect x=\\'3\\' y=\\'3\\' width=\\'18\\' height=\\'18\\' rx=\\'2\\'/></svg></div>'">` :
                     '<div class="market-card-no-image"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>';
+
                 const seller = getAllUsers().find(u => u.id === item.seller_id) || { displayName: item
                         .seller_name || 'Seller', avatar: item.seller_avatar || '' };
                 const sr =
@@ -4292,12 +4387,22 @@
                 });
             }
 
+            // ── Market Fullscreen ──
+
             function openMarketFullscreen(itemId) {
                 const item = getMarketItems().find(i => i.id === itemId);
                 if (!item) return;
-                const imageUrls = item.images && Array.isArray(item.images) ?
-                    item.images.map(img => typeof img === 'object' ? img.url : img) :
-                    (item.imageUrl ? [item.imageUrl] : []);
+
+                let imageUrls = [];
+                if (item.images && Array.isArray(item.images)) {
+                    if (item.images.length > 0 && typeof item.images[0] === 'object' && item.images[0].url) {
+                        imageUrls = item.images.map(img => img.url);
+                    } else {
+                        imageUrls = item.images;
+                    }
+                } else if (item.imageUrl) {
+                    imageUrls = [item.imageUrl];
+                }
 
                 let sliderHtml = '';
                 if (imageUrls.length > 1) {
@@ -4399,6 +4504,33 @@
                 350);
             }
 
+            // ── Market Filter ──
+
+            function openMarketFilterModal() {
+                const body = document.getElementById('market-filter-body');
+                let html = '';
+                MARKET_CATEGORIES.forEach(group => {
+                    html += `<div class="category-group-header">${escapeHtml(group.group)}</div>`;
+                    if (group.items.length > 0) {
+                        group.items.forEach(item => {
+                            const fullName = `${group.group} - ${item}`;
+                            html +=
+                                `<button class="category-option ${marketCategoryFilter===fullName?'selected':''}" data-cat="${escapeHtml(fullName)}">${escapeHtml(item)}</button>`;
+                        });
+                    } else {
+                        html +=
+                            `<button class="category-option ${marketCategoryFilter===group.group?'selected':''}" data-cat="${escapeHtml(group.group)}">All ${escapeHtml(group.group)}</button>`;
+                    }
+                });
+                body.innerHTML = html;
+                body.querySelectorAll('.category-option').forEach(btn => btn.addEventListener('click', () =>
+                    filterMarketCategory(btn.dataset.cat)));
+                document.getElementById('market-filter-modal').classList.add('open');
+            }
+
+            function closeMarketFilterModal() { document.getElementById('market-filter-modal').classList
+                .remove('open'); }
+
             function filterMarketCategory(c) {
                 marketCategoryFilter = (marketCategoryFilter === c) ? '' : c;
                 const mc = document.getElementById('market-container');
@@ -4416,31 +4548,6 @@
                 }
                 closeMarketFilterModal();
             }
-
-            function openMarketFilterModal() {
-                const body = document.getElementById('market-filter-body');
-                let html = '';
-                MARKET_CATEGORIES.forEach(group => {
-                    html += `<div class="category-group-header" style="font-weight:700;font-size:.72rem;color:#7C3AED;text-transform:uppercase;letter-spacing:.06em;padding:12px 4px 6px;">${escapeHtml(group.group)}</div>`;
-                    if (group.items.length > 0) {
-                        group.items.forEach(item => {
-                            const fullName = `${group.group} - ${item}`;
-                            html +=
-                                `<button class="category-option ${marketCategoryFilter===fullName?'selected':''}" data-cat="${escapeHtml(fullName)}" style="width:100%;text-align:left;padding:12px;border-radius:10px;border:none;background:transparent;color:var(--muted);font-size:.9rem;cursor:pointer;transition:.12s;display:flex;align-items:center;justify-content:space-between;">${escapeHtml(item)}</button>`;
-                        });
-                    } else {
-                        html +=
-                            `<button class="category-option ${marketCategoryFilter===group.group?'selected':''}" data-cat="${escapeHtml(group.group)}" style="width:100%;text-align:left;padding:12px;border-radius:10px;border:none;background:transparent;color:var(--muted);font-size:.9rem;cursor:pointer;transition:.12s;display:flex;align-items:center;justify-content:space-between;">All ${escapeHtml(group.group)}</button>`;
-                    }
-                });
-                body.innerHTML = html;
-                body.querySelectorAll('.category-option').forEach(btn => btn.addEventListener('click', () =>
-                    filterMarketCategory(btn.dataset.cat)));
-                document.getElementById('market-filter-modal').classList.add('open');
-            }
-
-            function closeMarketFilterModal() { document.getElementById('market-filter-modal').classList
-                .remove('open'); }
 
             // ── TABS / NAV ──
 
@@ -4719,6 +4826,7 @@
                         closeMarketFullscreen();
                         closeExploreFullscreen();
                         closeFilterDrawer();
+                        closeMarketFilterModal();
                     }
                 });
 
@@ -4766,7 +4874,6 @@
             if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
             else init();
 
-            // Expose functions
             window.toggleReaction = toggleReaction;
             window.openExplorePost = openExplorePost;
             window.closeExploreFullscreen = closeExploreFullscreen;
@@ -4781,6 +4888,8 @@
             window.reloadData = reloadData;
             window.refreshHome = refreshHome;
             window.closeMarketFullscreen = closeMarketFullscreen;
+            window.openMarketFilterModal = openMarketFilterModal;
+            window.closeMarketFilterModal = closeMarketFilterModal;
 
         })();
     </script>
