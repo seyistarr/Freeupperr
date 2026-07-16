@@ -19,8 +19,12 @@
             padding: 0;
             -webkit-tap-highlight-color: transparent;
         }
-        button, input, select, textarea { font-family: inherit; }
-        svg { overflow: visible; }
+        button, input, select, textarea {
+            font-family: inherit;
+        }
+        svg {
+            overflow: visible;
+        }
 
         :root {
             --p: #8b5cf6;
@@ -510,7 +514,6 @@
             opacity: .4;
         }
 
-        /* ─── PROFILE TABS ─────────────────────────────────── */
         .profile-tabs {
             display: flex;
             border-top: 1px solid var(--brd);
@@ -520,6 +523,7 @@
             top: 56px;
             background: var(--bg);
             z-index: 20;
+            transition: background .3s, border-color .3s;
             overflow-x: auto;
             scrollbar-width: none;
         }
@@ -669,7 +673,8 @@
             align-items: center;
             gap: 3px;
         }
-        .grid-card .delete-btn, .grid-card .remove-btn {
+        .grid-card .delete-btn,
+        .grid-card .remove-btn {
             position: absolute;
             top: 8px;
             right: 8px;
@@ -697,7 +702,8 @@
         .grid-card .remove-btn:hover {
             background: rgba(220, 38, 38, .8);
         }
-        .grid-card .delete-btn svg, .grid-card .remove-btn svg {
+        .grid-card .delete-btn svg,
+        .grid-card .remove-btn svg {
             width: 14px;
             height: 14px;
             stroke: currentColor;
@@ -887,7 +893,6 @@
             max-width: 230px;
         }
 
-        /* ─── BOTTOM NAV ──────────────────────────────────── */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -1035,7 +1040,6 @@
         .flex-wrap { flex-wrap: wrap; }
         .items-center { align-items: center; }
 
-        /* ─── MODAL SHEETS ────────────────────────────────── */
         .mfs {
             position: fixed;
             top: 0;
@@ -1056,6 +1060,7 @@
             opacity: 1;
             transform: translateY(0);
         }
+
         .fs-hdr {
             display: flex;
             justify-content: space-between;
@@ -1097,6 +1102,7 @@
             stroke-linecap: round;
             stroke-linejoin: round;
         }
+
         .fs-x {
             width: 38px;
             height: 38px;
@@ -2081,6 +2087,13 @@
         .dlg-ico.danger svg {
             stroke: var(--danger);
         }
+        .dlg-ico.warn {
+            background: rgba(251, 146, 60, .1);
+            border: 1.5px solid rgba(251, 146, 60, .25);
+        }
+        .dlg-ico.warn svg {
+            stroke: var(--warn);
+        }
         .dlg-ttl {
             font-size: 18px;
             font-weight: 800;
@@ -2131,6 +2144,21 @@
             opacity: 1;
         }
         .dlg-danger:not(:disabled):hover {
+            opacity: .88;
+        }
+        .dlg-warn-btn {
+            width: 100%;
+            padding: 13px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #fb923c, #ea580c);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 800;
+            border: none;
+            cursor: pointer;
+            transition: opacity .15s;
+        }
+        .dlg-warn-btn:hover {
             opacity: .88;
         }
 
@@ -2230,8 +2258,12 @@
         }
 
         /* ─── Avatar Viewer ─── */
-        #avatarViewerModal { z-index: 12000; }
-        #avViewerImg { transition: transform .15s ease; }
+        #avatarViewerModal {
+            z-index: 12000;
+        }
+        #avViewerImg {
+            transition: transform .15s ease;
+        }
     </style>
 </head>
 <body>
@@ -2481,7 +2513,7 @@
         </div>
     </div>
 
-    <!-- Share Modal (QR) -->
+    <!-- Share/QR Modal -->
     <div class="mfs" id="shareModal">
         <div id="shareQRView" style="display:flex;flex-direction:column;height:100%">
             <div style="display:flex;justify-content:space-between;align-items:center;padding:clamp(52px,10vw,64px) clamp(16px,5vw,24px) 14px">
@@ -2689,13 +2721,10 @@
     <script src="settings.js"></script>
 
     <script>
-        // ═════════════════════════════════════════════════════════════════
-        // PROFILE CONTROLLER – full implementation with 3‑grid tabs, edit pen, avatar viewer, follow logic, modals
-        // ═════════════════════════════════════════════════════════════════
         (function() {
             'use strict';
 
-            // ─── STATE ────────────────────────────────────────────────
+            // ─── STATE ────────────────────────────────────────
             var targetUserId = null;
             var isOwner = false;
             var currentUser = null;
@@ -2708,7 +2737,7 @@
             var pendingPills = [];
             var dobSel = { month: null, day: null, year: null };
 
-            // ─── FOLLOW MODAL STATE ──────────────────────────────────
+            // ─── FOLLOW MODAL STATE ──────────────────────────
             var _fwPageIdx = 0;
             var _fwPageState = [
                 { list: [], query: '', loaded: false },
@@ -2723,7 +2752,7 @@
             var FW_BUFFER = 4;
             var followModalData = null;
 
-            // ─── HELPERS ─────────────────────────────────────────────
+            // ─── HELPERS ────────────────────────────────────────
             function fmtNum(n) {
                 if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M';
                 if (n >= 1000) return (n / 1000).toFixed(1).replace('.0', '') + 'K';
@@ -2751,7 +2780,7 @@
                 return isNaN(n) ? 0 : n;
             }
 
-            // ─── GET CURRENT USER ─────────────────────────────────────
+            // ─── GET CURRENT USER ──────────────────────────────────
             function getCurrentUser() {
                 if (window.AuthUser && window.AuthUser.getCurrentUser) {
                     return window.AuthUser.getCurrentUser();
@@ -2759,13 +2788,15 @@
                 return null;
             }
 
-            // ─── GET TARGET USER ID ──────────────────────────────────
+            // ─── GET TARGET USER ID ──────────────────────────────
             function getTargetUserFromUrl() {
                 var params = new URLSearchParams(window.location.search);
-                return params.get('uid') || null;
+                var uid = params.get('uid');
+                if (uid) return uid;
+                return null;
             }
 
-            // ─── FETCH PROFILE ────────────────────────────────────────
+            // ─── FETCH PROFILE ────────────────────────────────────
             async function fetchProfile(userId) {
                 var result = await window.sb
                     .from('profiles')
@@ -2776,27 +2807,36 @@
                 return result.data;
             }
 
-            // ─── FETCH FOLLOW COUNTS ───────────────────────────────
+            // ─── FETCH FOLLOW COUNTS ─────────────────────────────
             async function fetchFollowCounts(userId) {
                 try {
-                    var fResult = await window.sb.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId);
-                    var gResult = await window.sb.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId);
-                    if (fResult.error) throw fResult.error;
-                    if (gResult.error) throw gResult.error;
-                    return { followers: fResult.count || 0, following: gResult.count || 0 };
+                    var followersResult = await window.sb
+                        .from('follows')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('following_id', userId);
+                    var followingResult = await window.sb
+                        .from('follows')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('follower_id', userId);
+                    if (followersResult.error) throw followersResult.error;
+                    if (followingResult.error) throw followingResult.error;
+                    return { followers: followersResult.count || 0, following: followingResult.count || 0 };
                 } catch (err) {
                     console.warn('Failed to fetch follow counts:', err);
                     return { followers: 0, following: 0 };
                 }
             }
 
-            // ─── FETCH FOLLOWERS / FOLLOWING ─────────────────────────
+            // ─── FETCH FOLLOWERS / FOLLOWING LISTS ──────────────
             async function fetchFollowers(userId) {
                 var result = await window.sb
                     .from('follows')
                     .select('follower_id, profiles:follower_id (id, username, display_name, avatar_url, verified)')
                     .eq('following_id', userId);
-                if (result.error) return [];
+                if (result.error) {
+                    console.warn('fetchFollowers error:', result.error);
+                    return [];
+                }
                 return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
             }
 
@@ -2805,11 +2845,14 @@
                     .from('follows')
                     .select('following_id, profiles:following_id (id, username, display_name, avatar_url, verified)')
                     .eq('follower_id', userId);
-                if (result.error) return [];
+                if (result.error) {
+                    console.warn('fetchFollowing error:', result.error);
+                    return [];
+                }
                 return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
             }
 
-            // ─── CHECK FOLLOW ────────────────────────────────────────
+            // ─── CHECK FOLLOW (single direction) ────────────────
             async function isFollowing(followerId, targetId) {
                 var result = await window.sb
                     .from('follows')
@@ -2817,20 +2860,26 @@
                     .eq('follower_id', followerId)
                     .eq('following_id', targetId)
                     .maybeSingle();
-                if (result.error) return false;
+                if (result.error) {
+                    console.warn('isFollowing error:', result.error);
+                    return false;
+                }
                 return !!result.data;
             }
 
-            // ─── GET RELATIONSHIP (both directions) ──────────────────
+            // ─── GET RELATIONSHIP (both directions) ─────────────
             async function getRelationship(myId, targetId) {
                 var results = await Promise.all([
                     window.sb.from('follows').select('id').eq('follower_id', myId).eq('following_id', targetId).maybeSingle(),
                     window.sb.from('follows').select('id').eq('follower_id', targetId).eq('following_id', myId).maybeSingle()
                 ]);
-                return { iFollowThem: !!results[0].data, theyFollowMe: !!results[1].data };
+                return {
+                    iFollowThem: !!results[0].data,
+                    theyFollowMe: !!results[1].data
+                };
             }
 
-            // ─── TOGGLE FOLLOW ──────────────────────────────────────
+            // ─── TOGGLE FOLLOW ──────────────────────────────────
             async function toggleFollow(targetId) {
                 var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
@@ -2839,44 +2888,76 @@
                 }
                 var currently = await isFollowing(user.id, targetId);
                 if (currently) {
-                    await window.sb.from('follows').delete().eq('follower_id', user.id).eq('following_id', targetId);
+                    await window.sb
+                        .from('follows')
+                        .delete()
+                        .eq('follower_id', user.id)
+                        .eq('following_id', targetId);
                 } else {
-                    await window.sb.from('follows').insert({ follower_id: user.id, following_id: targetId });
+                    await window.sb
+                        .from('follows')
+                        .insert({ follower_id: user.id, following_id: targetId });
                 }
                 return !currently;
             }
 
-            // ─── FETCH USER CONTENT ─────────────────────────────────
+            // ─── FETCH USER LIKES / BOOKMARKS / SHARES ──────────
             async function getUserLikes(userId) {
-                var res = await window.sb.from('post_likes').select('post_id').eq('user_id', userId);
-                if (res.error) return [];
-                return res.data.map(function(l) { return l.post_id; });
+                var result = await window.sb
+                    .from('post_likes')
+                    .select('post_id')
+                    .eq('user_id', userId);
+                if (result.error) {
+                    console.warn('getUserLikes error:', result.error);
+                    return [];
+                }
+                return result.data.map(function(l) { return l.post_id; });
             }
+
             async function getUserBookmarks(userId) {
-                var res = await window.sb.from('bookmarks').select('post_id').eq('user_id', userId);
-                if (res.error) return [];
-                return res.data.map(function(b) { return b.post_id; });
+                var result = await window.sb
+                    .from('bookmarks')
+                    .select('post_id')
+                    .eq('user_id', userId);
+                if (result.error) {
+                    console.warn('getUserBookmarks error:', result.error);
+                    return [];
+                }
+                return result.data.map(function(b) { return b.post_id; });
             }
+
             async function getUserShares(userId) {
-                var res = await window.sb.from('shares').select('post_id').eq('user_id', userId);
-                if (res.error) return [];
-                return res.data.map(function(s) { return s.post_id; });
+                var result = await window.sb
+                    .from('shares')
+                    .select('post_id')
+                    .eq('user_id', userId);
+                if (result.error) {
+                    console.warn('getUserShares error:', result.error);
+                    return [];
+                }
+                return result.data.map(function(s) { return s.post_id; });
             }
+
+            // ─── FETCH USER MARKET ITEMS ─────────────────────────
             async function getUserMarketItems(userId) {
-                var res = await window.sb
+                var result = await window.sb
                     .from('market_items')
                     .select('*')
                     .eq('seller_id', userId)
                     .order('created_at', { ascending: false });
-                if (res.error) return [];
-                return res.data || [];
+                if (result.error) {
+                    console.warn('getUserMarketItems error:', result.error);
+                    return [];
+                }
+                return result.data || [];
             }
 
-            // ─── LOAD POSTS ─────────────────────────────────────────
+            // ─── LOAD POSTS ──────────────────────────────────────
             async function loadPosts() {
                 try {
-                    allPosts = await window.PostsAPI.loadAllPosts();
-                    return allPosts;
+                    var posts = await window.PostsAPI.loadAllPosts();
+                    allPosts = posts;
+                    return posts;
                 } catch (err) {
                     console.error('Failed to load posts:', err);
                     showToast('Failed to load posts', 'r');
@@ -2888,7 +2969,7 @@
                 return allPosts.filter(function(p) { return p.authorId === userId; });
             }
 
-            // ─── RENDER PROFILE ─────────────────────────────────────
+            // ─── RENDER PROFILE ──────────────────────────────────
             async function renderProfile() {
                 var user = getCurrentUser();
                 currentUser = user;
@@ -2911,10 +2992,13 @@
                     targetUser = profile;
 
                     var counts = await fetchFollowCounts(targetId);
+
                     await loadPosts();
                     var userPosts = getUserPosts(targetId);
 
-                    var likedIds = [], bookmarkedIds = [], sharedIds = [];
+                    var likedIds = [],
+                        bookmarkedIds = [],
+                        sharedIds = [];
                     if (isOwner && user && user.isLoggedIn) {
                         likedIds = await getUserLikes(targetId);
                         bookmarkedIds = await getUserBookmarks(targetId);
@@ -2930,7 +3014,7 @@
                 }
             }
 
-            // ─── UPDATE UI ───────────────────────────────────────────
+            // ─── UPDATE UI ───────────────────────────────────────
             function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, sharedIds, marketItems) {
                 var avatarSrc = getAvatar(profile);
                 document.getElementById('profileAvatar').src = avatarSrc;
@@ -2952,8 +3036,11 @@
                 }).join('');
 
                 var badge = document.getElementById('verifiedBadge');
-                if (profile.verified) badge.classList.remove('hidden');
-                else badge.classList.add('hidden');
+                if (profile.verified) {
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
 
                 document.getElementById('statPosts').textContent = fmtNum(userPosts.length);
                 document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
@@ -2961,7 +3048,7 @@
 
                 renderActionRow();
 
-                // ─── Private account handling ──────────────────────
+                // ─── Private account handling ────────────────────
                 var isPrivate = !!profile.is_private;
                 var viewerBlocked = isPrivate && !isOwner;
                 var tabs = ['panel-posts','panel-love','panel-share','panel-star','panel-market'];
@@ -2985,7 +3072,7 @@
                     renderTab(activeTab, { userPosts: userPosts, likedIds: likedIds, bookmarkedIds: bookmarkedIds, sharedIds: sharedIds, marketItems: marketItems });
                 }
 
-                // ─── Owner-only elements ──────────────────────────
+                // ─── Owner-only elements ────────────────────────
                 document.querySelectorAll('.fw-owner-only').forEach(function(el) {
                     el.style.display = isOwner ? '' : 'none';
                 });
@@ -2999,7 +3086,7 @@
                 else followModal.classList.remove('is-owner');
             }
 
-            // ─── ACTION ROW ──────────────────────────────────────────
+            // ─── ACTION ROW ──────────────────────────────────────
             async function renderActionRow() {
                 var row = document.getElementById('actionRow');
                 if (isOwner) { row.innerHTML = ''; return; }
@@ -3017,11 +3104,8 @@
                     rel = await getRelationship(user.id, targetUserId);
                 } catch (e) { console.warn('getRelationship failed', e); }
 
-                var label = rel.iFollowThem && rel.theyFollowMe ? 'Friends' :
-                            rel.iFollowThem ? 'Following' :
-                            rel.theyFollowMe ? 'Follow Back' : 'Follow';
-                var cls = rel.iFollowThem && rel.theyFollowMe ? 'act-follow friends' :
-                          rel.iFollowThem ? 'act-follow fstate' : 'act-follow';
+                var label = followBtnLabel(rel);
+                var cls = followBtnClass(rel);
 
                 row.innerHTML =
                     '<button class="act-btn ' + cls + '" id="followBtn" data-following="' + rel.iFollowThem + '">' +
@@ -3031,10 +3115,26 @@
                 document.getElementById('followBtn').addEventListener('click', handleFollow);
             }
 
-            // ─── HANDLE FOLLOW (optimistic) ─────────────────────────
+            function followBtnLabel(rel) {
+                if (rel.iFollowThem && rel.theyFollowMe) return 'Friends';
+                if (rel.iFollowThem) return 'Following';
+                if (rel.theyFollowMe) return 'Follow Back';
+                return 'Follow';
+            }
+
+            function followBtnClass(rel) {
+                if (rel.iFollowThem && rel.theyFollowMe) return 'act-follow friends';
+                if (rel.iFollowThem) return 'act-follow fstate';
+                return 'act-follow';
+            }
+
+            // ─── HANDLE FOLLOW (optimistic, NO count refetch) ──
             window.handleFollow = async function() {
                 var user = getCurrentUser();
-                if (!user || !user.isLoggedIn) { showToast('Please sign in to follow', 'o'); return; }
+                if (!user || !user.isLoggedIn) {
+                    showToast('Please sign in to follow', 'o');
+                    return;
+                }
 
                 var btn = document.getElementById('followBtn');
                 if (!btn || btn.dataset.busy === '1') return;
@@ -3051,37 +3151,33 @@
                 followersEl.classList.add('cnt-bounce');
                 setTimeout(function() { followersEl.classList.remove('cnt-bounce'); }, 350);
 
+                // Optimistic button flip
                 btn.textContent = wasFollowing ? 'Follow' : 'Following';
                 btn.className = 'act-btn ' + (wasFollowing ? 'act-follow' : 'act-follow fstate');
                 btn.dataset.following = String(!wasFollowing);
 
                 try {
                     var newState = await toggleFollow(targetUserId);
-                    var results = await Promise.all([
-                        fetchFollowCounts(targetUserId),
-                        getRelationship(user.id, targetUserId)
-                    ]);
-                    var counts = results[0];
-                    var rel = results[1];
 
-                    followersEl.textContent = fmtNum(counts.followers);
-                    document.getElementById('statFollowing').textContent = fmtNum(counts.following);
+                    // Re-fetch relationship to get mutual/follow-back status
+                    var rel = await getRelationship(user.id, targetUserId);
 
-                    var label = rel.iFollowThem && rel.theyFollowMe ? 'Friends' :
-                                rel.iFollowThem ? 'Following' :
-                                rel.theyFollowMe ? 'Follow Back' : 'Follow';
-                    var cls = rel.iFollowThem && rel.theyFollowMe ? 'act-follow friends' :
-                              rel.iFollowThem ? 'act-follow fstate' : 'act-follow';
+                    var label = followBtnLabel(rel);
+                    var cls = followBtnClass(rel);
+
                     btn.textContent = label;
                     btn.className = 'act-btn ' + cls;
                     btn.dataset.following = String(rel.iFollowThem);
 
+                    // Invalidate follow modal cache so it re-fetches on next open
                     followModalData = null;
 
                     var toastMsg = rel.iFollowThem && rel.theyFollowMe ? 'You are now friends' :
                         newState ? 'Following ✓' : 'Unfollowed';
                     showToast(toastMsg, newState ? 'g' : 'o');
+
                 } catch (err) {
+                    // Rollback optimistic UI
                     followersEl.textContent = fmtNum(currentCount);
                     btn.textContent = wasFollowing ? 'Following' : 'Follow';
                     btn.className = 'act-btn ' + (wasFollowing ? 'act-follow fstate' : 'act-follow');
@@ -3094,7 +3190,7 @@
                 }
             };
 
-            // ─── TAB SWITCHING ──────────────────────────────────────
+            // ─── TABS ─────────────────────────────────────────────
             window.switchTab = function(el, tab) {
                 document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
                 el.classList.add('active');
@@ -3104,26 +3200,35 @@
                 renderTab(tab);
             };
 
-            // ─── RENDER TAB ──────────────────────────────────────────
             function renderTab(tab, data) {
                 var container = document.getElementById('panel-' + tab);
                 if (!container) return;
-                var userPosts     = data?.userPosts     || getUserPosts(targetUserId);
-                var likedIds      = data?.likedIds      || [];
-                var sharedIds     = data?.sharedIds     || [];
+                var userPosts = data?.userPosts || getUserPosts(targetUserId);
+                var likedIds = data?.likedIds || [];
                 var bookmarkedIds = data?.bookmarkedIds || [];
-                var marketItems   = data?.marketItems   || [];
+                var sharedIds = data?.sharedIds || [];
+                var marketItems = data?.marketItems || [];
 
                 switch (tab) {
-                    case 'posts':  renderPosts(container, userPosts); break;
-                    case 'love':   renderLove(container, userPosts, likedIds); break;
-                    case 'share':  renderShare(container, userPosts, sharedIds); break;
-                    case 'star':   renderStar(container, userPosts, bookmarkedIds); break;
-                    case 'market': renderMarket(container, marketItems); break;
+                    case 'posts':
+                        renderPosts(container, userPosts);
+                        break;
+                    case 'love':
+                        renderLove(container, userPosts, likedIds);
+                        break;
+                    case 'share':
+                        renderShare(container, userPosts, sharedIds);
+                        break;
+                    case 'star':
+                        renderStar(container, userPosts, bookmarkedIds);
+                        break;
+                    case 'market':
+                        renderMarket(container, marketItems);
+                        break;
                 }
             }
 
-            // ─── RENDER POSTS (grid-3) ─────────────────────────────
+            // ─── RENDER POSTS (grid-3) ────────────────────────────
             function renderPosts(container, userPosts) {
                 if (!userPosts.length) {
                     container.innerHTML =
@@ -3150,7 +3255,7 @@
                     '</div>';
             }
 
-            // ─── RENDER SHARE (grid-3) ─────────────────────────────
+            // ─── RENDER SHARE (grid-3) ───────────────────────────
             function renderShare(container, userPosts, sharedIds) {
                 var sharedPosts = userPosts.filter(function(p) { return sharedIds.indexOf(p.id) !== -1; });
                 if (!sharedPosts.length) {
@@ -3164,7 +3269,7 @@
                     '</div>';
             }
 
-            // ─── RENDER STAR (grid-3) ─────────────────────────────
+            // ─── RENDER STAR (grid-3) ────────────────────────────
             function renderStar(container, userPosts, bookmarkedIds) {
                 var bookmarkedPosts = userPosts.filter(function(p) { return bookmarkedIds.indexOf(p.id) !== -1; });
                 if (!bookmarkedPosts.length) {
@@ -3190,16 +3295,18 @@
                     '</div>';
             }
 
-            // ─── BUILD GRID POST CARD ──────────────────────────────
+            // ─── BUILD GRID POST CARD ────────────────────────────
             function buildGridPostCard(post, idx, actionType, sourceTab) {
                 var mediaHtml = '';
                 if (post.mediaType === 'image' && post.mediaUrl) {
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\">' + escapeHtml(post.title) + '</div>\'">';
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
                     var ytMatch = post.mediaUrl.match(/(?:youtube\.com\/embed\/|youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/);
-                    mediaHtml = ytMatch ?
-                        '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy">' :
-                        '<video src="' + post.mediaUrl + '" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>';
+                    if (ytMatch) {
+                        mediaHtml = '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\">' + escapeHtml(post.title) + '</div>\'">';
+                    } else {
+                        mediaHtml = '<video src="' + post.mediaUrl + '" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>';
+                    }
                 } else {
                     mediaHtml = '<div class="no-media">' + escapeHtml(post.title) + '</div>';
                 }
@@ -3215,7 +3322,8 @@
                     actionBtn = '<button class="remove-btn" onclick="event.stopPropagation();removeFromTab(' + post.id + ', \'' + sourceTab + '\')" title="' + label + '"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
                 }
 
-                var videoBadge = post.mediaType === 'video' ?
+                var isVideo = post.mediaType === 'video';
+                var videoBadge = isVideo ?
                     '<div class="video-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>' :
                     '';
 
@@ -3229,23 +3337,26 @@
                     '</div>';
             }
 
-            // ─── BUILD GRID LOVE CARD ──────────────────────────────
+            // ─── BUILD GRID LOVE CARD ────────────────────────────
             function buildGridLoveCard(post, idx) {
                 var mediaHtml = '';
                 if (post.mediaType === 'image' && post.mediaUrl) {
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\">' + escapeHtml(post.title) + '</div>\'">';
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
                     var ytMatch = post.mediaUrl.match(/(?:youtube\.com\/embed\/|youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/);
-                    mediaHtml = ytMatch ?
-                        '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy">' :
-                        '<video src="' + post.mediaUrl + '" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>';
+                    if (ytMatch) {
+                        mediaHtml = '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\">' + escapeHtml(post.title) + '</div>\'">';
+                    } else {
+                        mediaHtml = '<video src="' + post.mediaUrl + '" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>';
+                    }
                 } else {
                     mediaHtml = '<div class="no-media">' + escapeHtml(post.title) + '</div>';
                 }
 
                 var authorName = post.author || 'Anonymous';
                 var authorAvatar = post.authorAvatar || getAvatar(currentUser);
-                var videoBadge = post.mediaType === 'video' ?
+                var isVideo = post.mediaType === 'video';
+                var videoBadge = isVideo ?
                     '<div class="video-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>' :
                     '';
 
@@ -3259,7 +3370,7 @@
                     '</div>';
             }
 
-            // ─── BUILD MARKET CARD ──────────────────────────────────
+            // ─── BUILD MARKET CARD ─────────────────────────────
             function buildMarketCard(item, isOwner) {
                 var imgUrl = item.images && item.images.length ? item.images[0] : '';
                 var sellerName = item.seller_name || 'Seller';
@@ -3482,7 +3593,7 @@
                 }
             };
 
-            // ─── QR SCANNER ──────────────────────────────────────
+            // ─── QR SCANNER ─────────────────────────────────────
             var camStream = null;
             var scanRAF = null;
 
