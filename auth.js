@@ -5,21 +5,24 @@
   'use strict';
 
   // ─── CONFIG ────────────────────────────────────────────────
-  const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptanRxaWRpcnBtbmVnenZtaWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4ODk0OTAsImV4cCI6MjA5OTQ2NTQ5MH0.Lfxtyexew35L3uzy3bxPcBHogsnlMcAVOE-Ho50FZpk';
+  var SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptanRxaWRpcnBtbmVnenZtaWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4ODk0OTAsImV4cCI6MjA5OTQ2NTQ5MH0.Lfxtyexew35L3uzy3bxPcBHogsnlMcAVOE-Ho50FZpk';
 
-  const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
-  const CLOUDINARY_AVATAR_PRESET = 'image_upload';
+  var CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
+  var CLOUDINARY_AVATAR_PRESET = 'image_upload';
 
-  const USER_KEY = 'freeupper_user_profile';
-  const ALL_USERS_KEY = 'freeupper_all_users';
+  var USER_KEY = 'freeupper_user_profile';
+  var ALL_USERS_KEY = 'freeupper_all_users';
 
   if (!window.supabase) {
     console.error('auth.js: include the Supabase CDN script before this file.');
     return;
   }
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   window.sb = sb;
+
+  // ─── CHANGE LISTENERS ──────────────────────────────────────
+  var changeListeners = [];
 
   // ─── LOCAL PROFILE MIRROR ──────────────────────────────────
   function defaultGuest() {
@@ -39,23 +42,41 @@
 
   function readLocalUser() {
     try {
-      const raw = localStorage.getItem(USER_KEY);
+      var raw = localStorage.getItem(USER_KEY);
       return raw ? JSON.parse(raw) : null;
-    } catch (e) { return null; }
+    } catch (e) {
+      return null;
+    }
   }
 
   function writeLocalUser(user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
     registerInDirectory(user);
     updateAllAvatarEls(user.avatar);
-    document.dispatchEvent(new CustomEvent('profileUpdated', { detail: { user } }));
+    document.dispatchEvent(new CustomEvent('profileUpdated', { detail: { user: user } }));
+    // notify all registered onChange listeners
+    for (var i = 0; i < changeListeners.length; i++) {
+      try {
+        changeListeners[i](user);
+      } catch (e) {
+        console.error('Error in onChange listener:', e);
+      }
+    }
   }
 
   function registerInDirectory(user) {
-    let all = [];
-    try { all = JSON.parse(localStorage.getItem(ALL_USERS_KEY) || '[]'); } catch (e) {}
-    const idx = all.findIndex(u => u.id === user.id);
-    const rec = {
+    var all = [];
+    try {
+      all = JSON.parse(localStorage.getItem(ALL_USERS_KEY) || '[]');
+    } catch (e) {}
+    var idx = -1;
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].id === user.id) {
+        idx = i;
+        break;
+      }
+    }
+    var rec = {
       id: user.id,
       username: user.username,
       displayName: user.displayName,
@@ -63,43 +84,82 @@
       avatar: user.avatar,
       verified: user.verified || false
     };
-    if (idx >= 0) all[idx] = rec; else all.push(rec);
+    if (idx >= 0) {
+      all[idx] = rec;
+    } else {
+      all.push(rec);
+    }
     localStorage.setItem(ALL_USERS_KEY, JSON.stringify(all));
   }
 
   function updateAllAvatarEls(src) {
-    document.querySelectorAll('.side-av, .nav-av, #profileAvatar, #editAv, #qrAvatar').forEach(el => {
-      if (el) el.src = src;
-    });
+    var els = document.querySelectorAll('.side-av, .nav-av, #profileAvatar, #editAv, #qrAvatar');
+    for (var i = 0; i < els.length; i++) {
+      if (els[i]) els[i].src = src;
+    }
   }
 
   function getCurrentUser() {
-    const cached = readLocalUser();
+    var cached = readLocalUser();
     if (cached) return cached;
-    const guest = defaultGuest();
+    var guest = defaultGuest();
     localStorage.setItem(USER_KEY, JSON.stringify(guest));
     return guest;
   }
 
-  // ─── SYNC SUPABASE SESSION → LOCAL PROFILE ──────────────
+  // ─── SYNC SUPABASE SESSION -> LOCAL PROFILE (SAFE) ──────
   async function syncSessionToLocal(session) {
     if (!session || !session.user) return;
-    const authUser = session.user;
+    var authUser = session.user;
 
-    let { data: profile } = await sb.from('profiles').select('*').eq('id', authUser.id).single();
+    // Use maybeSingle() to avoid throwing on zero rows
+    var result = await sb
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .maybeSingle();
+
+    var profile = result.data;
+    var fetchError = result.error;
+
+    if (fetchError) {
+      // A real network/RLS error – do NOT assume missing row, skip to avoid overwriting
+      console.warn('syncSessionToLocal: profile fetch failed, skipping sync', fetchError);
+      return;
+    }
 
     if (!profile) {
-      const insertPayload = {
+      // Confirmed: row does not exist. Create it with safe insert (not upsert).
+      var insertPayload = {
         id: authUser.id,
         display_name: authUser.user_metadata?.display_name || authUser.email.split('@')[0],
         username: authUser.user_metadata?.username || authUser.email.split('@')[0],
         avatar_url: authUser.user_metadata?.avatar_url || null
       };
-      const { data: created } = await sb.from('profiles').upsert(insertPayload).select().single();
-      profile = created || insertPayload;
+      var insertResult = await sb
+        .from('profiles')
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (insertResult.error) {
+        // Possibly race condition: row was created by another tab/process – re-fetch.
+        var refetchResult = await sb
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+        if (refetchResult.error || !refetchResult.data) {
+          console.error('syncSessionToLocal: could not create or find profile', insertResult.error);
+          return;
+        }
+        profile = refetchResult.data;
+      } else {
+        profile = insertResult.data;
+      }
     }
 
-    const localUser = {
+    var localUser = {
       id: authUser.id,
       username: profile.username || '',
       displayName: profile.display_name || 'User',
@@ -120,23 +180,40 @@
     writeLocalUser(localUser);
   }
 
-  sb.auth.onAuthStateChange((_event, session) => {
-    if (session) syncSessionToLocal(session);
-    else {
-      const guest = defaultGuest();
+  // ─── PUBLIC: updateCurrentUser ────────────────────────────
+  function updateCurrentUser(partialUpdates) {
+    var current = getCurrentUser();
+    var merged = Object.assign({}, current, partialUpdates);
+    writeLocalUser(merged);
+    return merged;
+  }
+
+  function onChange(fn) {
+    if (typeof fn === 'function') {
+      changeListeners.push(fn);
+    }
+  }
+
+  // ─── SUPABASE AUTH STATE ──────────────────────────────────
+  sb.auth.onAuthStateChange(function (_event, session) {
+    if (session) {
+      syncSessionToLocal(session);
+    } else {
+      var guest = defaultGuest();
       localStorage.setItem(USER_KEY, JSON.stringify(guest));
       updateAllAvatarEls(guest.avatar);
     }
   });
 
-  sb.auth.getSession().then(({ data }) => {
+  sb.auth.getSession().then(function (_ref) {
+    var data = _ref.data;
     if (data.session) syncSessionToLocal(data.session);
   });
 
   // ─── AUTH MODAL ─────────────────────────────────────────────
-  let mode = 'signup';
-  let pendingAction = null;
-  let modalInitialized = false;
+  var mode = 'signup';
+  var pendingAction = null;
+  var modalInitialized = false;
 
   function renderAuthForm() {
     document.getElementById('fu-auth-error').textContent = '';
@@ -155,9 +232,9 @@
       document.getElementById('fu-auth-switch').innerHTML =
         "Don't have an account? <button id=\"fu-switch-btn\" type=\"button\">Sign Up</button>";
     }
-    const switchBtn = document.getElementById('fu-switch-btn');
+    var switchBtn = document.getElementById('fu-switch-btn');
     if (switchBtn) {
-      switchBtn.addEventListener('click', function() {
+      switchBtn.addEventListener('click', function () {
         mode = mode === 'signup' ? 'signin' : 'signup';
         renderAuthForm();
       });
@@ -165,27 +242,26 @@
   }
 
   function openModal(startMode, onSuccess) {
-    console.log('🔓 Opening auth modal, mode:', startMode);
+    console.log('Opening auth modal, mode:', startMode);
     mode = startMode || 'signup';
     pendingAction = onSuccess || null;
-    
-    // Ensure modal exists
+
     if (!modalInitialized) {
       createAuthModal();
     }
-    
+
     renderAuthForm();
-    const overlay = document.getElementById('fu-auth-overlay');
+    var overlay = document.getElementById('fu-auth-overlay');
     if (overlay) {
       overlay.classList.add('open');
       document.body.style.overflow = 'hidden';
     } else {
-      console.error('❌ Modal overlay not found!');
+      console.error('Auth modal overlay not found');
     }
   }
 
   function closeModal() {
-    const overlay = document.getElementById('fu-auth-overlay');
+    var overlay = document.getElementById('fu-auth-overlay');
     if (overlay) {
       overlay.classList.remove('open');
       document.body.style.overflow = '';
@@ -196,7 +272,7 @@
   function createAuthModal() {
     if (modalInitialized) return;
     if (!document.body) {
-      console.warn('⚠️ document.body not ready, retrying...');
+      console.warn('document.body not ready, retrying...');
       setTimeout(createAuthModal, 100);
       return;
     }
@@ -205,7 +281,7 @@
       return;
     }
 
-    const modalCSS = `
+    var modalCSS = `
     #fu-auth-overlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.7);
       backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;
       opacity:0;pointer-events:none;transition:opacity .25s;padding:20px}
@@ -224,7 +300,6 @@
     .fu-field input{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--brd2,rgba(255,255,255,.12));
       background:var(--inp,rgba(255,255,255,.05));color:var(--text,#fff);font-size:14px;outline:none;box-sizing:border-box}
     .fu-field input:focus{border-color:#8b5cf6}
-    /* ── Password toggle ── */
     .fu-password-wrapper{position:relative}
     .fu-password-wrapper input{padding-right:44px}
     .fu-password-toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);
@@ -233,7 +308,6 @@
       transition:color .2s,background .2s}
     .fu-password-toggle:hover{color:var(--text,#fff);background:rgba(255,255,255,.05)}
     .fu-password-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-    /* ── end password toggle ── */
     #fu-auth-error{font-size:12px;color:#f87171;min-height:16px;margin-bottom:6px}
     .fu-btn-primary{width:100%;padding:13px;border-radius:12px;border:none;cursor:pointer;
       background:linear-gradient(135deg,#8b5cf6,#6c3fc5);color:#fff;font-weight:800;font-size:14px;
@@ -250,13 +324,13 @@
     `;
 
     if (!document.getElementById('fu-auth-styles')) {
-      const style = document.createElement('style');
+      var style = document.createElement('style');
       style.id = 'fu-auth-styles';
       style.textContent = modalCSS;
       document.head.appendChild(style);
     }
 
-    const overlay = document.createElement('div');
+    var overlay = document.createElement('div');
     overlay.id = 'fu-auth-overlay';
     overlay.innerHTML = `
       <div id="fu-auth-card">
@@ -270,12 +344,10 @@
         <div class="fu-field fu-password-wrapper">
           <input id="fu-password" type="password" placeholder="Password" />
           <button id="fu-password-toggle" type="button" class="fu-password-toggle" aria-label="Toggle password visibility">
-            <!-- Eye Icon (Show Password) -->
             <svg class="icon-eye" viewBox="0 0 24 24">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
               <circle cx="12" cy="12" r="3"/>
             </svg>
-            <!-- Eye Slashed Icon (Hide Password) - hidden by default -->
             <svg class="icon-eye-off" viewBox="0 0 24 24" style="display:none;">
               <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
               <line x1="1" y1="1" x2="23" y2="23"/>
@@ -319,17 +391,19 @@
     document.body.appendChild(overlay);
 
     document.getElementById('fu-auth-close').addEventListener('click', closeModal);
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closeModal();
+    });
 
     document.getElementById('fu-submit-btn').addEventListener('click', handleAuthSubmit);
     document.getElementById('fu-google-btn').addEventListener('click', handleGoogleAuth);
 
-    // ─── Password visibility toggle ────────────────────────
-    const passwordInput = document.getElementById('fu-password');
-    const toggleBtn = document.getElementById('fu-password-toggle');
+    // Password visibility toggle
+    var passwordInput = document.getElementById('fu-password');
+    var toggleBtn = document.getElementById('fu-password-toggle');
     if (passwordInput && toggleBtn) {
-      const eyeIcon = toggleBtn.querySelector('.icon-eye');
-      const eyeOffIcon = toggleBtn.querySelector('.icon-eye-off');
+      var eyeIcon = toggleBtn.querySelector('.icon-eye');
+      var eyeOffIcon = toggleBtn.querySelector('.icon-eye-off');
 
       toggleBtn.addEventListener('click', function () {
         if (passwordInput.type === 'password') {
@@ -345,15 +419,15 @@
     }
 
     modalInitialized = true;
-    console.log('✅ Auth modal created');
+    console.log('Auth modal created');
   }
 
   // ─── AUTH HANDLERS ──────────────────────────────────────────
   async function handleAuthSubmit() {
-    const errEl = document.getElementById('fu-auth-error');
-    const email = document.getElementById('fu-email').value.trim();
-    const password = document.getElementById('fu-password').value;
-    const name = document.getElementById('fu-name').value.trim();
+    var errEl = document.getElementById('fu-auth-error');
+    var email = document.getElementById('fu-email').value.trim();
+    var password = document.getElementById('fu-password').value;
+    var name = document.getElementById('fu-name').value.trim();
     errEl.textContent = '';
 
     if (!email || !password) {
@@ -361,25 +435,35 @@
       return;
     }
 
-    const btn = document.getElementById('fu-submit-btn');
+    var btn = document.getElementById('fu-submit-btn');
     btn.disabled = true;
-    btn.textContent = 'Please wait…';
+    btn.textContent = 'Please wait...';
 
     try {
       if (mode === 'signup') {
-        const { data, error } = await sb.auth.signUp({
-          email, password,
-          options: { data: { display_name: name || email.split('@')[0], username: (name || email.split('@')[0]).toLowerCase().replace(/\s+/g, '') } }
+        var result = await sb.auth.signUp({
+          email: email,
+          password: password,
+          options: {
+            data: {
+              display_name: name || email.split('@')[0],
+              username: (name || email.split('@')[0]).toLowerCase().replace(/\s+/g, '')
+            }
+          }
         });
-        if (error) throw error;
-        if (data.session) await syncSessionToLocal(data.session);
+        if (result.error) throw result.error;
+        if (result.data.session) await syncSessionToLocal(result.data.session);
       } else {
-        const { data, error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        await syncSessionToLocal(data.session);
+        var signInResult = await sb.auth.signInWithPassword({ email: email, password: password });
+        if (signInResult.error) throw signInResult.error;
+        await syncSessionToLocal(signInResult.data.session);
       }
       closeModal();
-      if (pendingAction) { const fn = pendingAction; pendingAction = null; fn(); }
+      if (pendingAction) {
+        var fn = pendingAction;
+        pendingAction = null;
+        fn();
+      }
     } catch (e) {
       errEl.textContent = e.message || 'Something went wrong.';
     } finally {
@@ -389,22 +473,19 @@
   }
 
   async function handleGoogleAuth() {
-    await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.href } });
+    await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href }
+    });
   }
 
   // ─── PROTECTED ACTION WRAPPER ────────────────────────────
   function requireAuth(fn) {
-    const user = getCurrentUser();
-    console.log('🔐 requireAuth called, user logged in:', user.isLoggedIn);
-    
+    var user = getCurrentUser();
     if (user && user.isLoggedIn) {
-      console.log('✅ User is logged in, executing action');
       fn();
       return;
     }
-    
-    console.log('❌ User is not logged in, showing signup modal');
-    // Ensure modal exists before opening
     if (!modalInitialized) {
       createAuthModal();
     }
@@ -413,33 +494,47 @@
 
   // ─── CLOUDINARY AVATAR UPLOAD ────────────────────────────
   async function uploadAvatar(file, onProgress) {
-    const user = getCurrentUser();
-    if (!user.isLoggedIn) { openModal('signup'); return null; }
+    var user = getCurrentUser();
+    if (!user.isLoggedIn) {
+      openModal('signup');
+      return null;
+    }
 
-    if (!file.type.startsWith('image/')) throw new Error('Please choose an image file');
-    if (file.size > 5 * 1024 * 1024) throw new Error('Image too large (max 5MB)');
+    if (!file.type.startsWith('image/')) {
+      throw new Error('Please choose an image file');
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('Image too large (max 5MB)');
+    }
 
-    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-    const formData = new FormData();
+    var url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
+    var formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_AVATAR_PRESET);
 
-    const data = await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
+    var data = await new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
       xhr.open('POST', url);
-      xhr.upload.onprogress = (e) => {
+      xhr.upload.onprogress = function (e) {
         if (onProgress && e.lengthComputable) {
           onProgress(Math.round((e.loaded / e.total) * 100));
         }
       };
-      xhr.onload = () => {
+      xhr.onload = function () {
         try {
-          const res = JSON.parse(xhr.responseText);
-          if (xhr.status >= 200 && xhr.status < 300 && !res.error) resolve(res);
-          else reject(new Error(res.error?.message || 'Avatar upload failed'));
-        } catch (e) { reject(new Error('Avatar upload failed')); }
+          var res = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300 && !res.error) {
+            resolve(res);
+          } else {
+            reject(new Error(res.error?.message || 'Avatar upload failed'));
+          }
+        } catch (e) {
+          reject(new Error('Avatar upload failed'));
+        }
       };
-      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.onerror = function () {
+        reject(new Error('Network error during upload'));
+      };
       xhr.send(formData);
     });
 
@@ -447,7 +542,7 @@
 
     await sb.from('profiles').update({ avatar_url: data.secure_url }).eq('id', user.id);
 
-    const updated = { ...user, avatar: data.secure_url };
+    var updated = Object.assign({}, user, { avatar: data.secure_url });
     writeLocalUser(updated);
     return data.secure_url;
   }
@@ -458,7 +553,6 @@
 
   // ─── INIT ──────────────────────────────────────────────────
   function initAuth() {
-    // Create modal on DOM ready
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', createAuthModal);
     } else {
@@ -473,13 +567,14 @@
     uploadAvatar: uploadAvatar,
     signOut: signOut,
     openModal: openModal,
-    closeModal: closeModal
+    closeModal: closeModal,
+    updateCurrentUser: updateCurrentUser,
+    onChange: onChange
   };
 
   window.getCurrentUser = getCurrentUser;
 
-  // Init
   initAuth();
 
-  console.log('✅ AuthUser is ready:', window.AuthUser);
+  console.log('AuthUser is ready:', window.AuthUser);
 })();
