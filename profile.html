@@ -457,6 +457,12 @@
             box-shadow: none;
             border: 1.5px solid var(--brd2);
         }
+        .act-follow.friends {
+            background: var(--pdim);
+            color: var(--pl) !important;
+            box-shadow: none;
+            border: 1.5px solid var(--pbrd);
+        }
         .act-msg {
             background: var(--inp);
             border: 1.5px solid var(--brd2);
@@ -2311,7 +2317,7 @@
         }
         @keyframes cntBounce {
             0% { transform: scale(1); }
-            40% { transform: scale(1.25); }
+            40% { transform: scale(1.25); color: var(--p); }
             100% { transform: scale(1); }
         }
 
@@ -2812,6 +2818,15 @@
                 );
             }
 
+            function parseFollowerCount(text) {
+                if (!text) return 0;
+                var t = text.trim().toUpperCase();
+                if (t.endsWith('M')) return Math.round(parseFloat(t) * 1000000);
+                if (t.endsWith('K')) return Math.round(parseFloat(t) * 1000);
+                var n = parseInt(t.replace(/[^\d]/g, ''), 10);
+                return isNaN(n) ? 0 : n;
+            }
+
             // ─── GET CURRENT USER ──────────────────────────────────
             function getCurrentUser() {
                 if (window.AuthUser && window.AuthUser.getCurrentUser) {
@@ -2884,7 +2899,7 @@
                 return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
             }
 
-            // ─── CHECK / TOGGLE FOLLOW ───────────────────────────
+            // ─── CHECK FOLLOW (single direction) ────────────────
             async function isFollowing(followerId, targetId) {
                 var result = await window.sb
                     .from('follows')
@@ -2899,6 +2914,21 @@
                 return !!result.data;
             }
 
+            // ─── GET RELATIONSHIP (both directions) ─────────────
+            async function getRelationship(myId, targetId) {
+                var results = await Promise.all([
+                    window.sb.from('follows').select('id').eq('follower_id', myId).eq('following_id', targetId).maybeSingle(),
+                    window.sb.from('follows').select('id').eq('follower_id', targetId).eq('following_id', myId).maybeSingle()
+                ]);
+                var mine = results[0];
+                var theirs = results[1];
+                return {
+                    iFollowThem: !!mine.data,
+                    theyFollowMe: !!theirs.data
+                };
+            }
+
+            // ─── TOGGLE FOLLOW ──────────────────────────────────
             async function toggleFollow(targetId) {
                 var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
@@ -3081,9 +3111,15 @@
                     });
                     document.getElementById('statFollowersBox').classList.add('locked');
                     document.getElementById('statFollowingBox').classList.add('locked');
+                    // Remove click listeners
+                    document.getElementById('statFollowersBox').onclick = null;
+                    document.getElementById('statFollowingBox').onclick = null;
                 } else {
                     document.getElementById('statFollowersBox').classList.remove('locked');
                     document.getElementById('statFollowingBox').classList.remove('locked');
+                    // Re-bind
+                    document.getElementById('statFollowersBox').onclick = function() { openFollowModal('followers'); };
+                    document.getElementById('statFollowingBox').onclick = function() { openFollowModal('following'); };
                     renderTab(activeTab, { userPosts: userPosts, likedIds: likedIds, bookmarkedIds: bookmarkedIds, sharedIds: sharedIds, marketItems: marketItems });
                 }
 
@@ -3094,24 +3130,16 @@
 
                 document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
                 document.getElementById('fsTabFgCount').textContent = fmtNum(counts.following);
-                document.getElementById('fsTabFrCount').textContent = fmtNum(0);
+                // Friends count will be set when modal data loads
+                document.getElementById('fsTabFrCount').textContent = '';
 
                 // Update follow modal owner class
                 var followModal = document.getElementById('followModal');
                 if (isOwner) followModal.classList.add('is-owner');
                 else followModal.classList.remove('is-owner');
-
-                // Re-bind stat clicks if not locked
-                if (!viewerBlocked) {
-                    document.getElementById('statFollowersBox').onclick = function() { openFollowModal('followers'); };
-                    document.getElementById('statFollowingBox').onclick = function() { openFollowModal('following'); };
-                } else {
-                    document.getElementById('statFollowersBox').onclick = null;
-                    document.getElementById('statFollowingBox').onclick = null;
-                }
             }
 
-            // ─── ACTION ROW ──────────────────────────────────────
+            // ─── ACTION ROW (with relationship detection) ──────
             async function renderActionRow() {
                 var row = document.getElementById('actionRow');
                 if (isOwner) { row.innerHTML = ''; return; }
@@ -3124,38 +3152,96 @@
                     return;
                 }
 
-                var iFollowThem = false, theyFollowMe = false;
+                var rel = { iFollowThem: false, theyFollowMe: false };
                 try {
-                    iFollowThem = await isFollowing(user.id, targetUserId);
-                    theyFollowMe = await isFollowing(targetUserId, user.id);
-                } catch (e) { console.warn('follow state check failed', e); }
+                    rel = await getRelationship(user.id, targetUserId);
+                } catch (e) {
+                    console.warn('getRelationship failed', e);
+                }
 
-                var label = 'Follow', cls = 'act-follow';
-                if (iFollowThem) { label = 'Following'; cls = 'act-follow fstate'; }
-                else if (theyFollowMe) { label = 'Follow Back'; cls = 'act-follow'; }
-
+                var label = followBtnLabel(rel);
+                var cls = followBtnClass(rel);
                 row.innerHTML =
-                    '<button class="act-btn ' + cls + '" id="followBtn" onclick="handleFollow()">' + label + '</button>' +
+                    '<button class="act-btn ' + cls + '" id="followBtn" data-following="' + rel.iFollowThem + '">' +
+                    label + '</button>' +
                     '<button class="act-btn act-msg" onclick="showToast(\'Messaging coming soon\',\'p\')">Message</button>';
+
+                document.getElementById('followBtn').addEventListener('click', handleFollow);
             }
 
+            function followBtnLabel(rel) {
+                if (rel.iFollowThem && rel.theyFollowMe) return 'Friends';
+                if (rel.iFollowThem) return 'Following';
+                if (rel.theyFollowMe) return 'Follow Back';
+                return 'Follow';
+            }
+
+            function followBtnClass(rel) {
+                if (rel.iFollowThem && rel.theyFollowMe) return 'act-follow friends';
+                if (rel.iFollowThem) return 'act-follow fstate';
+                return 'act-follow';
+            }
+
+            // ─── HANDLE FOLLOW (with optimistic update) ────────
             window.handleFollow = async function() {
                 var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) { showToast('Please sign in to follow', 'o'); return; }
 
                 var btn = document.getElementById('followBtn');
-                if (btn) btn.disabled = true;
+                if (!btn || btn.dataset.busy === '1') return;
+
+                var wasFollowing = btn.dataset.following === 'true';
+                btn.dataset.busy = '1';
+                btn.style.pointerEvents = 'none';
+                btn.style.opacity = '.65';
+
+                // Optimistic UI: update follower count
+                var followersEl = document.getElementById('statFollowers');
+                var currentCount = parseFollowerCount(followersEl.textContent);
+                var optimisticCount = wasFollowing ? Math.max(0, currentCount - 1) : currentCount + 1;
+                followersEl.textContent = fmtNum(optimisticCount);
+                followersEl.classList.add('cnt-bounce');
+                setTimeout(function() { followersEl.classList.remove('cnt-bounce'); }, 350);
+
+                // Optimistic button flip
+                btn.textContent = wasFollowing ? 'Follow' : 'Following';
+                btn.className = 'act-btn ' + (wasFollowing ? 'act-follow' : 'act-follow fstate');
+                btn.dataset.following = String(!wasFollowing);
+
                 try {
                     var newState = await toggleFollow(targetUserId);
-                    await renderActionRow();
-                    var counts = await fetchFollowCounts(targetUserId);
+
+                    // Reconcile with real data
+                    var results = await Promise.all([
+                        fetchFollowCounts(targetUserId),
+                        getRelationship(user.id, targetUserId)
+                    ]);
+                    var counts = results[0];
+                    var rel = results[1];
+
                     document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
                     document.getElementById('statFollowing').textContent = fmtNum(counts.following);
-                    showToast(newState ? 'Following ✓' : 'Unfollowed', newState ? 'g' : 'o');
+                    btn.textContent = followBtnLabel(rel);
+                    btn.className = 'act-btn ' + followBtnClass(rel);
+                    btn.dataset.following = String(rel.iFollowThem);
+
+                    // Invalidate modal cache so it refetches on next open
+                    followModalData = null;
+
+                    var toastMsg = rel.iFollowThem && rel.theyFollowMe ? 'You are now friends' :
+                        newState ? 'Following ✓' : 'Unfollowed';
+                    showToast(toastMsg, newState ? 'g' : 'o');
                 } catch (err) {
+                    // Rollback optimistic UI
+                    followersEl.textContent = fmtNum(currentCount);
+                    btn.textContent = wasFollowing ? 'Following' : 'Follow';
+                    btn.className = 'act-btn ' + (wasFollowing ? 'act-follow fstate' : 'act-follow');
+                    btn.dataset.following = String(wasFollowing);
                     showToast(err.message || 'Failed to follow', 'r');
                 } finally {
-                    if (btn) btn.disabled = false;
+                    btn.dataset.busy = '0';
+                    btn.style.pointerEvents = '';
+                    btn.style.opacity = '';
                 }
             };
 
@@ -3197,7 +3283,7 @@
                 }
             }
 
-            // ─── RENDER POSTS ────────────────────────────────────
+            // ─── RENDER POSTS (3‑col grid) ──────────────────────
             function renderPosts(container, userPosts) {
                 if (!userPosts.length) {
                     container.innerHTML =
@@ -3209,7 +3295,7 @@
                     '<div class="grid-3">' + userPosts.map(function(p, i) { return buildGridPostCard(p, i, 'delete'); }).join('') + '</div>';
             }
 
-            // ─── RENDER LOVE ─────────────────────────────────────
+            // ─── RENDER LOVE (3‑col grid) ───────────────────────
             function renderLove(container, userPosts, likedIds) {
                 var likedPosts = userPosts.filter(function(p) { return likedIds.indexOf(p.id) !== -1; });
                 if (!likedPosts.length) {
@@ -3222,7 +3308,7 @@
                     '<div class="grid-3">' + likedPosts.map(function(p, i) { return buildGridLoveCard(p, i); }).join('') + '</div>';
             }
 
-            // ─── RENDER SHARE ────────────────────────────────────
+            // ─── RENDER SHARE (3‑col grid) ──────────────────────
             function renderShare(container, userPosts, sharedIds) {
                 var sharedPosts = userPosts.filter(function(p) { return sharedIds.indexOf(p.id) !== -1; });
                 if (!sharedPosts.length) {
@@ -3235,7 +3321,7 @@
                     '<div class="grid-3">' + sharedPosts.map(function(p, i) { return buildGridPostCard(p, i, 'remove', 'share'); }).join('') + '</div>';
             }
 
-            // ─── RENDER STAR ─────────────────────────────────────
+            // ─── RENDER STAR (3‑col grid) ──────────────────────
             function renderStar(container, userPosts, bookmarkedIds) {
                 var bookmarkedPosts = userPosts.filter(function(p) { return bookmarkedIds.indexOf(p.id) !== -1; });
                 if (!bookmarkedPosts.length) {
@@ -3248,7 +3334,7 @@
                     '<div class="grid-3">' + bookmarkedPosts.map(function(p, i) { return buildGridPostCard(p, i, 'remove', 'star'); }).join('') + '</div>';
             }
 
-            // ─── RENDER MARKET ───────────────────────────────────
+            // ─── RENDER MARKET (2‑col grid) ─────────────────────
             function renderMarket(container, marketItems) {
                 if (!marketItems.length) {
                     container.innerHTML =
@@ -3856,6 +3942,9 @@
                 if (!followModalData) {
                     try {
                         followModalData = await fetchFollowLists(targetUserId);
+                        var friendsCount = followModalData.friends.length;
+                        var frCountEl = document.getElementById('fsTabFrCount');
+                        if (frCountEl) frCountEl.textContent = fmtNum(friendsCount);
                     } catch (err) {
                         showToast('Failed to load followers', 'r');
                         return;
@@ -4047,30 +4136,31 @@
                             btn.className = 'u-btn' + (newState ? ' following' : '');
                             btn.setAttribute('data-action', newState ? 'unfollow' : 'follow-back');
                             showToast(newState ? 'Following ✓' : 'Unfollowed');
-                            followModalData = await fetchFollowLists(targetUserId);
-                            tabTap(_fwPageIdx);
+                            followModalData = null; // invalidate cache
                             var counts = await fetchFollowCounts(targetUserId);
                             document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
                             document.getElementById('statFollowing').textContent = fmtNum(counts.following);
+                            // Re-open to refresh modal data
+                            openFollowModal(_fwCurTab);
                         } else if (action === 'unfollow') {
                             await toggleFollow(user.id);
                             btn.textContent = 'Follow';
                             btn.className = 'u-btn';
                             btn.setAttribute('data-action', 'follow-back');
                             showToast('Unfollowed');
-                            followModalData = await fetchFollowLists(targetUserId);
-                            tabTap(_fwPageIdx);
+                            followModalData = null;
                             var counts2 = await fetchFollowCounts(targetUserId);
                             document.getElementById('statFollowers').textContent = fmtNum(counts2.followers);
                             document.getElementById('statFollowing').textContent = fmtNum(counts2.following);
+                            openFollowModal(_fwCurTab);
                         } else if (action === 'unfriend') {
                             await toggleFollow(user.id);
                             showToast('Unfriended');
-                            followModalData = await fetchFollowLists(targetUserId);
-                            tabTap(_fwPageIdx);
+                            followModalData = null;
                             var counts3 = await fetchFollowCounts(targetUserId);
                             document.getElementById('statFollowers').textContent = fmtNum(counts3.followers);
                             document.getElementById('statFollowing').textContent = fmtNum(counts3.following);
+                            openFollowModal(_fwCurTab);
                         } else if (action === 'remove') {
                             _fwList = _fwList.filter(function(u) { return u.id !== user.id; });
                             _fwApplyFilter();
