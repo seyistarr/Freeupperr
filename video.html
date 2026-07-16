@@ -64,6 +64,7 @@
             --sidebg: #0a0a0a;
             --bg4: #2a2a2a;
             --rowh: rgba(255, 255, 255, .06);
+            --nav-h: 78px;
         }
 
         [data-theme="light"] {
@@ -437,7 +438,7 @@
         .v-actions {
             position: absolute;
             right: 15px;
-            bottom: 45px;
+            bottom: calc(var(--nav-h, 78px) + 45px);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -560,7 +561,7 @@
             position: absolute;
             left: 20px;
             right: 90px;
-            bottom: 30px;
+            bottom: calc(var(--nav-h, 78px) + 40px);
             z-index: 20;
             display: flex;
             flex-direction: column;
@@ -654,11 +655,12 @@
             max-width: 100%;
         }
         .v-caption {
-            font-size: 15px;
-            line-height: 1.45;
+            font-size: 16px;
+            line-height: 1.55;
+            letter-spacing: .1px;
             color: #fff;
-            font-weight: 400;
-            text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+            font-weight: 500;
+            text-shadow: 0 1px 6px rgba(0, 0, 0, .75), 0 1px 12px rgba(0, 0, 0, .5);
             overflow-y: hidden;
             transition: max-height .3s cubic-bezier(.4, 0, .2, 1);
             word-wrap: break-word;
@@ -667,15 +669,23 @@
             display: -webkit-box;
             -webkit-line-clamp: 4;
             -webkit-box-orient: vertical;
-            max-height: 87px;
+            max-height: 100px;
         }
         .v-caption.expanded {
             display: block;
-            max-height: 261px;
+            max-height: 300px;
             overflow-y: auto;
             scrollbar-width: none;
-            -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) var(--scroll-fade, 0px), rgba(0, 0, 0, 1) 100%);
-            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) var(--scroll-fade, 0px), rgba(0, 0, 0, 1) 100%);
+            -webkit-mask-image: linear-gradient(to bottom,
+                    rgba(0, 0, 0, 0) 0%,
+                    rgba(0, 0, 0, 1) var(--fade-top, 0px),
+                    rgba(0, 0, 0, 1) calc(100% - var(--fade-bottom, 0px)),
+                    rgba(0, 0, 0, 0) 100%);
+            mask-image: linear-gradient(to bottom,
+                    rgba(0, 0, 0, 0) 0%,
+                    rgba(0, 0, 0, 1) var(--fade-top, 0px),
+                    rgba(0, 0, 0, 1) calc(100% - var(--fade-bottom, 0px)),
+                    rgba(0, 0, 0, 0) 100%);
         }
         .v-caption.expanded::-webkit-scrollbar {
             display: none;
@@ -727,15 +737,20 @@
         /* ── PROGRESS BAR ── */
         .v-progress {
             position: absolute;
-            bottom: calc(env(safe-area-inset-bottom, 0px) + 5px);
+            bottom: calc(var(--nav-h, 78px) + 10px);
             left: 20px;
             right: 20px;
-            height: 15px;
+            height: 20px;
             display: flex;
             align-items: center;
             z-index: 60;
             cursor: pointer;
             touch-action: none;
+            opacity: 0;
+            transition: opacity .25s ease;
+        }
+        .v-progress.visible {
+            opacity: 1;
         }
         .v-progress::before {
             content: '';
@@ -786,6 +801,7 @@
             padding: 10px 0 max(env(safe-area-inset-bottom), 16px);
             z-index: 50;
             transition: background .3s, border-color .3s;
+            height: var(--nav-h);
         }
         .nav-item {
             display: flex;
@@ -917,6 +933,7 @@
             padding: 14px 18px 12px;
             border-bottom: 1px solid var(--sheet-bd);
             flex-shrink: 0;
+            position: relative;
         }
         .sheet-title {
             font-size: 16px;
@@ -969,7 +986,47 @@
             stroke-linecap: round;
         }
 
+        /* ── SORT POPOVER ── */
+        #sortMenuPopover {
+            position: absolute;
+            top: 52px;
+            right: 52px;
+            background: var(--sheet-bg);
+            border: 1px solid var(--sheet-bd);
+            border-radius: 12px;
+            overflow: hidden;
+            z-index: 210;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+            min-width: 170px;
+        }
+        #sortMenuPopover .sort-option {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 12px 16px;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background .15s;
+        }
+        #sortMenuPopover .sort-option:hover {
+            background: var(--rowh);
+        }
+        #sortMenuPopover .sort-option:not(:last-child) {
+            border-bottom: 1px solid var(--sheet-bd);
+        }
+        #sortMenuPopover .sort-option.active {
+            font-weight: 800;
+        }
+
         /* ── COMMENTS SHEET ── */
+        #commentSheet {
+            height: 88dvh;
+            max-height: 88dvh;
+        }
         #commentSheet .sheet-body {
             flex: 1;
             overflow-y: auto;
@@ -1743,6 +1800,29 @@
             color: var(--muted);
             margin-top: 1px;
         }
+        .more-follow-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 8px;
+            border-radius: 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            text-align: left;
+            transition: background .18s;
+        }
+        .more-follow-row:hover {
+            background: rgba(255, 255, 255, .06);
+        }
+        .more-follow-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
 
         /* ── TOAST ── */
         #toast {
@@ -1897,6 +1977,7 @@
             }
             .v-progress {
                 bottom: 20px;
+                opacity: 1;
             }
             .v-actions {
                 bottom: 45px;
@@ -2094,6 +2175,19 @@
         [data-theme="light"] .nav-item.active span {
             color: var(--p);
         }
+        [data-theme="light"] #sortMenuPopover {
+            background: var(--sheet-bg);
+            border-color: var(--sheet-bd);
+        }
+        [data-theme="light"] #sortMenuPopover .sort-option {
+            color: var(--text);
+        }
+        [data-theme="light"] #sortMenuPopover .sort-option:not(:last-child) {
+            border-color: var(--sheet-bd);
+        }
+        [data-theme="light"] #sortMenuPopover .sort-option:hover {
+            background: var(--rowh);
+        }
     </style>
 </head>
 <body>
@@ -2226,7 +2320,6 @@
                 <button class="comment-icon-btn">
                     <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                 </button>
-                <button class="comment-icon-btn">😊</button>
                 <button class="comment-icon-btn">@</button>
                 <button class="comment-icon-btn">
                     <svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4"/><path d="M12 8v13M19 12v9H5v-9M12 8a3 3 0 1 0-3-3c0 1.5 3 3 3 3zM12 8a3 3 0 1 1 3-3c0 1.5-3 3-3 3z"/></svg>
@@ -2261,10 +2354,9 @@
 
         <div class="share-grid">
             <button class="share-item" id="nativeShareBtn" onclick="shareAction('native')" style="display:none">
-                <div class="share-ico" style="background:rgba(255,255,255,.1)">
-                    <svg viewBox="0 0 24 24" style="stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;width:26px;height:26px">
-                        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                <div class="share-ico" style="background:rgba(139,92,246,.22)">
+                    <svg viewBox="0 0 24 24" style="stroke:#8b5cf6;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;width:26px;height:26px">
+                        <path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>
                     </svg>
                 </div>
                 <span class="share-lbl">Share via…</span>
@@ -2290,10 +2382,10 @@
             </button>
 
             <button class="share-item" id="copyLinkBtn" onclick="shareAction('copy')">
-                <div class="share-ico" id="copyLinkIco" style="background:rgba(255,255,255,.08)">
-                    <svg viewBox="0 0 24 24" style="stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;width:26px;height:26px">
-                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                <div class="share-ico" id="copyLinkIco" style="background:rgba(29,161,242,.22)">
+                    <svg viewBox="0 0 24 24" style="stroke:#1d9bf0;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;width:26px;height:26px">
+                        <rect x="9" y="9" width="11" height="11" rx="2.5"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                     </svg>
                 </div>
                 <span class="share-lbl" id="copyLbl">Copy link</span>
@@ -2554,6 +2646,8 @@
         let _toastTimer = null;
         let _activeReactionChip = 0;
         let feedMode = 'foryou';
+        let commentSortMode = 'top';
+        let _progressHideTimer = {};
 
         // ─────────────────────────────────────────────
         // GET VIDEO POSTS (from Supabase via PostsAPI)
@@ -2618,7 +2712,9 @@
                         isYouTube: isYouTube,
                         ytId: isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] ||
                             post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null,
-                        timestamp: post.timestamp || post.date || new Date().toISOString()
+                        timestamp: post.timestamp || post.date || new Date().toISOString(),
+                        baseLikes: (post.reactions?.love || 0) + (post.reactions?.laugh || 0) + (post.reactions?.cry ||
+                            0) - (liked ? 1 : 0)
                     };
                 });
             } catch (err) {
@@ -2686,7 +2782,9 @@
                     isYouTube: isYouTube,
                     ytId: isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] ||
                         post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null,
-                    timestamp: post.timestamp || post.date || new Date().toISOString()
+                    timestamp: post.timestamp || post.date || new Date().toISOString(),
+                    baseLikes: (post.reactions?.love || 0) + (post.reactions?.laugh || 0) + (post.reactions?.cry ||
+                        0) - (liked ? 1 : 0)
                 };
             });
         }
@@ -2872,6 +2970,9 @@
                 else timeStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             }
 
+            // Strip @ from display name
+            const displayName = (v.handle || '').replace(/^@/, '');
+
             let videoHtml = '';
             if (v.isYouTube && v.ytId) {
                 videoHtml = `
@@ -2949,7 +3050,7 @@
                 </div>
                 <div class="v-user-meta">
                   <div class="v-creator">
-                    <span class="v-creator-name">${v.handle}</span>
+                    <span class="v-creator-name">${displayName}</span>
                     ${v.verified ? `<span class="v-badge"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>` : ''}
                   </div>
                   <div class="v-post-time">${timeStr}</div>
@@ -3026,6 +3127,7 @@
 
             if (vid._progTimer) clearInterval(vid._progTimer);
             vid._progTimer = setInterval(() => updateProgress(idx), 250);
+            showProgress(idx);
         }
 
         function updateProgress(idx) {
@@ -3073,6 +3175,7 @@
         function startScrub(e, idx) {
             e.stopPropagation();
             _scrubIdx = idx;
+            showProgress(idx);
 
             const v = videoPosts[idx];
             if (v && !v.isYouTube) {
@@ -3119,6 +3222,7 @@
         let _tapTimer = null;
 
         function handleCardTap(e, idx) {
+            showProgress(idx);
             if (_tapTimer) {
                 clearTimeout(_tapTimer);
                 _tapTimer = null;
@@ -3169,26 +3273,36 @@
             setTimeout(() => burst.remove(), 600);
         }
 
+        function showProgress(idx) {
+            const prog = document.getElementById('prog-' + idx);
+            if (!prog) return;
+            prog.classList.add('visible');
+            clearTimeout(_progressHideTimer[idx]);
+            _progressHideTimer[idx] = setTimeout(() => prog.classList.remove('visible'), 3000);
+        }
+
         // ─────────────────────────────────────────────
-        // LIKE (Supabase-powered)
+        // LIKE (Supabase-powered, never negative)
         // ─────────────────────────────────────────────
         async function toggleLike(idx) {
             const v = videoPosts[idx];
             if (!v) return;
+            if (v.baseLikes === undefined) v.baseLikes = Math.max(0, v.likes - (v.liked ? 1 : 0));
 
             const wasLiked = v.liked;
             v.liked = !v.liked;
-            v.likes += v.liked ? 1 : -1;
+            v.likes = v.baseLikes + (v.liked ? 1 : 0);
             updateLikeUI(idx, v);
 
             try {
                 const result = await window.PostsAPI.toggleLike(v.id);
-                v.likes = result.count;
+                v.baseLikes = Math.max(0, result.count - (result.liked ? 1 : 0));
                 v.liked = result.liked;
+                v.likes = v.baseLikes + (v.liked ? 1 : 0);
                 updateLikeUI(idx, v);
             } catch (err) {
                 v.liked = wasLiked;
-                v.likes += wasLiked ? 1 : -1;
+                v.likes = v.baseLikes + (v.liked ? 1 : 0);
                 updateLikeUI(idx, v);
                 showToast(err.message || 'Like failed');
             }
@@ -3240,7 +3354,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // CAPTION CLAMP / EXPAND (4→12 lines + scroll fade)
+        // CAPTION CLAMP / EXPAND (4→12 lines + dual-edge fade)
         // ─────────────────────────────────────────────
         function toggleCaption(idx) {
             const cap = document.getElementById('cap-' + idx);
@@ -3250,19 +3364,24 @@
                 cap.classList.remove('clamped');
                 cap.classList.add('expanded');
                 btn.textContent = 'see less';
-                handleCaptionScroll(cap);
+                requestAnimationFrame(() => handleCaptionScroll(cap));
             } else {
                 cap.classList.remove('expanded');
                 cap.classList.add('clamped');
                 btn.textContent = 'see more';
                 cap.scrollTop = 0;
-                cap.style.removeProperty('--scroll-fade');
+                cap.style.removeProperty('--fade-top');
+                cap.style.removeProperty('--fade-bottom');
             }
         }
 
         function handleCaptionScroll(el) {
-            const fade = Math.min(30, el.scrollTop);
-            el.style.setProperty('--scroll-fade', fade + 'px');
+            const topFade = Math.min(24, el.scrollTop);
+            const maxScroll = el.scrollHeight - el.clientHeight;
+            const distFromBottom = maxScroll - el.scrollTop;
+            const bottomFade = maxScroll > 0 ? Math.min(24, distFromBottom) : 0;
+            el.style.setProperty('--fade-top', topFade + 'px');
+            el.style.setProperty('--fade-bottom', bottomFade + 'px');
         }
 
         // ─────────────────────────────────────────────
@@ -3578,10 +3697,17 @@
 
             try {
                 const post = appData.posts.find(p => p.id === postId);
-                const comments = post?.comments?.length ?
+                let comments = post?.comments?.length ?
                     post.comments :
                     await window.PostsAPI.loadComments(postId);
                 if (post) post.comments = comments;
+
+                comments = [...comments].sort((a, b) => {
+                    if (commentSortMode === 'newest') return new Date(b.time) - new Date(a.time);
+                    const la = parseInt(localStorage.getItem('comment-like-' + a.id) || '0');
+                    const lb = parseInt(localStorage.getItem('comment-like-' + b.id) || '0');
+                    return lb - la;
+                });
 
                 const visibleCount = getVisibleComments(postId);
                 container.innerHTML = renderCommentsHTML(comments, postId, visibleCount);
@@ -3597,7 +3723,31 @@
         }
 
         function toggleSortMenu() {
-            showToast('Sort by: Top comments');
+            let menu = document.getElementById('sortMenuPopover');
+            if (menu) { menu.remove(); return; }
+            menu = document.createElement('div');
+            menu.id = 'sortMenuPopover';
+            menu.innerHTML = `
+                <button class="sort-option ${commentSortMode === 'top' ? 'active' : ''}" data-mode="top">Top comments</button>
+                <button class="sort-option ${commentSortMode === 'newest' ? 'active' : ''}" data-mode="newest">Newest comments</button>
+            `;
+            document.getElementById('commentSheet').appendChild(menu);
+            menu.querySelectorAll('.sort-option').forEach(btn => {
+                btn.onclick = () => {
+                    commentSortMode = btn.dataset.mode;
+                    menu.remove();
+                    refreshCommentsList(currentPostId);
+                    showToast(commentSortMode === 'top' ? 'Sorted by: Top comments' : 'Sorted by: Newest');
+                };
+            });
+            setTimeout(() => {
+                document.addEventListener('pointerdown', function closeMenu(ev) {
+                    if (!menu.contains(ev.target)) {
+                        menu.remove();
+                        document.removeEventListener('pointerdown', closeMenu);
+                    }
+                }, { capture: true, once: true });
+            }, 0);
         }
 
         function openComments(idx) {
@@ -3737,20 +3887,33 @@
         async function downloadVideo(idx) {
             const v = videoPosts[idx];
             const lbl = document.getElementById('saveVideoLbl');
-            if (lbl) lbl.textContent = 'Saving…';
+            const btn = document.getElementById('saveVideoBtn');
+            if (btn) btn.disabled = true;
+
+            let dots = 0;
+            const anim = setInterval(() => {
+                dots = (dots + 1) % 4;
+                if (lbl) lbl.textContent = 'Downloading' + '.'.repeat(dots);
+            }, 350);
+
             try {
                 const res = await fetch(v.src);
+                if (!res.ok) throw new Error('Network error');
                 const blob = await res.blob();
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
                 a.download = `freeupper-${v.id}.mp4`;
                 a.click();
                 URL.revokeObjectURL(a.href);
-                showToast('Saved ✓');
+                clearInterval(anim);
+                if (lbl) lbl.textContent = 'Save Video';
+                showToast('Downloaded successfully ✓');
             } catch (e) {
+                clearInterval(anim);
+                if (lbl) lbl.textContent = 'Save Video';
                 showToast('Download failed');
             } finally {
-                if (lbl) lbl.textContent = 'Save Video';
+                if (btn) btn.disabled = false;
             }
         }
 
@@ -3772,10 +3935,10 @@
             showToast('Quote posted ✓');
         }
 
-        // ── Ripple micro-interaction ──
+        // ── Ripple micro-interaction (fixed: preserve absolute positioning) ──
         document.addEventListener('pointerdown', function(e) {
             const el = e.target.closest(
-            '.share-item, .share-link-row, .composer-btn, .share-cancel-btn, .vt-more, .add-post-btn');
+                '.share-item, .share-link-row, .composer-btn, .share-cancel-btn, .vt-more, .add-post-btn');
             if (!el) return;
             const rect = el.getBoundingClientRect();
             const ripple = document.createElement('span');
@@ -3784,7 +3947,9 @@
             ripple.style.width = ripple.style.height = size + 'px';
             ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
             ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
-            el.style.position = 'relative';
+            if (getComputedStyle(el).position === 'static') {
+                el.style.position = 'relative';
+            }
             el.appendChild(ripple);
             setTimeout(() => ripple.remove(), 500);
         });
@@ -3851,14 +4016,23 @@
             }).join('');
         }
 
+        // ── More sheet with real follow toggle and real avatar ──
         function openMore(idx) {
             const list = document.getElementById('moreList');
             const v = videoPosts[idx];
-            list.innerHTML = [
+
+            const followRow = `
+                <button class="more-follow-row" id="moreFollowRow" onclick="toggleFollowFromMore(${idx})">
+                    <img class="more-follow-avatar" src="${v.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + v.creator}" alt="${v.creator}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'">
+                    <div>
+                        <div class="more-row-lbl" id="moreFollowLbl">${v.following ? 'Following' : 'Follow'} ${v.creator}</div>
+                        <div class="more-row-sub">${v.handle}</div>
+                    </div>
+                </button>`;
+
+            const otherRows = [
                 { ico: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
                     lbl: 'Not interested in this video' },
-                { ico: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-                    lbl: 'Follow ' + v.creator, sub: v.handle },
                 { ico: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
                     lbl: 'Find similar videos' },
                 { ico: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
@@ -3876,7 +4050,21 @@
                     </div>
                 </button>
             `).join('');
+
+            list.innerHTML = followRow + otherRows;
             openSheet('moreSheet');
+        }
+
+        function toggleFollowFromMore(idx) {
+            const v = videoPosts[idx];
+            if (!v.authorId) return showToast("Can't follow yourself");
+            const newState = toggleFollowUser(v.authorId);
+            v.following = newState;
+            const lbl = document.getElementById('moreFollowLbl');
+            if (lbl) lbl.textContent = (v.following ? 'Following ' : 'Follow ') + v.creator;
+            const dot = document.getElementById('followDot-' + idx);
+            if (dot) dot.classList.toggle('hidden', v.following);
+            showToast(v.following ? 'Following ' + v.creator : 'Unfollowed ' + v.creator);
         }
 
         function moreAction(label) {
