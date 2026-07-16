@@ -2766,7 +2766,7 @@
 
     <script>
         // ════════════════════════════════════════════════════════════════
-        // PROFILE CONTROLLER – Supabase only, error-resilient
+        // PROFILE CONTROLLER – with 3‑grid tabs, follow-back, avatar viewer, etc.
         // ════════════════════════════════════════════════════════════════
         (function() {
             'use strict';
@@ -2838,9 +2838,7 @@
             // ─── GET TARGET USER ID ──────────────────────────────
             function getTargetUserFromUrl() {
                 var params = new URLSearchParams(window.location.search);
-                var uid = params.get('uid');
-                if (uid) return uid;
-                return null;
+                return params.get('uid') || null;
             }
 
             // ─── FETCH PROFILE ────────────────────────────────────
@@ -2899,7 +2897,7 @@
                 return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
             }
 
-            // ─── CHECK FOLLOW (single direction) ────────────────
+            // ─── CHECK FOLLOW (single) ──────────────────────────
             async function isFollowing(followerId, targetId) {
                 var result = await window.sb
                     .from('follows')
@@ -2920,11 +2918,9 @@
                     window.sb.from('follows').select('id').eq('follower_id', myId).eq('following_id', targetId).maybeSingle(),
                     window.sb.from('follows').select('id').eq('follower_id', targetId).eq('following_id', myId).maybeSingle()
                 ]);
-                var mine = results[0];
-                var theirs = results[1];
                 return {
-                    iFollowThem: !!mine.data,
-                    theyFollowMe: !!theirs.data
+                    iFollowThem: !!results[0].data,
+                    theyFollowMe: !!results[1].data
                 };
             }
 
@@ -2956,34 +2952,23 @@
                     .from('post_likes')
                     .select('post_id')
                     .eq('user_id', userId);
-                if (result.error) {
-                    console.warn('getUserLikes error:', result.error);
-                    return [];
-                }
+                if (result.error) return [];
                 return result.data.map(function(l) { return l.post_id; });
             }
-
             async function getUserBookmarks(userId) {
                 var result = await window.sb
                     .from('bookmarks')
                     .select('post_id')
                     .eq('user_id', userId);
-                if (result.error) {
-                    console.warn('getUserBookmarks error:', result.error);
-                    return [];
-                }
+                if (result.error) return [];
                 return result.data.map(function(b) { return b.post_id; });
             }
-
             async function getUserShares(userId) {
                 var result = await window.sb
                     .from('shares')
                     .select('post_id')
                     .eq('user_id', userId);
-                if (result.error) {
-                    console.warn('getUserShares error:', result.error);
-                    return [];
-                }
+                if (result.error) return [];
                 return result.data.map(function(s) { return s.post_id; });
             }
 
@@ -2994,19 +2979,15 @@
                     .select('*')
                     .eq('seller_id', userId)
                     .order('created_at', { ascending: false });
-                if (result.error) {
-                    console.warn('getUserMarketItems error:', result.error);
-                    return [];
-                }
+                if (result.error) return [];
                 return result.data || [];
             }
 
             // ─── LOAD POSTS ──────────────────────────────────────
             async function loadPosts() {
                 try {
-                    var posts = await window.PostsAPI.loadAllPosts();
-                    allPosts = posts;
-                    return posts;
+                    allPosts = await window.PostsAPI.loadAllPosts();
+                    return allPosts;
                 } catch (err) {
                     console.error('Failed to load posts:', err);
                     showToast('Failed to load posts', 'r');
@@ -3041,7 +3022,6 @@
                     targetUser = profile;
 
                     var counts = await fetchFollowCounts(targetId);
-
                     await loadPosts();
                     var userPosts = getUserPosts(targetId);
 
@@ -3111,13 +3091,11 @@
                     });
                     document.getElementById('statFollowersBox').classList.add('locked');
                     document.getElementById('statFollowingBox').classList.add('locked');
-                    // Remove click listeners
                     document.getElementById('statFollowersBox').onclick = null;
                     document.getElementById('statFollowingBox').onclick = null;
                 } else {
                     document.getElementById('statFollowersBox').classList.remove('locked');
                     document.getElementById('statFollowingBox').classList.remove('locked');
-                    // Re-bind
                     document.getElementById('statFollowersBox').onclick = function() { openFollowModal('followers'); };
                     document.getElementById('statFollowingBox').onclick = function() { openFollowModal('following'); };
                     renderTab(activeTab, { userPosts: userPosts, likedIds: likedIds, bookmarkedIds: bookmarkedIds, sharedIds: sharedIds, marketItems: marketItems });
@@ -3130,16 +3108,14 @@
 
                 document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
                 document.getElementById('fsTabFgCount').textContent = fmtNum(counts.following);
-                // Friends count will be set when modal data loads
                 document.getElementById('fsTabFrCount').textContent = '';
 
-                // Update follow modal owner class
                 var followModal = document.getElementById('followModal');
                 if (isOwner) followModal.classList.add('is-owner');
                 else followModal.classList.remove('is-owner');
             }
 
-            // ─── ACTION ROW (with relationship detection) ──────
+            // ─── ACTION ROW ──────────────────────────────────────
             async function renderActionRow() {
                 var row = document.getElementById('actionRow');
                 if (isOwner) { row.innerHTML = ''; return; }
@@ -3155,9 +3131,7 @@
                 var rel = { iFollowThem: false, theyFollowMe: false };
                 try {
                     rel = await getRelationship(user.id, targetUserId);
-                } catch (e) {
-                    console.warn('getRelationship failed', e);
-                }
+                } catch (e) { console.warn('getRelationship failed', e); }
 
                 var label = followBtnLabel(rel);
                 var cls = followBtnClass(rel);
@@ -3182,7 +3156,7 @@
                 return 'act-follow';
             }
 
-            // ─── HANDLE FOLLOW (with optimistic update) ────────
+            // ─── HANDLE FOLLOW (optimistic) ────────────────────
             window.handleFollow = async function() {
                 var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) { showToast('Please sign in to follow', 'o'); return; }
@@ -3195,7 +3169,6 @@
                 btn.style.pointerEvents = 'none';
                 btn.style.opacity = '.65';
 
-                // Optimistic UI: update follower count
                 var followersEl = document.getElementById('statFollowers');
                 var currentCount = parseFollowerCount(followersEl.textContent);
                 var optimisticCount = wasFollowing ? Math.max(0, currentCount - 1) : currentCount + 1;
@@ -3203,15 +3176,12 @@
                 followersEl.classList.add('cnt-bounce');
                 setTimeout(function() { followersEl.classList.remove('cnt-bounce'); }, 350);
 
-                // Optimistic button flip
                 btn.textContent = wasFollowing ? 'Follow' : 'Following';
                 btn.className = 'act-btn ' + (wasFollowing ? 'act-follow' : 'act-follow fstate');
                 btn.dataset.following = String(!wasFollowing);
 
                 try {
                     var newState = await toggleFollow(targetUserId);
-
-                    // Reconcile with real data
                     var results = await Promise.all([
                         fetchFollowCounts(targetUserId),
                         getRelationship(user.id, targetUserId)
@@ -3225,14 +3195,12 @@
                     btn.className = 'act-btn ' + followBtnClass(rel);
                     btn.dataset.following = String(rel.iFollowThem);
 
-                    // Invalidate modal cache so it refetches on next open
                     followModalData = null;
 
                     var toastMsg = rel.iFollowThem && rel.theyFollowMe ? 'You are now friends' :
                         newState ? 'Following ✓' : 'Unfollowed';
                     showToast(toastMsg, newState ? 'g' : 'o');
                 } catch (err) {
-                    // Rollback optimistic UI
                     followersEl.textContent = fmtNum(currentCount);
                     btn.textContent = wasFollowing ? 'Following' : 'Follow';
                     btn.className = 'act-btn ' + (wasFollowing ? 'act-follow fstate' : 'act-follow');
@@ -3283,7 +3251,7 @@
                 }
             }
 
-            // ─── RENDER POSTS (3‑col grid) ──────────────────────
+            // ─── RENDER POSTS (3‑col) ────────────────────────────
             function renderPosts(container, userPosts) {
                 if (!userPosts.length) {
                     container.innerHTML =
@@ -3291,11 +3259,12 @@
                     return;
                 }
                 userPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
-                container.innerHTML =
-                    '<div class="grid-3">' + userPosts.map(function(p, i) { return buildGridPostCard(p, i, 'delete'); }).join('') + '</div>';
+                container.innerHTML = '<div class="grid-3">' +
+                    userPosts.map(function(p, i) { return buildGridPostCard(p, i, 'delete'); }).join('') +
+                    '</div>';
             }
 
-            // ─── RENDER LOVE (3‑col grid) ───────────────────────
+            // ─── RENDER LOVE (3‑col) ────────────────────────────
             function renderLove(container, userPosts, likedIds) {
                 var likedPosts = userPosts.filter(function(p) { return likedIds.indexOf(p.id) !== -1; });
                 if (!likedPosts.length) {
@@ -3304,11 +3273,12 @@
                     return;
                 }
                 likedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
-                container.innerHTML =
-                    '<div class="grid-3">' + likedPosts.map(function(p, i) { return buildGridLoveCard(p, i); }).join('') + '</div>';
+                container.innerHTML = '<div class="grid-3">' +
+                    likedPosts.map(function(p, i) { return buildGridLoveCard(p, i); }).join('') +
+                    '</div>';
             }
 
-            // ─── RENDER SHARE (3‑col grid) ──────────────────────
+            // ─── RENDER SHARE (3‑col) ───────────────────────────
             function renderShare(container, userPosts, sharedIds) {
                 var sharedPosts = userPosts.filter(function(p) { return sharedIds.indexOf(p.id) !== -1; });
                 if (!sharedPosts.length) {
@@ -3317,11 +3287,12 @@
                     return;
                 }
                 sharedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
-                container.innerHTML =
-                    '<div class="grid-3">' + sharedPosts.map(function(p, i) { return buildGridPostCard(p, i, 'remove', 'share'); }).join('') + '</div>';
+                container.innerHTML = '<div class="grid-3">' +
+                    sharedPosts.map(function(p, i) { return buildGridPostCard(p, i, 'remove', 'share'); }).join('') +
+                    '</div>';
             }
 
-            // ─── RENDER STAR (3‑col grid) ──────────────────────
+            // ─── RENDER STAR (3‑col) ────────────────────────────
             function renderStar(container, userPosts, bookmarkedIds) {
                 var bookmarkedPosts = userPosts.filter(function(p) { return bookmarkedIds.indexOf(p.id) !== -1; });
                 if (!bookmarkedPosts.length) {
@@ -3330,19 +3301,21 @@
                     return;
                 }
                 bookmarkedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
-                container.innerHTML =
-                    '<div class="grid-3">' + bookmarkedPosts.map(function(p, i) { return buildGridPostCard(p, i, 'remove', 'star'); }).join('') + '</div>';
+                container.innerHTML = '<div class="grid-3">' +
+                    bookmarkedPosts.map(function(p, i) { return buildGridPostCard(p, i, 'remove', 'star'); }).join('') +
+                    '</div>';
             }
 
-            // ─── RENDER MARKET (2‑col grid) ─────────────────────
+            // ─── RENDER MARKET (2‑col) ──────────────────────────
             function renderMarket(container, marketItems) {
                 if (!marketItems.length) {
                     container.innerHTML =
                         '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div><h3>No listings</h3><p>' + (isOwner ? 'Sell something on Campus Market.' : 'No items listed yet.') + '</p></div>';
                     return;
                 }
-                container.innerHTML =
-                    '<div class="grid-2">' + marketItems.map(function(item) { return buildMarketCard(item, isOwner); }).join('') + '</div>';
+                container.innerHTML = '<div class="grid-2">' +
+                    marketItems.map(function(item) { return buildMarketCard(item, isOwner); }).join('') +
+                    '</div>';
             }
 
             // ─── BUILD GRID POST CARD ────────────────────────────
@@ -3631,7 +3604,6 @@
                         correctLevel: QRCode.CorrectLevel.H
                     });
                 } catch (e) {
-                    console.error('QR generation error:', e);
                     container.innerHTML =
                         '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">QR code unavailable</div>';
                 }
@@ -3893,7 +3865,6 @@
                         .eq('id', user.id);
                     if (result.error) throw result.error;
 
-                    // Update in-memory cache via AuthUser
                     if (window.AuthUser && window.AuthUser.updateCurrentUser) {
                         window.AuthUser.updateCurrentUser({
                             displayName: updates.display_name,
@@ -4136,11 +4107,10 @@
                             btn.className = 'u-btn' + (newState ? ' following' : '');
                             btn.setAttribute('data-action', newState ? 'unfollow' : 'follow-back');
                             showToast(newState ? 'Following ✓' : 'Unfollowed');
-                            followModalData = null; // invalidate cache
+                            followModalData = null;
                             var counts = await fetchFollowCounts(targetUserId);
                             document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
                             document.getElementById('statFollowing').textContent = fmtNum(counts.following);
-                            // Re-open to refresh modal data
                             openFollowModal(_fwCurTab);
                         } else if (action === 'unfollow') {
                             await toggleFollow(user.id);
@@ -4488,7 +4458,7 @@
                     });
                 }
 
-                // Replace storage event with userRefreshed from AuthUser
+                // Replace storage event with userRefreshed
                 document.addEventListener('userRefreshed', function() {
                     renderProfile();
                 });
@@ -4506,7 +4476,7 @@
                 init();
             }
 
-            // ─── EXPOSE TO GLOBAL ──────────────────────────────
+            // ─── EXPOSE ──────────────────────────────────────────
             window.switchTab = switchTab;
             window.openFS = openFS;
             window.closeFS = closeFS;
