@@ -2879,7 +2879,7 @@
                 };
             }
 
-            // ─── TOGGLE FOLLOW ──────────────────────────────────
+            // ─── TOGGLE FOLLOW (with error checking) ────────────
             async function toggleFollow(targetId) {
                 var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
@@ -2887,16 +2887,19 @@
                     return false;
                 }
                 var currently = await isFollowing(user.id, targetId);
+                var result;
                 if (currently) {
-                    await window.sb
+                    result = await window.sb
                         .from('follows')
                         .delete()
                         .eq('follower_id', user.id)
                         .eq('following_id', targetId);
+                    if (result.error) throw result.error;
                 } else {
-                    await window.sb
+                    result = await window.sb
                         .from('follows')
                         .insert({ follower_id: user.id, following_id: targetId });
+                    if (result.error) throw result.error;
                 }
                 return !currently;
             }
@@ -3128,7 +3131,7 @@
                 return 'act-follow';
             }
 
-            // ─── HANDLE FOLLOW (optimistic, NO count refetch) ──
+            // ─── HANDLE FOLLOW (optimistic, no count refetch) ──
             window.handleFollow = async function() {
                 var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
