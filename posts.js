@@ -15,10 +15,10 @@
     return raw ? JSON.parse(raw) : null;
   }
   
-  // ── mapPost: prefer `media` array, fallback to old columns ──
+  // ─── mapPost: prefers `media` array, falls back to old columns ───
   function mapPost(row, userLikes) {
     let media = row.media;
-    // If media is null, undefined, or empty array, try old columns
+    // If media is null/undefined/empty, try old columns
     if (!media || !Array.isArray(media) || media.length === 0) {
       if (row.media_url) {
         media = [{ url: row.media_url, type: row.media_type || 'image' }];
@@ -26,7 +26,7 @@
         media = [];
       }
     }
-    // Ensure each media item has a type (default to 'image')
+    // Ensure each item has a type
     media = media.map(item => ({ ...item, type: item.type || 'image' }));
     
     return {
@@ -37,8 +37,8 @@
       title: row.title,
       description: row.description || '',
       content: row.content || '',
-      media: media,                               // primary
-      mediaUrl: row.media_url,                   // legacy
+      media: media,               // new array
+      mediaUrl: row.media_url,    // kept for compatibility
       mediaType: row.media_type,
       category: row.category || 'General',
       tags: row.tags || [],
@@ -52,6 +52,7 @@
     };
   }
   
+  // ─── Load all posts ───
   async function loadAllPosts() {
     const { data: rows, error } = await sb
       .from('posts')
@@ -61,13 +62,6 @@
     if (error) {
       console.error('loadAllPosts error:', error);
       return [];
-    }
-    
-    // Debug logs – check browser console
-    if (rows && rows.length > 0) {
-      console.log('First post row:', rows[0]);
-      console.log('media column:', rows[0].media);
-      console.log('media_url column:', rows[0].media_url);
     }
     
     const user = getCurrentUser();
@@ -80,14 +74,10 @@
       likedIds = new Set((likes || []).map(l => l.post_id));
     }
     
-    const posts = rows.map(row => mapPost(row, likedIds));
-    if (posts.length > 0) {
-      console.log('First mapped post:', posts[0]);
-      console.log('media array:', posts[0].media);
-    }
-    return posts;
+    return rows.map(row => mapPost(row, likedIds));
   }
   
+  // ─── Load comments for a post ───
   async function loadComments(postId) {
     const { data, error } = await sb
       .from('comments')
@@ -114,13 +104,14 @@
     }));
   }
   
-  // ── createPost: now accepts `media` array and saves as JSONB ──
+  // ─── Create a new post (saves both `media` array and old columns) ───
   async function createPost(fields) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
       throw new Error('Please sign in to post.');
     }
     
+    // Build payload with new `media` array
     const payload = {
       user_id: user.id,
       title: fields.title,
@@ -130,11 +121,10 @@
       tags: fields.tags || [],
       author: user.displayName || 'User',
       author_avatar: user.avatar || null,
-      // Store the new media array as JSONB
-      media: fields.media || []
+      media: fields.media || []   // <-- this is the new JSONB array
     };
     
-    // Also fill legacy columns for backward compatibility
+    // Also fill old columns for backward compatibility
     if (fields.media && fields.media.length > 0) {
       payload.media_url = fields.media[0].url || null;
       payload.media_type = fields.media[0].type || null;
@@ -156,7 +146,7 @@
     return mapPost(data, new Set());
   }
   
-  // ── Add comment ──
+  // ─── Add a comment ───
   async function addComment(postId, parentId, message) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -190,7 +180,7 @@
     };
   }
   
-  // ── Toggle like ──
+  // ─── Toggle like ───
   async function toggleLike(postId) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -224,6 +214,7 @@
     return { liked: !existing, count: count || 0 };
   }
   
+  // ─── Delete a post ───
   async function deletePost(postId) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -236,6 +227,7 @@
     if (error) throw error;
   }
   
+  // ─── Increment view count ───
   async function incrementView(postId) {
     const { error } = await sb
       .from('posts')
@@ -244,6 +236,7 @@
     if (error) console.error('incrementView error:', error);
   }
   
+  // ─── Expose API ───
   window.PostsAPI = {
     loadAllPosts,
     loadComments,
