@@ -18,7 +18,6 @@
   // ─── mapPost: prefers `media` array, falls back to old columns ───
   function mapPost(row, userLikes) {
     let media = row.media;
-    // If media is null/undefined/empty, try old columns
     if (!media || !Array.isArray(media) || media.length === 0) {
       if (row.media_url) {
         media = [{ url: row.media_url, type: row.media_type || 'image' }];
@@ -26,7 +25,6 @@
         media = [];
       }
     }
-    // Ensure each item has a type
     media = media.map(item => ({ ...item, type: item.type || 'image' }));
     
     return {
@@ -37,13 +35,13 @@
       title: row.title,
       description: row.description || '',
       content: row.content || '',
-      media: media,               // new array
-      mediaUrl: row.media_url,    // kept for compatibility
+      media: media,
+      mediaUrl: row.media_url,
       mediaType: row.media_type,
       category: row.category || 'General',
       tags: row.tags || [],
-      date: row.created_at.split('T')[0],
-      timestamp: row.created_at,
+      date: row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+      timestamp: row.created_at || new Date().toISOString(),
       views: row.views || 0,
       reactions: { like: row.likes_count || 0 },
       commentCount: row.comments_count || 0,
@@ -54,130 +52,173 @@
   
   // ─── Load all posts ───
   async function loadAllPosts() {
-    const { data: rows, error } = await sb
-      .from('posts')
-      .select('*')
-      .order('created_at', { ascending: false });
+    console.log('📡 loadAllPosts called');
     
-    if (error) {
-      console.error('loadAllPosts error:', error);
+    try {
+      const { data: rows, error } = await sb
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('❌ loadAllPosts error:', error);
+        return [];
+      }
+      
+      console.log(`✅ Found ${rows ? rows.length : 0} posts`);
+      if (rows && rows.length > 0) {
+        console.log('📋 First post:', rows[0]);
+        console.log('📋 media_url:', rows[0].media_url);
+        console.log('📋 media:', rows[0].media);
+      }
+      
+      const user = getCurrentUser();
+      let likedIds = new Set();
+      if (user && user.isLoggedIn) {
+        const { data: likes } = await sb
+          .from('post_likes')
+          .select('post_id')
+          .eq('user_id', user.id);
+        likedIds = new Set((likes || []).map(l => l.post_id));
+      }
+      
+      const posts = rows ? rows.map(row => mapPost(row, likedIds)) : [];
+      console.log(`✅ Mapped ${posts.length} posts`);
+      return posts;
+      
+    } catch (err) {
+      console.error('❌ loadAllPosts exception:', err);
       return [];
     }
-    
-    const user = getCurrentUser();
-    let likedIds = new Set();
-    if (user && user.isLoggedIn) {
-      const { data: likes } = await sb
-        .from('post_likes')
-        .select('post_id')
-        .eq('user_id', user.id);
-      likedIds = new Set((likes || []).map(l => l.post_id));
-    }
-    
-    return rows.map(row => mapPost(row, likedIds));
   }
   
-  // ─── Load comments for a post ───
+  // ─── Load comments ───
   async function loadComments(postId) {
-    const { data, error } = await sb
-      .from('comments')
-      .select(`
-        id, parent_id, message, created_at,
-        profiles:user_id (display_name, avatar_url)
-      `)
-      .eq('post_id', postId)
-      .order('created_at', { ascending: true });
-    
-    if (error) {
-      console.error('loadComments error:', error);
+    try {
+      const { data, error } = await sb
+        .from('comments')
+        .select(`
+          id, parent_id, message, created_at,
+          profiles:user_id (display_name, avatar_url)
+        `)
+        .eq('post_id', postId)
+        .order('created_at', { ascending: true });
+      
+      if (error) {
+        console.error('loadComments error:', error);
+        return [];
+      }
+      
+      return data.map(row => ({
+        id: row.id,
+        username: row.profiles?.display_name || 'Anonymous',
+        avatar: row.profiles?.avatar_url || null,
+        message: row.message,
+        time: row.created_at,
+        parentId: row.parent_id,
+        approved: true
+      }));
+    } catch (err) {
+      console.error('loadComments exception:', err);
       return [];
     }
-    
-    return data.map(row => ({
-      id: row.id,
-      username: row.profiles?.display_name || 'Anonymous',
-      avatar: row.profiles?.avatar_url || null,
-      message: row.message,
-      time: row.created_at,
-      parentId: row.parent_id,
-      approved: true
-    }));
   }
   
-  // ─── Create a new post (saves both `media` array and old columns) ───
+  // ─── Create a new post ───
   async function createPost(fields) {
+    console.log('📝 createPost called with:', fields);
+    
     const user = getCurrentUser();
+    console.log('👤 Current user:', user);
+    
     if (!user || !user.isLoggedIn) {
+      console.error('❌ User not logged in');
       throw new Error('Please sign in to post.');
     }
     
-    // Build payload with new `media` array
+    // Build payload
     const payload = {
       user_id: user.id,
-      title: fields.title,
+      title: fields.title || '',
       description: fields.description || '',
-      content: fields.content,
+      content: fields.content || '',
       category: fields.category || 'General',
       tags: fields.tags || [],
       author: user.displayName || 'User',
       author_avatar: user.avatar || null,
-      media: fields.media || []   // <-- this is the new JSONB array
+      // NEW: save media array
+      media: fields.media || [],
+      // OLD: keep for backward compatibility
+      media_url: fields.mediaUrl || null,
+      media_type: fields.mediaType || null
     };
     
-    // Also fill old columns for backward compatibility
+    // If media array has items, use first as media_url fallback
     if (fields.media && fields.media.length > 0) {
       payload.media_url = fields.media[0].url || null;
       payload.media_type = fields.media[0].type || null;
-    } else {
-      payload.media_url = fields.mediaUrl || null;
-      payload.media_type = fields.mediaType || null;
     }
     
-    console.log('Creating post with payload:', payload);
+    console.log('📤 Inserting post with payload:', payload);
     
-    const { data, error } = await sb
-      .from('posts')
-      .insert(payload)
-      .select('*')
-      .single();
-    
-    if (error) throw error;
-    console.log('Post created:', data);
-    return mapPost(data, new Set());
+    try {
+      const { data, error } = await sb
+        .from('posts')
+        .insert(payload)
+        .select('*')
+        .single();
+      
+      if (error) {
+        console.error('❌ Supabase insert error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Post created successfully:', data);
+      return mapPost(data, new Set());
+      
+    } catch (err) {
+      console.error('❌ createPost exception:', err);
+      throw err;
+    }
   }
   
-  // ─── Add a comment ───
+  // ─── Add comment ───
   async function addComment(postId, parentId, message) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
       throw new Error('Please sign in to comment.');
     }
     
-    const { data, error } = await sb
-      .from('comments')
-      .insert({
-        post_id: postId,
-        user_id: user.id,
-        parent_id: parentId || null,
-        message: message
-      })
-      .select(`
-        id, parent_id, message, created_at,
-        profiles:user_id (display_name, avatar_url)
-      `)
-      .single();
-    
-    if (error) throw error;
-    
-    return {
-      id: data.id,
-      username: data.profiles?.display_name || 'Anonymous',
-      avatar: data.profiles?.avatar_url || null,
-      message: data.message,
-      time: data.created_at,
-      parentId: data.parent_id,
-      approved: true
-    };
+    try {
+      const { data, error } = await sb
+        .from('comments')
+        .insert({
+          post_id: postId,
+          user_id: user.id,
+          parent_id: parentId || null,
+          message: message
+        })
+        .select(`
+          id, parent_id, message, created_at,
+          profiles:user_id (display_name, avatar_url)
+        `)
+        .single();
+      
+      if (error) throw error;
+      
+      return {
+        id: data.id,
+        username: data.profiles?.display_name || 'Anonymous',
+        avatar: data.profiles?.avatar_url || null,
+        message: data.message,
+        time: data.created_at,
+        parentId: data.parent_id,
+        approved: true
+      };
+    } catch (err) {
+      console.error('addComment error:', err);
+      throw err;
+    }
   }
   
   // ─── Toggle like ───
@@ -187,34 +228,39 @@
       throw new Error('Please sign in to like.');
     }
     
-    const { data: existing } = await sb
-      .from('post_likes')
-      .select('post_id')
-      .eq('post_id', postId)
-      .eq('user_id', user.id)
-      .maybeSingle();
-    
-    if (existing) {
-      await sb
+    try {
+      const { data: existing } = await sb
         .from('post_likes')
-        .delete()
+        .select('post_id')
         .eq('post_id', postId)
-        .eq('user_id', user.id);
-    } else {
-      await sb
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (existing) {
+        await sb
+          .from('post_likes')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', user.id);
+      } else {
+        await sb
+          .from('post_likes')
+          .insert({ post_id: postId, user_id: user.id });
+      }
+      
+      const { count } = await sb
         .from('post_likes')
-        .insert({ post_id: postId, user_id: user.id });
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId);
+      
+      return { liked: !existing, count: count || 0 };
+    } catch (err) {
+      console.error('toggleLike error:', err);
+      throw err;
     }
-    
-    const { count } = await sb
-      .from('post_likes')
-      .select('*', { count: 'exact', head: true })
-      .eq('post_id', postId);
-    
-    return { liked: !existing, count: count || 0 };
   }
   
-  // ─── Delete a post ───
+  // ─── Delete post ───
   async function deletePost(postId) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -229,11 +275,15 @@
   
   // ─── Increment view count ───
   async function incrementView(postId) {
-    const { error } = await sb
-      .from('posts')
-      .update({ views: sb.raw('views + 1') })
-      .eq('id', postId);
-    if (error) console.error('incrementView error:', error);
+    try {
+      const { error } = await sb
+        .from('posts')
+        .update({ views: sb.raw('views + 1') })
+        .eq('id', postId);
+      if (error) console.error('incrementView error:', error);
+    } catch (err) {
+      console.error('incrementView exception:', err);
+    }
   }
   
   // ─── Expose API ───
@@ -246,5 +296,8 @@
     deletePost,
     incrementView
   };
+  
+  console.log('✅ posts.js loaded successfully');
+  console.log('📦 PostsAPI:', Object.keys(window.PostsAPI));
   
 })();
