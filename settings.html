@@ -3090,6 +3090,9 @@
         (function() {
             'use strict';
 
+            // ─── USE THE SAME Supabase CLIENT AS auth.js ───
+            var sb = window.sb; // created in auth.js
+
             // ─── HELPERS ────────────────────────────────────────
             function getCurrentUser() {
                 if (window.AuthUser && window.AuthUser.getCurrentUser) {
@@ -3112,23 +3115,12 @@
                 }
             }
 
-            // ─── FETCH PROFILE FROM SUPABASE ───────────────────
-            async function fetchProfile(userId) {
-                const { data, error } = await window.sb
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', userId)
-                    .single();
-                if (error) throw error;
-                return data;
-            }
-
             // ─── UPDATE PROFILE IN SUPABASE ────────────────────
             async function updateProfileSupabase(updates) {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (!user || !user.id) throw new Error('No user logged in');
 
-                const payload = {
+                var payload = {
                     display_name: updates.displayName,
                     username: updates.username,
                     bio: updates.bio,
@@ -3139,14 +3131,13 @@
                     avatar_url: updates.avatar || ''
                 };
 
-                const { error } = await window.sb
+                var { error } = await sb
                     .from('profiles')
                     .update(payload)
                     .eq('id', user.id);
 
                 if (error) throw error;
 
-                // Update the user object in AuthUser cache
                 if (window.AuthUser && window.AuthUser.updateCurrentUser) {
                     window.AuthUser.updateCurrentUser(payload);
                 }
@@ -3172,7 +3163,7 @@
                 document.body.style.overflow = '';
             };
 
-            document.querySelectorAll('.mov').forEach(m => {
+            document.querySelectorAll('.mov').forEach(function(m) {
                 m.addEventListener('click', function(e) {
                     if (e.target === this) closeMov(this.id);
                 });
@@ -3185,7 +3176,7 @@
 
             document.getElementById('darkTog').checked = getCurrentTheme() === 'dark';
             document.getElementById('darkSub').textContent = 'Currently: ' + (getCurrentTheme() === 'dark' ? 'Dark' :
-            'Light');
+                'Light');
 
             window.toggleDark = function(on) {
                 if (on) {
@@ -3201,7 +3192,7 @@
 
             // ─── PRIVACY TOGGLES ──────────────────────────────
             window.togglePrivate = async function() {
-                const checked = document.getElementById('privToggle').checked;
+                var checked = document.getElementById('privToggle').checked;
                 try {
                     await window.SettingsAPI.updateFlags({ isPrivate: checked });
                     showToast(checked ? 'Account is now private' : 'Account is now public', checked ? 'o' : 'g');
@@ -3212,7 +3203,7 @@
             };
 
             window.toggleHideCount = async function() {
-                const checked = document.getElementById('hideCountTog').checked;
+                var checked = document.getElementById('hideCountTog').checked;
                 try {
                     await window.SettingsAPI.updateFlags({ hideFollowerCount: checked });
                     showToast(checked ? 'Follower count hidden' : 'Follower count visible', 'p');
@@ -3223,7 +3214,7 @@
             };
 
             window.toggleActivity = async function() {
-                const checked = document.getElementById('activityTog').checked;
+                var checked = document.getElementById('activityTog').checked;
                 try {
                     await window.SettingsAPI.updateFlags({ activityStatus: checked });
                     showToast(checked ? 'Activity status visible' : 'Activity status hidden', 'p');
@@ -3235,7 +3226,7 @@
 
             // ─── ACCOUNT DETAILS ──────────────────────────────
             window.openAccountDetails = function() {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 document.getElementById('acctUsername').textContent = '@' + (user?.username || 'user');
                 document.getElementById('acctEmail').textContent = user?.email || 'user@email.com';
                 document.getElementById('phoneInp').value = user?.phone || '';
@@ -3244,14 +3235,14 @@
             };
 
             window.onPhoneChange = function() {
-                const user = getCurrentUser();
-                const inp = document.getElementById('phoneInp');
-                const btn = document.getElementById('phoneSaveBtn');
+                var user = getCurrentUser();
+                var inp = document.getElementById('phoneInp');
+                var btn = document.getElementById('phoneSaveBtn');
                 btn.disabled = inp.value === (user?.phone || '');
             };
 
             window.savePhone = async function() {
-                const val = document.getElementById('phoneInp').value.trim();
+                var val = document.getElementById('phoneInp').value.trim();
                 if (!val) { showToast('Please enter a valid phone number', 'o'); return; }
                 try {
                     await window.SettingsAPI.updateFlags({ phone: val });
@@ -3269,10 +3260,10 @@
             };
 
             function syncEditProfile() {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (!user) return;
 
-                const avatarSrc = user.avatar || '';
+                var avatarSrc = user.avatar || '';
                 document.getElementById('editAv').src = avatarSrc;
 
                 document.getElementById('eDN').value = user.displayName || '';
@@ -3283,13 +3274,13 @@
                 document.getElementById('unC').textContent = (user.username || '').length + ' / 30';
                 document.getElementById('bioC').textContent = (user.bio || '').length + ' / 160';
 
-                const tags = user.tags || [];
+                var tags = user.tags || [];
                 renderPillsEd(tags);
                 window._pendingPills = tags.slice();
 
-                const gd = document.getElementById('eGenderDisplay');
+                var gd = document.getElementById('eGenderDisplay');
                 if (user.gender) {
-                    const icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
+                    var icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
                         'Other': '✦' };
                     gd.textContent = (icons[user.gender] || '') + ' ' + (user.gender || 'Prefer not to say');
                     gd.style.color = 'var(--text)';
@@ -3301,12 +3292,12 @@
                 }
 
                 if (user.dob) {
-                    const d = new Date(user.dob);
+                    var d = new Date(user.dob);
                     if (!isNaN(d.getTime())) {
-                        const dateStr = MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+                        var dateStr = MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
                         document.getElementById('eDOBDisplay').textContent = dateStr;
                         document.getElementById('eDOBDisplay').style.color = 'var(--text)';
-                        const age = new Date().getFullYear() - d.getFullYear();
+                        var age = new Date().getFullYear() - d.getFullYear();
                         document.getElementById('dobAgeHint').textContent = 'Age: ' + age + ' years old';
                         window._dobSel = { month: d.getMonth() + 1, day: d.getDate(), year: d.getFullYear() };
                     }
@@ -3318,7 +3309,7 @@
                 }
 
                 if (user.country) {
-                    const c = COUNTRIES.find(c => c.n === user.country);
+                    var c = COUNTRIES.find(function(c) { return c.n === user.country; });
                     if (c) {
                         document.getElementById('eCountryDisplay').textContent = c.f + ' ' + c.n;
                         document.getElementById('eCountryDisplay').style.color = 'var(--text)';
@@ -3332,18 +3323,19 @@
             }
 
             function renderPillsEd(tags) {
-                const container = document.getElementById('pillsEd');
-                const wrap = document.getElementById('pillWrap');
-                container.innerHTML = (tags || []).map((p, i) =>
-                    `<span class="pill-chip">${p}<button onclick="removePill(${i})">×</button></span>`
-                ).join('');
+                var container = document.getElementById('pillsEd');
+                var wrap = document.getElementById('pillWrap');
+                container.innerHTML = (tags || []).map(function(p, i) {
+                    return '<span class="pill-chip">' + p + '<button onclick="removePill(' + i +
+                        ')">×</button></span>';
+                }).join('');
                 wrap.style.display = (tags || []).length >= 3 ? 'none' : 'flex';
             }
 
             window.addPill = function() {
-                const inp = document.getElementById('pillInp');
-                const val = inp.value.trim();
-                const tags = window._pendingPills || [];
+                var inp = document.getElementById('pillInp');
+                var val = inp.value.trim();
+                var tags = window._pendingPills || [];
                 if (!val || tags.length >= 3) return;
                 tags.push(val);
                 inp.value = '';
@@ -3352,18 +3344,18 @@
             };
 
             window.removePill = function(i) {
-                const tags = window._pendingPills || [];
+                var tags = window._pendingPills || [];
                 tags.splice(i, 1);
                 window._pendingPills = tags;
                 renderPillsEd(tags);
             };
 
             window.saveProfile = async function() {
-                const dn = document.getElementById('eDN').value.trim();
-                const un = document.getElementById('eUN').value.trim();
-                const bio = document.getElementById('eBio').value.trim();
+                var dn = document.getElementById('eDN').value.trim();
+                var un = document.getElementById('eUN').value.trim();
+                var bio = document.getElementById('eBio').value.trim();
 
-                const updates = {
+                var updates = {
                     displayName: dn || 'Guest',
                     username: un || 'user',
                     bio: bio,
@@ -3378,9 +3370,8 @@
                 try {
                     await updateProfileSupabase(updates);
 
-                    // Update local AuthUser cache
                     if (window.AuthUser && window.AuthUser.updateCurrentUser) {
-                        const user = getCurrentUser();
+                        var user = getCurrentUser();
                         if (user) {
                             Object.assign(user, updates);
                             window.AuthUser.updateCurrentUser(user);
@@ -3390,7 +3381,6 @@
                     closeFS('editProfileModal');
                     showToast('Profile updated ✓', 'g');
 
-                    // Notify other tabs/pages
                     document.dispatchEvent(new CustomEvent('profileUpdated', {
                         detail: { user: getCurrentUser() }
                     }));
@@ -3400,15 +3390,15 @@
             };
 
             // ─── VERIFICATION ──────────────────────────────────
-            let vfyCat = '';
-            let vfyState = 'none';
+            var vfyCat = '';
+            var vfyState = 'none';
 
             function updateVfyStatusCard(status) {
-                const badge = document.getElementById('vfyBadgeIcon');
-                const lbl = document.getElementById('vfyStatusLbl');
-                const sub = document.getElementById('vfyStatusSub');
-                const pill = document.getElementById('vfyPill');
-                const settingsBadge = document.getElementById('vfySettingsBadge');
+                var badge = document.getElementById('vfyBadgeIcon');
+                var lbl = document.getElementById('vfyStatusLbl');
+                var sub = document.getElementById('vfyStatusSub');
+                var pill = document.getElementById('vfyPill');
+                var settingsBadge = document.getElementById('vfySettingsBadge');
 
                 if (status?.status === 'approved') {
                     badge.className = 'vfy-badge verified';
@@ -3441,9 +3431,9 @@
                         settingsBadge.className = 'r-badge'; }
                 }
                 // Eligibility requirements
-                const reqList = document.getElementById('vfyReqList');
-                const user = getCurrentUser();
-                const reqs = [
+                var reqList = document.getElementById('vfyReqList');
+                var user = getCurrentUser();
+                var reqs = [
                     { icon: user?.displayName && user?.bio ? 'pass' : 'fail', name: 'Complete profile',
                         hint: 'Display name, bio, and avatar set' },
                     { icon: user?.phone ? 'pass' : 'fail', name: 'Phone number linked',
@@ -3451,17 +3441,16 @@
                     { icon: 'fail', name: '100+ followers', hint: 'You currently have 0 followers' },
                     { icon: 'pass', name: 'Account age 30+ days', hint: 'Your account is old enough' }
                 ];
-                reqList.innerHTML = reqs.map(r => `
-                    <div class="vfy-req">
-                        <div class="vfy-req-ico ${r.icon}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
-                        <div class="vfy-req-txt"><span class="vfy-req-name">${r.name}</span><span class="vfy-req-hint">${r.hint}</span></div>
-                    </div>
-                `).join('');
+                reqList.innerHTML = reqs.map(function(r) {
+                    return '<div class="vfy-req"><div class="vfy-req-ico ' + r.icon +
+                        '"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="vfy-req-txt"><span class="vfy-req-name">' +
+                        r.name + '</span><span class="vfy-req-hint">' + r.hint + '</span></div></div>';
+                }).join('');
             }
 
             (async function loadVfyStatus() {
                 try {
-                    const status = await window.SettingsAPI.getVerificationStatus();
+                    var status = await window.SettingsAPI.getVerificationStatus();
                     updateVfyStatusCard(status);
                 } catch (e) {
                     console.log('No verification status yet');
@@ -3474,33 +3463,33 @@
             };
 
             window.vfyGoStep = function(n) {
-                document.querySelectorAll('.vfy-step').forEach(el => el.classList.remove('active'));
+                document.querySelectorAll('.vfy-step').forEach(function(el) { el.classList.remove('active'); });
                 document.getElementById('vfyStep' + n).classList.add('active');
             };
 
             window.vfyPickCat = function(btn, cat) {
                 vfyCat = cat;
-                document.querySelectorAll('.vfy-cat').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.vfy-cat').forEach(function(b) { b.classList.remove('active'); });
                 btn.classList.add('active');
                 vfyCheckForm();
             };
 
             window.vfyCheckForm = function() {
-                const reason = document.getElementById('vfyReason').value || '';
-                const cc = document.getElementById('vfyCharCount');
+                var reason = document.getElementById('vfyReason').value || '';
+                var cc = document.getElementById('vfyCharCount');
                 cc.textContent = Math.min(reason.length, 300) + ' / 300';
-                const btn = document.getElementById('vfySubmitBtn');
+                var btn = document.getElementById('vfySubmitBtn');
                 btn.disabled = !(vfyCat && reason.trim().length >= 30);
             };
 
             window.vfySubmit = async function() {
-                const reason = document.getElementById('vfyReason').value.trim();
-                const link = document.getElementById('vfyLink').value.trim();
+                var reason = document.getElementById('vfyReason').value.trim();
+                var link = document.getElementById('vfyLink').value.trim();
                 if (!vfyCat || reason.length < 30) return;
 
                 try {
-                    await window.SettingsAPI.submitVerification({ category: vfyCat, reason, link });
-                    const status = await window.SettingsAPI.getVerificationStatus();
+                    await window.SettingsAPI.submitVerification({ category: vfyCat, reason: reason, link: link });
+                    var status = await window.SettingsAPI.getVerificationStatus();
                     updateVfyStatusCard(status);
                     document.getElementById('vfyMetaCat').textContent = vfyCat;
                     document.getElementById('vfyMetaDate').textContent = new Date().toLocaleDateString('en-GB', {
@@ -3519,7 +3508,7 @@
                 if (!confirm('Withdraw your verification request?')) return;
                 try {
                     await window.SettingsAPI.withdrawVerification();
-                    const status = await window.SettingsAPI.getVerificationStatus();
+                    var status = await window.SettingsAPI.getVerificationStatus();
                     updateVfyStatusCard(status);
                     vfyGoStep(0);
                     showToast('Request withdrawn', 'o');
@@ -3529,7 +3518,7 @@
             };
 
             // ─── BLOCKED USERS ──────────────────────────────────
-            let blockedUsers = [];
+            var blockedUsers = [];
 
             async function loadBlockedUsers() {
                 try {
@@ -3542,34 +3531,34 @@
             }
 
             function renderBlockedUsers(list) {
-                const container = document.getElementById('blockedList');
+                var container = document.getElementById('blockedList');
                 if (!list.length) {
                     container.innerHTML =
                         '<div style="text-align:center;padding:40px;color:var(--muted)">No blocked users</div>';
                     return;
                 }
-                container.innerHTML = list.map((u, i) => `
-                    <div class="bl-row">
-                        <div class="bl-av" style="background:${u.avatar ? `url(${u.avatar})` : 'var(--bg4)'};background-size:cover;">
-                            ${!u.avatar ? (u.name ? u.name.charAt(0).toUpperCase() : '?') : ''}
-                        </div>
-                        <div class="u-info"><div class="u-name">${u.name || 'Unknown'}</div><div class="u-handle">${u.handle || ''}</div></div>
-                        <button class="unblock-btn" onclick="unblockUser(${i})">Unblock</button>
-                    </div>
-                `).join('');
+                container.innerHTML = list.map(function(u, i) {
+                    return '<div class="bl-row"><div class="bl-av" style="background:' + (u.avatar ? 'url(' + u
+                        .avatar + ')' : 'var(--bg4)') + ';background-size:cover;">' +
+                        (!u.avatar ? (u.name ? u.name.charAt(0).toUpperCase() : '?') : '') +
+                        '</div><div class="u-info"><div class="u-name">' + (u.name || 'Unknown') +
+                        '</div><div class="u-handle">' + (u.handle || '') +
+                        '</div></div><button class="unblock-btn" onclick="unblockUser(' + i +
+                        ')">Unblock</button></div>';
+                }).join('');
             }
 
             window.filterBlockedUsers = function(q) {
                 if (!q) { renderBlockedUsers(blockedUsers); return; }
-                const q2 = q.toLowerCase();
-                renderBlockedUsers(blockedUsers.filter(u =>
-                    (u.name || '').toLowerCase().includes(q2) ||
-                    (u.handle || '').toLowerCase().includes(q2)
-                ));
+                var q2 = q.toLowerCase();
+                renderBlockedUsers(blockedUsers.filter(function(u) {
+                    return (u.name || '').toLowerCase().includes(q2) ||
+                        (u.handle || '').toLowerCase().includes(q2);
+                }));
             };
 
             window.unblockUser = async function(idx) {
-                const user = blockedUsers[idx];
+                var user = blockedUsers[idx];
                 if (!user) return;
                 if (!confirm('Unblock ' + (user.name || 'this user') + '?')) return;
                 try {
@@ -3589,7 +3578,7 @@
             };
 
             // ─── LANGUAGE PICKER ──────────────────────────────
-            const LANGS = [
+            var LANGS = [
                 { g: 'Global', langs: [
                         { code: 'en', native: 'English', english: 'English (UK)', flag: '🇬🇧' },
                         { code: 'en-US', native: 'English', english: 'English (US)', flag: '🇺🇸' },
@@ -3621,38 +3610,45 @@
                         { code: 'ak', native: 'Akan', english: 'Akan', flag: '🇬🇭' }
                     ] }
             ];
-            let selLang = localStorage.getItem('freeupper_lang') || 'en';
-            let pendingLang = null;
+            var selLang = localStorage.getItem('freeupper_lang') || 'en';
+            var pendingLang = null;
 
             function renderLangs(q) {
-                const el = document.getElementById('langList');
+                var el = document.getElementById('langList');
                 if (q && q.trim()) {
-                    const lq = q.toLowerCase();
-                    const flat = [];
-                    LANGS.forEach(g => { g.langs.forEach(l => {
+                    var lq = q.toLowerCase();
+                    var flat = [];
+                    LANGS.forEach(function(g) {
+                        g.langs.forEach(function(l) {
                             if (l.native.toLowerCase().includes(lq) || l.english.toLowerCase().includes(lq))
                                 flat.push(l);
-                        }); });
+                        });
+                    });
                     if (!flat.length) {
                         el.innerHTML =
                             '<div style="text-align:center;padding:48px;color:var(--muted)"><div style="font-size:28px;margin-bottom:12px">🌍</div><div style="font-size:14px;font-weight:700">No languages found</div></div>';
                         return;
                     }
-                    el.innerHTML = flat.map(l => langRow(l)).join('');
+                    el.innerHTML = flat.map(function(l) { return langRow(l); }).join('');
                 } else {
-                    el.innerHTML = LANGS.map(g =>
-                        '<div class="lang-region">' + g.g + '</div>' + g.langs.map(l => langRow(l)).join('')
-                    ).join('');
+                    el.innerHTML = LANGS.map(function(g) {
+                        return '<div class="lang-region">' + g.g + '</div>' + g.langs.map(function(l) {
+                            return langRow(l);
+                        }).join('');
+                    }).join('');
                 }
             }
 
             function langRow(l) {
-                const isSel = selLang === l.code;
-                return `<div class="ctr-row${isSel?' sel':''}" onclick="pickLang('${l.code}','${l.english.replace(/'/g,"\\'")}','${l.flag}')">
-                    <span class="ctr-flag">${l.flag}</span>
-                    <div class="r-txt"><div class="ctr-name">${l.native}</div><div class="lang-native">${l.english}</div></div>
-                    ${isSel ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : ''}
-                </div>`;
+                var isSel = selLang === l.code;
+                return '<div class="ctr-row' + (isSel ? ' sel' : '') + '" onclick="pickLang(\'' + l.code + '\',\'' +
+                    l.english.replace(/'/g, "\\'") + '\',\'' + l.flag + '\')">' +
+                    '<span class="ctr-flag">' + l.flag + '</span>' +
+                    '<div class="r-txt"><div class="ctr-name">' + l.native + '</div><div class="lang-native">' + l
+                    .english + '</div></div>' +
+                    (isSel ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' :
+                        '') +
+                    '</div>';
             }
 
             window.openLanguagePicker = function() {
@@ -3664,7 +3660,7 @@
 
             window.pickLang = function(code, english, flag) {
                 if (code === selLang) { closeFS('langModal'); return; }
-                pendingLang = { code, english, flag };
+                pendingLang = { code: code, english: english, flag: flag };
                 document.getElementById('langConfirmDesc').textContent = 'The app will update to ' + english +
                     ' immediately.';
                 openMov('langConfirmOv');
@@ -3682,17 +3678,17 @@
             };
 
             // ─── 2FA ─────────────────────────────────────────────
-            let tfaStep = 0;
-            let tfaFactorId = null;
-            let tfaSecret = null;
-            const BACKUP_CODES = [];
+            var tfaStep = 0;
+            var tfaFactorId = null;
+            var tfaSecret = null;
+            var BACKUP_CODES = [];
 
             function generateBackupCodes() {
-                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-                const codes = [];
-                for (let i = 0; i < 8; i++) {
-                    let code = 'FREE-';
-                    for (let j = 0; j < 4; j++) {
+                var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                var codes = [];
+                for (var i = 0; i < 8; i++) {
+                    var code = 'FREE-';
+                    for (var j = 0; j < 4; j++) {
                         code += chars.charAt(Math.floor(Math.random() * chars.length));
                     }
                     codes.push(code);
@@ -3711,7 +3707,7 @@
                 tfaFactorId = null;
                 tfaSecret = null;
                 [0, 1, 2, 3, 4, 5].forEach(function(i) {
-                    const e = document.getElementById('td' + i);
+                    var e = document.getElementById('td' + i);
                     if (e) { e.value = '';
                         e.style.borderColor = ''; }
                 });
@@ -3731,7 +3727,7 @@
             window.tfaGo = function(step) {
                 tfaStep = step;
                 for (var i = 0; i <= 3; i++) {
-                    const el = document.getElementById('tfas' + i);
+                    var el = document.getElementById('tfas' + i);
                     if (el) { el.classList.toggle('active', i === step);
                         el.style.display = ''; }
                 }
@@ -3747,7 +3743,8 @@
 
             async function generateTfaQR() {
                 try {
-                    const { data, error } = await window.supabase.auth.mfa.enroll({
+                    // --- FIX: use sb (not window.supabase) ---
+                    var { data, error } = await sb.auth.mfa.enroll({
                         factorType: 'totp'
                     });
 
@@ -3756,8 +3753,8 @@
                     tfaFactorId = data.id;
                     tfaSecret = data.totp.secret;
 
-                    const qrImage = document.getElementById('tfaQrImage');
-                    const qrPlaceholder = document.getElementById('tfaQrPlaceholder');
+                    var qrImage = document.getElementById('tfaQrImage');
+                    var qrPlaceholder = document.getElementById('tfaQrPlaceholder');
 
                     if (data.totp.qr_code) {
                         qrImage.src = data.totp.qr_code;
@@ -3770,7 +3767,7 @@
                     document.getElementById('tfaSecretKey').textContent = tfaSecret;
 
                     setTimeout(function() {
-                        const e = document.getElementById('td0');
+                        var e = document.getElementById('td0');
                         if (e) e.focus();
                     }, 300);
                 } catch (err) {
@@ -3791,48 +3788,48 @@
             window.mvD = function(el, i) {
                 el.value = el.value.replace(/[^0-9]/g, '').slice(-1);
                 if (el.value && i < 5) {
-                    const next = document.getElementById('td' + (i + 1));
+                    var next = document.getElementById('td' + (i + 1));
                     if (next) next.focus();
                 }
-                const allFilled = [0, 1, 2, 3, 4, 5].every(function(j) {
-                    const e = document.getElementById('td' + j);
+                var allFilled = [0, 1, 2, 3, 4, 5].every(function(j) {
+                    var e = document.getElementById('td' + j);
                     return e && e.value.length === 1;
                 });
-                const btn = document.getElementById('tfaVerifyBtn');
+                var btn = document.getElementById('tfaVerifyBtn');
                 if (btn) btn.disabled = !allFilled;
             };
 
             window.mvDKey = function(el, i, e) {
                 if (e.key === 'Backspace' && !el.value && i > 0) {
-                    const prev = document.getElementById('td' + (i - 1));
+                    var prev = document.getElementById('td' + (i - 1));
                     if (prev) { prev.value = '';
                         prev.focus(); }
-                    const btn = document.getElementById('tfaVerifyBtn');
+                    var btn = document.getElementById('tfaVerifyBtn');
                     if (btn) btn.disabled = true;
                 }
                 if (e.key === 'ArrowLeft' && i > 0) {
-                    const prev2 = document.getElementById('td' + (i - 1));
+                    var prev2 = document.getElementById('td' + (i - 1));
                     if (prev2) prev2.focus();
                 }
                 if (e.key === 'ArrowRight' && i < 5) {
-                    const next2 = document.getElementById('td' + (i + 1));
+                    var next2 = document.getElementById('td' + (i + 1));
                     if (next2) next2.focus();
                 }
             };
 
             window.mvDPaste = function(e) {
                 e.preventDefault();
-                const text = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0,
+                var text = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0,
                 6);
                 for (var j = 0; j < 6; j++) {
-                    const inp = document.getElementById('td' + j);
+                    var inp = document.getElementById('td' + j);
                     if (inp) inp.value = text[j] || '';
                 }
-                const last = Math.min(text.length, 5);
-                const focus = document.getElementById('td' + last);
+                var last = Math.min(text.length, 5);
+                var focus = document.getElementById('td' + last);
                 if (focus) focus.focus();
-                const allFilled = text.length >= 6;
-                const btn = document.getElementById('tfaVerifyBtn');
+                var allFilled = text.length >= 6;
+                var btn = document.getElementById('tfaVerifyBtn');
                 if (btn) btn.disabled = !allFilled;
             };
 
@@ -3842,15 +3839,16 @@
                     return;
                 }
 
-                const code = [0, 1, 2, 3, 4, 5].map(function(i) {
-                    const e = document.getElementById('td' + i);
+                var code = [0, 1, 2, 3, 4, 5].map(function(i) {
+                    var e = document.getElementById('td' + i);
                     return e ? e.value : '';
                 }).join('');
 
                 if (code.length < 6) return;
 
                 try {
-                    const { data, error } = await window.supabase.auth.mfa.challengeAndVerify({
+                    // --- FIX: use sb ---
+                    var { data, error } = await sb.auth.mfa.challengeAndVerify({
                         factorId: tfaFactorId,
                         code: code
                     });
@@ -3858,17 +3856,17 @@
                     if (error) throw error;
 
                     [0, 1, 2, 3, 4, 5].forEach(function(i) {
-                        const e = document.getElementById('td' + i);
+                        var e = document.getElementById('td' + i);
                         if (e) e.style.borderColor = 'var(--ok)';
                     });
 
-                    const btn = document.getElementById('tfaVerifyBtn');
+                    var btn = document.getElementById('tfaVerifyBtn');
                     if (btn) { btn.disabled = true;
                         btn.textContent = 'Verified ✓'; }
 
-                    const codes = generateBackupCodes();
-                    BACKUP_CODES.push(...codes);
-                    const bc = document.getElementById('backupCodes');
+                    var codes = generateBackupCodes();
+                    BACKUP_CODES.push.apply(BACKUP_CODES, codes);
+                    var bc = document.getElementById('backupCodes');
                     if (bc) {
                         bc.innerHTML = codes.map(function(k) { return '<div class="bc">' + k + '</div>'; })
                     .join('');
@@ -3878,16 +3876,16 @@
                 } catch (err) {
                     showToast('Invalid code: ' + err.message, 'r');
                     [0, 1, 2, 3, 4, 5].forEach(function(i) {
-                        const e = document.getElementById('td' + i);
+                        var e = document.getElementById('td' + i);
                         if (e) {
                             e.value = '';
                             e.style.borderColor = 'var(--danger)';
                             setTimeout(function() { e.style.borderColor = ''; }, 1000);
                         }
                     });
-                    const btn = document.getElementById('tfaVerifyBtn');
+                    var btn = document.getElementById('tfaVerifyBtn');
                     if (btn) btn.disabled = true;
-                    const first = document.getElementById('td0');
+                    var first = document.getElementById('td0');
                     if (first) first.focus();
                 }
             };
@@ -3908,8 +3906,8 @@
                     showToast('No backup codes available', 'o');
                     return;
                 }
-                const b = new Blob([BACKUP_CODES.join('\n')], { type: 'text/plain' });
-                const a = document.createElement('a');
+                var b = new Blob([BACKUP_CODES.join('\n')], { type: 'text/plain' });
+                var a = document.createElement('a');
                 a.href = URL.createObjectURL(b);
                 a.download = 'freeupper-backup-codes.txt';
                 a.click();
@@ -3927,17 +3925,17 @@
             };
 
             function tfaRestoreStep0() {
-                const box = document.getElementById('tfas0');
+                var box = document.getElementById('tfas0');
                 box.innerHTML =
                     '<div class="tfa-intro-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><div class="tfa-h">Secure Your Account</div><div class="tfa-p">Add an extra layer of security by requiring a verification code from your authenticator app when logging in.</div><div class="tfa-info">💡 Once enabled, you\'ll enter a 6-digit code from your app after your password each time you sign in.</div><button class="tfa-btn" onclick="tfaGo(1)">Continue →</button>';
             }
 
             function tfaGoDisable() {
-                const box = document.getElementById('tfas0');
+                var box = document.getElementById('tfas0');
                 box.innerHTML =
                     '<div class="tfa-intro-icon" style="background:rgba(220,38,38,.1);border-color:rgba(220,38,38,.3)"><svg viewBox="0 0 24 24" style="stroke:#dc2626;fill:none;stroke-width:1.5;stroke-linecap:round;width:36px;height:36px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div><div class="tfa-h">Disable 2FA?</div><div class="tfa-p">Removing two-factor authentication will make your account less secure. Are you sure?</div><button class="tfa-btn" style="background:linear-gradient(135deg,#dc2626,#b91c1c)" onclick="tfaDisableConfirm()">Yes, Disable 2FA</button><button class="tfa-btn-sm" onclick="closeFS(\'tfaModal\');tfaRestoreStep0()" style="margin-top:-8px">Cancel</button>';
                 for (var i = 0; i <= 3; i++) {
-                    const el = document.getElementById('tfas' + i);
+                    var el = document.getElementById('tfas' + i);
                     if (el) el.classList.toggle('active', i === 0);
                 }
                 document.querySelectorAll('.tfa-dot').forEach(function(d, i) {
@@ -3948,9 +3946,10 @@
 
             async function tfaDisableConfirm() {
                 try {
-                    const factorId = localStorage.getItem('freeupper_2fa_factor_id');
+                    var factorId = localStorage.getItem('freeupper_2fa_factor_id');
                     if (factorId) {
-                        const { error } = await window.supabase.auth.mfa.unenroll({ factorId });
+                        // --- FIX: use sb ---
+                        var { error } = await sb.auth.mfa.unenroll({ factorId: factorId });
                         if (error) throw error;
                     }
                     localStorage.removeItem('freeupper_2fa_enabled');
@@ -3968,31 +3967,31 @@
 
             // ─── CHANGE PASSWORD ──────────────────────────────
             window.toggleEye = function(id) {
-                const inp = document.getElementById(id);
+                var inp = document.getElementById(id);
                 if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
             };
 
             window.chkStr = function(pw) {
-                const len = pw.length >= 8;
-                const upper = /[A-Z]/.test(pw);
-                const num = /[0-9]/.test(pw);
-                const spec = /[^a-zA-Z0-9]/.test(pw);
-                const score = (len ? 1 : 0) + (upper ? 1 : 0) + (num ? 1 : 0) + (spec ? 1 : 0) + (pw.length >= 14 ? 1 :
+                var len = pw.length >= 8;
+                var upper = /[A-Z]/.test(pw);
+                var num = /[0-9]/.test(pw);
+                var spec = /[^a-zA-Z0-9]/.test(pw);
+                var score = (len ? 1 : 0) + (upper ? 1 : 0) + (num ? 1 : 0) + (spec ? 1 : 0) + (pw.length >= 14 ? 1 :
                 0);
-                const levels = [
+                var levels = [
                     { w: '0%', c: 'transparent', t: '' },
                     { w: '25%', c: '#f87171', t: 'Weak' },
                     { w: '50%', c: '#fb923c', t: 'Fair' },
                     { w: '75%', c: '#facc15', t: 'Good' },
                     { w: '100%', c: '#4ade80', t: 'Strong' }
                 ];
-                const l = levels[Math.min(score, 4)];
-                const fill = document.getElementById('strFill');
-                const lbl = document.getElementById('strLbl');
+                var l = levels[Math.min(score, 4)];
+                var fill = document.getElementById('strFill');
+                var lbl = document.getElementById('strLbl');
                 if (fill) fill.style.cssText = 'width:' + l.w + ';background:' + l.c;
                 if (lbl) { lbl.textContent = l.t;
                     lbl.style.color = l.c; }
-                const setReq = function(id, met) { const e = document.getElementById(id); if (e) e.classList.toggle(
+                var setReq = function(id, met) { var e = document.getElementById(id); if (e) e.classList.toggle(
                         'met', met); };
                 setReq('req-len', len);
                 setReq('req-upper', upper);
@@ -4002,40 +4001,40 @@
             };
 
             window.chkMatch = function() {
-                const nEl = document.getElementById('pwNew');
-                const cEl = document.getElementById('pwConf');
-                const h = document.getElementById('matchHint');
+                var nEl = document.getElementById('pwNew');
+                var cEl = document.getElementById('pwConf');
+                var h = document.getElementById('matchHint');
                 if (!h || !nEl || !cEl || !cEl.value) { if (h) h.textContent = ''; return; }
-                const match = nEl.value === cEl.value;
+                var match = nEl.value === cEl.value;
                 h.textContent = match ? '✓ Passwords match' : '✗ Passwords do not match';
                 h.style.color = match ? 'var(--ok)' : 'var(--danger)';
             };
 
             window.openPasswordModal = function() {
-                ['pwCur', 'pwNew', 'pwConf'].forEach(function(id) { const e = document.getElementById(id); if (e) e
+                ['pwCur', 'pwNew', 'pwConf'].forEach(function(id) { var e = document.getElementById(id); if (e) e
                         .value = ''; });
-                const fill = document.getElementById('strFill');
-                const lbl = document.getElementById('strLbl');
-                const hint = document.getElementById('matchHint');
+                var fill = document.getElementById('strFill');
+                var lbl = document.getElementById('strLbl');
+                var hint = document.getElementById('matchHint');
                 if (fill) fill.style.cssText = '';
                 if (lbl) lbl.textContent = '';
                 if (hint) hint.textContent = '';
-                ['req-len', 'req-upper', 'req-num', 'req-special'].forEach(function(id) { const e = document
+                ['req-len', 'req-upper', 'req-num', 'req-special'].forEach(function(id) { var e = document
                         .getElementById(id); if (e) e.classList.remove('met'); });
                 openFS('pwModal');
             };
 
             window.savePassword = async function() {
-                const cur = document.getElementById('pwCur').value;
-                const nw = document.getElementById('pwNew').value;
-                const cf = document.getElementById('pwConf').value;
-                const user = getCurrentUser();
+                var cur = document.getElementById('pwCur').value;
+                var nw = document.getElementById('pwNew').value;
+                var cf = document.getElementById('pwConf').value;
+                var user = getCurrentUser();
                 if (!cur || !nw || !cf) { showToast('Fill all fields', 'o'); return; }
                 if (nw !== cf) { showToast('Passwords do not match', 'o'); return; }
                 if (nw.length < 8) { showToast('Password must be at least 8 characters', 'o'); return; }
 
                 try {
-                    const { error: signInError } = await window.supabase.auth.signInWithPassword({
+                    var { error: signInError } = await sb.auth.signInWithPassword({
                         email: user.email,
                         password: cur
                     });
@@ -4045,7 +4044,7 @@
                         return;
                     }
 
-                    const { error: updateError } = await window.supabase.auth.updateUser({
+                    var { error: updateError } = await sb.auth.updateUser({
                         password: nw
                     });
 
@@ -4058,33 +4057,31 @@
                 }
             };
 
-            // ─── ACTIVE SESSIONS (REAL EDGE FUNCTION) ──────────
-            let sessions = [];
-            let pendingSessId = null;
+            // ─── ACTIVE SESSIONS ──────────────────────────────
+            var sessions = [];
+            var pendingSessId = null;
 
             async function loadSessions() {
                 try {
-                    // 1. Call Edge Function
-                    const { data, error } = await window.supabase.functions.invoke('manage-sessions', {
+                    // --- FIX: use sb for Edge Function ---
+                    var { data, error } = await sb.functions.invoke('manage-sessions', {
                         body: { action: 'list' }
                     });
                     if (error) throw new Error(error.message || 'Failed to load sessions');
 
-                    // 2. Get current session id from JWT
-                    const { data: sessionData } = await window.supabase.auth.getSession();
-                    let currentSessionId = null;
+                    var { data: sessionData } = await sb.auth.getSession();
+                    var currentSessionId = null;
                     if (sessionData && sessionData.session) {
                         try {
-                            const payload = JSON.parse(atob(sessionData.session.access_token.split('.')[1]));
+                            var payload = JSON.parse(atob(sessionData.session.access_token.split('.')[1]));
                             currentSessionId = payload.session_id || null;
                         } catch (e) { console.warn('Could not decode session_id', e); }
                     }
 
-                    // 3. Map sessions
                     sessions = (data.sessions || []).map(function(s) {
-                        const isCurrent = s.id === currentSessionId;
-                        const name = /mobile/i.test(s.user_agent || '') ? 'Mobile Device' : 'Desktop Browser';
-                        const isPhone = /mobile/i.test(s.user_agent || '');
+                        var isCurrent = s.id === currentSessionId;
+                        var name = /mobile/i.test(s.user_agent || '') ? 'Mobile Device' : 'Desktop Browser';
+                        var isPhone = /mobile/i.test(s.user_agent || '');
                         return {
                             id: s.id,
                             isCurrent: isCurrent,
@@ -4108,17 +4105,17 @@
             }
 
             function renderSessions() {
-                const body = document.getElementById('sessBody');
+                var body = document.getElementById('sessBody');
                 if (!sessions.length) {
                     body.innerHTML =
                         '<div class="sess-empty"><div class="sess-empty-ico"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><h3>No active sessions</h3><p>You are not logged in on any device.</p></div>';
                     return;
                 }
 
-                const curr = sessions.find(s => s.isCurrent);
-                const others = sessions.filter(s => !s.isCurrent);
+                var curr = sessions.find(function(s) { return s.isCurrent; });
+                var others = sessions.filter(function(s) { return !s.isCurrent; });
 
-                let html = '';
+                var html = '';
                 if (curr) {
                     html +=
                         '<div class="sess-section-hdr" style="padding-top:6px">Current Device</div>' +
@@ -4126,7 +4123,7 @@
                 }
                 if (others.length) {
                     html += '<div class="sess-section-hdr">Other Devices</div>' +
-                        others.map(s => sessCard(s)).join('');
+                        others.map(function(s) { return sessCard(s); }).join('');
                     html +=
                         '<div style="margin:16px 16px 0;"><button onclick="openMov(\'sessLogoutAllDlg\')" class="sess-logout-all"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log Out of All Other Sessions</button></div>';
                 } else {
@@ -4137,25 +4134,23 @@
             }
 
             function sessCard(s) {
-                const icon = s.isPhone ?
+                var icon = s.isPhone ?
                     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>' :
                     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
-                const lastActive = s.lastActive === 'Active now' ? 'Active now' :
+                var lastActive = s.lastActive === 'Active now' ? 'Active now' :
                     s.lastActive && s.lastActive !== 'Unknown' ? new Date(s.lastActive).toLocaleString() : 'Unknown';
-                return `<div class="sess-card${s.isCurrent ? ' current' : ''}">
-                    <div class="sess-card-top">
-                        <div class="sess-dev-ico">${icon}</div>
-                        <div class="sess-dev-info">
-                            <div class="sess-dev-name">${s.name}${s.isCurrent ? ' <span class="sess-curr-badge">Current</span>' : ''}</div>
-                            <div class="sess-dev-detail">${s.os || 'Unknown OS'}</div>
-                        </div>
-                    </div>
-                    <div class="sess-meta">
-                        <div class="sess-meta-item"><span class="sess-meta-lbl">IP</span><span class="sess-meta-val">${s.ip || 'Unknown'}</span></div>
-                        <div class="sess-meta-item"><span class="sess-meta-lbl">Last active</span><span class="sess-meta-val${s.lastActive === 'Active now' ? ' active-now' : ''}">${lastActive}</span></div>
-                    </div>
-                    ${!s.isCurrent ? `<button class="sess-logout-btn" onclick="askSessLogout('${s.id}')">Log Out This Device</button>` : ''}
-                </div>`;
+                return '<div class="sess-card' + (s.isCurrent ? ' current' : '') + '">' +
+                    '<div class="sess-card-top"><div class="sess-dev-ico">' + icon +
+                    '</div><div class="sess-dev-info"><div class="sess-dev-name">' + s.name + (s.isCurrent ?
+                        ' <span class="sess-curr-badge">Current</span>' : '') +
+                    '</div><div class="sess-dev-detail">' + (s.os || 'Unknown OS') + '</div></div></div>' +
+                    '<div class="sess-meta"><div class="sess-meta-item"><span class="sess-meta-lbl">IP</span><span class="sess-meta-val">' +
+                    (s.ip || 'Unknown') + '</span></div>' +
+                    '<div class="sess-meta-item"><span class="sess-meta-lbl">Last active</span><span class="sess-meta-val' +
+                    (s.lastActive === 'Active now' ? ' active-now' : '') + '">' + lastActive + '</span></div></div>' +
+                    (!s.isCurrent ? '<button class="sess-logout-btn" onclick="askSessLogout(\'' + s.id +
+                        '\')">Log Out This Device</button>' : '') +
+                    '</div>';
             }
 
             window.askSessLogout = function(id) {
@@ -4166,11 +4161,12 @@
             window.confirmSessLogout = function() {
                 closeMov('sessLogoutDlg');
                 if (!pendingSessId) return;
-                window.supabase.functions.invoke('manage-sessions', {
+                // --- FIX: use sb ---
+                sb.functions.invoke('manage-sessions', {
                     body: { action: 'revoke', session_id: pendingSessId }
                 }).then(function({ error }) {
                     if (error) { showToast(error.message, 'r'); return; }
-                    sessions = sessions.filter(s => s.id !== pendingSessId);
+                    sessions = sessions.filter(function(s) { return s.id !== pendingSessId; });
                     renderSessions();
                     document.getElementById('sessBadge').textContent = sessions.length + ' devices';
                     showToast('Device logged out', 'g');
@@ -4181,20 +4177,20 @@
 
             window.confirmLogoutAll = function() {
                 closeMov('sessLogoutAllDlg');
-                // Need current session id
-                window.supabase.auth.getSession().then(function({ data }) {
+                sb.auth.getSession().then(function({ data }) {
                     if (data && data.session) {
-                        let currentSessionId = null;
+                        var currentSessionId = null;
                         try {
-                            const payload = JSON.parse(atob(data.session.access_token.split('.')[1]));
+                            var payload = JSON.parse(atob(data.session.access_token.split('.')[1]));
                             currentSessionId = payload.session_id || null;
                         } catch (e) {}
                         if (currentSessionId) {
-                            window.supabase.functions.invoke('manage-sessions', {
+                            // --- FIX: use sb ---
+                            sb.functions.invoke('manage-sessions', {
                                 body: { action: 'revoke_others', current_session_id: currentSessionId }
                             }).then(function({ error }) {
                                 if (error) { showToast(error.message, 'r'); return; }
-                                sessions = sessions.filter(s => s.isCurrent);
+                                sessions = sessions.filter(function(s) { return s.isCurrent; });
                                 renderSessions();
                                 document.getElementById('sessBadge').textContent = sessions.length +
                                     ' devices';
@@ -4222,7 +4218,7 @@
             window.confirmLogoutAction = async function() {
                 closeMov('logoutDlg');
                 try {
-                    const { error } = await window.supabase.auth.signOut();
+                    var { error } = await sb.auth.signOut();
                     if (error) throw error;
                     window.location.href = 'index.html';
                 } catch (err) {
@@ -4230,14 +4226,14 @@
                 }
             };
 
-            // ─── DELETE ACCOUNT (REAL EDGE FUNCTION) ────────────
-            let deleteTimer = null;
-            let deleteCountdown = 30;
+            // ─── DELETE ACCOUNT ────────────────────────────────
+            var deleteTimer = null;
+            var deleteCountdown = 30;
 
             window.onDeleteInput = function() {
-                const input = document.getElementById('deleteConfirmInput');
-                const btn = document.getElementById('delBtn');
-                const timer = document.getElementById('deleteTimer');
+                var input = document.getElementById('deleteConfirmInput');
+                var btn = document.getElementById('delBtn');
+                var timer = document.getElementById('deleteTimer');
 
                 if (input.value === 'DELETE') {
                     btn.disabled = true;
@@ -4283,7 +4279,8 @@
             window.confirmDeleteAction = async function() {
                 closeMov('deleteDlg');
                 try {
-                    const response = await window.supabase.functions.invoke('delete-account', {
+                    // --- FIX: use sb ---
+                    var response = await sb.functions.invoke('delete-account', {
                         method: 'POST',
                         body: {}
                     });
@@ -4298,30 +4295,35 @@
             };
 
             // ─── AVATAR PICKER ──────────────────────────────────
-            const AVATARS = ['assets/photo1.png', 'assets/photo2.png', 'assets/photo3.png', 'assets/photo4.png',
+            var AVATARS = ['assets/photo1.png', 'assets/photo2.png', 'assets/photo3.png', 'assets/photo4.png',
                 'assets/photo5.png', 'assets/photo6.png', 'assets/photo7.png', 'assets/photo8.png', 'assets/photo9.png'
             ];
-            const AVBG = ['linear-gradient(135deg,#1a1035,#3b1a6b)', 'linear-gradient(135deg,#0f1a2e,#1e3a5f)',
+            var AVBG = ['linear-gradient(135deg,#1a1035,#3b1a6b)', 'linear-gradient(135deg,#0f1a2e,#1e3a5f)',
                 'linear-gradient(135deg,#1a0f1f,#3b0764)', 'linear-gradient(135deg,#0f1f1a,#064e3b)'
             ];
-            let selAvIdx = -1;
+            var selAvIdx = -1;
 
             function initAvatarGrid() {
-                const grid = document.getElementById('avGrid');
+                var grid = document.getElementById('avGrid');
                 if (!grid) return;
-                const user = getCurrentUser();
-                const currentAvatar = user?.avatar || '';
-                let foundIdx = AVATARS.indexOf(currentAvatar);
+                var user = getCurrentUser();
+                var currentAvatar = user?.avatar || '';
+                var foundIdx = AVATARS.indexOf(currentAvatar);
                 if (foundIdx === -1) foundIdx = -1;
                 selAvIdx = foundIdx;
 
-                grid.innerHTML = AVATARS.map((src, i) => {
-                    const sel = selAvIdx === i;
-                    return `<div class="av-opt${sel ? ' sel' : ''}" onclick="pickAv(this,${i},'${src}')" style="border:3px solid ${sel ? 'var(--p)' : 'transparent'}">
-                        <img src="${src}" alt="Photo ${i+1}" style="width:100%;height:100%;object-fit:cover;display:block;position:absolute;top:0;left:0" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                        <div style="display:none;width:100%;height:100%;background:${AVBG[i % AVBG.length]};align-items:center;justify-content:center;font-size:26px;position:absolute;top:0;left:0">${['🎬','💻','🚀','🛠️','🌌','🔮','🎯','🤖','🦾'][i]}</div>
-                        ${sel ? `<div class="av-select-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>` : ''}
-                    </div>`;
+                grid.innerHTML = AVATARS.map(function(src, i) {
+                    var sel = selAvIdx === i;
+                    return '<div class="av-opt' + (sel ? ' sel' : '') + '" onclick="pickAv(this,' + i + ',\'' +
+                        src + '\')" style="border:3px solid ' + (sel ? 'var(--p)' : 'transparent') + '">' +
+                        '<img src="' + src + '" alt="Photo ' + (i + 1) +
+                        '" style="width:100%;height:100%;object-fit:cover;display:block;position:absolute;top:0;left:0" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                        '<div style="display:none;width:100%;height:100%;background:' + AVBG[i % AVBG.length] +
+                        ';align-items:center;justify-content:center;font-size:26px;position:absolute;top:0;left:0">' +
+                        ['🎬', '💻', '🚀', '🛠️', '🌌', '🔮', '🎯', '🤖', '🦾'][i] + '</div>' +
+                        (sel ? '<div class="av-select-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' :
+                            '') +
+                        '</div>';
                 }).join('');
             }
 
@@ -4329,27 +4331,27 @@
                 selAvIdx = idx;
                 initAvatarGrid();
 
-                ['profileAvatar', 'editAv', 'navAv', 'sideAv', 'qrAvatar'].forEach(id => {
-                    const e = document.getElementById(id);
+                ['profileAvatar', 'editAv', 'navAv', 'sideAv', 'qrAvatar'].forEach(function(id) {
+                    var e = document.getElementById(id);
                     if (e) e.src = src;
                 });
 
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (user) {
-                    updateProfileSupabase({ avatar: src }).then(() => {
+                    updateProfileSupabase({ avatar: src }).then(function() {
                         showToast('Profile photo updated ✓', 'g');
                         if (window.AuthUser && window.AuthUser.updateCurrentUser) {
-                            const updated = { ...user, avatar: src };
+                            var updated = Object.assign({}, user, { avatar: src });
                             window.AuthUser.updateCurrentUser(updated);
                         }
-                    }).catch(err => showToast(err.message, 'r'));
+                    }).catch(function(err) { showToast(err.message, 'r'); });
                 }
 
                 closeFS('avatarModal');
             };
 
             window.handleUpload = async function(e) {
-                const file = e.target.files[0];
+                var file = e.target.files[0];
                 if (!file) return;
                 try {
                     showToast('Uploading photo…', 'p');
@@ -4362,15 +4364,15 @@
             };
 
             // ─── DOB PICKER ─────────────────────────────────────
-            const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
+            var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
                 'October', 'November', 'December'
             ];
             window._dobSel = { month: null, day: null, year: null };
 
             window.openDOBModal = function() {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (user?.dob) {
-                    const d = new Date(user.dob);
+                    var d = new Date(user.dob);
                     if (!isNaN(d.getTime())) {
                         window._dobSel = { month: d.getMonth() + 1, day: d.getDate(), year: d.getFullYear() };
                     }
@@ -4382,21 +4384,25 @@
             };
 
             function initDOBPickers() {
-                const curY = new Date().getFullYear();
-                const ms = document.getElementById('dobMonthScroll');
-                ms.innerHTML = MONTHS.map((m, i) =>
-                    `<div class="dob-item${window._dobSel.month===i+1 ? ' sel' : ''}" onclick="selDOB('month',${i+1},this)">${m}</div>`
-                ).join('');
-                const ds = document.getElementById('dobDayScroll');
-                ds.innerHTML = Array.from({ length: 31 }, (_, i) =>
-                    `<div class="dob-item${window._dobSel.day===i+1 ? ' sel' : ''}" onclick="selDOB('day',${i+1},this)">${String(i+1).padStart(2,'0')}</div>`
-                ).join('');
-                const ys = document.getElementById('dobYearScroll');
-                const years = [];
-                for (let y = curY - 13; y >= curY - 120; y--) years.push(y);
-                ys.innerHTML = years.map(y =>
-                    `<div class="dob-item${window._dobSel.year===y ? ' sel' : ''}" onclick="selDOB('year',${y},this)">${y}</div>`
-                ).join('');
+                var curY = new Date().getFullYear();
+                var ms = document.getElementById('dobMonthScroll');
+                ms.innerHTML = MONTHS.map(function(m, i) {
+                    return '<div class="dob-item' + (window._dobSel.month === i + 1 ? ' sel' : '') +
+                        '" onclick="selDOB(\'month\',' + (i + 1) + ',this)">' + m + '</div>';
+                }).join('');
+                var ds = document.getElementById('dobDayScroll');
+                ds.innerHTML = Array.from({ length: 31 }, function(_, i) {
+                    return '<div class="dob-item' + (window._dobSel.day === i + 1 ? ' sel' : '') +
+                        '" onclick="selDOB(\'day\',' + (i + 1) + ',this)">' + String(i + 1).padStart(2, '0') +
+                        '</div>';
+                }).join('');
+                var ys = document.getElementById('dobYearScroll');
+                var years = [];
+                for (var y = curY - 13; y >= curY - 120; y--) years.push(y);
+                ys.innerHTML = years.map(function(y) {
+                    return '<div class="dob-item' + (window._dobSel.year === y ? ' sel' : '') +
+                        '" onclick="selDOB(\'year\',' + y + ',this)">' + y + '</div>';
+                }).join('');
                 if (window._dobSel.month) scrollToDOB(ms, window._dobSel.month - 1);
                 if (window._dobSel.day) scrollToDOB(ds, window._dobSel.day - 1);
                 if (window._dobSel.year) scrollToDOB(ys, years.indexOf(window._dobSel.year));
@@ -4404,45 +4410,49 @@
             }
 
             function scrollToDOB(container, idx) {
-                const itemH = 48;
+                var itemH = 48;
                 container.scrollTop = Math.max(0, idx * itemH - container.clientHeight / 2 + itemH / 2);
             }
 
             window.selDOB = function(field, val, el) {
                 window._dobSel[field] = val;
-                const scroll = el.closest('.dob-scroll');
-                scroll.querySelectorAll('.dob-item').forEach(i => i.classList.remove('sel'));
+                var scroll = el.closest('.dob-scroll');
+                scroll.querySelectorAll('.dob-item').forEach(function(i) { i.classList.remove('sel'); });
                 el.classList.add('sel');
-                const idx = Array.from(scroll.querySelectorAll('.dob-item')).indexOf(el);
+                var idx = Array.from(scroll.querySelectorAll('.dob-item')).indexOf(el);
                 scrollToDOB(scroll, idx);
                 updateDOBResult();
             };
 
             function updateDOBResult() {
-                const res = document.getElementById('dobResult');
-                const warn = document.getElementById('dobWarn');
-                const saveBtn = document.getElementById('dobSaveBtn');
+                var res = document.getElementById('dobResult');
+                var warn = document.getElementById('dobWarn');
+                var saveBtn = document.getElementById('dobSaveBtn');
                 if (!window._dobSel.month || !window._dobSel.day || !window._dobSel.year) {
                     res.textContent = 'Select your date of birth above';
                     warn.style.display = 'none';
                     if (saveBtn) saveBtn.disabled = false;
                     return;
                 }
-                const dob = new Date(window._dobSel.year, window._dobSel.month - 1, window._dobSel.day);
-                const today = new Date();
-                let age = today.getFullYear() - dob.getFullYear();
-                const mDiff = today.getMonth() - dob.getMonth();
+                var dob = new Date(window._dobSel.year, window._dobSel.month - 1, window._dobSel.day);
+                var today = new Date();
+                var age = today.getFullYear() - dob.getFullYear();
+                var mDiff = today.getMonth() - dob.getMonth();
                 if (mDiff < 0 || (mDiff === 0 && today.getDate() < dob.getDate())) age--;
-                const dateStr = MONTHS[window._dobSel.month - 1] + ' ' + window._dobSel.day + ', ' + window._dobSel
+                var dateStr = MONTHS[window._dobSel.month - 1] + ' ' + window._dobSel.day + ', ' + window._dobSel
                 .year;
                 if (age < 13) {
                     res.innerHTML =
-                        `<span style="color:var(--danger);font-weight:700">${dateStr}</span><br><span style="font-size:12px;color:var(--muted)">That makes you ${age} years old</span>`;
+                        '<span style="color:var(--danger);font-weight:700">' + dateStr +
+                        '</span><br><span style="font-size:12px;color:var(--muted)">That makes you ' + age +
+                        ' years old</span>';
                     warn.style.display = 'flex';
                     if (saveBtn) saveBtn.disabled = true;
                 } else {
                     res.innerHTML =
-                        `<span style="color:var(--ok);font-weight:700">${dateStr}</span><br><span style="font-size:12px;color:var(--muted)">Age: ${age} years old</span>`;
+                        '<span style="color:var(--ok);font-weight:700">' + dateStr +
+                        '</span><br><span style="font-size:12px;color:var(--muted)">Age: ' + age +
+                        ' years old</span>';
                     warn.style.display = 'none';
                     if (saveBtn) saveBtn.disabled = false;
                 }
@@ -4453,30 +4463,30 @@
                     showToast('Please select your full date of birth', 'o');
                     return;
                 }
-                const dob = new Date(window._dobSel.year, window._dobSel.month - 1, window._dobSel.day);
-                const today = new Date();
-                let age = today.getFullYear() - dob.getFullYear();
-                const mDiff = today.getMonth() - dob.getMonth();
+                var dob = new Date(window._dobSel.year, window._dobSel.month - 1, window._dobSel.day);
+                var today = new Date();
+                var age = today.getFullYear() - dob.getFullYear();
+                var mDiff = today.getMonth() - dob.getMonth();
                 if (mDiff < 0 || (mDiff === 0 && today.getDate() < dob.getDate())) age--;
                 if (age < 13) { showToast('You must be at least 13 years old', 'r'); return; }
-                const dateStr = MONTHS[window._dobSel.month - 1] + ' ' + window._dobSel.day + ', ' + window._dobSel
+                var dateStr = MONTHS[window._dobSel.month - 1] + ' ' + window._dobSel.day + ', ' + window._dobSel
                 .year;
-                const disp = document.getElementById('eDOBDisplay');
-                const hint = document.getElementById('dobAgeHint');
+                var disp = document.getElementById('eDOBDisplay');
+                var hint = document.getElementById('dobAgeHint');
                 if (disp) { disp.textContent = dateStr;
                     disp.style.color = 'var(--text)'; }
                 if (hint) hint.textContent = 'Age: ' + age + ' years old';
 
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (user) {
-                    updateProfileSupabase({ dob: dob.toISOString() }).then(() => {
+                    updateProfileSupabase({ dob: dob.toISOString() }).then(function() {
                         closeFS('dobModal');
                         showToast('Date of birth saved ✓', 'g');
                         if (window.AuthUser && window.AuthUser.updateCurrentUser) {
-                            const updated = { ...user, dob: dob.toISOString() };
+                            var updated = Object.assign({}, user, { dob: dob.toISOString() });
                             window.AuthUser.updateCurrentUser(updated);
                         }
-                    }).catch(err => showToast(err.message, 'r'));
+                    }).catch(function(err) { showToast(err.message, 'r'); });
                 } else {
                     closeFS('dobModal');
                     showToast('Date of birth saved ✓', 'g');
@@ -4487,15 +4497,15 @@
             window._selGender = '';
 
             window.openGenderModal = function() {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 window._selGender = user?.gender || '';
 
-                document.querySelectorAll('.gen-opt').forEach(o => {
-                    const isSel = o.dataset.val === window._selGender;
+                document.querySelectorAll('.gen-opt').forEach(function(o) {
+                    var isSel = o.dataset.val === window._selGender;
                     o.classList.toggle('sel', isSel);
-                    const existing = o.querySelector('.gen-check');
+                    var existing = o.querySelector('.gen-check');
                     if (isSel && !existing) {
-                        const chk = document.createElement('div');
+                        var chk = document.createElement('div');
                         chk.className = 'gen-check';
                         chk.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
                         o.appendChild(chk);
@@ -4506,28 +4516,28 @@
 
             window.pickGender = function(el) {
                 window._selGender = el.dataset.val;
-                const icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
+                var icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
                     'Other': '✦' };
-                const disp = document.getElementById('eGenderDisplay');
+                var disp = document.getElementById('eGenderDisplay');
                 if (disp) { disp.textContent = (icons[window._selGender] || '') + ' ' + (window._selGender ||
                         'Prefer not to say');
                     disp.style.color = 'var(--text)'; }
 
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (user) {
-                    updateProfileSupabase({ gender: window._selGender }).then(() => {
+                    updateProfileSupabase({ gender: window._selGender }).then(function() {
                         if (window.AuthUser && window.AuthUser.updateCurrentUser) {
-                            const updated = { ...user, gender: window._selGender };
+                            var updated = Object.assign({}, user, { gender: window._selGender });
                             window.AuthUser.updateCurrentUser(updated);
                         }
-                    }).catch(err => showToast(err.message, 'r'));
+                    }).catch(function(err) { showToast(err.message, 'r'); });
                 }
 
                 closeMov('genderOverlay');
             };
 
             // ─── COUNTRY PICKER ────────────────────────────────
-            const COUNTRIES = [
+            var COUNTRIES = [
                 { f: '🇳🇬', n: 'Nigeria', r: 'Africa' },
                 { f: '🇬🇭', n: 'Ghana', r: 'Africa' },
                 { f: '🇰🇪', n: 'Kenya', r: 'Africa' },
@@ -4564,7 +4574,7 @@
             window._selCountry = '';
 
             window.openCountryModal = function() {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 window._selCountry = user?.country || '';
                 renderCountries(COUNTRIES, false);
                 openFS('countryModal');
@@ -4572,8 +4582,8 @@
 
             window.filterCountries = function(q) {
                 if (!q) { renderCountries(COUNTRIES, false); return; }
-                const q2 = q.toLowerCase();
-                renderCountries(COUNTRIES.filter(c => c.n.toLowerCase().includes(q2)), true);
+                var q2 = q.toLowerCase();
+                renderCountries(COUNTRIES.filter(function(c) { return c.n.toLowerCase().includes(q2); }), true);
             };
 
             window.clearCountrySearch = function() {
@@ -4582,42 +4592,52 @@
             };
 
             function renderCountries(list, flat) {
-                const el = document.getElementById('countryList');
+                var el = document.getElementById('countryList');
                 if (!list.length) {
                     el.innerHTML =
                         '<div style="text-align:center;padding:48px;color:var(--muted)"><div style="font-size:28px;margin-bottom:12px">🌍</div><div style="font-size:14px;font-weight:700">No countries found</div></div>';
                     return;
                 }
                 if (flat) {
-                    el.innerHTML = list.map(c =>
-                        `<div class="ctr-row${window._selCountry===c.n ? ' sel' : ''}" onclick="pickCountry('${c.n.replace(/'/g,"\\'")}','${c.f}')"><span class="ctr-flag">${c.f}</span><span class="ctr-name">${c.n}</span>${window._selCountry===c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : ''}</div>`
-                    ).join('');
+                    el.innerHTML = list.map(function(c) {
+                        return '<div class="ctr-row' + (window._selCountry === c.n ? ' sel' : '') +
+                            '" onclick="pickCountry(\'' + c.n.replace(/'/g, "\\'") + '\',\'' + c.f +
+                            '\')"><span class="ctr-flag">' + c.f + '</span><span class="ctr-name">' + c.n +
+                            '</span>' + (window._selCountry === c.n ?
+                                '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' :
+                                '') + '</div>';
+                    }).join('');
                 } else {
-                    const regions = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
-                    el.innerHTML = regions.map(r => {
-                        const items = list.filter(c => c.r === r);
+                    var regions = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
+                    el.innerHTML = regions.map(function(r) {
+                        var items = list.filter(function(c) { return c.r === r; });
                         if (!items.length) return '';
-                        return `<div class="ctr-section-hdr">${r}</div>` + items.map(c =>
-                            `<div class="ctr-row${window._selCountry===c.n ? ' sel' : ''}" onclick="pickCountry('${c.n.replace(/'/g,"\\'")}','${c.f}')"><span class="ctr-flag">${c.f}</span><span class="ctr-name">${c.n}</span>${window._selCountry===c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : ''}</div>`
-                        ).join('');
+                        return '<div class="ctr-section-hdr">' + r + '</div>' + items.map(function(c) {
+                            return '<div class="ctr-row' + (window._selCountry === c.n ? ' sel' : '') +
+                                '" onclick="pickCountry(\'' + c.n.replace(/'/g, "\\'") + '\',\'' + c.f +
+                                '\')"><span class="ctr-flag">' + c.f + '</span><span class="ctr-name">' +
+                                c.n + '</span>' + (window._selCountry === c.n ?
+                                    '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' :
+                                    '') + '</div>';
+                        }).join('');
                     }).join('');
                 }
             }
 
             window.pickCountry = function(name, flag) {
                 window._selCountry = name;
-                const disp = document.getElementById('eCountryDisplay');
+                var disp = document.getElementById('eCountryDisplay');
                 if (disp) { disp.textContent = flag + ' ' + name;
                     disp.style.color = 'var(--text)'; }
 
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (user) {
-                    updateProfileSupabase({ country: name }).then(() => {
+                    updateProfileSupabase({ country: name }).then(function() {
                         if (window.AuthUser && window.AuthUser.updateCurrentUser) {
-                            const updated = { ...user, country: name };
+                            var updated = Object.assign({}, user, { country: name });
                             window.AuthUser.updateCurrentUser(updated);
                         }
-                    }).catch(err => showToast(err.message, 'r'));
+                    }).catch(function(err) { showToast(err.message, 'r'); });
                 }
 
                 closeFS('countryModal');
@@ -4629,44 +4649,41 @@
 
             // ─── SETUP PROFILE SYNC ─────────────────────────────
             function setupSettingsSync() {
-                // Listen for storage events (from other tabs)
                 window.addEventListener('storage', function(e) {
                     if (e.key === 'freeupper_user_profile') {
-                        const user = getCurrentUser();
+                        var user = getCurrentUser();
                         updateNavAvatar();
-                        window.SettingsAPI.getVerificationStatus().then(status => {
+                        window.SettingsAPI.getVerificationStatus().then(function(status) {
                             updateVfyStatusCard(status);
-                        }).catch(() => {});
+                        }).catch(function() {});
                         document.getElementById('acctUsername').textContent = '@' + (user?.username || 'user');
                         document.getElementById('acctEmail').textContent = user?.email || 'user@email.com';
                         document.getElementById('phoneInp').value = user?.phone || '';
                     }
                 });
 
-                // Listen for profileUpdated events (from edit profile)
                 document.addEventListener('profileUpdated', function(e) {
                     if (e.detail && e.detail.user) {
-                        const user = e.detail.user;
+                        var user = e.detail.user;
                         updateNavAvatar();
-                        window.SettingsAPI.getVerificationStatus().then(status => {
+                        window.SettingsAPI.getVerificationStatus().then(function(status) {
                             updateVfyStatusCard(status);
-                        }).catch(() => {});
+                        }).catch(function() {});
                         document.getElementById('acctUsername').textContent = '@' + (user.username || 'user');
                         document.getElementById('acctEmail').textContent = user.email || 'user@email.com';
                         document.getElementById('phoneInp').value = user.phone || '';
                     }
                 });
 
-                // Listen for AuthUser changes via onChange (from auth.js)
                 if (window.AuthUser && window.AuthUser.onChange) {
                     window.AuthUser.onChange(function(user) {
                         if (user) {
                             updateNavAvatar();
-                            window.SettingsAPI.getVerificationStatus().then(status => {
+                            window.SettingsAPI.getVerificationStatus().then(function(status) {
                                 updateVfyStatusCard(status);
-                            }).catch(() => {});
+                            }).catch(function() {});
                             document.getElementById('acctUsername').textContent = '@' + (user.username ||
-                            'user');
+                                'user');
                             document.getElementById('acctEmail').textContent = user.email ||
                                 'user@email.com';
                             document.getElementById('phoneInp').value = user.phone || '';
@@ -4674,14 +4691,13 @@
                     });
                 }
 
-                // Also listen for the userRefreshed event from auth.js
                 document.addEventListener('userRefreshed', function() {
-                    const user = getCurrentUser();
+                    var user = getCurrentUser();
                     if (user) {
                         updateNavAvatar();
-                        window.SettingsAPI.getVerificationStatus().then(status => {
+                        window.SettingsAPI.getVerificationStatus().then(function(status) {
                             updateVfyStatusCard(status);
-                        }).catch(() => {});
+                        }).catch(function() {});
                         document.getElementById('acctUsername').textContent = '@' + (user.username || 'user');
                         document.getElementById('acctEmail').textContent = user.email || 'user@email.com';
                         document.getElementById('phoneInp').value = user.phone || '';
@@ -4692,10 +4708,11 @@
             setupSettingsSync();
 
             // ─── INIT ────────────────────────────────────────────
-            const savedLang = localStorage.getItem('freeupper_lang');
+            var savedLang = localStorage.getItem('freeupper_lang');
             if (savedLang) {
                 selLang = savedLang;
-                const found = LANGS.flatMap(g => g.langs).find(l => l.code === savedLang);
+                var found = LANGS.flatMap(function(g) { return g.langs; }).find(function(l) { return l.code ===
+                        savedLang; });
                 if (found) {
                     document.getElementById('currentLangVal').textContent = found.flag + ' ' + found.english;
                 }
@@ -4706,9 +4723,9 @@
                 document.getElementById('tfaBadge').className = 'r-badge ok';
             }
 
-            window.SettingsAPI.listBlockedUsers().then(list => {
+            window.SettingsAPI.listBlockedUsers().then(function(list) {
                 document.getElementById('blCountSub').textContent = list.length + ' accounts blocked';
-            }).catch(() => {});
+            }).catch(function() {});
 
             document.getElementById('sessBadge').textContent = '1 device';
 
