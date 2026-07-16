@@ -2314,6 +2314,14 @@
             40% { transform: scale(1.25); }
             100% { transform: scale(1); }
         }
+
+        /* ─── Avatar Viewer ─── */
+        #avatarViewerModal {
+            z-index: 12000;
+        }
+        #avViewerImg {
+            transition: transform .15s ease;
+        }
     </style>
 </head>
 <body>
@@ -2368,7 +2376,7 @@
                 </div>
 
                 <div class="profile-hero">
-                    <div class="avatar-wrap" id="avatarWrap" onclick="handleAvatarClick()">
+                    <div class="avatar-wrap" id="avatarWrap" onclick="handleAvatarTap()">
                         <div class="avatar-ring"></div>
                         <div class="avatar-ring-gap"></div>
                         <img class="avatar-img" id="profileAvatar" src="" alt="" onerror="this.style.background='linear-gradient(135deg,#1a1035,#3b1a6b)';this.removeAttribute('src');">
@@ -2377,7 +2385,7 @@
                     <div class="role-tags" id="roleTags"></div>
                     <div class="display-name-row">
                         <span class="display-name" id="displayName"></span>
-                        <button class="edit-pen" onclick="openEditModal()" title="Edit profile">
+                        <button class="edit-pen fw-owner-only" onclick="openEditModal()" title="Edit profile" style="display:none">
                             <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
                         </button>
                     </div>
@@ -2386,15 +2394,15 @@
                 </div>
 
                 <div class="stats-row">
-                    <div class="stat" onclick="openPostsModal()">
+                    <div class="stat" id="statPostsBox" onclick="openPostsModal()">
                         <div class="stat-n" id="statPosts">0</div>
                         <div class="stat-l">Posts</div>
                     </div>
-                    <div class="stat" onclick="openFollowModal('followers')">
+                    <div class="stat" id="statFollowersBox">
                         <div class="stat-n" id="statFollowers">—</div>
                         <div class="stat-l">Followers</div>
                     </div>
-                    <div class="stat" onclick="openFollowModal('following')">
+                    <div class="stat" id="statFollowingBox">
                         <div class="stat-n" id="statFollowing">—</div>
                         <div class="stat-l">Following</div>
                     </div>
@@ -2733,6 +2741,16 @@
         </div>
     </div>
 
+    <!-- ─── Avatar Viewer Modal ─── -->
+    <div class="mco" id="avatarViewerModal" style="cursor:default">
+        <div style="position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;touch-action:none" id="avViewerTrack">
+            <button class="fs-x" onclick="closeAvatarViewer()" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;z-index:2;background:rgba(0,0,0,.5)">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <img id="avViewerImg" src="" style="max-width:90vw;max-height:90vh;border-radius:16px;object-fit:contain">
+        </div>
+    </div>
+
     <!-- ═══ SCRIPTS ═══ -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="global.js"></script>
@@ -2748,32 +2766,32 @@
             'use strict';
 
             // ─── STATE ────────────────────────────────────────
-            let targetUserId = null;
-            let isOwner = false;
-            let currentUser = null;
-            let targetUser = null;
-            let allPosts = [];
-            let activeTab = 'posts';
-            let selAvIdx = -1;
-            let selCountry = '';
-            let selGender = '';
-            let pendingPills = [];
-            let dobSel = { month: null, day: null, year: null };
+            var targetUserId = null;
+            var isOwner = false;
+            var currentUser = null;
+            var targetUser = null;
+            var allPosts = [];
+            var activeTab = 'posts';
+            var selAvIdx = -1;
+            var selCountry = '';
+            var selGender = '';
+            var pendingPills = [];
+            var dobSel = { month: null, day: null, year: null };
 
             // ─── FOLLOW MODAL STATE ──────────────────────────
-            let _fwPageIdx = 0;
-            let _fwPageState = [
+            var _fwPageIdx = 0;
+            var _fwPageState = [
                 { list: [], query: '', loaded: false },
                 { list: [], query: '', loaded: false },
                 { list: [], query: '', loaded: false },
                 { list: [], query: '', loaded: false }
             ];
-            let _fwCurTab = 'followers';
-            let _fwFiltered = [];
-            let _fwList = [];
-            const FW_ROW_H = 76;
-            const FW_BUFFER = 4;
-            let followModalData = null;
+            var _fwCurTab = 'followers';
+            var _fwFiltered = [];
+            var _fwList = [];
+            var FW_ROW_H = 76;
+            var FW_BUFFER = 4;
+            var followModalData = null;
 
             // ─── HELPERS ────────────────────────────────────────
             function fmtNum(n) {
@@ -2783,7 +2801,7 @@
             }
 
             function escapeHtml(s) {
-                const d = document.createElement('div');
+                var d = document.createElement('div');
                 d.textContent = s || '';
                 return d.innerHTML;
             }
@@ -2792,18 +2810,6 @@
                 return u?.avatar_url || u?.avatar || 'data:image/svg+xml,' + encodeURIComponent(
                     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
                 );
-            }
-
-            function formatRelativeTime(iso) {
-                const now = Date.now(),
-                    then = new Date(iso).getTime(),
-                    diff = Math.floor((now - then) / 1000);
-                if (diff < 60) return 'Just now';
-                if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-                if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-                if (diff < 172800) return 'Yesterday';
-                if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
-                return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             }
 
             // ─── GET CURRENT USER ──────────────────────────────────
@@ -2816,38 +2822,37 @@
 
             // ─── GET TARGET USER ID ──────────────────────────────
             function getTargetUserFromUrl() {
-                const params = new URLSearchParams(window.location.search);
-                const uid = params.get('uid');
+                var params = new URLSearchParams(window.location.search);
+                var uid = params.get('uid');
                 if (uid) return uid;
                 return null;
             }
 
             // ─── FETCH PROFILE ────────────────────────────────────
             async function fetchProfile(userId) {
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('profiles')
                     .select('*')
                     .eq('id', userId)
-                    .single();
-                if (error) throw error;
-                return data;
+                    .maybeSingle();
+                if (result.error) throw result.error;
+                return result.data;
             }
 
-            // ─── FETCH FOLLOW COUNTS (error-resilient) ──────────
+            // ─── FETCH FOLLOW COUNTS ─────────────────────────────
             async function fetchFollowCounts(userId) {
                 try {
-                    const { count: followers, error: e1 } = await window.sb
+                    var followersResult = await window.sb
                         .from('follows')
                         .select('*', { count: 'exact', head: true })
                         .eq('following_id', userId);
-
-                    const { count: following, error: e2 } = await window.sb
+                    var followingResult = await window.sb
                         .from('follows')
                         .select('*', { count: 'exact', head: true })
                         .eq('follower_id', userId);
-
-                    if (e1 || e2) throw e1 || e2;
-                    return { followers: followers || 0, following: following || 0 };
+                    if (followersResult.error) throw followersResult.error;
+                    if (followingResult.error) throw followingResult.error;
+                    return { followers: followersResult.count || 0, following: followingResult.count || 0 };
                 } catch (err) {
                     console.warn('Failed to fetch follow counts:', err);
                     return { followers: 0, following: 0 };
@@ -2856,51 +2861,51 @@
 
             // ─── FETCH FOLLOWERS / FOLLOWING LISTS ──────────────
             async function fetchFollowers(userId) {
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('follows')
                     .select('follower_id, profiles:follower_id (id, username, display_name, avatar_url, verified)')
                     .eq('following_id', userId);
-                if (error) {
-                    console.warn('fetchFollowers error:', error);
+                if (result.error) {
+                    console.warn('fetchFollowers error:', result.error);
                     return [];
                 }
-                return data.map(f => f.profiles).filter(p => p);
+                return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
             }
 
             async function fetchFollowing(userId) {
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('follows')
                     .select('following_id, profiles:following_id (id, username, display_name, avatar_url, verified)')
                     .eq('follower_id', userId);
-                if (error) {
-                    console.warn('fetchFollowing error:', error);
+                if (result.error) {
+                    console.warn('fetchFollowing error:', result.error);
                     return [];
                 }
-                return data.map(f => f.profiles).filter(p => p);
+                return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
             }
 
             // ─── CHECK / TOGGLE FOLLOW ───────────────────────────
             async function isFollowing(followerId, targetId) {
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('follows')
                     .select('id')
                     .eq('follower_id', followerId)
                     .eq('following_id', targetId)
                     .maybeSingle();
-                if (error) {
-                    console.warn('isFollowing error:', error);
+                if (result.error) {
+                    console.warn('isFollowing error:', result.error);
                     return false;
                 }
-                return !!data;
+                return !!result.data;
             }
 
             async function toggleFollow(targetId) {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
                     showToast('Please sign in to follow', 'o');
                     return false;
                 }
-                const currently = await isFollowing(user.id, targetId);
+                var currently = await isFollowing(user.id, targetId);
                 if (currently) {
                     await window.sb
                         .from('follows')
@@ -2917,59 +2922,59 @@
 
             // ─── FETCH USER LIKES / BOOKMARKS / SHARES ──────────
             async function getUserLikes(userId) {
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('post_likes')
                     .select('post_id')
                     .eq('user_id', userId);
-                if (error) {
-                    console.warn('getUserLikes error:', error);
+                if (result.error) {
+                    console.warn('getUserLikes error:', result.error);
                     return [];
                 }
-                return data.map(l => l.post_id);
+                return result.data.map(function(l) { return l.post_id; });
             }
 
             async function getUserBookmarks(userId) {
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('bookmarks')
                     .select('post_id')
                     .eq('user_id', userId);
-                if (error) {
-                    console.warn('getUserBookmarks error:', error);
+                if (result.error) {
+                    console.warn('getUserBookmarks error:', result.error);
                     return [];
                 }
-                return data.map(b => b.post_id);
+                return result.data.map(function(b) { return b.post_id; });
             }
 
             async function getUserShares(userId) {
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('shares')
                     .select('post_id')
                     .eq('user_id', userId);
-                if (error) {
-                    console.warn('getUserShares error:', error);
+                if (result.error) {
+                    console.warn('getUserShares error:', result.error);
                     return [];
                 }
-                return data.map(s => s.post_id);
+                return result.data.map(function(s) { return s.post_id; });
             }
 
             // ─── FETCH USER MARKET ITEMS ─────────────────────────
             async function getUserMarketItems(userId) {
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('market_items')
                     .select('*')
                     .eq('seller_id', userId)
                     .order('created_at', { ascending: false });
-                if (error) {
-                    console.warn('getUserMarketItems error:', error);
+                if (result.error) {
+                    console.warn('getUserMarketItems error:', result.error);
                     return [];
                 }
-                return data || [];
+                return result.data || [];
             }
 
-            // ─── LOAD POSTS (via PostsAPI) ───────────────────────
+            // ─── LOAD POSTS ──────────────────────────────────────
             async function loadPosts() {
                 try {
-                    const posts = await window.PostsAPI.loadAllPosts();
+                    var posts = await window.PostsAPI.loadAllPosts();
                     allPosts = posts;
                     return posts;
                 } catch (err) {
@@ -2980,15 +2985,15 @@
             }
 
             function getUserPosts(userId) {
-                return allPosts.filter(p => p.authorId === userId);
+                return allPosts.filter(function(p) { return p.authorId === userId; });
             }
 
             // ─── RENDER PROFILE ──────────────────────────────────
             async function renderProfile() {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 currentUser = user;
 
-                let targetId = getTargetUserFromUrl();
+                var targetId = getTargetUserFromUrl();
                 if (!targetId) {
                     if (user && user.isLoggedIn) {
                         targetId = user.id;
@@ -3002,18 +3007,15 @@
                 isOwner = targetId === user?.id;
 
                 try {
-                    const profile = await fetchProfile(targetId);
+                    var profile = await fetchProfile(targetId);
                     targetUser = profile;
 
-                    // Graceful follow counts (fallback to 0)
-                    const counts = await fetchFollowCounts(targetId);
+                    var counts = await fetchFollowCounts(targetId);
 
-                    // Load posts
                     await loadPosts();
-                    const userPosts = getUserPosts(targetId);
+                    var userPosts = getUserPosts(targetId);
 
-                    // For owner: get likes/bookmarks/shares
-                    let likedIds = [],
+                    var likedIds = [],
                         bookmarkedIds = [],
                         sharedIds = [];
                     if (isOwner && user && user.isLoggedIn) {
@@ -3021,7 +3023,7 @@
                         bookmarkedIds = await getUserBookmarks(targetId);
                         sharedIds = await getUserShares(targetId);
                     }
-                    const marketItems = await getUserMarketItems(targetId);
+                    var marketItems = await getUserMarketItems(targetId);
 
                     updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, sharedIds, marketItems);
 
@@ -3033,7 +3035,7 @@
 
             // ─── UPDATE UI ───────────────────────────────────────
             function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, sharedIds, marketItems) {
-                const avatarSrc = getAvatar(profile);
+                var avatarSrc = getAvatar(profile);
                 document.getElementById('profileAvatar').src = avatarSrc;
                 document.getElementById('editAv').src = avatarSrc;
                 document.getElementById('qrAvatar').src = avatarSrc;
@@ -3044,15 +3046,15 @@
                 document.getElementById('qrName').textContent = profile.display_name || 'Guest';
                 document.getElementById('qrHandle').textContent = '@' + (profile.username || 'user');
 
-                const bioEl = document.getElementById('heroBio');
+                var bioEl = document.getElementById('heroBio');
                 bioEl.textContent = profile.bio || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
 
-                const tags = profile.tags || [];
-                document.getElementById('roleTags').innerHTML = tags.map(t =>
-                    `<span class="role-tag">${escapeHtml(t)}</span>`
-                ).join('');
+                var tags = profile.tags || [];
+                document.getElementById('roleTags').innerHTML = tags.map(function(t) {
+                    return '<span class="role-tag">' + escapeHtml(t) + '</span>';
+                }).join('');
 
-                const badge = document.getElementById('verifiedBadge');
+                var badge = document.getElementById('verifiedBadge');
                 if (profile.verified) {
                     badge.classList.remove('hidden');
                 } else {
@@ -3065,78 +3067,116 @@
 
                 renderActionRow();
 
+                // ─── Private account handling ────────────────────
+                var isPrivate = !!profile.is_private;
+                var viewerBlocked = isPrivate && !isOwner;
+                var tabs = ['panel-posts','panel-love','panel-share','panel-star','panel-market'];
+                if (viewerBlocked) {
+                    tabs.forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el) {
+                            el.innerHTML =
+                                '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><h3>This account is private</h3><p>Follow to see their posts and activity.</p></div>';
+                        }
+                    });
+                    document.getElementById('statFollowersBox').classList.add('locked');
+                    document.getElementById('statFollowingBox').classList.add('locked');
+                } else {
+                    document.getElementById('statFollowersBox').classList.remove('locked');
+                    document.getElementById('statFollowingBox').classList.remove('locked');
+                    renderTab(activeTab, { userPosts: userPosts, likedIds: likedIds, bookmarkedIds: bookmarkedIds, sharedIds: sharedIds, marketItems: marketItems });
+                }
+
+                // ─── Owner-only elements ────────────────────────
+                document.querySelectorAll('.fw-owner-only').forEach(function(el) {
+                    el.style.display = isOwner ? '' : 'none';
+                });
+
                 document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
                 document.getElementById('fsTabFgCount').textContent = fmtNum(counts.following);
                 document.getElementById('fsTabFrCount').textContent = fmtNum(0);
 
-                const ownerTabs = document.querySelectorAll('.fw-owner-only');
-                ownerTabs.forEach(t => t.style.display = isOwner ? '' : 'none');
-                if (isOwner) document.getElementById('followModal').classList.add('is-owner');
-                else document.getElementById('followModal').classList.remove('is-owner');
+                // Update follow modal owner class
+                var followModal = document.getElementById('followModal');
+                if (isOwner) followModal.classList.add('is-owner');
+                else followModal.classList.remove('is-owner');
 
-                renderTab(activeTab, { userPosts, likedIds, bookmarkedIds, sharedIds, marketItems });
+                // Re-bind stat clicks if not locked
+                if (!viewerBlocked) {
+                    document.getElementById('statFollowersBox').onclick = function() { openFollowModal('followers'); };
+                    document.getElementById('statFollowingBox').onclick = function() { openFollowModal('following'); };
+                } else {
+                    document.getElementById('statFollowersBox').onclick = null;
+                    document.getElementById('statFollowingBox').onclick = null;
+                }
             }
 
             // ─── ACTION ROW ──────────────────────────────────────
-            function renderActionRow() {
-                const row = document.getElementById('actionRow');
-                if (isOwner) {
-                    row.innerHTML = '';
-                    return;
-                }
-                const user = getCurrentUser();
+            async function renderActionRow() {
+                var row = document.getElementById('actionRow');
+                if (isOwner) { row.innerHTML = ''; return; }
+
+                var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
                     row.innerHTML =
-                        `<button class="act-btn act-follow" onclick="showToast('Please sign in to follow','o')">Follow</button>
-                                    <button class="act-btn act-msg" onclick="showToast('Messaging coming soon','p')">Message</button>`;
+                        '<button class="act-btn act-follow" onclick="showToast(\'Please sign in to follow\',\'o\')">Follow</button>' +
+                        '<button class="act-btn act-msg" onclick="showToast(\'Messaging coming soon\',\'p\')">Message</button>';
                     return;
                 }
-                isFollowing(user.id, targetUserId).then(following => {
-                    row.innerHTML = `
-                                <button class="act-btn ${following ? 'act-follow fstate' : 'act-follow'}" id="followBtn" onclick="handleFollow()">
-                                    ${following ? 'Following' : 'Follow'}
-                                </button>
-                                <button class="act-btn act-msg" onclick="showToast('Messaging coming soon','p')">Message</button>
-                            `;
-                }).catch(() => {
-                    row.innerHTML =
-                    `<button class="act-btn act-follow" onclick="handleFollow()">Follow</button>
-                                <button class="act-btn act-msg" onclick="showToast('Messaging coming soon','p')">Message</button>`;
-                });
+
+                var iFollowThem = false, theyFollowMe = false;
+                try {
+                    iFollowThem = await isFollowing(user.id, targetUserId);
+                    theyFollowMe = await isFollowing(targetUserId, user.id);
+                } catch (e) { console.warn('follow state check failed', e); }
+
+                var label = 'Follow', cls = 'act-follow';
+                if (iFollowThem) { label = 'Following'; cls = 'act-follow fstate'; }
+                else if (theyFollowMe) { label = 'Follow Back'; cls = 'act-follow'; }
+
+                row.innerHTML =
+                    '<button class="act-btn ' + cls + '" id="followBtn" onclick="handleFollow()">' + label + '</button>' +
+                    '<button class="act-btn act-msg" onclick="showToast(\'Messaging coming soon\',\'p\')">Message</button>';
             }
 
             window.handleFollow = async function() {
-                const user = getCurrentUser();
-                if (!user || !user.isLoggedIn) {
-                    showToast('Please sign in to follow', 'o');
-                    return;
+                var user = getCurrentUser();
+                if (!user || !user.isLoggedIn) { showToast('Please sign in to follow', 'o'); return; }
+
+                var btn = document.getElementById('followBtn');
+                if (btn) btn.disabled = true;
+                try {
+                    var newState = await toggleFollow(targetUserId);
+                    await renderActionRow();
+                    var counts = await fetchFollowCounts(targetUserId);
+                    document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
+                    document.getElementById('statFollowing').textContent = fmtNum(counts.following);
+                    showToast(newState ? 'Following ✓' : 'Unfollowed', newState ? 'g' : 'o');
+                } catch (err) {
+                    showToast(err.message || 'Failed to follow', 'r');
+                } finally {
+                    if (btn) btn.disabled = false;
                 }
-                const newState = await toggleFollow(targetUserId);
-                renderActionRow();
-                const counts = await fetchFollowCounts(targetUserId);
-                document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
-                document.getElementById('statFollowing').textContent = fmtNum(counts.following);
-                showToast(newState ? 'Following ✓' : 'Unfollowed', newState ? 'g' : 'o');
             };
 
             // ─── TABS ─────────────────────────────────────────────
             window.switchTab = function(el, tab) {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
                 el.classList.add('active');
-                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
                 document.getElementById('panel-' + tab).classList.add('active');
                 activeTab = tab;
                 renderTab(tab);
             };
 
             function renderTab(tab, data) {
-                const container = document.getElementById('panel-' + tab);
+                var container = document.getElementById('panel-' + tab);
                 if (!container) return;
-                const userPosts = data?.userPosts || getUserPosts(targetUserId);
-                const likedIds = data?.likedIds || [];
-                const bookmarkedIds = data?.bookmarkedIds || [];
-                const sharedIds = data?.sharedIds || [];
-                const marketItems = data?.marketItems || [];
+                var userPosts = data?.userPosts || getUserPosts(targetUserId);
+                var likedIds = data?.likedIds || [];
+                var bookmarkedIds = data?.bookmarkedIds || [];
+                var sharedIds = data?.sharedIds || [];
+                var marketItems = data?.marketItems || [];
 
                 switch (tab) {
                     case 'posts':
@@ -3161,188 +3201,162 @@
             function renderPosts(container, userPosts) {
                 if (!userPosts.length) {
                     container.innerHTML =
-                        `<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><h3>No posts yet</h3><p>${isOwner ? 'Create your first post.' : 'Nothing posted yet.'}</p></div>`;
+                        '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><h3>No posts yet</h3><p>' + (isOwner ? 'Create your first post.' : 'Nothing posted yet.') + '</p></div>';
                     return;
                 }
-                userPosts.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+                userPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML =
-                    `<div class="grid-3">${userPosts.map((p, i) => buildGridPostCard(p, i, 'delete')).join('')}</div>`;
+                    '<div class="grid-3">' + userPosts.map(function(p, i) { return buildGridPostCard(p, i, 'delete'); }).join('') + '</div>';
             }
 
             // ─── RENDER LOVE ─────────────────────────────────────
             function renderLove(container, userPosts, likedIds) {
-                const likedPosts = userPosts.filter(p => likedIds.includes(p.id));
+                var likedPosts = userPosts.filter(function(p) { return likedIds.indexOf(p.id) !== -1; });
                 if (!likedPosts.length) {
                     container.innerHTML =
-                        `<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div><h3>No liked posts</h3><p>Posts you love will appear here.</p></div>`;
+                        '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div><h3>No liked posts</h3><p>Posts you love will appear here.</p></div>';
                     return;
                 }
-                likedPosts.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+                likedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML =
-                    `<div class="grid-3">${likedPosts.map((p, i) => buildGridLoveCard(p, i)).join('')}</div>`;
+                    '<div class="grid-3">' + likedPosts.map(function(p, i) { return buildGridLoveCard(p, i); }).join('') + '</div>';
             }
 
             // ─── RENDER SHARE ────────────────────────────────────
             function renderShare(container, userPosts, sharedIds) {
-                const sharedPosts = userPosts.filter(p => sharedIds.includes(p.id));
+                var sharedPosts = userPosts.filter(function(p) { return sharedIds.indexOf(p.id) !== -1; });
                 if (!sharedPosts.length) {
                     container.innerHTML =
-                        `<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div><h3>No shared posts</h3><p>Posts you share will appear here.</p></div>`;
+                        '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div><h3>No shared posts</h3><p>Posts you share will appear here.</p></div>';
                     return;
                 }
-                sharedPosts.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+                sharedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML =
-                    `<div class="grid-3">${sharedPosts.map((p, i) => buildGridPostCard(p, i, 'remove', 'share')).join('')}</div>`;
+                    '<div class="grid-3">' + sharedPosts.map(function(p, i) { return buildGridPostCard(p, i, 'remove', 'share'); }).join('') + '</div>';
             }
 
             // ─── RENDER STAR ─────────────────────────────────────
             function renderStar(container, userPosts, bookmarkedIds) {
-                const bookmarkedPosts = userPosts.filter(p => bookmarkedIds.includes(p.id));
+                var bookmarkedPosts = userPosts.filter(function(p) { return bookmarkedIds.indexOf(p.id) !== -1; });
                 if (!bookmarkedPosts.length) {
                     container.innerHTML =
-                        `<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><h3>No bookmarks</h3><p>Star posts you love to find them instantly.</p></div>`;
+                        '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><h3>No bookmarks</h3><p>Star posts you love to find them instantly.</p></div>';
                     return;
                 }
-                bookmarkedPosts.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+                bookmarkedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML =
-                    `<div class="grid-3">${bookmarkedPosts.map((p, i) => buildGridPostCard(p, i, 'remove', 'star')).join('')}</div>`;
+                    '<div class="grid-3">' + bookmarkedPosts.map(function(p, i) { return buildGridPostCard(p, i, 'remove', 'star'); }).join('') + '</div>';
             }
 
             // ─── RENDER MARKET ───────────────────────────────────
             function renderMarket(container, marketItems) {
                 if (!marketItems.length) {
                     container.innerHTML =
-                        `<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div><h3>No listings</h3><p>${isOwner ? 'Sell something on Campus Market.' : 'No items listed yet.'}</p></div>`;
+                        '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div><h3>No listings</h3><p>' + (isOwner ? 'Sell something on Campus Market.' : 'No items listed yet.') + '</p></div>';
                     return;
                 }
                 container.innerHTML =
-                    `<div class="grid-2">${marketItems.map(item => buildMarketCard(item, isOwner)).join('')}</div>`;
+                    '<div class="grid-2">' + marketItems.map(function(item) { return buildMarketCard(item, isOwner); }).join('') + '</div>';
             }
 
             // ─── BUILD GRID POST CARD ────────────────────────────
             function buildGridPostCard(post, idx, actionType, sourceTab) {
-                let mediaHtml = '';
+                var mediaHtml = '';
                 if (post.mediaType === 'image' && post.mediaUrl) {
-                    mediaHtml =
-                        `<img src="${post.mediaUrl}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'no-media\\'>${escapeHtml(post.title)}</div>'">`;
+                    mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\">' + escapeHtml(post.title) + '</div>\'">';
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
-                    const ytMatch = post.mediaUrl.match(/(?:youtube\.com\/embed\/|youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/);
+                    var ytMatch = post.mediaUrl.match(/(?:youtube\.com\/embed\/|youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/);
                     if (ytMatch) {
-                        mediaHtml =
-                            `<img src="https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'no-media\\'>${escapeHtml(post.title)}</div>'">`;
+                        mediaHtml = '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\">' + escapeHtml(post.title) + '</div>\'">';
                     } else {
-                        mediaHtml =
-                            `<video src="${post.mediaUrl}" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>`;
+                        mediaHtml = '<video src="' + post.mediaUrl + '" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>';
                     }
                 } else {
-                    mediaHtml = `<div class="no-media">${escapeHtml(post.title)}</div>`;
+                    mediaHtml = '<div class="no-media">' + escapeHtml(post.title) + '</div>';
                 }
 
-                const authorName = post.author || 'Anonymous';
-                const authorAvatar = post.authorAvatar || getAvatar(currentUser);
+                var authorName = post.author || 'Anonymous';
+                var authorAvatar = post.authorAvatar || getAvatar(currentUser);
 
-                let actionBtn = '';
+                var actionBtn = '';
                 if (actionType === 'delete') {
-                    actionBtn =
-                        `<button class="delete-btn" onclick="event.stopPropagation();deletePost(${post.id})" title="Delete"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>`;
+                    actionBtn = '<button class="delete-btn" onclick="event.stopPropagation();deletePost(' + post.id + ')" title="Delete"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>';
                 } else if (actionType === 'remove') {
-                    const label = sourceTab === 'share' ? 'Unshare' : 'Unsave';
-                    actionBtn =
-                        `<button class="remove-btn" onclick="event.stopPropagation();removeFromTab(${post.id}, '${sourceTab}')" title="${label}"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+                    var label = sourceTab === 'share' ? 'Unshare' : 'Unsave';
+                    actionBtn = '<button class="remove-btn" onclick="event.stopPropagation();removeFromTab(' + post.id + ', \'' + sourceTab + '\')" title="' + label + '"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
                 }
 
-                const isVideo = post.mediaType === 'video';
-                const videoBadge = isVideo ?
-                    `<div class="video-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>` :
+                var isVideo = post.mediaType === 'video';
+                var videoBadge = isVideo ?
+                    '<div class="video-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>' :
                     '';
 
-                return `
-                            <div class="grid-card" onclick="window.location.href='index.html?post=${post.id}'">
-                                ${mediaHtml}
-                                <div class="badge">${escapeHtml(post.category || 'General')}</div>
-                                ${videoBadge}
-                                ${actionBtn}
-                                <div class="overlay">
-                                    <div class="title">${escapeHtml(post.title)}</div>
-                                    <div class="meta">
-                                        <img src="${authorAvatar}" class="avatar" onerror="this.style.display='none'">
-                                        <span class="name">${escapeHtml(authorName)}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
+                return '<div class="grid-card" onclick="window.location.href=\'index.html?post=' + post.id + '\'">' +
+                    mediaHtml +
+                    '<div class="badge">' + escapeHtml(post.category || 'General') + '</div>' +
+                    videoBadge +
+                    actionBtn +
+                    '<div class="overlay"><div class="title">' + escapeHtml(post.title) + '</div>' +
+                    '<div class="meta"><img src="' + authorAvatar + '" class="avatar" onerror="this.style.display=\'none\'"><span class="name">' + escapeHtml(authorName) + '</span></div></div>' +
+                    '</div>';
             }
 
             // ─── BUILD GRID LOVE CARD ────────────────────────────
             function buildGridLoveCard(post, idx) {
-                let mediaHtml = '';
+                var mediaHtml = '';
                 if (post.mediaType === 'image' && post.mediaUrl) {
-                    mediaHtml =
-                        `<img src="${post.mediaUrl}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'no-media\\'>${escapeHtml(post.title)}</div>'">`;
+                    mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\">' + escapeHtml(post.title) + '</div>\'">';
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
-                    const ytMatch = post.mediaUrl.match(/(?:youtube\.com\/embed\/|youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/);
+                    var ytMatch = post.mediaUrl.match(/(?:youtube\.com\/embed\/|youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/);
                     if (ytMatch) {
-                        mediaHtml =
-                            `<img src="https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'no-media\\'>${escapeHtml(post.title)}</div>'">`;
+                        mediaHtml = '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\">' + escapeHtml(post.title) + '</div>\'">';
                     } else {
-                        mediaHtml =
-                            `<video src="${post.mediaUrl}" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>`;
+                        mediaHtml = '<video src="' + post.mediaUrl + '" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>';
                     }
                 } else {
-                    mediaHtml = `<div class="no-media">${escapeHtml(post.title)}</div>`;
+                    mediaHtml = '<div class="no-media">' + escapeHtml(post.title) + '</div>';
                 }
 
-                const authorName = post.author || 'Anonymous';
-                const authorAvatar = post.authorAvatar || getAvatar(currentUser);
-                const isVideo = post.mediaType === 'video';
-                const videoBadge = isVideo ?
-                    `<div class="video-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>` :
+                var authorName = post.author || 'Anonymous';
+                var authorAvatar = post.authorAvatar || getAvatar(currentUser);
+                var isVideo = post.mediaType === 'video';
+                var videoBadge = isVideo ?
+                    '<div class="video-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>' :
                     '';
 
-                return `
-                            <div class="grid-card" onclick="window.location.href='index.html?post=${post.id}'">
-                                ${mediaHtml}
-                                <div class="badge">${escapeHtml(post.category || 'General')}</div>
-                                ${videoBadge}
-                                <button class="remove-btn" onclick="event.stopPropagation();removeFromTab(${post.id}, 'love')" title="Unlike"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-                                <div class="overlay">
-                                    <div class="title">${escapeHtml(post.title)}</div>
-                                    <div class="meta">
-                                        <img src="${authorAvatar}" class="avatar" onerror="this.style.display='none'">
-                                        <span class="name">${escapeHtml(authorName)}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
+                return '<div class="grid-card" onclick="window.location.href=\'index.html?post=' + post.id + '\'">' +
+                    mediaHtml +
+                    '<div class="badge">' + escapeHtml(post.category || 'General') + '</div>' +
+                    videoBadge +
+                    '<button class="remove-btn" onclick="event.stopPropagation();removeFromTab(' + post.id + ', \'love\')" title="Unlike"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
+                    '<div class="overlay"><div class="title">' + escapeHtml(post.title) + '</div>' +
+                    '<div class="meta"><img src="' + authorAvatar + '" class="avatar" onerror="this.style.display=\'none\'"><span class="name">' + escapeHtml(authorName) + '</span></div></div>' +
+                    '</div>';
             }
 
             // ─── BUILD MARKET CARD ─────────────────────────────
             function buildMarketCard(item, isOwner) {
-                const imgUrl = item.images && item.images.length ? item.images[0] : '';
-                const sellerName = item.seller_name || 'Seller';
-                const sellerAvatar = item.seller_avatar || getAvatar(currentUser);
+                var imgUrl = item.images && item.images.length ? item.images[0] : '';
+                var sellerName = item.seller_name || 'Seller';
+                var sellerAvatar = item.seller_avatar || getAvatar(currentUser);
 
-                let deleteBtn = '';
+                var deleteBtn = '';
                 if (isOwner) {
-                    deleteBtn =
-                        `<button class="delete-btn" onclick="event.stopPropagation();deleteMarketItem(${item.id})" title="Delete"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>`;
+                    deleteBtn = '<button class="delete-btn" onclick="event.stopPropagation();deleteMarketItem(' + item.id + ')" title="Delete"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>';
                 }
 
-                return `
-                            <div class="market-card" onclick="showToast('Market detail coming soon','p')">
-                                <div class="img-wrap">
-                                    ${imgUrl ? `<img src="${imgUrl}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'no-media\\' style=\\'display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted2);\\'>No image</div>'">` : `<div class="no-media" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted2);">No image</div>`}
-                                    <span class="cat-badge">${escapeHtml(item.category || 'General')}</span>
-                                    <span class="price-tag">₦${formatPrice(item.price)}</span>
-                                    ${deleteBtn}
-                                </div>
-                                <div class="body">
-                                    <div class="title">${escapeHtml(item.title)}</div>
-                                    <div class="location"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>${escapeHtml(item.location || 'Campus')}</div>
-                                    <div class="seller"><img src="${sellerAvatar}" class="avatar" onerror="this.style.display='none'"><span class="name">${escapeHtml(sellerName)}</span></div>
-                                </div>
-                            </div>
-                        `;
+                return '<div class="market-card" onclick="showToast(\'Market detail coming soon\',\'p\')">' +
+                    '<div class="img-wrap">' +
+                    (imgUrl ? '<img src="' + imgUrl + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\" style=\\"display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted2);\\">No image</div>\'">' : '<div class="no-media" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted2);">No image</div>') +
+                    '<span class="cat-badge">' + escapeHtml(item.category || 'General') + '</span>' +
+                    '<span class="price-tag">₦' + formatPrice(item.price) + '</span>' +
+                    deleteBtn +
+                    '</div>' +
+                    '<div class="body">' +
+                    '<div class="title">' + escapeHtml(item.title) + '</div>' +
+                    '<div class="location"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' + escapeHtml(item.location || 'Campus') + '</div>' +
+                    '<div class="seller"><img src="' + sellerAvatar + '" class="avatar" onerror="this.style.display=\'none\'"><span class="name">' + escapeHtml(sellerName) + '</span></div>' +
+                    '</div></div>';
             }
 
             function formatPrice(n) {
@@ -3351,15 +3365,15 @@
 
             // ─── ACTIONS ────────────────────────────────────────
             window.toggleReaction = async function(postId) {
-                const post = allPosts.find(p => p.id === postId);
+                var post = allPosts.find(function(p) { return p.id === postId; });
                 if (!post) return;
-                window.AuthUser.requireAuth(async () => {
+                window.AuthUser.requireAuth(async function() {
                     try {
-                        const { liked, count } = await window.PostsAPI.toggleLike(postId);
-                        post.likedByMe = liked;
-                        post.reactions.like = count;
+                        var result = await window.PostsAPI.toggleLike(postId);
+                        post.likedByMe = result.liked;
+                        post.reactions.like = result.count;
                         renderTab(activeTab);
-                        showToast(liked ? 'Liked ♥' : 'Unliked', liked ? 'g' : 'o');
+                        showToast(result.liked ? 'Liked' : 'Unliked', result.liked ? 'g' : 'o');
                     } catch (err) {
                         showToast(err.message, 'r');
                     }
@@ -3367,47 +3381,47 @@
             };
 
             window.toggleBookmark = async function(postId) {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
                     showToast('Please sign in to bookmark', 'o');
                     return;
                 }
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('bookmarks')
                     .select('id')
                     .eq('user_id', user.id)
                     .eq('post_id', postId)
                     .maybeSingle();
-                if (error) throw error;
-                if (data) {
-                    await window.sb.from('bookmarks').delete().eq('id', data.id);
+                if (result.error) throw result.error;
+                if (result.data) {
+                    await window.sb.from('bookmarks').delete().eq('id', result.data.id);
                     showToast('Removed from bookmarks', 'o');
                 } else {
                     await window.sb.from('bookmarks').insert({ user_id: user.id, post_id: postId });
-                    showToast('Bookmarked ⭐', 'g');
+                    showToast('Bookmarked', 'g');
                 }
                 renderTab(activeTab);
             };
 
             window.toggleShare = async function(postId) {
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
                     showToast('Please sign in to share', 'o');
                     return;
                 }
-                const { data, error } = await window.sb
+                var result = await window.sb
                     .from('shares')
                     .select('id')
                     .eq('user_id', user.id)
                     .eq('post_id', postId)
                     .maybeSingle();
-                if (error) throw error;
-                if (data) {
-                    await window.sb.from('shares').delete().eq('id', data.id);
+                if (result.error) throw result.error;
+                if (result.data) {
+                    await window.sb.from('shares').delete().eq('id', result.data.id);
                     showToast('Unshared', 'o');
                 } else {
                     await window.sb.from('shares').insert({ user_id: user.id, post_id: postId });
-                    showToast('Shared 📤', 'g');
+                    showToast('Shared', 'g');
                 }
                 renderTab(activeTab);
             };
@@ -3445,6 +3459,49 @@
                 }
             };
 
+            // ─── AVATAR VIEWER ──────────────────────────────────
+            window.handleAvatarTap = function() {
+                if (isOwner) { openFS('avatarModal'); return; }
+                openAvatarViewer(document.getElementById('profileAvatar').src);
+            };
+
+            window.openAvatarViewer = function(src) {
+                document.getElementById('avViewerImg').src = src;
+                document.getElementById('avatarViewerModal').classList.add('open');
+                document.body.style.overflow = 'hidden';
+                setupAvatarSwipeClose();
+            };
+
+            window.closeAvatarViewer = function() {
+                document.getElementById('avatarViewerModal').classList.remove('open');
+                document.body.style.overflow = '';
+            };
+
+            function setupAvatarSwipeClose() {
+                var track = document.getElementById('avViewerTrack');
+                var img = document.getElementById('avViewerImg');
+                var startY = 0, deltaY = 0, dragging = false;
+                track.ontouchstart = function(e) {
+                    startY = e.touches[0].clientY;
+                    dragging = true;
+                };
+                track.ontouchmove = function(e) {
+                    if (!dragging) return;
+                    deltaY = e.touches[0].clientY - startY;
+                    if (deltaY > 0) {
+                        img.style.transform = 'translateY(' + deltaY + 'px) scale(' + Math.max(0.7, 1 - deltaY / 600) + ')';
+                        document.getElementById('avatarViewerModal').style.background = 'rgba(0,0,0,' + Math.max(0, 0.85 - deltaY / 400) + ')';
+                    }
+                };
+                track.ontouchend = function() {
+                    dragging = false;
+                    if (deltaY > 120) { closeAvatarViewer(); }
+                    img.style.transform = '';
+                    deltaY = 0;
+                    document.getElementById('avatarViewerModal').style.background = '';
+                };
+            }
+
             // ─── MODAL HELPERS ──────────────────────────────────
             window.openFS = function(id) {
                 document.getElementById(id).classList.add('open');
@@ -3460,7 +3517,7 @@
             };
 
             window.openPostsModal = function() {
-                const count = getUserPosts(targetUserId).length;
+                var count = getUserPosts(targetUserId).length;
                 document.getElementById('mcCount').textContent = count;
                 document.getElementById('mcNum').textContent = count;
                 document.getElementById('mcName').textContent = targetUser?.display_name || 'User';
@@ -3475,10 +3532,9 @@
             };
 
             function generateQRCode() {
-                const container = document.getElementById('qrcode');
+                var container = document.getElementById('qrcode');
                 container.innerHTML = '';
-                const username = targetUser?.username || 'user';
-                const url = 'https://freeupper.vercel.app/@' + username;
+                var url = 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(targetUserId);
                 try {
                     new QRCode(container, {
                         text: url,
@@ -3496,49 +3552,47 @@
             }
 
             window.copyProfileLink = function() {
-                const username = targetUser?.username || 'user';
-                const url = 'https://freeupper.vercel.app/@' + username;
+                var url = 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(targetUserId);
                 if (navigator.clipboard) {
-                    navigator.clipboard.writeText(url).then(() => {
-                        showToast('Profile link copied ✓', 'g');
-                    }).catch(() => {
-                        const textArea = document.createElement('textarea');
+                    navigator.clipboard.writeText(url).then(function() {
+                        showToast('Profile link copied', 'g');
+                    }).catch(function() {
+                        var textArea = document.createElement('textarea');
                         textArea.value = url;
                         document.body.appendChild(textArea);
                         textArea.select();
                         document.execCommand('copy');
                         textArea.remove();
-                        showToast('Profile link copied ✓', 'g');
+                        showToast('Profile link copied', 'g');
                     });
                 } else {
-                    const textArea = document.createElement('textarea');
+                    var textArea = document.createElement('textarea');
                     textArea.value = url;
                     document.body.appendChild(textArea);
                     textArea.select();
                     document.execCommand('copy');
                     textArea.remove();
-                    showToast('Profile link copied ✓', 'g');
+                    showToast('Profile link copied', 'g');
                 }
             };
 
             window.shareProfileLink = function() {
-                const username = targetUser?.username || 'user';
-                const url = 'https://freeupper.vercel.app/@' + username;
-                const name = targetUser?.display_name || 'User';
+                var url = 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(targetUserId);
+                var name = targetUser?.display_name || 'User';
                 if (navigator.share) {
                     navigator.share({
                         title: name + ' on Freeupper',
                         text: 'Connect with ' + name + ' on Freeupper!',
                         url: url
-                    }).catch(() => {});
+                    }).catch(function() {});
                 } else {
                     copyProfileLink();
                 }
             };
 
             // ─── QR SCANNER ─────────────────────────────────────
-            let camStream = null;
-            let scanRAF = null;
+            var camStream = null;
+            var scanRAF = null;
 
             window.showScanView = function() {
                 document.getElementById('shareQRView').style.display = 'none';
@@ -3554,8 +3608,8 @@
             };
 
             function startCamera() {
-                const video = document.getElementById('scanVideo');
-                const canvas = document.getElementById('scanCanvas');
+                var video = document.getElementById('scanVideo');
+                var canvas = document.getElementById('scanCanvas');
                 stopCamera();
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     showScanStatus('Camera not supported', 'rgba(248,113,113,.85)');
@@ -3564,13 +3618,13 @@
                 navigator.mediaDevices.getUserMedia({
                     video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
                     audio: false
-                }).then(stream => {
+                }).then(function(stream) {
                     camStream = stream;
                     video.srcObject = stream;
                     video.play();
                     video.style.display = 'block';
                     tickQR(video, canvas);
-                }).catch(err => {
+                }).catch(function(err) {
                     console.warn('Camera error:', err);
                     showScanStatus('Could not access camera', 'rgba(248,113,113,.85)');
                 });
@@ -3579,24 +3633,24 @@
             function stopCamera() {
                 if (scanRAF) { cancelAnimationFrame(scanRAF);
                     scanRAF = null; }
-                if (camStream) { camStream.getTracks().forEach(t => t.stop());
+                if (camStream) { camStream.getTracks().forEach(function(t) { t.stop(); });
                     camStream = null; }
-                const video = document.getElementById('scanVideo');
+                var video = document.getElementById('scanVideo');
                 if (video) video.srcObject = null;
             }
 
             function tickQR(video, canvas) {
                 if (!camStream) return;
-                const tick = () => {
+                var tick = function() {
                     if (!camStream || video.readyState < 2) { scanRAF = requestAnimationFrame(tick); return; }
-                    const w = video.videoWidth,
+                    var w = video.videoWidth,
                         h = video.videoHeight;
                     if (!w || !h) { scanRAF = requestAnimationFrame(tick); return; }
                     canvas.width = w;
                     canvas.height = h;
-                    const ctx = canvas.getContext('2d');
+                    var ctx = canvas.getContext('2d');
                     ctx.drawImage(video, 0, 0, w, h);
-                    let code = null;
+                    var code = null;
                     try {
                         if (typeof jsQR === 'function') {
                             code = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
@@ -3610,50 +3664,50 @@
 
             function onQRDetected(data) {
                 stopCamera();
-                document.querySelectorAll('.scan-corner').forEach(c => {
+                document.querySelectorAll('.scan-corner').forEach(function(c) {
                     c.style.transition = 'border-color .2s';
                     c.style.borderColor = '#4ade80';
-                    setTimeout(() => { c.style.borderColor = '';
+                    setTimeout(function() { c.style.borderColor = '';
                         c.style.transition = ''; }, 700);
                 });
-                const match = data.match(/^https?:\/\/(www\.)?freeupper\.vercel\.app\/@([a-zA-Z0-9_.]+)$/);
+                var match = data.match(/^https?:\/\/(www\.)?freeupper\.vercel\.app\/profile\.html\?uid=([a-zA-Z0-9-]+)$/);
                 if (match) {
-                    const username = match[2];
-                    showScanStatus('✓ Found @' + username, 'rgba(74,222,128,.9)');
-                    setTimeout(() => {
+                    var uid = match[2];
+                    showScanStatus('Profile found', 'rgba(74,222,128,.9)');
+                    setTimeout(function() {
                         stopCameraAndShowQR();
-                        window.location.href = '/@' + username;
+                        window.location.href = 'profile.html?uid=' + uid;
                     }, 900);
                 } else {
                     showScanStatus('Not a valid Freeupper QR code', 'rgba(248,113,113,.85)');
-                    setTimeout(() => { if (!camStream) startCamera(); }, 1800);
+                    setTimeout(function() { if (!camStream) startCamera(); }, 1800);
                 }
             }
 
             function showScanStatus(msg, color) {
-                const el = document.getElementById('scanStatus');
+                var el = document.getElementById('scanStatus');
                 if (!el) return;
                 el.textContent = msg;
                 el.style.background = color || 'rgba(0,0,0,.7)';
                 el.style.display = 'block';
                 clearTimeout(el._t);
-                el._t = setTimeout(() => { el.style.display = 'none'; }, 2800);
+                el._t = setTimeout(function() { el.style.display = 'none'; }, 2800);
             }
 
             window.scanGalleryQR = function(e) {
-                const file = e.target.files[0];
+                var file = e.target.files[0];
                 if (!file) return;
                 e.target.value = '';
-                const reader = new FileReader();
+                var reader = new FileReader();
                 reader.onload = function(ev) {
-                    const img = new Image();
+                    var img = new Image();
                     img.onload = function() {
-                        const canvas = document.createElement('canvas');
+                        var canvas = document.createElement('canvas');
                         canvas.width = img.width;
                         canvas.height = img.height;
-                        const ctx = canvas.getContext('2d');
+                        var ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0);
-                        let code = null;
+                        var code = null;
                         try {
                             if (typeof jsQR === 'function') {
                                 code = jsQR(ctx.getImageData(0, 0, img.width, img.height).data, img.width, img.height);
@@ -3674,31 +3728,31 @@
             };
 
             function syncEdit() {
-                const user = targetUser;
+                var user = targetUser;
                 document.getElementById('eDN').value = user.display_name || '';
                 document.getElementById('eUN').value = user.username || '';
                 document.getElementById('eBio').value = user.bio || '';
                 document.getElementById('dnC').textContent = (user.display_name || '').length + ' / 40';
                 pendingPills = (user.tags || []).slice();
                 renderPillsEd();
-                const gd = document.getElementById('eGenderDisplay');
+                var gd = document.getElementById('eGenderDisplay');
                 if (user.gender) {
-                    const icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
+                    var icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
                         'Other': '✦' };
                     gd.textContent = (icons[user.gender] || '') + ' ' + (user.gender || 'Prefer not to say');
                     gd.style.color = 'var(--text)';
                     selGender = user.gender;
                 }
                 if (user.dob) {
-                    const d = new Date(user.dob);
-                    const dateStr = MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+                    var d = new Date(user.dob);
+                    var dateStr = MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
                     document.getElementById('eDOBDisplay').textContent = dateStr;
                     document.getElementById('eDOBDisplay').style.color = 'var(--text)';
-                    const age = new Date().getFullYear() - d.getFullYear();
+                    var age = new Date().getFullYear() - d.getFullYear();
                     document.getElementById('dobAgeHint').textContent = 'Age: ' + age + ' years old';
                 }
                 if (user.country) {
-                    const c = COUNTRIES.find(c => c.n === user.country);
+                    var c = COUNTRIES.find(function(c) { return c.n === user.country; });
                     if (c) {
                         document.getElementById('eCountryDisplay').textContent = c.f + ' ' + c.n;
                         document.getElementById('eCountryDisplay').style.color = 'var(--text)';
@@ -3708,15 +3762,15 @@
             }
 
             function renderPillsEd() {
-                document.getElementById('pillsEd').innerHTML = pendingPills.map((p, i) =>
-                    `<span class="pill-chip">${p}<button onclick="removePill(${i})">×</button></span>`
-                ).join('');
+                document.getElementById('pillsEd').innerHTML = pendingPills.map(function(p, i) {
+                    return '<span class="pill-chip">' + p + '<button onclick="removePill(' + i + ')">×</button></span>';
+                }).join('');
                 document.getElementById('pillWrap').style.display = pendingPills.length >= 3 ? 'none' : 'flex';
             }
 
             window.addPill = function() {
-                const inp = document.getElementById('pillInp');
-                const val = inp.value.trim();
+                var inp = document.getElementById('pillInp');
+                var val = inp.value.trim();
                 if (!val || pendingPills.length >= 3) return;
                 pendingPills.push(val);
                 inp.value = '';
@@ -3727,12 +3781,12 @@
                 renderPillsEd(); };
 
             window.saveProfile = async function() {
-                const dn = document.getElementById('eDN').value.trim();
-                const un = document.getElementById('eUN').value.trim();
-                const bio = document.getElementById('eBio').value.trim();
-                const user = getCurrentUser();
+                var dn = document.getElementById('eDN').value.trim();
+                var un = document.getElementById('eUN').value.trim();
+                var bio = document.getElementById('eBio').value.trim();
+                var user = getCurrentUser();
 
-                const updates = {
+                var updates = {
                     display_name: dn || 'Guest',
                     username: un || 'user',
                     bio: bio,
@@ -3742,18 +3796,20 @@
                 };
 
                 if (dobSel.month && dobSel.day && dobSel.year) {
-                    const d = new Date(dobSel.year, dobSel.month - 1, dobSel.day);
+                    var d = new Date(dobSel.year, dobSel.month - 1, dobSel.day);
                     updates.dob = d.toISOString();
                 }
 
                 try {
-                    const { error } = await window.sb
+                    var result = await window.sb
                         .from('profiles')
                         .update(updates)
                         .eq('id', user.id);
-                    if (error) throw error;
-                    if (typeof updateUserProfile === 'function') {
-                        const localUpdates = {
+                    if (result.error) throw result.error;
+
+                    // Update in-memory cache via AuthUser
+                    if (window.AuthUser && window.AuthUser.updateCurrentUser) {
+                        window.AuthUser.updateCurrentUser({
                             displayName: updates.display_name,
                             username: updates.username,
                             bio: updates.bio,
@@ -3761,11 +3817,11 @@
                             gender: updates.gender,
                             country: updates.country,
                             dob: updates.dob
-                        };
-                        updateUserProfile(localUpdates);
+                        });
                     }
+
                     closeFS('editModal');
-                    showToast('Profile updated ✓', 'g');
+                    showToast('Profile updated', 'g');
                     renderProfile();
                 } catch (err) {
                     showToast(err.message, 'r');
@@ -3774,23 +3830,25 @@
 
             // ─── FOLLOW MODAL ──────────────────────────────────
             async function fetchFollowLists(userId) {
-                const followers = await fetchFollowers(userId);
-                const following = await fetchFollowing(userId);
-                const followingIds = new Set(following.map(u => u.id));
-                const friends = followers.filter(u => followingIds.has(u.id));
+                var followers = await fetchFollowers(userId);
+                var following = await fetchFollowing(userId);
+                var followingIds = new Set(following.map(function(u) { return u.id; }));
+                var friends = followers.filter(function(u) { return followingIds.has(u.id); });
 
-                const current = getCurrentUser();
-                let suggestions = [];
+                var current = getCurrentUser();
+                var suggestions = [];
                 if (current && current.isLoggedIn && current.id !== userId) {
-                    const followedIds = new Set([userId, ...followingIds]);
-                    const { data, error } = await window.sb
+                    var followedIds = new Set([userId]);
+                    following.forEach(function(u) { followedIds.add(u.id); });
+                    var ids = Array.from(followedIds).join(',');
+                    var sugResult = await window.sb
                         .from('profiles')
                         .select('id, username, display_name, avatar_url, verified')
-                        .not('id', 'in', `(${[...followedIds].join(',')})`)
+                        .not('id', 'in', '(' + ids + ')')
                         .limit(10);
-                    if (!error) suggestions = data;
+                    if (!sugResult.error) suggestions = sugResult.data;
                 }
-                return { followers, following, friends, suggestions };
+                return { followers: followers, following: following, friends: friends, suggestions: suggestions };
             }
 
             window.openFollowModal = async function(tab) {
@@ -3804,39 +3862,41 @@
                     }
                 }
                 openFS('followModal');
-                const idx = ['followers', 'following', 'friends', 'suggestions'].indexOf(tab);
+                var idx = ['followers', 'following', 'friends', 'suggestions'].indexOf(tab);
                 if (idx < 0) idx = 0;
                 if (!isOwner && idx > 1) idx = 0;
                 tabTap(idx);
-                requestAnimationFrame(() => { _fwPositionBar(idx); });
+                requestAnimationFrame(function() { _fwPositionBar(idx); });
             };
 
             function tabTap(idx) {
                 idx = Math.max(0, Math.min(idx, 3));
                 _fwPageIdx = idx;
-                const tabs = ['followers', 'following', 'friends', 'suggestions'];
+                var tabs = ['followers', 'following', 'friends', 'suggestions'];
                 _fwCurTab = tabs[idx];
 
-                let dataSource = [];
+                var dataSource = [];
                 if (followModalData) {
                     if (idx === 0) dataSource = followModalData.followers;
                     else if (idx === 1) dataSource = followModalData.following;
                     else if (idx === 2) dataSource = followModalData.friends;
                     else if (idx === 3) dataSource = followModalData.suggestions;
                 }
-                _fwList = dataSource.map(u => ({
-                    id: u.id,
-                    displayName: u.display_name || u.username,
-                    handle: '@' + (u.username || ''),
-                    avatar: u.avatar_url || '',
-                    verified: u.verified || false,
-                    isFollowing: false,
-                    isMutual: false
-                }));
+                _fwList = dataSource.map(function(u) {
+                    return {
+                        id: u.id,
+                        displayName: u.display_name || u.username,
+                        handle: '@' + (u.username || ''),
+                        avatar: u.avatar_url || '',
+                        verified: u.verified || false,
+                        isFollowing: false,
+                        isMutual: false
+                    };
+                });
                 _fwPageState[idx].loaded = true;
 
-                for (let i = 0; i < 4; i++) {
-                    const pg = document.getElementById('fsPage' + i);
+                for (var i = 0; i < 4; i++) {
+                    var pg = document.getElementById('fsPage' + i);
                     if (pg) pg.classList.toggle('active', i === idx);
                 }
 
@@ -3846,151 +3906,150 @@
             }
 
             function _fwPositionBar(idx) {
-                const tabIds = ['fsTabF', 'fsTabFg', 'fsTabFr', 'fsTabSg'];
-                const titles = ['Followers', 'Following', 'Friends', 'Suggestions'];
-                for (let t = 0; t < tabIds.length; t++) {
-                    const el = document.getElementById(tabIds[t]);
+                var tabIds = ['fsTabF', 'fsTabFg', 'fsTabFr', 'fsTabSg'];
+                var titles = ['Followers', 'Following', 'Friends', 'Suggestions'];
+                for (var t = 0; t < tabIds.length; t++) {
+                    var el = document.getElementById(tabIds[t]);
                     if (el) el.classList.toggle('active', t === idx);
                 }
-                const titleEl = document.getElementById('fsTitle');
+                var titleEl = document.getElementById('fsTitle');
                 if (titleEl) titleEl.textContent = titles[idx] || titles[0];
 
-                const bar = document.getElementById('fsTabBar');
-                const tabsEl = document.getElementById('fsTabs');
+                var bar = document.getElementById('fsTabBar');
+                var tabsEl = document.getElementById('fsTabs');
                 if (!bar || !tabsEl) return;
-                const btn = document.getElementById(tabIds[idx]);
+                var btn = document.getElementById(tabIds[idx]);
                 if (!btn) return;
-                const wrapRect = tabsEl.getBoundingClientRect();
-                const btnRect = btn.getBoundingClientRect();
-                const L = btnRect.left - wrapRect.left;
-                const W = btnRect.width;
+                var wrapRect = tabsEl.getBoundingClientRect();
+                var btnRect = btn.getBoundingClientRect();
+                var L = btnRect.left - wrapRect.left;
+                var W = btnRect.width;
                 bar.style.left = (L + W * 0.25) + 'px';
                 bar.style.width = (W * 0.5) + 'px';
             }
 
             function _fwApplyFilter() {
-                const q = _fwPageState[_fwPageIdx].query || '';
+                var q = _fwPageState[_fwPageIdx].query || '';
                 if (!q) {
                     _fwFiltered = _fwList.slice();
                 } else {
-                    const q2 = q.toLowerCase();
-                    _fwFiltered = _fwFiltered.filter(u =>
-                        (u.displayName || '').toLowerCase().includes(q2) ||
-                        (u.handle || '').toLowerCase().includes(q2)
-                    );
+                    var q2 = q.toLowerCase();
+                    _fwFiltered = _fwList.filter(function(u) {
+                        return (u.displayName || '').toLowerCase().includes(q2) ||
+                            (u.handle || '').toLowerCase().includes(q2);
+                    });
                 }
             }
 
             function _fwRenderVisible() {
-                const listEl = document.getElementById('fsList' + _fwPageIdx);
-                const wrapEl = document.getElementById('fsVirtualWrap' + _fwPageIdx);
-                const contentEl = document.getElementById('fsVirtualContent' + _fwPageIdx);
+                var listEl = document.getElementById('fsList' + _fwPageIdx);
+                var wrapEl = document.getElementById('fsVirtualWrap' + _fwPageIdx);
+                var contentEl = document.getElementById('fsVirtualContent' + _fwPageIdx);
                 if (!listEl || !wrapEl || !contentEl) return;
 
-                const data = _fwFiltered;
-                const total = data.length;
+                var data = _fwFiltered;
+                var total = data.length;
 
                 if (total === 0) {
                     wrapEl.style.height = '0';
                     contentEl.innerHTML =
-                        `<div class="fw-empty"><div class="fw-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><h3>No ${_fwCurTab}</h3><p>No ${_fwCurTab} found.</p></div>`;
+                        '<div class="fw-empty"><div class="fw-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><h3>No ' + _fwCurTab + '</h3><p>No ' + _fwCurTab + ' found.</p></div>';
                     return;
                 }
 
-                const rowH = (_fwCurTab === 'suggestions') ? 88 : 72;
+                var rowH = (_fwCurTab === 'suggestions') ? 88 : 72;
                 wrapEl.style.height = (total * rowH) + 'px';
 
-                const scrollTop = listEl.scrollTop;
-                const vh = listEl.clientHeight || window.innerHeight * 0.75;
-                const startIdx = Math.max(0, Math.floor(scrollTop / rowH) - FW_BUFFER);
-                const endIdx = Math.min(total, Math.ceil((scrollTop + vh) / rowH) + FW_BUFFER);
+                var scrollTop = listEl.scrollTop;
+                var vh = listEl.clientHeight || window.innerHeight * 0.75;
+                var startIdx = Math.max(0, Math.floor(scrollTop / rowH) - FW_BUFFER);
+                var endIdx = Math.min(total, Math.ceil((scrollTop + vh) / rowH) + FW_BUFFER);
 
-                let html = '';
-                const isSugg = (_fwCurTab === 'suggestions');
+                var html = '';
+                var isSugg = (_fwCurTab === 'suggestions');
 
-                for (let i = startIdx; i < endIdx; i++) {
-                    const u = data[i];
-                    const top = i * rowH;
-                    const d = 'data-uid="' + (u.id || '') + '" data-fidx="' + i + '"';
-                    const tp = 'onclick="_fwTap(this)"';
+                for (var i = startIdx; i < endIdx; i++) {
+                    var u = data[i];
+                    var top = i * rowH;
+                    var d = 'data-uid="' + (u.id || '') + '" data-fidx="' + i + '"';
+                    var tp = 'onclick="_fwTap(this)"';
 
                     if (isSugg) {
-                        const srcLbl = u.source || 'People you may know';
-                        html += `<div class="u-row u-row-suggestion" style="position:absolute;top:${top}px;left:0;right:0;height:${rowH}px;box-sizing:border-box;padding:0 clamp(14px,5vw,24px)">
-                                    <div class="u-av" style="background:var(--bg4);flex-shrink:0">${u.avatar ? `<img src="${u.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : '&#x1F464;'}</div>
-                                    <div class="u-info">
-                                        <div class="u-name">${u.displayName || ''}${u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : ''}</div>
-                                        <div class="u-handle">${u.handle || ''}</div>
-                                        <div class="u-sugg-src">${srcLbl}</div>
-                                    </div>
-                                    <div class="u-sugg-actions" style="display:flex;gap:8px;flex-shrink:0">
-                                        <button class="u-btn" ${d} data-action="toggle-follow" ${tp}>Follow</button>
-                                        <button class="u-btn-sugg-remove" ${d} data-action="remove" ${tp}><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-                                    </div>
-                                </div>`;
+                        var srcLbl = u.source || 'People you may know';
+                        html += '<div class="u-row u-row-suggestion" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;padding:0 clamp(14px,5vw,24px)">' +
+                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-info">' +
+                            '<div class="u-name">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-handle">' + (u.handle || '') + '</div>' +
+                            '<div class="u-sugg-src">' + srcLbl + '</div>' +
+                            '</div>' +
+                            '<div class="u-sugg-actions" style="display:flex;gap:8px;flex-shrink:0">' +
+                            '<button class="u-btn" ' + d + ' data-action="toggle-follow" ' + tp + '>Follow</button>' +
+                            '<button class="u-btn-sugg-remove" ' + d + ' data-action="remove" ' + tp + '><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
+                            '</div></div>';
                     } else {
-                        let actionHtml = _fwRowAction(u, i);
-                        html += `<div class="u-row" data-row-idx="${i}" style="position:absolute;top:${top}px;left:0;right:0;height:${rowH}px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 clamp(14px,5vw,24px)">
-                                    <div class="u-av" style="background:var(--bg4);flex-shrink:0">${u.avatar ? `<img src="${u.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : '&#x1F464;'}</div>
-                                    <div class="u-info">
-                                        <div class="u-name">${u.displayName || ''}${u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : ''}</div>
-                                        <div class="u-handle">${u.handle || ''}</div>
-                                    </div>
-                                    ${actionHtml}
-                                </div>`;
+                        var actionHtml = _fwRowAction(u, i);
+                        html += '<div class="u-row" data-row-idx="' + i + '" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 clamp(14px,5vw,24px)">' +
+                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-info">' +
+                            '<div class="u-name">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-handle">' + (u.handle || '') + '</div>' +
+                            '</div>' +
+                            actionHtml +
+                            '</div>';
                     }
                 }
                 contentEl.innerHTML = html;
             }
 
             function _fwRowAction(u, idx) {
-                const d = 'data-uid="' + (u.id || '') + '" data-fidx="' + idx + '"';
-                const tp = 'onclick="_fwTap(this)"';
+                var d = 'data-uid="' + (u.id || '') + '" data-fidx="' + idx + '"';
+                var tp = 'onclick="_fwTap(this)"';
 
                 if (_fwCurTab === 'friends') {
-                    return `<button class="u-btn-msg" ${d} data-action="message" ${tp}><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Message</button>`;
+                    return '<button class="u-btn-msg" ' + d + ' data-action="message" ' + tp + '><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Message</button>';
                 }
                 if (_fwCurTab === 'suggestions') {
-                    return `<div style="display:flex;gap:8px;flex-shrink:0">
-                                <button class="u-btn" ${d} data-action="toggle-follow" ${tp}>Follow</button>
-                                <button class="u-btn-sugg-remove" ${d} data-action="remove" ${tp}><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-                            </div>`;
+                    return '<div style="display:flex;gap:8px;flex-shrink:0">' +
+                        '<button class="u-btn" ' + d + ' data-action="toggle-follow" ' + tp + '>Follow</button>' +
+                        '<button class="u-btn-sugg-remove" ' + d + ' data-action="remove" ' + tp + '><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
+                        '</div>';
                 }
                 if (_fwCurTab === 'followers') {
-                    const isMutual = followModalData?.following.some(f => f.id === u.id) || false;
+                    var isMutual = followModalData?.following.some(function(f) { return f.id === u.id; }) || false;
                     if (isMutual) {
-                        return `<button class="u-btn friends" ${d} data-action="unfriend" ${tp}>Friends</button>`;
+                        return '<button class="u-btn friends" ' + d + ' data-action="unfriend" ' + tp + '>Friends</button>';
                     }
-                    return `<button class="u-btn follow-back" ${d} data-action="follow-back" ${tp}>Follow Back</button>`;
+                    return '<button class="u-btn follow-back" ' + d + ' data-action="follow-back" ' + tp + '>Follow Back</button>';
                 }
                 if (_fwCurTab === 'following') {
-                    const isMutual = followModalData?.followers.some(f => f.id === u.id) || false;
-                    if (isMutual) {
-                        return `<button class="u-btn friends" ${d} data-action="unfriend" ${tp}>Friends</button>`;
+                    var isMutual2 = followModalData?.followers.some(function(f) { return f.id === u.id; }) || false;
+                    if (isMutual2) {
+                        return '<button class="u-btn friends" ' + d + ' data-action="unfriend" ' + tp + '>Friends</button>';
                     }
-                    return `<button class="u-btn following" ${d} data-action="unfollow" ${tp}>Following</button>`;
+                    return '<button class="u-btn following" ' + d + ' data-action="unfollow" ' + tp + '>Following</button>';
                 }
                 return '';
             }
 
             window._fwTap = function(btn) {
                 if (btn.classList.contains('pending')) return;
-                const action = btn.getAttribute('data-action') || 'toggle-follow';
-                const fidx = parseInt(btn.getAttribute('data-fidx'), 10);
-                const user = _fwFiltered[fidx];
+                var action = btn.getAttribute('data-action') || 'toggle-follow';
+                var fidx = parseInt(btn.getAttribute('data-fidx'), 10);
+                var user = _fwFiltered[fidx];
                 if (!user) return;
 
-                window.AuthUser.requireAuth(async () => {
+                window.AuthUser.requireAuth(async function() {
                     try {
                         if (action === 'follow-back' || action === 'toggle-follow') {
-                            const newState = await toggleFollow(user.id);
+                            var newState = await toggleFollow(user.id);
                             btn.textContent = newState ? 'Following' : 'Follow';
                             btn.className = 'u-btn' + (newState ? ' following' : '');
                             btn.setAttribute('data-action', newState ? 'unfollow' : 'follow-back');
                             showToast(newState ? 'Following ✓' : 'Unfollowed');
                             followModalData = await fetchFollowLists(targetUserId);
                             tabTap(_fwPageIdx);
-                            const counts = await fetchFollowCounts(targetUserId);
+                            var counts = await fetchFollowCounts(targetUserId);
                             document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
                             document.getElementById('statFollowing').textContent = fmtNum(counts.following);
                         } else if (action === 'unfollow') {
@@ -4001,24 +4060,24 @@
                             showToast('Unfollowed');
                             followModalData = await fetchFollowLists(targetUserId);
                             tabTap(_fwPageIdx);
-                            const counts = await fetchFollowCounts(targetUserId);
-                            document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
-                            document.getElementById('statFollowing').textContent = fmtNum(counts.following);
+                            var counts2 = await fetchFollowCounts(targetUserId);
+                            document.getElementById('statFollowers').textContent = fmtNum(counts2.followers);
+                            document.getElementById('statFollowing').textContent = fmtNum(counts2.following);
                         } else if (action === 'unfriend') {
                             await toggleFollow(user.id);
                             showToast('Unfriended');
                             followModalData = await fetchFollowLists(targetUserId);
                             tabTap(_fwPageIdx);
-                            const counts = await fetchFollowCounts(targetUserId);
-                            document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
-                            document.getElementById('statFollowing').textContent = fmtNum(counts.following);
+                            var counts3 = await fetchFollowCounts(targetUserId);
+                            document.getElementById('statFollowers').textContent = fmtNum(counts3.followers);
+                            document.getElementById('statFollowing').textContent = fmtNum(counts3.following);
                         } else if (action === 'remove') {
-                            _fwList = _fwList.filter(u => u.id !== user.id);
+                            _fwList = _fwList.filter(function(u) { return u.id !== user.id; });
                             _fwApplyFilter();
                             _fwRenderVisible();
                             showToast('Removed suggestion', 'o');
                         } else if (action === 'message') {
-                            showToast('Messaging coming soon 💬', 'p');
+                            showToast('Messaging coming soon', 'p');
                         }
                     } catch (err) {
                         showToast(err.message, 'r');
@@ -4028,7 +4087,7 @@
 
             window.filterUsersPage = function(pageIdx) {
                 if (pageIdx !== _fwPageIdx) return;
-                const inp = document.getElementById('fsSearch' + pageIdx);
+                var inp = document.getElementById('fsSearch' + pageIdx);
                 _fwPageState[pageIdx].query = inp ? inp.value.toLowerCase().trim() : '';
                 _fwApplyFilter();
                 _fwRenderVisible();
@@ -4040,22 +4099,22 @@
             };
 
             // ─── AVATAR PICKER ──────────────────────────────────
-            const AVATARS = ['assets/photo1.png', 'assets/photo2.png', 'assets/photo3.png', 'assets/photo4.png',
+            var AVATARS = ['assets/photo1.png', 'assets/photo2.png', 'assets/photo3.png', 'assets/photo4.png',
                 'assets/photo5.png', 'assets/photo6.png', 'assets/photo7.png', 'assets/photo8.png', 'assets/photo9.png'
             ];
-            const AVBG = ['linear-gradient(135deg,#1a1035,#3b1a6b)', 'linear-gradient(135deg,#0f1a2e,#1e3a5f)',
+            var AVBG = ['linear-gradient(135deg,#1a1035,#3b1a6b)', 'linear-gradient(135deg,#0f1a2e,#1e3a5f)',
                 'linear-gradient(135deg,#1a0f1f,#3b0764)', 'linear-gradient(135deg,#0f1f1a,#064e3b)'
             ];
 
             function initAvatarGrid() {
-                const grid = document.getElementById('avGrid');
-                grid.innerHTML = AVATARS.map((src, i) => {
-                    const sel = selAvIdx === i;
-                    return `<div class="av-opt${sel ? ' sel' : ''}" onclick="pickAv(this,${i},'${src}')" style="border:3px solid ${sel ? 'var(--p)' : 'transparent'}">
-                                <img src="${src}" alt="Photo ${i+1}" style="width:100%;height:100%;object-fit:cover;display:block;position:absolute;top:0;left:0" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                                <div style="display:none;width:100%;height:100%;background:${AVBG[i % AVBG.length]};align-items:center;justify-content:center;font-size:26px;position:absolute;top:0;left:0">${['🎬','💻','🚀','🛠️','🌌','🔮','🎯','🤖','🦾'][i]}</div>
-                                ${sel ? `<div class="av-select-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>` : ''}
-                            </div>`;
+                var grid = document.getElementById('avGrid');
+                grid.innerHTML = AVATARS.map(function(src, i) {
+                    var sel = selAvIdx === i;
+                    return '<div class="av-opt' + (sel ? ' sel' : '') + '" onclick="pickAv(this,' + i + ',\'' + src + '\')" style="border:3px solid ' + (sel ? 'var(--p)' : 'transparent') + '">' +
+                        '<img src="' + src + '" alt="Photo ' + (i + 1) + '" style="width:100%;height:100%;object-fit:cover;display:block;position:absolute;top:0;left:0" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                        '<div style="display:none;width:100%;height:100%;background:' + AVBG[i % AVBG.length] + ';align-items:center;justify-content:center;font-size:26px;position:absolute;top:0;left:0">' + ['🎬', '💻', '🚀', '🛠️', '🌌', '🔮', '🎯', '🤖', '🦾'][i] + '</div>' +
+                        (sel ? '<div class="av-select-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : '') +
+                        '</div>';
                 }).join('');
             }
 
@@ -4063,34 +4122,34 @@
                 selAvIdx = idx;
                 initAvatarGrid();
 
-                ['profileAvatar', 'editAv', 'navAv', 'sideAv', 'qrAvatar'].forEach(id => {
-                    const e = document.getElementById(id);
+                ['profileAvatar', 'editAv', 'navAv', 'sideAv', 'qrAvatar'].forEach(function(id) {
+                    var e = document.getElementById(id);
                     if (e) e.src = src;
                 });
 
-                const user = getCurrentUser();
+                var user = getCurrentUser();
                 if (user) {
                     window.sb.from('profiles').update({ avatar_url: src }).eq('id', user.id)
-                        .then(() => {
-                            if (typeof updateUserProfile === 'function') {
-                                updateUserProfile({ avatar: src });
+                        .then(function() {
+                            if (window.AuthUser && window.AuthUser.updateCurrentUser) {
+                                window.AuthUser.updateCurrentUser({ avatar: src });
                             }
-                            showToast('Profile photo updated ✓', 'g');
+                            showToast('Profile photo updated', 'g');
                         })
-                        .catch(err => showToast(err.message, 'r'));
+                        .catch(function(err) { showToast(err.message, 'r'); });
                 }
 
                 closeFS('avatarModal');
             };
 
             window.handleUpload = async function(e) {
-                const file = e.target.files[0];
+                var file = e.target.files[0];
                 if (!file) return;
                 try {
                     showToast('Uploading photo…', 'p');
                     await window.AuthUser.uploadAvatar(file);
                     closeFS('avatarModal');
-                    showToast('Profile photo updated ✓', 'g');
+                    showToast('Profile photo updated', 'g');
                     renderProfile();
                 } catch (err) {
                     showToast(err.message, 'r');
@@ -4098,7 +4157,7 @@
             };
 
             // ─── COUNTRY PICKER ──────────────────────────────────
-            const COUNTRIES = [
+            var COUNTRIES = [
                 { f: '🇳🇬', n: 'Nigeria', r: 'Africa' },
                 { f: '🇬🇭', n: 'Ghana', r: 'Africa' },
                 { f: '🇰🇪', n: 'Kenya', r: 'Africa' },
@@ -4132,7 +4191,7 @@
                 { f: '🇦🇺', n: 'Australia', r: 'Oceania' },
                 { f: '🇳🇿', n: 'New Zealand', r: 'Oceania' }
             ];
-            const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
+            var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
                 'October', 'November', 'December'
             ];
 
@@ -4143,8 +4202,8 @@
 
             window.filterCountries = function(q) {
                 if (!q) { renderCountries(COUNTRIES, false); return; }
-                const q2 = q.toLowerCase();
-                renderCountries(COUNTRIES.filter(c => c.n.toLowerCase().includes(q2)), true);
+                var q2 = q.toLowerCase();
+                renderCountries(COUNTRIES.filter(function(c) { return c.n.toLowerCase().includes(q2); }), true);
             };
 
             window.clearCountrySearch = function() {
@@ -4153,31 +4212,31 @@
             };
 
             function renderCountries(list, flat) {
-                const el = document.getElementById('countryList');
+                var el = document.getElementById('countryList');
                 if (!list.length) {
                     el.innerHTML =
                         '<div style="text-align:center;padding:48px;color:var(--muted)"><div style="font-size:28px;margin-bottom:12px">🌍</div><div style="font-size:14px;font-weight:700">No countries found</div></div>';
                     return;
                 }
                 if (flat) {
-                    el.innerHTML = list.map(c =>
-                        `<div class="ctr-row${selCountry===c.n ? ' sel' : ''}" onclick="pickCountry('${c.n.replace(/'/g,"\\'")}','${c.f}')"><span class="ctr-flag">${c.f}</span><span class="ctr-name">${c.n}</span>${selCountry===c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : ''}</div>`
-                    ).join('');
+                    el.innerHTML = list.map(function(c) {
+                        return '<div class="ctr-row' + (selCountry === c.n ? ' sel' : '') + '" onclick="pickCountry(\'' + c.n.replace(/'/g, "\\'") + '\',\'' + c.f + '\')"><span class="ctr-flag">' + c.f + '</span><span class="ctr-name">' + c.n + '</span>' + (selCountry === c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : '') + '</div>';
+                    }).join('');
                 } else {
-                    const regions = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
-                    el.innerHTML = regions.map(r => {
-                        const items = list.filter(c => c.r === r);
+                    var regions = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
+                    el.innerHTML = regions.map(function(r) {
+                        var items = list.filter(function(c) { return c.r === r; });
                         if (!items.length) return '';
-                        return `<div class="ctr-section-hdr">${r}</div>` + items.map(c =>
-                            `<div class="ctr-row${selCountry===c.n ? ' sel' : ''}" onclick="pickCountry('${c.n.replace(/'/g,"\\'")}','${c.f}')"><span class="ctr-flag">${c.f}</span><span class="ctr-name">${c.n}</span>${selCountry===c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : ''}</div>`
-                        ).join('');
+                        return '<div class="ctr-section-hdr">' + r + '</div>' + items.map(function(c) {
+                            return '<div class="ctr-row' + (selCountry === c.n ? ' sel' : '') + '" onclick="pickCountry(\'' + c.n.replace(/'/g, "\\'") + '\',\'' + c.f + '\')"><span class="ctr-flag">' + c.f + '</span><span class="ctr-name">' + c.n + '</span>' + (selCountry === c.n ? '<div class="ctr-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>' : '') + '</div>';
+                        }).join('');
                     }).join('');
                 }
             }
 
             window.pickCountry = function(name, flag) {
                 selCountry = name;
-                const disp = document.getElementById('eCountryDisplay');
+                var disp = document.getElementById('eCountryDisplay');
                 if (disp) { disp.textContent = flag + ' ' + name;
                     disp.style.color = 'var(--text)'; }
                 closeFS('countryModal');
@@ -4191,21 +4250,21 @@
             };
 
             function initDOBPickers() {
-                const curY = new Date().getFullYear();
-                const ms = document.getElementById('dobMonthScroll');
-                ms.innerHTML = MONTHS.map((m, i) =>
-                    `<div class="dob-item${dobSel.month===i+1 ? ' sel' : ''}" onclick="selDOB('month',${i+1},this)">${m}</div>`
-                ).join('');
-                const ds = document.getElementById('dobDayScroll');
-                ds.innerHTML = Array.from({ length: 31 }, (_, i) =>
-                    `<div class="dob-item${dobSel.day===i+1 ? ' sel' : ''}" onclick="selDOB('day',${i+1},this)">${String(i+1).padStart(2,'0')}</div>`
-                ).join('');
-                const ys = document.getElementById('dobYearScroll');
-                const years = [];
-                for (let y = curY - 13; y >= curY - 120; y--) years.push(y);
-                ys.innerHTML = years.map(y =>
-                    `<div class="dob-item${dobSel.year===y ? ' sel' : ''}" onclick="selDOB('year',${y},this)">${y}</div>`
-                ).join('');
+                var curY = new Date().getFullYear();
+                var ms = document.getElementById('dobMonthScroll');
+                ms.innerHTML = MONTHS.map(function(m, i) {
+                    return '<div class="dob-item' + (dobSel.month === i + 1 ? ' sel' : '') + '" onclick="selDOB(\'month\',' + (i + 1) + ',this)">' + m + '</div>';
+                }).join('');
+                var ds = document.getElementById('dobDayScroll');
+                ds.innerHTML = Array.from({ length: 31 }, function(_, i) {
+                    return '<div class="dob-item' + (dobSel.day === i + 1 ? ' sel' : '') + '" onclick="selDOB(\'day\',' + (i + 1) + ',this)">' + String(i + 1).padStart(2, '0') + '</div>';
+                }).join('');
+                var ys = document.getElementById('dobYearScroll');
+                var years = [];
+                for (var y = curY - 13; y >= curY - 120; y--) years.push(y);
+                ys.innerHTML = years.map(function(y) {
+                    return '<div class="dob-item' + (dobSel.year === y ? ' sel' : '') + '" onclick="selDOB(\'year\',' + y + ',this)">' + y + '</div>';
+                }).join('');
                 if (dobSel.month) scrollToDOB(ms, dobSel.month - 1);
                 if (dobSel.day) scrollToDOB(ds, dobSel.day - 1);
                 if (dobSel.year) scrollToDOB(ys, years.indexOf(dobSel.year));
@@ -4213,44 +4272,44 @@
             }
 
             function scrollToDOB(container, idx) {
-                const itemH = 48;
+                var itemH = 48;
                 container.scrollTop = Math.max(0, idx * itemH - container.clientHeight / 2 + itemH / 2);
             }
 
             window.selDOB = function(field, val, el) {
                 dobSel[field] = val;
-                const scroll = el.closest('.dob-scroll');
-                scroll.querySelectorAll('.dob-item').forEach(i => i.classList.remove('sel'));
+                var scroll = el.closest('.dob-scroll');
+                scroll.querySelectorAll('.dob-item').forEach(function(i) { i.classList.remove('sel'); });
                 el.classList.add('sel');
-                const idx = Array.from(scroll.querySelectorAll('.dob-item')).indexOf(el);
+                var idx = Array.from(scroll.querySelectorAll('.dob-item')).indexOf(el);
                 scrollToDOB(scroll, idx);
                 updateDOBResult();
             };
 
             function updateDOBResult() {
-                const res = document.getElementById('dobResult');
-                const warn = document.getElementById('dobWarn');
-                const saveBtn = document.getElementById('dobSaveBtn');
+                var res = document.getElementById('dobResult');
+                var warn = document.getElementById('dobWarn');
+                var saveBtn = document.getElementById('dobSaveBtn');
                 if (!dobSel.month || !dobSel.day || !dobSel.year) {
                     res.textContent = 'Select your date of birth above';
                     warn.style.display = 'none';
                     if (saveBtn) saveBtn.disabled = false;
                     return;
                 }
-                const dob = new Date(dobSel.year, dobSel.month - 1, dobSel.day);
-                const today = new Date();
-                let age = today.getFullYear() - dob.getFullYear();
-                const mDiff = today.getMonth() - dob.getMonth();
+                var dob = new Date(dobSel.year, dobSel.month - 1, dobSel.day);
+                var today = new Date();
+                var age = today.getFullYear() - dob.getFullYear();
+                var mDiff = today.getMonth() - dob.getMonth();
                 if (mDiff < 0 || (mDiff === 0 && today.getDate() < dob.getDate())) age--;
-                const dateStr = MONTHS[dobSel.month - 1] + ' ' + dobSel.day + ', ' + dobSel.year;
+                var dateStr = MONTHS[dobSel.month - 1] + ' ' + dobSel.day + ', ' + dobSel.year;
                 if (age < 13) {
                     res.innerHTML =
-                        `<span style="color:var(--danger);font-weight:700">${dateStr}</span><br><span style="font-size:12px;color:var(--muted)">That makes you ${age} years old</span>`;
+                        '<span style="color:var(--danger);font-weight:700">' + dateStr + '</span><br><span style="font-size:12px;color:var(--muted)">That makes you ' + age + ' years old</span>';
                     warn.style.display = 'flex';
                     if (saveBtn) saveBtn.disabled = true;
                 } else {
                     res.innerHTML =
-                        `<span style="color:var(--ok);font-weight:700">${dateStr}</span><br><span style="font-size:12px;color:var(--muted)">Age: ${age} years old</span>`;
+                        '<span style="color:var(--ok);font-weight:700">' + dateStr + '</span><br><span style="font-size:12px;color:var(--muted)">Age: ' + age + ' years old</span>';
                     warn.style.display = 'none';
                     if (saveBtn) saveBtn.disabled = false;
                 }
@@ -4259,30 +4318,30 @@
             window.saveDOB = function() {
                 if (!dobSel.month || !dobSel.day || !dobSel.year) { showToast('Please select your full date of birth',
                         'o'); return; }
-                const dob = new Date(dobSel.year, dobSel.month - 1, dobSel.day);
-                const today = new Date();
-                let age = today.getFullYear() - dob.getFullYear();
-                const mDiff = today.getMonth() - dob.getMonth();
+                var dob = new Date(dobSel.year, dobSel.month - 1, dobSel.day);
+                var today = new Date();
+                var age = today.getFullYear() - dob.getFullYear();
+                var mDiff = today.getMonth() - dob.getMonth();
                 if (mDiff < 0 || (mDiff === 0 && today.getDate() < dob.getDate())) age--;
                 if (age < 13) { showToast('You must be at least 13 years old', 'r'); return; }
-                const dateStr = MONTHS[dobSel.month - 1] + ' ' + dobSel.day + ', ' + dobSel.year;
-                const disp = document.getElementById('eDOBDisplay');
-                const hint = document.getElementById('dobAgeHint');
+                var dateStr = MONTHS[dobSel.month - 1] + ' ' + dobSel.day + ', ' + dobSel.year;
+                var disp = document.getElementById('eDOBDisplay');
+                var hint = document.getElementById('dobAgeHint');
                 if (disp) { disp.textContent = dateStr;
                     disp.style.color = 'var(--text)'; }
                 if (hint) hint.textContent = 'Age: ' + age + ' years old';
                 closeFS('dobModal');
-                showToast('Date of birth saved ✓', 'g');
+                showToast('Date of birth saved', 'g');
             };
 
             // ─── GENDER MODAL ────────────────────────────────────
             window.openGenderModal = function() {
-                document.querySelectorAll('.gen-opt').forEach(o => {
-                    const isSel = o.dataset.val === selGender;
+                document.querySelectorAll('.gen-opt').forEach(function(o) {
+                    var isSel = o.dataset.val === selGender;
                     o.classList.toggle('sel', isSel);
-                    const existing = o.querySelector('.gen-check');
+                    var existing = o.querySelector('.gen-check');
                     if (isSel && !existing) {
-                        const chk = document.createElement('div');
+                        var chk = document.createElement('div');
                         chk.className = 'gen-check';
                         chk.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
                         o.appendChild(chk);
@@ -4293,9 +4352,9 @@
 
             window.pickGender = function(el) {
                 selGender = el.dataset.val;
-                const icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
+                var icons = { '': '', 'Male': '♂', 'Female': '♀', 'Non-binary': '⚧', 'Genderfluid': '≈',
                     'Other': '✦' };
-                const disp = document.getElementById('eGenderDisplay');
+                var disp = document.getElementById('eGenderDisplay');
                 if (disp) { disp.textContent = (icons[selGender] || '') + ' ' + (selGender || 'Prefer not to say');
                     disp.style.color = 'var(--text)'; }
                 closeMov('genderOverlay');
@@ -4307,7 +4366,7 @@
             function closeMov(id) { document.getElementById(id).classList.remove('open');
                 document.body.style.overflow = ''; }
 
-            document.querySelectorAll('.mov').forEach(m => {
+            document.querySelectorAll('.mov').forEach(function(m) {
                 m.addEventListener('click', function(e) { if (e.target === this) closeMov(this.id); });
             });
 
@@ -4329,20 +4388,19 @@
             // ─── INIT ───────────────────────────────────────────
             async function init() {
                 if (!window.AuthUser) {
-                    await new Promise(resolve => setTimeout(resolve, 300));
+                    await new Promise(function(resolve) { setTimeout(resolve, 300); });
                 }
                 await renderProfile();
 
                 if (typeof window.setupProfileSync === 'function') {
-                    window.setupProfileSync(() => {
+                    window.setupProfileSync(function() {
                         renderProfile();
                     });
                 }
 
-                window.addEventListener('storage', function(e) {
-                    if (e.key === 'freeupper_user_profile') {
-                        renderProfile();
-                    }
+                // Replace storage event with userRefreshed from AuthUser
+                document.addEventListener('userRefreshed', function() {
+                    renderProfile();
                 });
 
                 document.getElementById('avatarModal').addEventListener('open', initAvatarGrid);
@@ -4350,8 +4408,6 @@
                 window.addEventListener('popstate', function() {
                     renderProfile();
                 });
-
-                window.handleAvatarClick = function() { if (isOwner) openFS('avatarModal'); };
             }
 
             if (document.readyState === 'loading') {
@@ -4396,6 +4452,9 @@
             window.removeFromTab = removeFromTab;
             window.deletePost = deletePost;
             window.deleteMarketItem = deleteMarketItem;
+            window.handleAvatarTap = handleAvatarTap;
+            window.openAvatarViewer = openAvatarViewer;
+            window.closeAvatarViewer = closeAvatarViewer;
 
         })();
     </script>
