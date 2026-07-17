@@ -1,17 +1,19 @@
-// ══════════════════════════════════════════
-// GLOBAL UTILITIES – THEME, TOAST, USER CACHE
+// ============================================================
+// GLOBAL UTILITIES – THEME, TOAST, USER CACHE, AUTHOR HELPERS
 // Used across all Freeupper pages
-// ══════════════════════════════════════════
+// ============================================================
 
-(function () {
+(function() {
   'use strict';
 
-  // ─── CONSTANTS ──────────────────────────
+  // ─── CONSTANTS ───────────────────────────────────────────────
   const THEME_KEY = 'freeupper_theme';
-  const USER_KEY = 'freeupper_user_profile'; // cached user object
-  const ALL_USERS_KEY = 'freeupper_all_users'; // deprecated – kept for compatibility
+  const USER_KEY = 'freeupper_user_profile';
+  const DEFAULT_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
+  );
 
-  // ─── THEME ──────────────────────────────
+  // ─── THEME ────────────────────────────────────────────────────
   let currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
 
   function applyTheme(theme) {
@@ -22,12 +24,12 @@
     updateThemeButton();
   }
 
-  window.toggleTheme = function () {
+  window.toggleTheme = function() {
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     applyTheme(newTheme);
   };
 
-  window.getCurrentTheme = function () {
+  window.getCurrentTheme = function() {
     return currentTheme;
   };
 
@@ -47,12 +49,12 @@
   // Init theme
   (function initTheme() {
     applyTheme(currentTheme);
-    window.addEventListener('storage', function (e) {
+    window.addEventListener('storage', function(e) {
       if (e.key === THEME_KEY && e.newValue && e.newValue !== currentTheme) {
         applyTheme(e.newValue);
       }
     });
-    document.addEventListener('themeChanged', function (e) {
+    document.addEventListener('themeChanged', function(e) {
       if (e.detail && e.detail.theme) {
         currentTheme = e.detail.theme;
         updateThemeButton();
@@ -60,8 +62,8 @@
     });
   })();
 
-  // ─── TOAST ──────────────────────────────
-  window.showToast = function (msg, type) {
+  // ─── TOAST ────────────────────────────────────────────────────
+  window.showToast = function(msg, type) {
     type = type || 'p';
     const w = document.getElementById('tw');
     if (!w) return;
@@ -70,24 +72,22 @@
     const colorMap = { p: 'tp', g: 'tg', r: 'tr', o: 'to' };
     el.innerHTML = '<div class="td ' + (colorMap[type] || 'tp') + '"></div>' + msg;
     w.appendChild(el);
-    setTimeout(function () {
+    setTimeout(function() {
       el.classList.add('out');
-      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 260);
+      setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 260);
     }, 2600);
   };
 
-  // ─── USER SESSION CACHE ──────────────────
-  // We keep a lightweight cache of the current user (from Supabase session)
-  // but it should be refreshed on auth changes.
+  // ─── USER SESSION CACHE ──────────────────────────────────────
+  // Caches only the current user's session info (for UI state like avatar in navbar)
+  // All post/comment author data comes from Supabase profiles join – NOT from this cache.
   function getDefaultUser() {
     return {
       id: 'GUEST-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
       username: '',
       displayName: 'Guest',
       bio: '',
-      avatar: 'data:image/svg+xml,' + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
-      ),
+      avatar: DEFAULT_AVATAR,
       isLoggedIn: false,
       verified: false,
       isAdmin: false,
@@ -95,7 +95,7 @@
     };
   }
 
-  window.getCurrentUser = function () {
+  window.getCurrentUser = function() {
     let user = JSON.parse(localStorage.getItem(USER_KEY));
     if (!user) {
       user = getDefaultUser();
@@ -104,9 +104,8 @@
     return user;
   };
 
-  window.saveCurrentUser = function (user) {
+  window.saveCurrentUser = function(user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
-    // Dispatch event so other tabs can update
     try {
       window.dispatchEvent(new StorageEvent('storage', {
         key: USER_KEY,
@@ -115,19 +114,80 @@
     } catch (e) { /* ignore */ }
   };
 
-  // ─── AVATAR / NAV UPDATES ──────────────
-  window.updateNavAvatar = function () {
+  // ─── AVATAR / NAV UPDATES ────────────────────────────────────
+  window.updateNavAvatar = function() {
     const user = getCurrentUser();
     const avatars = document.querySelectorAll('.side-av, .nav-av');
     avatars.forEach(el => {
-      el.src = user.avatar;
-      el.onerror = function () { this.style.display = 'none'; };
+      el.src = user.avatar || DEFAULT_AVATAR;
+      el.onerror = function() { this.style.display = 'none'; };
     });
   };
 
-  // ─── VERIFICATION BADGE HELPERS ─────────
-  window.updateVerificationBadge = function () {
+  // ─── AUTHOR HELPER ───────────────────────────────────────────
+  // Given a profile object (from a post or comment join), return a clean author object.
+  window.getAuthorFromProfile = function(profile) {
+    if (!profile) return null;
+    return {
+      id: profile.id,
+      name: profile.display_name || 'Anonymous',
+      username: profile.username || '',
+      avatar: profile.avatar_url || DEFAULT_AVATAR,
+      verified: profile.verified || false,
+      verified_status: profile.verified_status || 'none',
+      is_private: profile.is_private || false,
+    };
+  };
+
+  // ─── VERIFIED BADGE HTML ─────────────────────────────────────
+  // Now accepts verifiedStatus and optional size.
+  window.getVerifiedBadgeHTML = function(verifiedStatus, size) {
+    if (!verifiedStatus || verifiedStatus === 'none' || verifiedStatus === 'pending') return '';
+    const sizeClass = size === 'sm' ? 'verified-badge-sm' :
+                      size === 'lg' ? 'verified-badge-lg' :
+                      'verified-badge';
+    const label = verifiedStatus === 'official' ? 'Official' :
+                  verifiedStatus === 'staff' ? 'Staff' :
+                  verifiedStatus === 'business' ? 'Business' : 'Verified';
+    return `<span class="${sizeClass}" title="${label}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>`;
+  };
+
+  // ─── UPDATE AUTHOR UI ────────────────────────────────────────
+  // Updates all DOM elements belonging to a specific user when their profile changes.
+  window.updateAuthorUI = function(updatedProfile) {
+    const avatar = updatedProfile.avatar_url || DEFAULT_AVATAR;
+    const displayName = updatedProfile.display_name || 'Anonymous';
+    const verifiedStatus = updatedProfile.verified_status || 'none';
+    const isVerified = verifiedStatus && verifiedStatus !== 'none' && verifiedStatus !== 'pending';
+
+    document.querySelectorAll(`[data-author-id="${updatedProfile.id}"]`).forEach(el => {
+      // Avatar
+      const avatarEl = el.querySelector('[data-author-avatar]');
+      if (avatarEl) avatarEl.src = avatar;
+      // Display name
+      const nameEl = el.querySelector('[data-author-name]');
+      if (nameEl) nameEl.textContent = displayName;
+      // Verified badge wrapper (use innerHTML to replace content)
+      const badgeWrapper = el.querySelector('[data-author-badge-wrapper]');
+      if (badgeWrapper) {
+        if (isVerified) {
+          badgeWrapper.innerHTML = window.getVerifiedBadgeHTML(verifiedStatus);
+          badgeWrapper.style.display = '';
+        } else {
+          badgeWrapper.innerHTML = '';
+          badgeWrapper.style.display = 'none';
+        }
+      }
+    });
+  };
+
+  // ─── PROFILE UPDATE HELPER ──────────────────────────────────
+  window.updateUserProfile = function(updates) {
     const user = getCurrentUser();
+    Object.assign(user, updates);
+    saveCurrentUser(user);
+    updateNavAvatar();
+    // Update own profile badge (if displayed)
     const badges = document.querySelectorAll('.verified-badge, .verified-badge-sm, .verified-badge-lg');
     badges.forEach(badge => {
       if (user && user.verified) {
@@ -138,46 +198,27 @@
         badge.style.display = 'none';
       }
     });
-  };
-
-  window.getVerifiedBadgeHTML = function (size) {
-    const user = getCurrentUser();
-    if (!user || !user.verified) return '';
-    const sizeClass = size === 'sm' ? 'verified-badge-sm' :
-      size === 'lg' ? 'verified-badge-lg' : 'verified-badge';
-    return `<span class="${sizeClass}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>`;
-  };
-
-  // ─── PROFILE UPDATE HELPER ──────────────
-  window.updateUserProfile = function (updates) {
-    const user = getCurrentUser();
-    Object.assign(user, updates);
-    saveCurrentUser(user);
-    updateNavAvatar();
-    updateVerificationBadge();
     document.dispatchEvent(new CustomEvent('profileUpdated', {
       detail: { user: user }
     }));
     return user;
   };
 
-  // ─── CROSS‑TAB PROFILE SYNC ─────────────
-  window.setupProfileSync = function (refreshCallback) {
-    window.addEventListener('storage', function (e) {
+  // ─── CROSS‑TAB PROFILE SYNC ─────────────────────────────────
+  window.setupProfileSync = function(refreshCallback) {
+    window.addEventListener('storage', function(e) {
       if (e.key === USER_KEY) {
         const user = getCurrentUser();
         updateNavAvatar();
-        updateVerificationBadge();
         if (typeof refreshCallback === 'function') {
           refreshCallback(user);
         }
       }
     });
 
-    document.addEventListener('profileUpdated', function (e) {
+    document.addEventListener('profileUpdated', function(e) {
       if (e.detail && e.detail.user) {
         updateNavAvatar();
-        updateVerificationBadge();
         if (typeof refreshCallback === 'function') {
           refreshCallback(e.detail.user);
         }
@@ -185,11 +226,9 @@
     });
   };
 
-  // ─── INIT ───────────────────────────────
-  // Run once on DOM ready
+  // ─── INIT ────────────────────────────────────────────────────
   function initGlobal() {
     updateNavAvatar();
-    updateVerificationBadge();
   }
 
   if (document.readyState === 'loading') {
@@ -198,19 +237,6 @@
     initGlobal();
   }
 
-  // ─── DEPRECATED – removed all localStorage data functions ──
-  // The following functions are no longer used for persistent data:
-  // - getPosts, savePost, deletePost
-  // - getMarketItems, saveMarketItem, deleteMarketItem
-  // - toggleFollow, isFollowing, getFollowCounts
-  // - toggleReaction, hasReacted
-  // - toggleBookmark, isBookmarked
-  // - toggleShare, isShared
-  // - submitVerificationRequest, approveVerification, rejectVerification
-  // - getAllUsers (replaced by direct Supabase queries)
-  // - getVerificationRequests (replaced by Supabase)
-  // These have been moved to their respective API modules (posts.js, etc.)
-
-  console.log('✅ global.js loaded (UI/theme only – data now via Supabase)');
+  console.log('✅ global.js loaded (theme, toast, helpers, Supabase profile joins)');
 
 })();
