@@ -125,15 +125,23 @@
 
   // ─── AUTHOR HELPER ───────────────────────────────────────────
   // Given a profile object (from a post or comment join), return a clean author object.
+  // Supports both new verified_status and old verified boolean columns.
   window.getAuthorFromProfile = function(profile) {
     if (!profile) return null;
+
+    // Determine verified status: prefer verified_status, fallback to verified boolean
+    let verifiedStatus = profile.verified_status || 'none';
+    if (verifiedStatus === 'none' && profile.verified === true) {
+      verifiedStatus = 'verified';
+    }
+
     return {
       id: profile.id,
       name: profile.display_name || 'Anonymous',
       username: profile.username || '',
       avatar: profile.avatar_url || DEFAULT_AVATAR,
-      verified_status: profile.verified_status || 'none',
-      verified: profile.verified_status && profile.verified_status !== 'none' && profile.verified_status !== 'pending',
+      verified_status: verifiedStatus,
+      verified: verifiedStatus !== 'none' && verifiedStatus !== 'pending',
       is_private: profile.is_private || false,
     };
   };
@@ -157,7 +165,7 @@
     const avatar = updatedProfile.avatar_url || DEFAULT_AVATAR;
     const displayName = updatedProfile.display_name || 'Anonymous';
     const verifiedStatus = updatedProfile.verified_status || 'none';
-    const isVerified = verifiedStatus && verifiedStatus !== 'none' && verifiedStatus !== 'pending';
+    const isVerified = verifiedStatus !== 'none' && verifiedStatus !== 'pending';
 
     document.querySelectorAll(`[data-author-id="${updatedProfile.id}"]`).forEach(el => {
       // Avatar
