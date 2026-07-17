@@ -618,31 +618,13 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            flex-wrap: wrap;
         }
         .v-creator-name {
             font-size: 15px;
             font-weight: 700;
             color: #fff;
             text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
-        }
-        .v-badge {
-            display: inline-flex;
-            width: 16px;
-            height: 16px;
-            background: var(--accent);
-            border-radius: 50%;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-        .v-badge svg {
-            width: 9px;
-            height: 9px;
-            stroke: #fff;
-            fill: none;
-            stroke-width: 3;
-            stroke-linecap: round;
-            stroke-linejoin: round;
         }
         .v-post-time {
             font-size: 13px;
@@ -2017,12 +1999,6 @@
         [data-theme="light"] .v-music-tag svg {
             stroke: #fff;
         }
-        [data-theme="light"] .v-badge {
-            background: var(--accent);
-        }
-        [data-theme="light"] .v-badge svg {
-            stroke: #fff;
-        }
         [data-theme="light"] .v-avatar {
             border-color: rgba(255, 255, 255, .3);
         }
@@ -2656,32 +2632,25 @@
             try {
                 const allPosts = await window.PostsAPI.loadAllPosts();
                 const currentUser = getCurrentUser();
-                const allUsers = getAllUsers();
 
                 let posts = allPosts.filter(p =>
                     p.mediaType === 'video' && p.mediaUrl
                 );
 
-                posts = posts.filter(p => {
-                    if (p.authorId === currentUser.id) return true;
-                    const author = allUsers.find(u => u.id === p.authorId);
-                    return !author || !author.isPrivate;
-                });
+                // Filter private posts (if needed)
+                // We'll assume profiles table handles privacy later
 
                 posts.sort((a, b) =>
                     new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date)
                 );
 
                 return posts.map(post => {
-                    const isOwn = post.authorId === currentUser.id;
-                    const author = isOwn ? currentUser : allUsers.find(u => u.id === post.authorId);
-                    const authorName = isOwn ? currentUser.displayName : (author?.displayName || post.author ||
-                        'Anonymous');
-                    const authorAvatar = isOwn ? currentUser.avatar : (author?.avatar || '');
-                    const isVerified = isOwn ? currentUser.verified : (author?.verified || false);
-                    const isFollowingUser = !isOwn && author ? isFollowing(author.id) : false;
+                    const profile = post.profile || {};
+                    const author = window.getAuthorFromProfile(profile);
+                    const isOwn = post.user_id === currentUser.id;
+                    const isFollowingUser = !isOwn && isFollowing(post.user_id);
 
-                    const liked = post.likedByMe || !!post.userReaction;
+                    const liked = post.likedByMe || false;
                     const isYouTube = post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post.mediaUrl
                         .includes('youtu.be'));
 
@@ -2689,32 +2658,29 @@
                         id: post.id,
                         src: post.mediaUrl,
                         poster: post.mediaUrl || '',
-                        creator: authorName,
-                        handle: isOwn ? `@${currentUser.username || 'me'}` :
-                            `@${author?.username || authorName.toLowerCase()}`,
-                        verified: isVerified,
-                        avatar: authorAvatar,
+                        creator: author.name,
+                        handle: isOwn ? `@${currentUser.username || 'me'}` : `@${profile.username || author.name.toLowerCase()}`,
+                        verified: author.verified,
+                        avatar: author.avatar,
                         caption: post.title + (post.description ? '\n' + post.description : '') +
                             (post.tags ? ' ' + post.tags.map(t => '#' + t).join(' ') : ''),
-                        sound: 'Original Audio · ' + authorName,
-                        soundImg: authorAvatar ||
-                            'https://api.dicebear.com/7.x/avataaars/svg?seed=' + authorName,
-                        likes: (post.reactions?.love || 0) + (post.reactions?.laugh || 0) + (post.reactions?.cry ||
-                            0),
-                        comments: post.comments?.length || 0,
+                        sound: 'Original Audio · ' + author.name,
+                        soundImg: author.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + author.name,
+                        likes: post.likes || 0,
+                        comments: post.comments || 0,
                         reposts: 0,
                         bookmarks: 0,
                         liked: liked,
                         saved: false,
                         following: isFollowingUser,
-                        authorId: post.authorId,
+                        authorId: post.user_id,
                         postData: post,
                         isYouTube: isYouTube,
                         ytId: isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] ||
                             post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null,
                         timestamp: post.timestamp || post.date || new Date().toISOString(),
-                        baseLikes: (post.reactions?.love || 0) + (post.reactions?.laugh || 0) + (post.reactions?.cry ||
-                            0) - (liked ? 1 : 0)
+                        baseLikes: Math.max(0, (post.likes || 0) - (liked ? 1 : 0)),
+                        profile: post.profile,
                     };
                 });
             } catch (err) {
@@ -2784,7 +2750,8 @@
                         post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null,
                     timestamp: post.timestamp || post.date || new Date().toISOString(),
                     baseLikes: (post.reactions?.love || 0) + (post.reactions?.laugh || 0) + (post.reactions?.cry ||
-                        0) - (liked ? 1 : 0)
+                        0) - (liked ? 1 : 0),
+                    profile: null, // no profile in fallback
                 };
             });
         }
@@ -2952,13 +2919,18 @@
         }
 
         // ─────────────────────────────────────────────
-        // BUILD CARD HTML
+        // BUILD CARD HTML (using profile author data)
         // ─────────────────────────────────────────────
         function buildCard(v, i) {
+            const profile = v.profile || {};
+            const author = window.getAuthorFromProfile(profile);
+            const displayName = author.name;
+            const avatar = author.avatar;
+            const verifiedStatus = author.verified_status;
+
             const likeClass = v.liked ? 'v-action-btn liked' : 'v-action-btn';
             const saveClass = v.saved ? 'v-action-btn saved' : 'v-action-btn';
             const captionHtml = v.caption ? hashify(v.caption) : '';
-
             let timeStr = 'Just now';
             if (v.timestamp) {
                 const d = new Date(v.timestamp);
@@ -2969,9 +2941,6 @@
                 else if (m < 1440) timeStr = Math.floor(m / 60) + 'h';
                 else timeStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             }
-
-            // Strip @ from display name
-            const displayName = (v.handle || '').replace(/^@/, '');
 
             let videoHtml = '';
             if (v.isYouTube && v.ytId) {
@@ -2991,89 +2960,91 @@
             }
 
             return `
-            ${videoHtml}
-            <div class="v-skeleton" id="skel-${i}"><div class="v-skeleton-pulse"></div></div>
-            <div class="v-grad-top"></div>
-            <div class="v-grad-bot"></div>
-            ${!v.isYouTube ? `<div class="v-tap" id="tap-${i}" onclick="handleCardTap(event,${i})"></div>` : ''}
-            <div class="v-pause-icon" id="pauseIcon-${i}">
-              <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-            </div>
-
-            <!-- RIGHT ACTIONS (plain outline icons, 32px) -->
-            <div class="v-actions">
-              <div class="v-action">
-                <button class="${likeClass}" id="likeBtn-${i}" onclick="toggleLike(${i})">
-                  <svg id="likeIco-${i}" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                </button>
-                <span class="v-action-lbl" id="likeCount-${i}">${fmtNum(v.likes)}</span>
-              </div>
-
-              <div class="v-action">
-                <button class="v-action-btn" onclick="openComments(${i})">
-                  <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-                </button>
-                <span class="v-action-lbl">${fmtNum(v.comments)}</span>
-              </div>
-
-              <div class="v-action">
-                <button class="v-action-btn" onclick="openShare(${i})">
-                  <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
-                <span class="v-action-lbl">${fmtNum(v.reposts)}</span>
-              </div>
-
-              <div class="v-action">
-                <button class="${saveClass}" id="saveBtn-${i}" onclick="toggleSave(${i})">
-                  <svg id="saveIco-${i}" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-                </button>
-                <span class="v-action-lbl" id="saveCount-${i}">${fmtNum(v.bookmarks)}</span>
-              </div>
-
-              <!-- Sound disc -->
-              <div class="v-disc-wrap">
-                <div class="v-disc">
-                  <img src="${v.soundImg || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + v.creator}" alt="" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'">
+            <div class="v-card" id="card-${i}" data-author-id="${author.id}">
+                ${videoHtml}
+                <div class="v-skeleton" id="skel-${i}"><div class="v-skeleton-pulse"></div></div>
+                <div class="v-grad-top"></div>
+                <div class="v-grad-bot"></div>
+                ${!v.isYouTube ? `<div class="v-tap" id="tap-${i}" onclick="handleCardTap(event,${i})"></div>` : ''}
+                <div class="v-pause-icon" id="pauseIcon-${i}">
+                    <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
                 </div>
-                <div class="v-disc-note">
-                  <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+
+                <!-- RIGHT ACTIONS (plain outline icons, 32px) -->
+                <div class="v-actions">
+                    <div class="v-action">
+                        <button class="${likeClass}" id="likeBtn-${i}" onclick="toggleLike(${i})">
+                            <svg id="likeIco-${i}" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                        </button>
+                        <span class="v-action-lbl" id="likeCount-${i}">${fmtNum(v.likes)}</span>
+                    </div>
+
+                    <div class="v-action">
+                        <button class="v-action-btn" onclick="openComments(${i})">
+                            <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                        </button>
+                        <span class="v-action-lbl">${fmtNum(v.comments)}</span>
+                    </div>
+
+                    <div class="v-action">
+                        <button class="v-action-btn" onclick="toggleRepost(${i})">
+                            <svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                        </button>
+                        <span class="v-action-lbl" id="repostCount-${i}">${fmtNum(v.reposts)}</span>
+                    </div>
+
+                    <div class="v-action">
+                        <button class="${saveClass}" id="saveBtn-${i}" onclick="toggleSave(${i})">
+                            <svg id="saveIco-${i}" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                        </button>
+                        <span class="v-action-lbl" id="saveCount-${i}">${fmtNum(v.bookmarks)}</span>
+                    </div>
+
+                    <!-- Sound disc -->
+                    <div class="v-disc-wrap">
+                        <div class="v-disc">
+                            <img src="${v.soundImg || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + v.creator}" alt="" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'">
+                        </div>
+                        <div class="v-disc-note">
+                            <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        </div>
+                    </div>
                 </div>
-              </div>
-            </div>
 
-            <!-- BOTTOM INFO -->
-            <div class="v-info">
-              <div class="v-user-row">
-                <div class="v-avatar-wrap">
-                  <img class="v-avatar" src="${v.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + v.creator}" alt="${v.creator}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'">
-                  <div class="v-plus-badge ${v.following ? 'hidden' : ''}" id="followDot-${i}" onclick="toggleFollow(${i})">+</div>
+                <!-- BOTTOM INFO -->
+                <div class="v-info">
+                    <div class="v-user-row">
+                        <div class="v-avatar-wrap">
+                            <img data-author-avatar class="v-avatar" src="${avatar}" alt="${displayName}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}'">
+                            <div class="v-plus-badge ${v.following ? 'hidden' : ''}" id="followDot-${i}" onclick="toggleFollow(${i})">+</div>
+                        </div>
+                        <div class="v-user-meta">
+                            <div class="v-creator">
+                                <span data-author-name class="v-creator-name">${displayName}</span>
+                                <span data-author-badge-wrapper>${window.getVerifiedBadgeHTML(verifiedStatus)}</span>
+                            </div>
+                            <div class="v-post-time">${timeStr}</div>
+                        </div>
+                    </div>
+
+                    <div class="v-desc-container">
+                        <p class="v-caption clamped" id="cap-${i}" onscroll="handleCaptionScroll(this)">${captionHtml}</p>
+                        <button class="v-see-more" id="seeMore-${i}" onclick="toggleCaption(${i})">see more</button>
+                    </div>
+
+                    <div class="v-music-tag">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                        <span>${v.sound}</span>
+                    </div>
                 </div>
-                <div class="v-user-meta">
-                  <div class="v-creator">
-                    <span class="v-creator-name">${displayName}</span>
-                    ${v.verified ? `<span class="v-badge"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>` : ''}
-                  </div>
-                  <div class="v-post-time">${timeStr}</div>
+
+                <!-- PROGRESS BAR -->
+                <div class="v-progress" id="prog-${i}" onpointerdown="startScrub(event,${i})">
+                    <div class="v-progress-fill" id="progFill-${i}" style="width:0%"></div>
+                    <div class="v-progress-thumb" id="progThumb-${i}"></div>
                 </div>
-              </div>
-
-              <div class="v-desc-container">
-                <p class="v-caption clamped" id="cap-${i}" onscroll="handleCaptionScroll(this)">${captionHtml}</p>
-              </div>
-              <button class="v-see-more" id="seeMore-${i}" onclick="toggleCaption(${i})">see more</button>
-
-              <div class="v-music-tag">
-                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                <span>${v.sound}</span>
-              </div>
             </div>
-
-            <!-- PROGRESS BAR -->
-            <div class="v-progress" id="prog-${i}" onpointerdown="startScrub(event,${i})">
-              <div class="v-progress-fill" id="progFill-${i}" style="width:0%"></div>
-              <div class="v-progress-thumb" id="progThumb-${i}"></div>
-            </div>
-          `;
+            `;
         }
 
         // ─────────────────────────────────────────────
@@ -4020,12 +3991,14 @@
         function openMore(idx) {
             const list = document.getElementById('moreList');
             const v = videoPosts[idx];
+            const profile = v.profile || {};
+            const author = window.getAuthorFromProfile(profile);
 
             const followRow = `
                 <button class="more-follow-row" id="moreFollowRow" onclick="toggleFollowFromMore(${idx})">
-                    <img class="more-follow-avatar" src="${v.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + v.creator}" alt="${v.creator}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'">
+                    <img class="more-follow-avatar" src="${author.avatar}" alt="${author.name}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${author.name}'">
                     <div>
-                        <div class="more-row-lbl" id="moreFollowLbl">${v.following ? 'Following' : 'Follow'} ${v.creator}</div>
+                        <div class="more-row-lbl" id="moreFollowLbl">${v.following ? 'Following' : 'Follow'} ${author.name}</div>
                         <div class="more-row-sub">${v.handle}</div>
                     </div>
                 </button>`;
