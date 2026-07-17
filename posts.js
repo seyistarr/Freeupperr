@@ -1,4 +1,4 @@
-(function() {
+(function () {
   'use strict';
 
   if (!window.sb) {
@@ -15,7 +15,7 @@
     return raw ? JSON.parse(raw) : null;
   }
 
-  // Map post with profile data
+  // Map post with profile data including verified_status
   function mapPost(row, userLikes) {
     const profile = row.profiles || {};
     let media = row.media;
@@ -44,7 +44,7 @@
       comments: row.comments_count || 0,
       likes: row.likes_count || 0,
       likedByMe: userLikes.has(row.id),
-      // embed profile directly
+      // Profile data (single source of truth)
       profile: {
         id: profile.id,
         display_name: profile.display_name || 'Anonymous',
@@ -129,7 +129,7 @@
       throw new Error('Please sign in to post.');
     }
 
-    // Only save user_id – NO author/author_avatar
+    // Only store user_id – NO author/author_avatar
     const payload = {
       user_id: user.id,
       title: fields.title || '',
