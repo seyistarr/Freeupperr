@@ -12,7 +12,6 @@
   var CLOUDINARY_AVATAR_PRESET = 'image_upload';
 
   var USER_KEY = 'freeupper_user_profile';
-  var ALL_USERS_KEY = 'freeupper_all_users';
 
   if (!window.supabase) {
     console.error('auth.js: include the Supabase CDN script before this file.');
@@ -24,7 +23,7 @@
   // ─── CHANGE LISTENERS ──────────────────────────────────────
   var changeListeners = [];
 
-  // ─── LOCAL PROFILE MIRROR ──────────────────────────────────
+  // ─── LOCAL PROFILE MIRROR (only for current user session) ──
   function defaultGuest() {
     return {
       id: 'GUEST-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
@@ -51,10 +50,11 @@
 
   function writeLocalUser(user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
-    registerInDirectory(user);
-    updateAllAvatarEls(user.avatar);
+    // Update all static avatar elements (nav, profile, etc.)
+    updateAvatarEls(user.avatar);
+    // Dispatch event for other tabs/pages
     document.dispatchEvent(new CustomEvent('profileUpdated', { detail: { user: user } }));
-    // notify all registered onChange listeners
+    // Notify listeners
     for (var i = 0; i < changeListeners.length; i++) {
       try {
         changeListeners[i](user);
@@ -64,35 +64,7 @@
     }
   }
 
-  function registerInDirectory(user) {
-    var all = [];
-    try {
-      all = JSON.parse(localStorage.getItem(ALL_USERS_KEY) || '[]');
-    } catch (e) {}
-    var idx = -1;
-    for (var i = 0; i < all.length; i++) {
-      if (all[i].id === user.id) {
-        idx = i;
-        break;
-      }
-    }
-    var rec = {
-      id: user.id,
-      username: user.username,
-      displayName: user.displayName,
-      bio: user.bio,
-      avatar: user.avatar,
-      verified: user.verified || false
-    };
-    if (idx >= 0) {
-      all[idx] = rec;
-    } else {
-      all.push(rec);
-    }
-    localStorage.setItem(ALL_USERS_KEY, JSON.stringify(all));
-  }
-
-  function updateAllAvatarEls(src) {
+  function updateAvatarEls(src) {
     var els = document.querySelectorAll('.side-av, .nav-av, #profileAvatar, #editAv, #qrAvatar');
     for (var i = 0; i < els.length; i++) {
       if (els[i]) els[i].src = src;
@@ -107,12 +79,11 @@
     return guest;
   }
 
-  // ─── SYNC SUPABASE SESSION -> LOCAL PROFILE (SAFE) ──────
+  // ─── SYNC SUPABASE SESSION -> LOCAL PROFILE ──────────────
   async function syncSessionToLocal(session) {
     if (!session || !session.user) return;
     var authUser = session.user;
 
-    // Use maybeSingle() to avoid throwing on zero rows
     var result = await sb
       .from('profiles')
       .select('*')
@@ -123,18 +94,18 @@
     var fetchError = result.error;
 
     if (fetchError) {
-      // A real network/RLS error – do NOT assume missing row, skip to avoid overwriting
       console.warn('syncSessionToLocal: profile fetch failed, skipping sync', fetchError);
       return;
     }
 
     if (!profile) {
-      // Confirmed: row does not exist. Create it with safe insert (not upsert).
+      // Create profile if it doesn't exist
       var insertPayload = {
         id: authUser.id,
         display_name: authUser.user_metadata?.display_name || authUser.email.split('@')[0],
         username: authUser.user_metadata?.username || authUser.email.split('@')[0],
-        avatar_url: authUser.user_metadata?.avatar_url || null
+        avatar_url: authUser.user_metadata?.avatar_url || null,
+        verified_status: 'none'
       };
       var insertResult = await sb
         .from('profiles')
@@ -143,7 +114,6 @@
         .single();
 
       if (insertResult.error) {
-        // Possibly race condition: row was created by another tab/process – re-fetch.
         var refetchResult = await sb
           .from('profiles')
           .select('*')
@@ -159,6 +129,7 @@
       }
     }
 
+    // Build local user object – derive 'verified' from verified_status
     var localUser = {
       id: authUser.id,
       username: profile.username || '',
@@ -167,8 +138,8 @@
       avatar: profile.avatar_url || defaultGuest().avatar,
       email: authUser.email,
       isLoggedIn: true,
-      verified: profile.verified || false,
-      verificationStatus: 'none',
+      verified: profile.verified_status === 'verified' || profile.verified_status === 'official' || profile.verified_status === 'staff' || profile.verified_status === 'business',
+      verificationStatus: profile.verified_status || 'none',
       isPrivate: profile.is_private || false,
       hideFollowerCount: profile.hide_follower_count || false,
       activityStatus: profile.activity_status !== undefined ? profile.activity_status : true,
@@ -201,7 +172,7 @@
     } else {
       var guest = defaultGuest();
       localStorage.setItem(USER_KEY, JSON.stringify(guest));
-      updateAllAvatarEls(guest.avatar);
+      updateAvatarEls(guest.avatar);
     }
   });
 
@@ -210,7 +181,7 @@
     if (data.session) syncSessionToLocal(data.session);
   });
 
-  // ─── AUTH MODAL ─────────────────────────────────────────────
+  // ─── AUTH MODAL (unchanged) ──────────────────────────────
   var mode = 'signup';
   var pendingAction = null;
   var modalInitialized = false;
@@ -492,7 +463,7 @@
     openModal('signup', fn);
   }
 
-  // ─── CLOUDINARY AVATAR UPLOAD ────────────────────────────
+  // ─── AVATAR UPLOAD ────────────────────────────────────────
   async function uploadAvatar(file, onProgress) {
     var user = getCurrentUser();
     if (!user.isLoggedIn) {
@@ -507,6 +478,7 @@
       throw new Error('Image too large (max 5MB)');
     }
 
+    // Upload to Cloudinary
     var url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
     var formData = new FormData();
     formData.append('file', file);
@@ -540,13 +512,26 @@
 
     if (onProgress) onProgress(100);
 
-    await sb.from('profiles').update({ avatar_url: data.secure_url }).eq('id', user.id);
+    // Use the secure RPC to update avatar_url
+    var { data: updatedProfile, error } = await sb.rpc('update_avatar', {
+      p_avatar_url: data.secure_url
+    });
 
-    var updated = Object.assign({}, user, { avatar: data.secure_url });
+    if (error) throw error;
+
+    // Update local cache
+    var updated = Object.assign({}, user, { avatar: updatedProfile.avatar_url });
     writeLocalUser(updated);
-    return data.secure_url;
+
+    // Update all visible elements for this user using the global helper
+    if (typeof window.updateAuthorUI === 'function') {
+      window.updateAuthorUI(updatedProfile);
+    }
+
+    return updatedProfile.avatar_url;
   }
 
+  // ─── SIGN OUT ──────────────────────────────────────────────
   async function signOut() {
     await sb.auth.signOut();
   }
