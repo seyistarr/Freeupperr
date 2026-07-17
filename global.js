@@ -90,7 +90,6 @@
       avatar: DEFAULT_AVATAR,
       isLoggedIn: false,
       verified: false,
-      isAdmin: false,
       verificationStatus: 'none'
     };
   }
@@ -133,8 +132,8 @@
       name: profile.display_name || 'Anonymous',
       username: profile.username || '',
       avatar: profile.avatar_url || DEFAULT_AVATAR,
-      verified: profile.verified || false,
       verified_status: profile.verified_status || 'none',
+      verified: profile.verified_status && profile.verified_status !== 'none' && profile.verified_status !== 'pending',
       is_private: profile.is_private || false,
     };
   };
@@ -238,5 +237,4 @@
   }
 
   console.log('✅ global.js loaded (theme, toast, helpers, Supabase profile joins)');
-
 })();
