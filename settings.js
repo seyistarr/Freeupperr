@@ -19,14 +19,18 @@
     return null;
   }
 
-  function updateLocalCache(updates) {
-    var user = getCurrentUser();
-    if (!user) return;
-    Object.assign(user, updates);
+  function saveCurrentUser(user) {
     if (window.AuthUser && window.AuthUser.updateCurrentUser) {
       window.AuthUser.updateCurrentUser(user);
     }
     document.dispatchEvent(new CustomEvent('profileUpdated', { detail: { user: user } }));
+  }
+
+  function updateLocalCache(updates) {
+    var user = getCurrentUser();
+    if (!user) return;
+    Object.assign(user, updates);
+    saveCurrentUser(user);
   }
 
   // ─── UPDATE PROFILE FLAGS ──────────────────────────────────
@@ -52,6 +56,65 @@
     if (error) throw error;
 
     updateLocalCache(updates);
+  }
+
+  // ─── SAVE PROFILE (edit profile modal) ─────────────────────
+  // Reads directly from the edit-profile modal fields and window._pending*
+  // state (tags, gender, country, dob) set up by settings.html, and writes
+  // straight to the profiles table — profiles is the single source of truth.
+  async function saveProfile() {
+    var user = getCurrentUser();
+    if (!user || !user.isLoggedIn) {
+      if (typeof showToast === 'function') showToast('Please sign in to update your profile', 'o');
+      throw new Error('Please sign in.');
+    }
+
+    var dnEl = document.getElementById('eDN');
+    var unEl = document.getElementById('eUN');
+    var bioEl = document.getElementById('eBio');
+
+    var dn = dnEl ? dnEl.value.trim() : '';
+    var un = unEl ? unEl.value.trim() : '';
+    var bio = bioEl ? bioEl.value.trim() : '';
+
+    var dob = null;
+    if (window._dobSel && window._dobSel.month && window._dobSel.day && window._dobSel.year) {
+      dob = new Date(window._dobSel.year, window._dobSel.month - 1, window._dobSel.day).toISOString();
+    }
+
+    var updates = {
+      display_name: dn || 'Guest',
+      username: un || 'user',
+      bio: bio,
+      tags: window._pendingPills || [],
+      gender: window._selGender || '',
+      country: window._selCountry || '',
+      dob: dob
+    };
+
+    try {
+      var { error } = await sb.from('profiles').update(updates).eq('id', user.id);
+      if (error) throw error;
+
+      // Update local user cache (for navbar, etc.)
+      Object.assign(user, {
+        displayName: updates.display_name,
+        username: updates.username,
+        bio: updates.bio,
+        tags: updates.tags,
+        gender: updates.gender,
+        country: updates.country,
+        dob: updates.dob
+      });
+      saveCurrentUser(user);
+
+      if (typeof updateNavAvatar === 'function') updateNavAvatar();
+      if (typeof closeFS === 'function') closeFS('editProfileModal');
+      if (typeof showToast === 'function') showToast('Profile updated!', 'g');
+    } catch (err) {
+      if (typeof showToast === 'function') showToast(err.message, 'r');
+      throw err;
+    }
   }
 
   // ─── CHANGE PASSWORD ──────────────────────────────────────
@@ -362,6 +425,7 @@
   window.SettingsAPI = {
     // Profile & flags
     updateFlags: updateFlags,
+    saveProfile: saveProfile,
     changePassword: changePassword,
 
     // Verification
