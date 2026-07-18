@@ -1,8 +1,8 @@
-const CACHE_NAME = 'freeupper-pwa-v2';
+const CACHE_NAME = 'freeupper-pwa-v3';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './create.html',
+  './create.htm',          // change to .html if needed
   './profile.html',
   './search.html',
   './settings.html',
@@ -10,7 +10,10 @@ const URLS_TO_CACHE = [
   './global.css',
   './global.js',
   './manifest.webmanifest',
-  './freeupper.png'
+  './freeupper.png',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png'
 ];
 
 self.addEventListener('install', event => {
