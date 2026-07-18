@@ -136,7 +136,7 @@
   }
 
   function openPost(postId) {
-    // Use your app's router if available; fallback to full page load
+    // Use the existing deep-link pattern: video.html?post=...
     window.location.href = `/video.html?post=${encodeURIComponent(postId)}`;
   }
 
