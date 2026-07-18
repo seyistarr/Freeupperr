@@ -1,23 +1,58 @@
-(function () {
+(function() {
   'use strict';
 
-  const FREEUPPER_POST_REGEX = /https:\/\/freeupper\.vercel\.app\/post\/([a-zA-Z0-9_-]+)/;
-  const previewCache = new Map(); // postId -> preview data (avoid refetching same link repeatedly)
+  // ── 1. DYNAMIC ORIGIN ──────────────────────────────────────
+  // Use the current origin (works on any domain)
+  const origin = window.location.origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+  // ── 2. REGEX – matches both /post/ and /video.html?post= ──
+  const POST_REGEX = new RegExp(`${origin}/(?:post|video\\.html\\?post=)([a-zA-Z0-9_-]+)`);
+
+  // ── 3. CACHE – stores Promises to avoid duplicate inflight requests ──
+  const previewCache = new Map();
+
+  // ── 4. DETECTION ──────────────────────────────────────────
   function detectFreeupperLink(text) {
-    if (!text) return null;
-    const match = text.match(FREEUPPER_POST_REGEX);
+    if (!text || typeof text !== 'string') return null;
+    const match = text.match(POST_REGEX);
     return match ? match[1] : null;
   }
 
-  async function fetchPreview(postId) {
-    if (previewCache.has(postId)) return previewCache.get(postId);
-    if (!window.PostsAPI || !window.PostsAPI.loadPostPreview) return null;
-    const preview = await window.PostsAPI.loadPostPreview(postId);
-    if (preview) previewCache.set(postId, preview);
-    return preview;
+  // ── 5. BUILD POST URL (for sharing) ──────────────────────
+  function getPostUrl(postId) {
+    return `${window.location.origin}/post/${postId}`;
   }
 
+  // ── 6. FETCH PREVIEW DATA ─────────────────────────────────
+  async function fetchPreview(postId) {
+    // Return cached promise if exists
+    if (previewCache.has(postId)) {
+      return previewCache.get(postId);
+    }
+
+    // Ensure PostsAPI is available
+    if (!window.PostsAPI || typeof window.PostsAPI.loadPostPreview !== 'function') {
+      console.warn('PostsAPI.loadPostPreview not available');
+      return null;
+    }
+
+    // Create the promise and cache it
+    const promise = window.PostsAPI.loadPostPreview(postId);
+    previewCache.set(postId, promise);
+
+    try {
+      const preview = await promise;
+      // Store the resolved value (not the promise) for future calls
+      previewCache.set(postId, preview);
+      return preview;
+    } catch (err) {
+      previewCache.delete(postId);
+      console.error('fetchPreview error:', err);
+      return null;
+    }
+  }
+
+  // ── 7. RENDER PREVIEW CARD ────────────────────────────────
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
@@ -32,10 +67,10 @@
       </div>` : '';
 
     return `
-      <div class="fu-link-preview" data-post-id="${escapeHtml(preview.id)}" onclick="window.FreeupperLinkPreview.openPost('${escapeHtml(preview.id)}')">
+      <div class="fu-link-preview" data-post-id="${escapeHtml(preview.id)}" onclick="window.FreeupperLinkPreview.openPost('${escapeHtml(preview.id)}')" tabindex="0" role="button">
         <div class="fu-preview-thumb-wrap">
           ${preview.thumbnailUrl
-            ? `<img class="fu-preview-thumb" src="${escapeHtml(preview.thumbnailUrl)}" alt="" onerror="this.style.display='none'">`
+            ? `<img class="fu-preview-thumb" src="${escapeHtml(preview.thumbnailUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">`
             : `<div class="fu-preview-thumb fu-preview-thumb-empty"></div>`}
           ${durationBadge}
         </div>
@@ -45,7 +80,7 @@
             ${preview.avatarUrl ? `<img class="fu-preview-avatar" src="${escapeHtml(preview.avatarUrl)}" alt="">` : ''}
             <span>@${escapeHtml(preview.username || preview.displayName)}</span>
           </div>
-          <div class="fu-preview-domain">freeupper.vercel.app</div>
+          <div class="fu-preview-domain">${window.location.hostname}</div>
         </div>
       </div>
     `;
@@ -65,11 +100,7 @@
     `;
   }
 
-  /**
-   * Attaches live preview detection to a text input/textarea.
-   * Renders the preview card into `previewContainerEl` below the input.
-   * Calls onLinkDetected(postId|null) so callers can track state (e.g. attach postId to a comment on submit).
-   */
+  // ── 8. ATTACH TO INPUT (debounced) ───────────────────────
   function attachLinkPreview(inputEl, previewContainerEl, onLinkDetected) {
     let lastDetectedId = null;
     let debounceTimer = null;
@@ -89,7 +120,7 @@
           return;
         }
 
-        if (postId === lastDetectedId) return; // same link, already shown/loading
+        if (postId === lastDetectedId) return;
         lastDetectedId = postId;
 
         previewContainerEl.style.display = 'block';
@@ -97,7 +128,7 @@
 
         const preview = await fetchPreview(postId);
 
-        // Guard against race: input may have changed while fetching
+        // Guard against race condition: input may have changed while fetching
         if (detectFreeupperLink(inputEl.value) !== postId) return;
 
         if (preview) {
@@ -108,15 +139,11 @@
           previewContainerEl.style.display = 'none';
           if (onLinkDetected) onLinkDetected(null);
         }
-      }, 400); // debounce so we don't fetch on every keystroke
+      }, 400);
     });
   }
 
-  /**
-   * Renders a preview card for a link found inside already-posted text
-   * (e.g. a comment or chat message that contains a Freeupper URL).
-   * Returns a Promise<string> of HTML to inject after the text content.
-   */
+  // ── 9. INLINE PREVIEW FOR ALREADY‑POSTED TEXT ────────────
   async function renderInlinePreviewForText(text) {
     const postId = detectFreeupperLink(text);
     if (!postId) return '';
@@ -125,10 +152,12 @@
     return renderPreviewCardHTML(preview);
   }
 
+  // ── 10. OPEN POST (navigate to the post page) ──────────
   function openPost(postId) {
-    window.location.href = `/post/${postId}`;
+    window.location.href = `/post/${encodeURIComponent(postId)}`;
   }
 
+  // ── 11. EXPOSE PUBLIC API ─────────────────────────────────
   window.FreeupperLinkPreview = {
     detectFreeupperLink,
     fetchPreview,
@@ -136,5 +165,6 @@
     renderInlinePreviewForText,
     renderPreviewCardHTML,
     openPost,
+    getPostUrl,
   };
 })();
