@@ -293,6 +293,37 @@
     }
   }
 
+  // ─── NEW: LOAD POST PREVIEW (for link cards) ───
+  async function loadPostPreview(postId) {
+    const { data, error } = await sb
+      .from('posts')
+      .select(`
+        id,
+        title,
+        description,
+        media_type,
+        thumbnail_url,
+        media_url,
+        profiles:user_id ( username, display_name, avatar_url, verified_status )
+      `)
+      .eq('id', postId)
+      .single();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      title: data.title || '',
+      description: data.description || '',
+      mediaType: data.media_type,
+      thumbnailUrl: data.thumbnail_url || data.media_url || '',
+      username: data.profiles?.username || '',
+      displayName: data.profiles?.display_name || 'Anonymous',
+      avatarUrl: data.profiles?.avatar_url || '',
+      verifiedStatus: data.profiles?.verified_status || 'none',
+    };
+  }
+
   // ─── REPOST FEED HELPERS ──────────────────────────
 
   async function loadRepostFeedItems(offset = 0, limit = 20) {
@@ -393,5 +424,6 @@
     toggleRepostAPI,
     deletePost,
     incrementView,
+    loadPostPreview,   // ← NEW
   };
 })();
