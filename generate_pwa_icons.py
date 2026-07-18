@@ -7,7 +7,6 @@ ASSETS = {
     'apple-touch-icon.png': 180,
 }
 
-
 with Image.open(SOURCE) as src:
     src = src.convert('RGBA')
     for name, size in ASSETS.items():
