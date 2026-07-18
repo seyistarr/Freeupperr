@@ -1,12 +1,18 @@
+// =====================================================================
+// posts.js – Supabase Post API with Comments, Likes, Reposts, and Feed
+// =====================================================================
+
 (function() {
   'use strict';
 
+  // ── Supabase client ──────────────────────────────────────────────
   if (!window.sb) {
     console.error('posts.js: Supabase client missing.');
     return;
   }
   const sb = window.sb;
 
+  // ── Get current user (fallback to localStorage) ──────────────────
   function getCurrentUser() {
     if (window.AuthUser && typeof window.AuthUser.getCurrentUser === 'function') {
       return window.AuthUser.getCurrentUser();
@@ -15,36 +21,44 @@
     return raw ? JSON.parse(raw) : null;
   }
 
-  // Map post with profile data including verified_status and repost info
-  function mapPost(row, userLikes, myRepost) {
+  // ── Map a raw post row (with profile) to a clean client object ──
+  function mapPost(row, userLikes = new Set(), myRepost = null) {
     const profile = row.profiles || {};
+
+    // Normalize media array
     let media = row.media;
-    if (!media || !Array.isArray(media) || media.length === 0) {
+    if (typeof media === 'string') {
+      try { media = JSON.parse(media); } catch (e) { media = []; }
+    }
+    if (!Array.isArray(media) || media.length === 0) {
       if (row.media_url) {
         media = [{ url: row.media_url, type: row.media_type || 'image' }];
       } else {
         media = [];
       }
     }
-    media = media.map(item => ({ ...item, type: item.type || 'image' }));
+    media = media.map(item => ({
+      ...item,
+      type: item.type || 'image',
+    }));
 
     return {
       id: row.id,
       user_id: row.user_id,
-      title: row.title,
+      title: row.title || '',
       description: row.description || '',
       content: row.content || '',
       media: media,
-      mediaUrl: row.media_url,
-      mediaType: row.media_type,
+      mediaUrl: row.media_url || (media.length ? media[0].url : ''),
+      mediaType: row.media_type || (media.length ? media[0].type : 'image'),
       category: row.category || 'General',
       tags: row.tags || [],
       timestamp: row.created_at || new Date().toISOString(),
       views: row.views || 0,
-      comments: row.comments_count || 0,
-      likes: row.likes_count || 0,
+      comments: row.comment_count || 0,        // denormalized
+      likes: row.like_count || 0,              // denormalized
       likedByMe: userLikes.has(row.id),
-      repostCount: row.repost_count || 0,
+      repostCount: row.repost_count || 0,      // denormalized
       myRepost: !!myRepost,
       myRepostText: myRepost ? (myRepost.comment || '') : '',
       myRepostTime: myRepost ? myRepost.created_at : null,
@@ -57,10 +71,11 @@
         verified: profile.verified || false,
         verified_status: profile.verified_status || 'none',
         is_private: profile.is_private || false,
-      }
+      },
     };
   }
 
+  // ── LOAD POSTS (with user's likes & reposts) ────────────────────
   async function loadAllPosts(offset = 0, limit = 20) {
     const { data: rows, error } = await sb
       .from('posts')
@@ -87,6 +102,7 @@
     const user = getCurrentUser();
     let likedIds = new Set();
     let repostMap = new Map();
+
     if (user && user.isLoggedIn && rows && rows.length > 0) {
       const postIds = rows.map(r => r.id);
       const [{ data: likes }, { data: reposts }] = await Promise.all([
@@ -100,7 +116,7 @@
     return rows.map(row => mapPost(row, likedIds, repostMap.get(row.id)));
   }
 
-  // ─── LOAD COMMENTS (returns camelCase fields) ───
+  // ── LOAD COMMENTS (with like counts and user's likes) ──────────
   async function loadComments(postId) {
     const { data, error } = await sb
       .from('comments')
@@ -148,51 +164,7 @@
     }));
   }
 
-  async function createPost(fields) {
-    const user = getCurrentUser();
-    if (!user || !user.isLoggedIn) {
-      throw new Error('Please sign in to post.');
-    }
-
-    // Only store user_id – NO author/author_avatar
-    const payload = {
-      user_id: user.id,
-      title: fields.title || '',
-      description: fields.description || '',
-      content: fields.content || '',
-      category: fields.category || 'General',
-      tags: fields.tags || [],
-      media: fields.media || [],
-      media_url: fields.mediaUrl || null,
-      media_type: fields.mediaType || null,
-    };
-
-    if (fields.media && fields.media.length > 0) {
-      payload.media_url = fields.media[0].url || null;
-      payload.media_type = fields.media[0].type || null;
-    }
-
-    const { data, error } = await sb
-      .from('posts')
-      .insert(payload)
-      .select(`
-        *,
-        profiles:user_id (
-          id,
-          display_name,
-          username,
-          avatar_url,
-          verified,
-          verified_status
-        )
-      `)
-      .single();
-
-    if (error) throw error;
-    return mapPost(data, new Set(), null);   // ← FIXED: pass null as third arg
-  }
-
-  // ─── ADD COMMENT (returns camelCase fields) ───
+  // ── ADD COMMENT ──────────────────────────────────────────────────
   async function addComment(postId, parentId, message) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -229,12 +201,61 @@
       userId: data.user_id,
       time: data.created_at,
       approved: data.approved,
-      likeCount: 0,          // ← FIXED: added
-      likedByMe: false,      // ← FIXED: added
+      likeCount: 0,          // new comment has no likes yet
+      likedByMe: false,      // user just posted it, so not liked by themselves
       profile: data.profiles || {},
     };
   }
 
+  // ── CREATE POST ──────────────────────────────────────────────────
+  async function createPost(fields) {
+    const user = getCurrentUser();
+    if (!user || !user.isLoggedIn) {
+      throw new Error('Please sign in to post.');
+    }
+
+    // Only store user_id – profile data is fetched via join
+    const payload = {
+      user_id: user.id,
+      title: fields.title || '',
+      description: fields.description || '',
+      content: fields.content || '',
+      category: fields.category || 'General',
+      tags: fields.tags || [],
+      media: fields.media || [],
+      media_url: fields.mediaUrl || null,
+      media_type: fields.mediaType || null,
+    };
+
+    // If media array is provided, extract the first item
+    if (fields.media && fields.media.length > 0) {
+      payload.media_url = fields.media[0].url || null;
+      payload.media_type = fields.media[0].type || null;
+    }
+
+    const { data, error } = await sb
+      .from('posts')
+      .insert(payload)
+      .select(`
+        *,
+        profiles:user_id (
+          id,
+          display_name,
+          username,
+          avatar_url,
+          verified,
+          verified_status
+        )
+      `)
+      .single();
+
+    if (error) throw error;
+
+    // Pass null as third arg because a new post hasn't been reposted by the user yet
+    return mapPost(data, new Set(), null);
+  }
+
+  // ── TOGGLE POST LIKE ────────────────────────────────────────────
   async function toggleLike(postId) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -245,6 +266,7 @@
     return { liked: data[0].liked, count: data[0].new_count };
   }
 
+  // ── TOGGLE COMMENT LIKE ─────────────────────────────────────────
   async function toggleCommentLike(commentId) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -255,7 +277,8 @@
     return { liked: data[0].liked, count: data[0].new_count };
   }
 
-  async function toggleRepostAPI(postId, comment) {
+  // ── TOGGLE REPOST (with optional comment) ──────────────────────
+  async function toggleRepostAPI(postId, comment = '') {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
       throw new Error('Please sign in to repost.');
@@ -273,6 +296,7 @@
     };
   }
 
+  // ── DELETE POST ──────────────────────────────────────────────────
   async function deletePost(postId) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -282,6 +306,7 @@
     if (error) throw error;
   }
 
+  // ── INCREMENT VIEW (analytics) ──────────────────────────────────
   async function incrementView(postId) {
     try {
       const { error } = await sb.rpc('add_view', {
@@ -295,7 +320,7 @@
     }
   }
 
-  // ─── LOAD POST PREVIEW (for link cards) ───
+  // ── LOAD POST PREVIEW (for link cards) ─────────────────────────
   async function loadPostPreview(postId) {
     const { data, error } = await sb
       .from('posts')
@@ -326,8 +351,9 @@
     };
   }
 
-  // ─── REPOST FEED HELPERS ──────────────────────────
+  // ── REPOST FEED HELPERS ──────────────────────────────────────────
 
+  // Fetch raw repost events (with reposter info)
   async function loadRepostFeedItems(offset = 0, limit = 20) {
     const { data: rows, error } = await sb
       .from('repost_feed_items')
@@ -342,6 +368,7 @@
     return rows;
   }
 
+  // Load a merged feed: posts + repost entries, sorted by time
   async function loadFeedWithReposts(offset = 0, limit = 20) {
     const [posts, repostItems] = await Promise.all([
       loadAllPosts(offset, limit),
@@ -388,7 +415,7 @@
     const repostEntries = repostItems
       .map(r => {
         const originalPost = postsById.get(r.post_id) || extraPostsById.get(r.post_id);
-        if (!originalPost) return null;
+        if (!originalPost) return null; // original was deleted or inaccessible
         return {
           feedType: 'repost',
           sortTime: r.repost_created_at,
@@ -408,12 +435,13 @@
 
     const postEntries = posts.map(p => ({ feedType: 'post', sortTime: p.timestamp, post: p }));
 
+    // Merge and sort by time (newest first)
     return [...postEntries, ...repostEntries].sort(
       (a, b) => new Date(b.sortTime) - new Date(a.sortTime)
     );
   }
 
-  // ─── EXPOSE API ────────────────────────────────────
+  // ── EXPOSE PUBLIC API ──────────────────────────────────────────
   window.PostsAPI = {
     loadAllPosts,
     loadRepostFeedItems,
@@ -426,6 +454,7 @@
     toggleRepostAPI,
     deletePost,
     incrementView,
-    loadPostPreview,   // ← NEW
+    loadPostPreview,
   };
+
 })();
