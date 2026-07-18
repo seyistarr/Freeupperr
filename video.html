@@ -2457,10 +2457,17 @@
     <div id="toast"></div>
 
     <!-- ══════════════════════════════════════════════════════
-         MAIN SCRIPT – UPDATED
+         MAIN SCRIPT
     ══════════════════════════════════════════════════════ -->
     <script>
         'use strict';
+
+        // ============================================================
+        // ⚠️ IMPORTANT: You must also update posts.js with:
+        //   - loadComments() mapping snake_case → camelCase
+        //   - addComment() returning camelCase fields
+        // See the separate post for those patches.
+        // ============================================================
 
         // ─────────────────────────────────────────────
         // CONFIG
@@ -2565,6 +2572,19 @@
         let feedMode = 'foryou';
         let commentSortMode = 'top';
         let _progressHideTimer = {};
+
+        // ─────────────────────────────────────────────
+        // GET ALL DESCENDANTS (replies) – needed for nested threads
+        // ─────────────────────────────────────────────
+        function getAllDescendants(pid, comments) {
+            const result = [];
+            const direct = comments.filter(c => c.parentId === pid);
+            for (const c of direct) {
+                result.push(c);
+                result.push(...getAllDescendants(c.id, comments));
+            }
+            return result;
+        }
 
         // ─────────────────────────────────────────────
         // GET VIDEO POSTS (uses profile)
@@ -3301,12 +3321,10 @@
         }
 
         // ─────────────────────────────────────────────
-        // COMMENTS – UPDATED with fixes
+        // COMMENTS – FIXED
         // ─────────────────────────────────────────────
 
-        // Helper functions (renderCommentsHTML, renderCommentThread, renderReplyItem) are unchanged
-        // I'll include them here in full (they are the same as before).
-
+        // ── renderCommentsHTML ──
         function renderCommentsHTML(comments, postId, visibleCount) {
             const topLevel = comments.filter(c => c.parentId === null);
             if (topLevel.length === 0) {
@@ -3323,6 +3341,7 @@
             return html;
         }
 
+        // ── renderCommentThread ──
         function renderCommentThread(comment, allComments, postId) {
             const profile = comment.profile || {};
             const author = window.getAuthorFromProfile(profile);
@@ -3383,6 +3402,7 @@
             `;
         }
 
+        // ── renderReplyItem ──
         function renderReplyItem(reply, allComments, postId) {
             const profile = reply.profile || {};
             const author = window.getAuthorFromProfile(profile);
@@ -3423,7 +3443,7 @@
             `;
         }
 
-        // ── NEW addComment (better cache update and error handling) ──
+        // ── addComment (updated cache) ──
         async function addComment(postId, parentId, message) {
             try {
                 const comment = await window.PostsAPI.addComment(postId, parentId, message);
@@ -3447,7 +3467,7 @@
             }
         }
 
-        // ── NEW submitCommentFromBar (updates video card count) ──
+        // ── submitCommentFromBar (updates video card count) ──
         function submitCommentFromBar() {
             const textarea = document.getElementById('commentInput');
             const message = textarea.value.trim();
@@ -3486,7 +3506,7 @@
                 });
         }
 
-        // ── NEW refreshCommentsList (always fetches fresh data) ──
+        // ── refreshCommentsList (always fetches fresh) ──
         async function refreshCommentsList(postId, preserveScroll, prevScroll) {
             const container = document.getElementById('comments-list');
             const scrollBody = document.getElementById('commentBody');
