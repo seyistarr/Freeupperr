@@ -189,7 +189,7 @@
       .single();
 
     if (error) throw error;
-    return mapPost(data, new Set());
+    return mapPost(data, new Set(), null);   // ← FIXED: pass null as third arg
   }
 
   // ─── ADD COMMENT (returns camelCase fields) ───
@@ -229,6 +229,8 @@
       userId: data.user_id,
       time: data.created_at,
       approved: data.approved,
+      likeCount: 0,          // ← FIXED: added
+      likedByMe: false,      // ← FIXED: added
       profile: data.profiles || {},
     };
   }
@@ -293,7 +295,7 @@
     }
   }
 
-  // ─── NEW: LOAD POST PREVIEW (for link cards) ───
+  // ─── LOAD POST PREVIEW (for link cards) ───
   async function loadPostPreview(postId) {
     const { data, error } = await sb
       .from('posts')
