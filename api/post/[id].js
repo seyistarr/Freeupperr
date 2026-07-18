@@ -1,6 +1,7 @@
 // api/post/[id].js
 // This serverless function serves a dynamic HTML page with Open Graph meta tags
 // for social sharing (WhatsApp, Facebook, Twitter, etc.).
+// It also redirects users to the actual video player page.
 
 import { createClient } from '@supabase/supabase-js';
 
