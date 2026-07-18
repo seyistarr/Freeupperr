@@ -1,41 +1,21 @@
-(function() {
+(function () {
   'use strict';
 
-  // Use the current origin dynamically
-  const origin = window.location.origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const POST_REGEX = new RegExp(`${origin}/post/([a-zA-Z0-9_-]+)`);
-
-  // Cache: key = postId, value = Promise (to avoid duplicate in-flight requests)
-  const previewCache = new Map();
+  const FREEUPPER_POST_REGEX = /https:\/\/freeupper\.vercel\.app\/post\/([a-zA-Z0-9_-]+)/;
+  const previewCache = new Map(); // postId -> preview data (avoid refetching same link repeatedly)
 
   function detectFreeupperLink(text) {
     if (!text) return null;
-    const match = text.match(POST_REGEX);
+    const match = text.match(FREEUPPER_POST_REGEX);
     return match ? match[1] : null;
   }
 
-  function getPostUrl(postId) {
-    return `${window.location.origin}/post/${postId}`;
-  }
-
   async function fetchPreview(postId) {
-    if (previewCache.has(postId)) {
-      return previewCache.get(postId);
-    }
-    if (!window.PostsAPI || !window.PostsAPI.loadPostPreview) {
-      return null;
-    }
-    const promise = window.PostsAPI.loadPostPreview(postId);
-    previewCache.set(postId, promise);
-    try {
-      const preview = await promise;
-      // Store the resolved value, not the promise
-      previewCache.set(postId, preview);
-      return preview;
-    } catch (e) {
-      previewCache.delete(postId);
-      return null;
-    }
+    if (previewCache.has(postId)) return previewCache.get(postId);
+    if (!window.PostsAPI || !window.PostsAPI.loadPostPreview) return null;
+    const preview = await window.PostsAPI.loadPostPreview(postId);
+    if (preview) previewCache.set(postId, preview);
+    return preview;
   }
 
   function escapeHtml(str) {
@@ -52,10 +32,10 @@
       </div>` : '';
 
     return `
-      <div class="fu-link-preview" data-post-id="${escapeHtml(preview.id)}" onclick="window.FreeupperLinkPreview.openPost('${escapeHtml(preview.id)}')" tabindex="0" role="button">
+      <div class="fu-link-preview" data-post-id="${escapeHtml(preview.id)}" onclick="window.FreeupperLinkPreview.openPost('${escapeHtml(preview.id)}')">
         <div class="fu-preview-thumb-wrap">
           ${preview.thumbnailUrl
-            ? `<img class="fu-preview-thumb" src="${escapeHtml(preview.thumbnailUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+            ? `<img class="fu-preview-thumb" src="${escapeHtml(preview.thumbnailUrl)}" alt="" onerror="this.style.display='none'">`
             : `<div class="fu-preview-thumb fu-preview-thumb-empty"></div>`}
           ${durationBadge}
         </div>
@@ -65,7 +45,7 @@
             ${preview.avatarUrl ? `<img class="fu-preview-avatar" src="${escapeHtml(preview.avatarUrl)}" alt="">` : ''}
             <span>@${escapeHtml(preview.username || preview.displayName)}</span>
           </div>
-          <div class="fu-preview-domain">${window.location.hostname}</div>
+          <div class="fu-preview-domain">freeupper.vercel.app</div>
         </div>
       </div>
     `;
@@ -85,6 +65,11 @@
     `;
   }
 
+  /**
+   * Attaches live preview detection to a text input/textarea.
+   * Renders the preview card into `previewContainerEl` below the input.
+   * Calls onLinkDetected(postId|null) so callers can track state (e.g. attach postId to a comment on submit).
+   */
   function attachLinkPreview(inputEl, previewContainerEl, onLinkDetected) {
     let lastDetectedId = null;
     let debounceTimer = null;
@@ -104,7 +89,7 @@
           return;
         }
 
-        if (postId === lastDetectedId) return;
+        if (postId === lastDetectedId) return; // same link, already shown/loading
         lastDetectedId = postId;
 
         previewContainerEl.style.display = 'block';
@@ -112,7 +97,7 @@
 
         const preview = await fetchPreview(postId);
 
-        // Guard against race condition
+        // Guard against race: input may have changed while fetching
         if (detectFreeupperLink(inputEl.value) !== postId) return;
 
         if (preview) {
@@ -123,10 +108,15 @@
           previewContainerEl.style.display = 'none';
           if (onLinkDetected) onLinkDetected(null);
         }
-      }, 400);
+      }, 400); // debounce so we don't fetch on every keystroke
     });
   }
 
+  /**
+   * Renders a preview card for a link found inside already-posted text
+   * (e.g. a comment or chat message that contains a Freeupper URL).
+   * Returns a Promise<string> of HTML to inject after the text content.
+   */
   async function renderInlinePreviewForText(text) {
     const postId = detectFreeupperLink(text);
     if (!postId) return '';
@@ -136,8 +126,7 @@
   }
 
   function openPost(postId) {
-    // Use the existing deep-link pattern: video.html?post=...
-    window.location.href = `/video.html?post=${encodeURIComponent(postId)}`;
+    window.location.href = `/post/${postId}`;
   }
 
   window.FreeupperLinkPreview = {
@@ -147,6 +136,5 @@
     renderInlinePreviewForText,
     renderPreviewCardHTML,
     openPost,
-    getPostUrl,
   };
 })();
