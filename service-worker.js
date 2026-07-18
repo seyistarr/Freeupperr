@@ -1,17 +1,17 @@
-const CACHE_NAME = 'freeupper-pwa-v3';
+const CACHE_NAME = 'freeupper-pwa-v2';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './create.htm',          // change to .html if needed
+  './create.htm',        // was create.html
   './profile.html',
   './search.html',
   './settings.html',
   './video.html',
+  './chat.html',         // added
   './global.css',
   './global.js',
   './manifest.webmanifest',
-  './freeupper.png',
-  './icon-192.png',
+  './icon-192.png',      // generated icons
   './icon-512.png',
   './apple-touch-icon.png'
 ];
