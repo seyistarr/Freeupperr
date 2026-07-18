@@ -95,6 +95,7 @@
     return rows.map(row => mapPost(row, likedIds));
   }
 
+  // ─── LOAD COMMENTS (returns camelCase fields) ───
   async function loadComments(postId) {
     const { data, error } = await sb
       .from('comments')
@@ -118,7 +119,12 @@
     }
 
     return data.map(row => ({
-      ...row,
+      id: row.id,
+      message: row.message,
+      parentId: row.parent_id,      // ← snake → camel
+      userId: row.user_id,          // ← snake → camel
+      time: row.created_at,         // ← snake → camel
+      approved: row.approved,
       profile: row.profiles || {},
     }));
   }
@@ -167,6 +173,7 @@
     return mapPost(data, new Set());
   }
 
+  // ─── ADD COMMENT (returns camelCase fields) ───
   async function addComment(postId, parentId, message) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -195,8 +202,14 @@
       .single();
 
     if (error) throw error;
+
     return {
-      ...data,
+      id: data.id,
+      message: data.message,
+      parentId: data.parent_id,
+      userId: data.user_id,
+      time: data.created_at,
+      approved: data.approved,
       profile: data.profiles || {},
     };
   }
