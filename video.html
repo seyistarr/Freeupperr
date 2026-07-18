@@ -35,6 +35,7 @@
     <script src="global.js"></script>
     <script src="auth.js"></script>
     <script src="posts.js"></script>
+    <script src="link-preview.js"></script>
 
     <style>
         /* ── TOKENS ── */
@@ -565,6 +566,7 @@
             position: relative;
             width: 48px;
             height: 48px;
+            cursor: pointer;
         }
         .v-avatar {
             width: 100%;
@@ -607,6 +609,7 @@
             align-items: center;
             gap: 6px;
             flex-wrap: wrap;
+            cursor: pointer;
         }
         .v-creator-name {
             font-size: 15px;
@@ -702,6 +705,252 @@
             fill: none;
             stroke: #fff;
             stroke-width: 2;
+        }
+
+        /* ── REPOST PILL ── */
+        .v-repost-pill {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 186, 124, .16);
+            border: 1px solid rgba(0, 186, 124, .35);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 6px 12px;
+            border-radius: 100px;
+            width: max-content;
+            max-width: 260px;
+            cursor: pointer;
+            transition: transform .15s cubic-bezier(.34,1.56,.64,1), background .15s;
+        }
+        .v-repost-pill:active {
+            transform: scale(.95);
+        }
+        .v-repost-pill:hover {
+            background: rgba(0, 186, 124, .24);
+        }
+        .v-repost-pill span {
+            font-size: 12px;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-shadow: 0 1px 4px rgba(0,0,0,.4);
+        }
+
+        /* ── REPOST BANNER (feed-level) ── */
+        .v-repost-banner {
+            position: absolute;
+            top: max(env(safe-area-inset-top), 14px);
+            left: 16px;
+            right: 60px;
+            z-index: 25;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, .55);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, .12);
+            padding: 7px 12px 7px 7px;
+            border-radius: 100px;
+            width: max-content;
+            max-width: calc(100% - 20px);
+            pointer-events: none;
+        }
+        .v-repost-banner-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid rgba(255, 255, 255, .4);
+            flex-shrink: 0;
+        }
+        .v-repost-banner-text {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
+        }
+        .v-repost-banner-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 140px;
+        }
+        .v-repost-banner-verb {
+            font-size: 12px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, .65);
+            white-space: nowrap;
+        }
+        .v-repost-banner-icon {
+            width: 13px;
+            height: 13px;
+            stroke: #00ba7c;
+            fill: none;
+            stroke-width: 2.4;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            flex-shrink: 0;
+        }
+        .v-repost-banner-chevron {
+            width: 12px;
+            height: 12px;
+            stroke: rgba(255, 255, 255, .8);
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            flex-shrink: 0;
+            margin-left: 2px;
+            transition: transform .2s ease;
+        }
+        .v-repost-banner-chevron.open {
+            transform: rotate(180deg);
+        }
+        .v-repost-pill-chevron {
+            margin-left: 2px;
+            transition: transform .2s ease;
+        }
+        .v-repost-pill-chevron.open {
+            transform: rotate(180deg);
+        }
+        .v-repost-banner-comment {
+            position: absolute;
+            top: calc(max(env(safe-area-inset-top), 14px) + 46px);
+            left: 16px;
+            right: 60px;
+            z-index: 25;
+            background: rgba(0, 0, 0, .55);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, .1);
+            padding: 8px 14px;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #fff;
+            line-height: 1.4;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height .3s ease, padding .3s ease, opacity .3s ease;
+            opacity: 0;
+            pointer-events: none;
+            padding: 0 14px;
+        }
+        .v-repost-banner-comment.open {
+            max-height: 80px;
+            padding: 8px 14px;
+            opacity: 1;
+        }
+
+        /* ── LINK PREVIEW CARD ── */
+        .fu-link-preview {
+            display: flex;
+            gap: 10px;
+            background: var(--inp-bg);
+            border: 1px solid var(--sheet-bd);
+            border-radius: 14px;
+            padding: 10px;
+            margin-top: 8px;
+            cursor: pointer;
+            transition: background .15s, transform .12s;
+            max-width: 320px;
+        }
+        .fu-link-preview:hover { background: var(--bg4); }
+        .fu-link-preview:active { transform: scale(.98); }
+        .fu-preview-thumb-wrap {
+            position: relative;
+            width: 56px;
+            height: 72px;
+            flex-shrink: 0;
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--bg4);
+        }
+        .fu-preview-thumb {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .fu-preview-thumb-empty {
+            background: linear-gradient(135deg, var(--bg4), var(--sheet-bd));
+        }
+        .fu-preview-play {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,.25);
+        }
+        .fu-preview-play svg {
+            width: 20px;
+            height: 20px;
+            fill: #fff;
+            filter: drop-shadow(0 1px 3px rgba(0,0,0,.5));
+        }
+        .fu-preview-meta {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 4px;
+        }
+        .fu-preview-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            line-height: 1.3;
+        }
+        .fu-preview-author {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .fu-preview-avatar {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .fu-preview-domain {
+            font-size: 11px;
+            color: var(--muted2);
+            text-transform: lowercase;
+        }
+        .fu-preview-loading .fu-preview-pulse {
+            position: relative;
+            overflow: hidden;
+        }
+        .fu-preview-loading .fu-preview-pulse::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
+            animation: fuPreviewShimmer 1.2s infinite;
+        }
+        .fu-preview-pulse-line {
+            height: 10px;
+            border-radius: 4px;
+            background: var(--bg4);
+        }
+        @keyframes fuPreviewShimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
         }
 
         /* ── PROGRESS BAR ── */
@@ -1058,6 +1307,7 @@
             color: var(--text);
             font-weight: 700;
             font-size: 14px;
+            cursor: pointer;
         }
         .comment-time {
             color: var(--muted2);
@@ -1172,6 +1422,7 @@
             font-weight: 600;
             color: var(--text);
             margin-bottom: 1px;
+            cursor: pointer;
         }
         .reply-text {
             white-space: pre-wrap;
@@ -1220,7 +1471,6 @@
         .reply-like-btn.liked {
             color: var(--red);
         }
-        /* FIX: reply heart styling */
         .reply-like-btn .like-heart {
             width: 12px;
             height: 12px;
@@ -1232,9 +1482,6 @@
             stroke: var(--red);
             fill: var(--red);
             transform: scale(1.1);
-        }
-        .reply-like-btn.liked {
-            color: var(--red);
         }
 
         .view-replies-btn,
@@ -1500,7 +1747,6 @@
             color: var(--text);
         }
 
-        /* Copied state */
         .share-item.copied .share-ico {
             background: rgba(0, 186, 124, .18) !important;
         }
@@ -1591,7 +1837,6 @@
             background: var(--bg4);
         }
 
-        /* Ripple effect */
         .share-ripple {
             position: absolute;
             border-radius: 50%;
@@ -1828,248 +2073,6 @@
             flex-shrink: 0;
         }
 
-        /* ── REPOST PILL ── */
-        .v-repost-pill {
-            display: none;
-            align-items: center;
-            gap: 6px;
-            background: rgba(0, 186, 124, .16);
-            border: 1px solid rgba(0, 186, 124, .35);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            padding: 6px 12px;
-            border-radius: 100px;
-            width: max-content;
-            max-width: 260px;
-            cursor: pointer;
-            transition: transform .15s cubic-bezier(.34,1.56,.64,1), background .15s;
-        }
-        .v-repost-pill:active {
-            transform: scale(.95);
-        }
-        .v-repost-pill:hover {
-            background: rgba(0, 186, 124, .24);
-        }
-        .v-repost-pill span {
-            font-size: 12px;
-            font-weight: 600;
-            color: #fff;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-shadow: 0 1px 4px rgba(0,0,0,.4);
-        }
-
-        /* ── REPOST BANNER (feed-level) ── */
-        .v-repost-banner {
-            position: absolute;
-            top: max(env(safe-area-inset-top), 14px);
-            left: 16px;
-            right: 60px;
-            z-index: 25;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(0, 0, 0, .55);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, .12);
-            padding: 7px 12px 7px 7px;
-            border-radius: 100px;
-            width: max-content;
-            max-width: calc(100% - 20px);
-            pointer-events: none;
-        }
-        .v-repost-banner-avatar {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 1.5px solid rgba(255, 255, 255, .4);
-            flex-shrink: 0;
-        }
-        .v-repost-banner-text {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            min-width: 0;
-        }
-        .v-repost-banner-name {
-            font-size: 13px;
-            font-weight: 700;
-            color: #fff;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 140px;
-        }
-        .v-repost-banner-verb {
-            font-size: 12px;
-            font-weight: 500;
-            color: rgba(255, 255, 255, .65);
-            white-space: nowrap;
-        }
-        .v-repost-banner-icon {
-            width: 13px;
-            height: 13px;
-            stroke: #00ba7c;
-            fill: none;
-            stroke-width: 2.4;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-            flex-shrink: 0;
-        }
-        .v-repost-banner-comment {
-            position: absolute;
-            top: calc(max(env(safe-area-inset-top), 14px) + 46px);
-            left: 16px;
-            right: 60px;
-            z-index: 25;
-            background: rgba(0, 0, 0, .55);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, .1);
-            padding: 8px 14px;
-            border-radius: 14px;
-            font-size: 13px;
-            font-weight: 500;
-            color: #fff;
-            line-height: 1.4;
-            max-height: 60px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            pointer-events: none;
-        }
-
-        /* ── REPOST MODAL ── */
-        .repost-modal-backdrop {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, .7);
-            backdrop-filter: blur(4px);
-            z-index: 300;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity .25s, visibility .25s;
-            padding: 20px;
-        }
-        .repost-modal-backdrop.open {
-            opacity: 1;
-            visibility: visible;
-        }
-        .repost-modal-card {
-            background: var(--sheet-bg);
-            border: 1px solid var(--sheet-bd);
-            border-radius: 22px;
-            width: 100%;
-            max-width: 380px;
-            padding: 22px;
-            transform: scale(.85) translateY(20px);
-            transition: transform .3s cubic-bezier(.34,1.56,.64,1);
-            box-shadow: 0 20px 60px rgba(0,0,0,.5);
-        }
-        .repost-modal-backdrop.open .repost-modal-card {
-            transform: scale(1) translateY(0);
-        }
-        .repost-modal-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 16px;
-        }
-        .repost-modal-badge {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(0, 186, 124, .15);
-            border: 1px solid rgba(0, 186, 124, .3);
-            padding: 5px 12px;
-            border-radius: 100px;
-            font-size: 12px;
-            font-weight: 700;
-            color: #00ba7c;
-        }
-        .repost-modal-avatar-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 14px;
-        }
-        .repost-modal-avatar {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid var(--p);
-        }
-        .repost-modal-name {
-            font-size: 15px;
-            font-weight: 800;
-            color: var(--text);
-        }
-        .repost-modal-time {
-            font-size: 12px;
-            color: var(--muted);
-        }
-        .repost-modal-text {
-            font-size: 15px;
-            line-height: 1.6;
-            color: var(--text);
-            font-weight: 500;
-            margin-bottom: 18px;
-            word-break: break-word;
-        }
-        .repost-modal-video-preview {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: var(--inp-bg);
-            border: 1px solid var(--sheet-bd);
-            border-radius: 14px;
-            padding: 10px;
-            cursor: pointer;
-            transition: background .15s;
-        }
-        .repost-modal-video-preview:hover {
-            background: var(--bg4);
-        }
-        .repost-modal-video-thumb {
-            width: 44px;
-            height: 56px;
-            border-radius: 8px;
-            object-fit: cover;
-            background: var(--bg4);
-            flex-shrink: 0;
-        }
-        .repost-modal-video-caption {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-        }
-        .repost-modal-close {
-            margin-top: 18px;
-            width: 100%;
-            padding: 13px;
-            border-radius: 100px;
-            background: var(--inp-bg);
-            border: none;
-            color: var(--text);
-            font-weight: 700;
-            font-size: 14px;
-            cursor: pointer;
-        }
-
         /* ── TOAST ── */
         #toast {
             position: fixed;
@@ -2211,15 +2214,91 @@
             .side-nav { width: 82px; }
         }
 
-        /* ── LIGHT THEME OVERRIDES ── */
-        /* (Most light-theme overrides are already in the original CSS; I’m omitting them for brevity, but they remain unchanged) */
+        /* ── LIGHT THEME OVERRIDES (minimal) ── */
         [data-theme="light"] .vt-tab {
             color: rgba(255, 255, 255, .6);
         }
         [data-theme="light"] .vt-tab.active {
             color: #fff;
         }
-        /* … all other light-theme overrides stay the same … */
+        [data-theme="light"] .vt-more {
+            border-color: rgba(255, 255, 255, .3);
+            background: rgba(0, 0, 0, .4);
+        }
+        [data-theme="light"] .v-action-lbl,
+        [data-theme="light"] .v-caption,
+        [data-theme="light"] .v-creator-name,
+        [data-theme="light"] .v-post-time,
+        [data-theme="light"] .v-music-tag {
+            color: #fff;
+        }
+        [data-theme="light"] .v-music-tag {
+            border-color: rgba(255, 255, 255, .15);
+            background: rgba(255, 255, 255, .1);
+        }
+        [data-theme="light"] .v-music-tag svg {
+            stroke: #fff;
+        }
+        [data-theme="light"] .v-avatar {
+            border-color: rgba(255, 255, 255, .3);
+        }
+        [data-theme="light"] .v-plus-badge {
+            border-color: #000;
+        }
+        [data-theme="light"] .v-progress::before {
+            background: rgba(255, 255, 255, .2);
+        }
+        [data-theme="light"] .v-progress-fill {
+            background: var(--p);
+        }
+        [data-theme="light"] .v-progress-thumb {
+            background: #fff;
+        }
+        [data-theme="light"] .v-grad-top {
+            background: linear-gradient(to bottom, rgba(0,0,0,.7) 0%, transparent 100%);
+        }
+        [data-theme="light"] .v-grad-bot {
+            background: linear-gradient(to top, rgba(0,0,0,.9) 0%, rgba(0,0,0,.3) 60%, transparent 100%);
+        }
+        [data-theme="light"] .v-mute-badge {
+            background: rgba(0, 0, 0, .5);
+        }
+        [data-theme="light"] .v-mute-badge svg {
+            stroke: #fff;
+        }
+        [data-theme="light"] .v-see-more {
+            color: rgba(255, 255, 255, .7);
+        }
+        [data-theme="light"] .v-see-more:hover {
+            color: #fff;
+        }
+        [data-theme="light"] .v-disc {
+            border-color: var(--p);
+            background: #000;
+        }
+        [data-theme="light"] .v-disc-note {
+            background: #111;
+            border-color: rgba(255, 255, 255, .3);
+        }
+        [data-theme="light"] .v-disc-note svg {
+            fill: #fff;
+        }
+        [data-theme="light"] .empty-videos {
+            background: var(--bg);
+        }
+        [data-theme="light"] .empty-videos .empty-icon {
+            background: var(--pdim);
+            border-color: var(--pbrd);
+        }
+        [data-theme="light"] .empty-videos .empty-icon svg {
+            stroke: var(--p);
+        }
+        [data-theme="light"] .empty-videos h3 {
+            color: var(--text);
+        }
+        [data-theme="light"] .empty-videos p {
+            color: var(--muted);
+        }
     </style>
 </head>
 <body>
@@ -2310,7 +2389,7 @@
     <div class="sheet-backdrop" id="backdrop" onclick="closeAllSheets()"></div>
 
     <!-- ══════════════════════════════════════════════════════
-         COMMENT SHEET (unchanged)
+         COMMENT SHEET (with link preview container)
     ══════════════════════════════════════════════════════ -->
     <div class="sheet" id="commentSheet">
         <div class="sheet-handle"></div>
@@ -2331,17 +2410,15 @@
         <div class="sheet-body" id="commentBody">
             <div id="comments-list"></div>
         </div>
+        <!-- Link preview container -->
+        <div id="commentLinkPreview" style="display:none; padding:0 14px;"></div>
         <div class="comment-inp-row">
             <img class="comment-inp-ava" id="commentUserAvatar" src="" alt="" onerror="this.style.display='none'" />
             <div class="comment-inp-wrap">
                 <input class="comment-inp" id="commentInput" placeholder="Add a comment…" maxlength="280" />
-                <button class="comment-icon-btn">
-                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                </button>
+                <button class="comment-icon-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
                 <button class="comment-icon-btn">@</button>
-                <button class="comment-icon-btn">
-                    <svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4"/><path d="M12 8v13M19 12v9H5v-9M12 8a3 3 0 1 0-3-3c0 1.5 3 3 3 3zM12 8a3 3 0 1 1 3-3c0 1.5-3 3-3 3z"/></svg>
-                </button>
+                <button class="comment-icon-btn"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4"/><path d="M12 8v13M19 12v9H5v-9M12 8a3 3 0 1 0-3-3c0 1.5 3 3 3 3zM12 8a3 3 0 1 1 3-3c0 1.5-3 3-3 3z"/></svg></button>
             </div>
             <button class="comment-send" id="comment-send" onclick="submitCommentFromBar()">
                 <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -2350,7 +2427,7 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════
-         SHARE SHEET – UPDATED with glossy icons
+         SHARE SHEET (glossy icons)
     ══════════════════════════════════════════════════════ -->
     <div class="sheet" id="shareSheet">
         <div class="sheet-handle"></div>
@@ -2360,8 +2437,6 @@
                 <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
         </div>
-
-        <!-- Post preview -->
         <div class="share-preview" id="sharePreview">
             <img class="share-preview-thumb" id="sharePreviewThumb" src="" alt="">
             <div class="share-preview-meta">
@@ -2369,8 +2444,6 @@
                 <div class="share-preview-handle" id="sharePreviewHandle"></div>
             </div>
         </div>
-
-        <!-- Grid: glossy icons -->
         <div class="share-grid">
             <button class="share-item" id="nativeShareBtn" onclick="shareAction('native')" style="display:none">
                 <div class="share-ico share-ico-3d">
@@ -2378,7 +2451,6 @@
                 </div>
                 <span class="share-lbl">Share via…</span>
             </button>
-
             <button class="share-item" onclick="shareAction('repost')">
                 <div class="share-ico share-ico-3d" style="background:linear-gradient(145deg,#3a8b5a,#00ba7c)">
                     <svg viewBox="0 0 24 24" style="stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;width:28px;height:28px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">
@@ -2388,7 +2460,6 @@
                 </div>
                 <span class="share-lbl">Repost</span>
             </button>
-
             <button class="share-item" onclick="shareAction('quote')">
                 <div class="share-ico share-ico-3d" style="background:linear-gradient(145deg,#4fc3f7,#1d9bf0)">
                     <svg viewBox="0 0 24 24" style="stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;width:26px;height:26px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25))">
@@ -2397,7 +2468,6 @@
                 </div>
                 <span class="share-lbl">Quote</span>
             </button>
-
             <button class="share-item" id="copyLinkBtn" onclick="shareAction('copy')">
                 <div class="share-ico share-ico-3d" id="copyLinkIco" style="background:linear-gradient(145deg,#64d2ff,#1d9bf0)">
                     <svg viewBox="0 0 24 24" style="stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;width:24px;height:24px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25))">
@@ -2408,43 +2478,27 @@
                 <span class="share-lbl" id="copyLbl">Copy link</span>
             </button>
         </div>
-
         <div class="share-links">
             <button class="share-link-row" onclick="shareAction('whatsapp')">
-                <div class="share-link-ico share-link-ico-3d">
-                    <img src="https://cdn-icons-png.flaticon.com/128/3670/3670051.png" alt="WhatsApp" />
-                </div>
+                <div class="share-link-ico share-link-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/3670/3670051.png" alt="WhatsApp" /></div>
                 <span class="share-link-txt">WhatsApp</span>
             </button>
-
             <button class="share-link-row" onclick="shareAction('twitter')">
-                <div class="share-link-ico share-link-ico-3d">
-                    <img src="https://cdn-icons-png.flaticon.com/128/5968/5968958.png" alt="X" />
-                </div>
+                <div class="share-link-ico share-link-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/5968/5968958.png" alt="X" /></div>
                 <span class="share-link-txt">X (Twitter)</span>
             </button>
-
             <button class="share-link-row" onclick="shareAction('telegram')">
-                <div class="share-link-ico share-link-ico-3d">
-                    <img src="https://cdn-icons-png.flaticon.com/128/2111/2111646.png" alt="Telegram" />
-                </div>
+                <div class="share-link-ico share-link-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/2111/2111646.png" alt="Telegram" /></div>
                 <span class="share-link-txt">Telegram</span>
             </button>
-
             <button class="share-link-row" onclick="shareAction('facebook')">
-                <div class="share-link-ico share-link-ico-3d">
-                    <img src="https://cdn-icons-png.flaticon.com/128/124/124010.png" alt="Facebook" />
-                </div>
+                <div class="share-link-ico share-link-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/124/124010.png" alt="Facebook" /></div>
                 <span class="share-link-txt">Facebook</span>
             </button>
-
             <button class="share-link-row" onclick="shareAction('instagram')">
-                <div class="share-link-ico share-link-ico-3d">
-                    <img src="https://cdn-icons-png.flaticon.com/128/2111/2111463.png" alt="Instagram" />
-                </div>
+                <div class="share-link-ico share-link-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/2111/2111463.png" alt="Instagram" /></div>
                 <span class="share-link-txt">Instagram</span>
             </button>
-
             <button class="share-link-row" id="saveVideoBtn" onclick="shareAction('download')">
                 <div class="share-link-ico share-link-ico-3d" style="background:linear-gradient(145deg,#3a3a3a,#1a1a1a)">
                     <svg viewBox="0 0 24 24" style="stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 2px 2px rgba(0,0,0,.3))">
@@ -2455,11 +2509,10 @@
                 <span class="share-link-txt" id="saveVideoLbl">Save Video</span>
             </button>
         </div>
-
         <button class="share-cancel-btn" onclick="closeSheet('shareSheet')">Cancel</button>
     </div>
 
-    <!-- ── REPOST COMPOSER (with word-limit) ── -->
+    <!-- ── REPOST COMPOSER ── -->
     <div class="sheet" id="repostSheet">
         <div class="sheet-handle"></div>
         <div class="sheet-hdr">
@@ -2496,9 +2549,7 @@
         </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════
-         REACTION SHEET (unchanged)
-    ══════════════════════════════════════════════════════ -->
+    <!-- ── REACTION SHEET ── -->
     <div class="sheet" id="reactionSheet">
         <div class="sheet-handle"></div>
         <div class="sheet-hdr">
@@ -2511,9 +2562,7 @@
         <div class="reaction-list" id="reactionList"></div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════
-         MORE OPTIONS SHEET (unchanged)
-    ══════════════════════════════════════════════════════ -->
+    <!-- ── MORE OPTIONS ── -->
     <div class="sheet" id="moreSheet">
         <div class="sheet-handle"></div>
         <div class="sheet-hdr">
@@ -2525,19 +2574,17 @@
         <div class="more-list" id="moreList"></div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════
-         TOAST
-    ══════════════════════════════════════════════════════ -->
+    <!-- ════ TOAST ════ -->
     <div id="toast"></div>
 
     <!-- ══════════════════════════════════════════════════════
-         MAIN SCRIPT – UPDATED with all new features
+         MAIN SCRIPT
     ══════════════════════════════════════════════════════ -->
     <script>
         'use strict';
 
         // ─────────────────────────────────────────────
-        // CONFIG (unchanged)
+        // CONFIG
         // ─────────────────────────────────────────────
         const SITE_URL = 'https://freeupper.vercel.app';
         const STORAGE_KEY = 'freeupper_blog_data_v2';
@@ -2549,7 +2596,7 @@
         const PAGE_SIZE = 5;
 
         // ─────────────────────────────────────────────
-        // DATA LAYER (unchanged)
+        // DATA LAYER
         // ─────────────────────────────────────────────
         function loadData() {
             const raw = localStorage.getItem(STORAGE_KEY);
@@ -2639,9 +2686,10 @@
         let feedMode = 'foryou';
         let commentSortMode = 'top';
         let _progressHideTimer = {};
+        let _pendingCommentLinkPostId = null;
 
         // ─────────────────────────────────────────────
-        // GET ALL DESCENDANTS (for replies)
+        // GET ALL DESCENDANTS (replies)
         // ─────────────────────────────────────────────
         function getAllDescendants(pid, comments) {
             const result = [];
@@ -2654,7 +2702,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // GET VIDEO POSTS – UPDATED to handle repost entries
+        // GET VIDEO POSTS (with isOwn)
         // ─────────────────────────────────────────────
         async function getVideoPostsFromSupabase() {
             try {
@@ -2680,6 +2728,7 @@
                         handle: isOwn ? `@${currentUser.username || 'me'}` : `@${profile.username || author.name.toLowerCase()}`,
                         verified: author.verified,
                         avatar: author.avatar,
+                        isOwn: isOwn,
                         caption: post.title + (post.description ? '\n' + post.description : '') +
                             (post.tags ? ' ' + post.tags.map(t => '#' + t).join(' ') : ''),
                         sound: 'Original Audio · ' + author.name,
@@ -2688,7 +2737,7 @@
                         comments: post.comments || 0,
                         reposts: post.repostCount || 0,
                         bookmarks: 0,
-                        shares: 0, // placeholder; can be computed from reposts + shares
+                        shares: 0,
                         liked: liked,
                         saved: false,
                         following: isFollowingUser,
@@ -2705,7 +2754,6 @@
                         myRepostTime: post.myRepostTime || null,
                     };
 
-                    // Repost entry metadata
                     if (entry.feedType === 'repost') {
                         vp.isRepostEntry = true;
                         vp.repostId = entry.repostId;
@@ -2732,7 +2780,6 @@
             }
         }
 
-        // Fallback (unchanged)
         function getVideoPostsFromLocal() {
             const data = loadData();
             const currentUser = getCurrentUser();
@@ -2754,6 +2801,7 @@
                     handle: isOwn ? `@${currentUser.username || 'me'}` : `@${authorName.toLowerCase()}`,
                     verified: isVerified,
                     avatar: authorAvatar,
+                    isOwn: isOwn,
                     caption: post.title + (post.description ? '\n' + post.description : '') +
                         (post.tags ? ' ' + post.tags.map(t => '#' + t).join(' ') : ''),
                     sound: 'Original Audio · ' + authorName,
@@ -2870,7 +2918,7 @@
         });
 
         // ─────────────────────────────────────────────
-        // BUILD FEED – updated to call updateRepostPill after building
+        // BUILD FEED & CARD
         // ─────────────────────────────────────────────
         function buildFeed(list) {
             const posts = list || videoPosts;
@@ -2909,7 +2957,6 @@
             });
             if (posts.length > 0) {
                 onCardActive(0);
-                // Initialize repost pills
                 posts.forEach((_, i) => updateRepostPill(i));
             }
             requestAnimationFrame(() => {
@@ -2923,7 +2970,6 @@
             });
         }
 
-        // ─── buildCard – updated with repost banner, stable comment id, share count, repost pill ───
         function buildCard(v, i) {
             const profile = v.profile || {};
             const author = window.getAuthorFromProfile(profile);
@@ -2962,9 +3008,10 @@
                 `;
             }
 
-            // Repost banner (feed-level)
+            // Repost banner (feed-level) with chevron
             const repostBannerHtml = v.isRepostEntry ? `
-                <div class="v-repost-banner" onclick="event.stopPropagation()">
+                <div class="v-repost-banner ${v.repostEntryComment ? 'has-comment' : ''}"
+                     onclick="event.stopPropagation(); toggleRepostBannerComment(${i})">
                     <img class="v-repost-banner-avatar" src="${v.reposterAvatar}" alt="${escapeHtml(v.reposterName)}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.reposterName}'">
                     <div class="v-repost-banner-text">
                         <span class="v-repost-banner-name">${escapeHtml(v.reposterName)}</span>
@@ -2974,8 +3021,32 @@
                         <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
                         <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
                     </svg>
+                    ${v.repostEntryComment ? `
+                        <svg viewBox="0 0 24 24" class="v-repost-banner-chevron" id="repostBannerChevron-${i}">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    ` : ''}
                 </div>
-                ${v.repostEntryComment ? `<div class="v-repost-banner-comment">${escapeHtml(v.repostEntryComment)}</div>` : ''}
+                ${v.repostEntryComment ? `<div class="v-repost-banner-comment" id="repostBannerComment-${i}">${escapeHtml(v.repostEntryComment)}</div>` : ''}
+            ` : '';
+
+            // Own repost pill (inline toggle)
+            const ownRepostPillHtml = (v.myRepost && !v.isRepostEntry) ? `
+                <div class="v-repost-pill ${v.myRepostText ? 'has-comment' : ''}"
+                     id="repostPill-${i}"
+                     onclick="toggleOwnRepostComment(${i})">
+                    <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:#fff;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0">
+                        <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                        <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                    </svg>
+                    <span>You reposted this</span>
+                    ${v.myRepostText ? `
+                        <svg viewBox="0 0 24 24" class="v-repost-pill-chevron" id="repostPillChevron-${i}">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    ` : ''}
+                </div>
+                ${v.myRepostText ? `<div class="v-repost-banner-comment" id="ownRepostComment-${i}">${escapeHtml(v.myRepostText)}</div>` : ''}
             ` : '';
 
             return `
@@ -2990,25 +3061,20 @@
                     <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
                 </div>
 
-                <!-- RIGHT ACTIONS (plain outline icons, 32px) -->
+                <!-- RIGHT ACTIONS -->
                 <div class="v-actions">
-                    <!-- 1. Like -->
                     <div class="v-action">
                         <button class="${likeClass}" id="likeBtn-${i}" onclick="toggleLike(${i})">
                             <svg id="likeIco-${i}" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                         </button>
                         <span class="v-action-lbl" id="likeCount-${i}">${fmtNum(v.likes)}</span>
                     </div>
-
-                    <!-- 2. Comments – with stable id -->
                     <div class="v-action">
                         <button class="v-action-btn" onclick="openComments(${i})">
                             <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                         </button>
                         <span class="v-action-lbl" id="commentCountLbl-${i}">${fmtNum(v.comments)}</span>
                     </div>
-
-                    <!-- 3. Share (above Save) -->
                     <div class="v-action">
                         <button class="v-action-btn" onclick="openShare(${i})">
                             <svg viewBox="0 0 24 24">
@@ -3018,16 +3084,12 @@
                         </button>
                         <span class="v-action-lbl" id="shareCount-${i}">${fmtNum(v.shares || 0)}</span>
                     </div>
-
-                    <!-- 4. Save (bookmark) -->
                     <div class="v-action">
                         <button class="${saveClass}" id="saveBtn-${i}" onclick="toggleSave(${i})">
                             <svg id="saveIco-${i}" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                         </button>
                         <span class="v-action-lbl" id="saveCount-${i}">${fmtNum(v.bookmarks)}</span>
                     </div>
-
-                    <!-- Sound disc (last) -->
                     <div class="v-disc-wrap">
                         <div class="v-disc">
                             <img src="${v.soundImg || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + v.creator}" alt="" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'">
@@ -3040,33 +3102,24 @@
 
                 <!-- BOTTOM INFO -->
                 <div class="v-info">
-                    <!-- Repost pill (your own repost) -->
-                    <div class="v-repost-pill" id="repostPill-${i}" style="display:${v.myRepost ? 'flex' : 'none'}" onclick="openRepostModal(${i})">
-                        <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:#00ba7c;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0">
-                            <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-                            <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-                        </svg>
-                        <span id="repostPillText-${i}"></span>
-                    </div>
+                    ${ownRepostPillHtml}
                     <div class="v-user-row">
-                        <div class="v-avatar-wrap">
+                        <div class="v-avatar-wrap" onclick="event.stopPropagation(); goToProfile('${author.id}')">
                             <img data-author-avatar class="v-avatar" src="${avatar}" alt="${displayName}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}'">
-                            <div class="v-plus-badge ${v.following ? 'hidden' : ''}" id="followDot-${i}" onclick="toggleFollow(${i})">+</div>
+                            <div class="v-plus-badge ${(v.following || v.isOwn) ? 'hidden' : ''}" id="followDot-${i}" onclick="event.stopPropagation(); toggleFollow(${i})">+</div>
                         </div>
                         <div class="v-user-meta">
-                            <div class="v-creator">
+                            <div class="v-creator" onclick="event.stopPropagation(); goToProfile('${author.id}')">
                                 <span data-author-name class="v-creator-name">${displayName}</span>
                                 <span data-author-badge-wrapper>${window.getVerifiedBadgeHTML(verifiedStatus)}</span>
                             </div>
                             <div class="v-post-time">${timeStr}</div>
                         </div>
                     </div>
-
                     <div class="v-desc-container">
                         <p class="v-caption clamped" id="cap-${i}" onscroll="handleCaptionScroll(this)">${captionHtml}</p>
                         <button class="v-see-more" id="seeMore-${i}" onclick="toggleCaption(${i})">see more</button>
                     </div>
-
                     <div class="v-music-tag">
                         <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
                         <span>${v.sound}</span>
@@ -3305,7 +3358,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // REPOST / SAVE / FOLLOW – UPDATED
+        // REPOST / SAVE / FOLLOW
         // ─────────────────────────────────────────────
         async function toggleRepost(idx, comment) {
             const v = videoPosts[idx];
@@ -3375,14 +3428,46 @@
 
         function toggleFollow(idx) {
             const v = videoPosts[idx];
-            if (!v.authorId) return showToast("Can't follow yourself");
+            if (!v.authorId || v.isOwn) return showToast("You can't follow yourself");
             toggleFollowUserAndUpdate(v.authorId, idx);
         }
 
         function toggleFollowFromMore(idx) {
             const v = videoPosts[idx];
-            if (!v.authorId) return showToast("Can't follow yourself");
+            if (!v.authorId || v.isOwn) return showToast("You can't follow yourself");
             toggleFollowUserAndUpdate(v.authorId, idx);
+        }
+
+        // ─────────────────────────────────────────────
+        // REPOST BANNER TOGGLES
+        // ─────────────────────────────────────────────
+        function toggleRepostBannerComment(idx) {
+            const el = document.getElementById('repostBannerComment-' + idx);
+            const chevron = document.getElementById('repostBannerChevron-' + idx);
+            if (!el) return;
+            el.classList.toggle('open');
+            if (chevron) chevron.classList.toggle('open');
+        }
+
+        function toggleOwnRepostComment(idx) {
+            const el = document.getElementById('ownRepostComment-' + idx);
+            const chevron = document.getElementById('repostPillChevron-' + idx);
+            if (!el) return;
+            el.classList.toggle('open');
+            if (chevron) chevron.classList.toggle('open');
+        }
+
+        // ─────────────────────────────────────────────
+        // PROFILE NAVIGATION
+        // ─────────────────────────────────────────────
+        function goToProfile(userId) {
+            if (!userId) return;
+            const currentUser = getCurrentUser();
+            if (userId === currentUser.id) {
+                window.location.href = 'profile.html';
+            } else {
+                window.location.href = `profile.html?user=${encodeURIComponent(userId)}`;
+            }
         }
 
         // ─────────────────────────────────────────────
@@ -3411,56 +3496,6 @@
             }
         }
 
-        function openRepostModal(idx) {
-            const v = videoPosts[idx];
-            if (!v || !v.myRepost) return;
-            const user = getCurrentUser();
-
-            let modal = document.getElementById('repostModalBackdrop');
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'repostModalBackdrop';
-                modal.className = 'repost-modal-backdrop';
-                modal.onclick = (e) => { if (e.target === modal) closeRepostModal(); };
-                document.body.appendChild(modal);
-            }
-
-            const timeStr = formatRelativeTime(v.myRepostTime || new Date().toISOString());
-
-            modal.innerHTML = `
-                <div class="repost-modal-card">
-                    <div class="repost-modal-header">
-                        <div class="repost-modal-badge">
-                            <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#00ba7c;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round">
-                                <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-                                <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-                            </svg>
-                            Reposted
-                        </div>
-                    </div>
-                    <div class="repost-modal-avatar-row">
-                        <img class="repost-modal-avatar" src="${user.avatar}" alt="">
-                        <div>
-                            <div class="repost-modal-name">${escapeHtml(user.displayName || 'You')}</div>
-                            <div class="repost-modal-time">${timeStr}</div>
-                        </div>
-                    </div>
-                    ${v.myRepostText ? `<div class="repost-modal-text">${escapeHtml(v.myRepostText)}</div>` : ''}
-                    <div class="repost-modal-video-preview" onclick="closeRepostModal(); document.getElementById('card-${idx}').scrollIntoView({block:'start',behavior:'smooth'});">
-                        <img class="repost-modal-video-thumb" src="${v.poster || v.src}" alt="">
-                        <div class="repost-modal-video-caption">${escapeHtml((v.caption || '').split('\n')[0])}</div>
-                    </div>
-                    <button class="repost-modal-close" onclick="closeRepostModal()">Close</button>
-                </div>
-            `;
-            requestAnimationFrame(() => modal.classList.add('open'));
-        }
-
-        function closeRepostModal() {
-            const modal = document.getElementById('repostModalBackdrop');
-            if (modal) modal.classList.remove('open');
-        }
-
         async function submitRepost() {
             const idx = _shareIdx;
             const comment = document.getElementById('repostComment').value.trim();
@@ -3476,7 +3511,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // CAPTION CLAMP / EXPAND (unchanged)
+        // CAPTION CLAMP / EXPAND
         // ─────────────────────────────────────────────
         function toggleCaption(idx) {
             const cap = document.getElementById('cap-' + idx);
@@ -3538,7 +3573,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // SHEETS (unchanged)
+        // SHEETS
         // ─────────────────────────────────────────────
         function openSheet(id) {
             document.getElementById('backdrop').classList.add('open');
@@ -3574,7 +3609,22 @@
         }
 
         // ─────────────────────────────────────────────
-        // COMMENTS – UPDATED with server-side like count and stable ID
+        // LINK PREVIEW HYDRATION FOR COMMENTS
+        // ─────────────────────────────────────────────
+        async function hydrateCommentLinkPreviews(comments) {
+            if (!window.FreeupperLinkPreview) return;
+            for (const c of comments) {
+                const postId = window.FreeupperLinkPreview.detectFreeupperLink(c.message);
+                if (!postId) continue;
+                const slot = document.querySelector(`.fu-comment-link-slot[data-link-slot-for="${c.id}"]`);
+                if (!slot) continue;
+                const html = await window.FreeupperLinkPreview.renderInlinePreviewForText(c.message);
+                if (html) slot.innerHTML = html;
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        // COMMENTS – with profile navigation and server likes
         // ─────────────────────────────────────────────
         function renderCommentsHTML(comments, postId, visibleCount) {
             const topLevel = comments.filter(c => c.parentId === null);
@@ -3625,7 +3675,6 @@
                     </button>`;
                 }
             }
-            // Use server values
             const likeCount = comment.likeCount || 0;
             const isLiked = !!comment.likedByMe;
             const avatarHtml = avatar ? `<img src="${avatar}" alt="">` : username.charAt(0).toUpperCase();
@@ -3633,15 +3682,16 @@
             const badgeHtml = window.getVerifiedBadgeHTML(verifiedStatus);
             return `
                 <div class="comment-item" data-comment-id="${comment.id}" data-author-id="${author.id}">
-                    <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
+                    <div class="${avatarClass}" data-username="${escapeHtml(username)}" onclick="goToProfile('${author.id}')">${avatarHtml}</div>
                     <div class="comment-body">
                         <div class="comment-username-row">
                             ${isCreator ? `<span class="creator-lbl">Creator</span>` : ''}
-                            <span data-author-name class="comment-username">@${escapeHtml(username)}</span>
+                            <span data-author-name class="comment-username" onclick="goToProfile('${author.id}')" style="cursor:pointer;">@${escapeHtml(username)}</span>
                             <span data-author-badge-wrapper>${badgeHtml}</span>
                             <span class="comment-time">${formatRelativeTime(comment.time)}</span>
                         </div>
                         <div class="comment-text" data-cid="${comment.id}">${escapeHtml(comment.message)}</div>
+                        <div class="fu-comment-link-slot" data-link-slot-for="${comment.id}"></div>
                         <button class="comment-reply-btn" onclick="replyToComment('${comment.id}', '${escapeHtml(username)}')">Reply</button>
                         ${repliesHtml}
                     </div>
@@ -3672,14 +3722,15 @@
             const badgeHtml = window.getVerifiedBadgeHTML(verifiedStatus);
             return `
                 <div class="reply-item" data-comment-id="${reply.id}" data-author-id="${author.id}">
-                    <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
+                    <div class="${avatarClass}" data-username="${escapeHtml(username)}" onclick="goToProfile('${author.id}')">${avatarHtml}</div>
                     <div class="reply-body">
-                        <div data-author-name class="reply-username">
+                        <div data-author-name class="reply-username" onclick="goToProfile('${author.id}')" style="cursor:pointer;">
                             ${isCreator ? `<span class="creator-lbl">Creator</span>` : ''}
                             @${escapeHtml(username)}
                             <span data-author-badge-wrapper>${badgeHtml}</span>
                         </div>
                         <div class="reply-text">${mention}${escapeHtml(reply.message)}</div>
+                        <div class="fu-comment-link-slot" data-link-slot-for="${reply.id}"></div>
                         <div class="reply-meta">
                             <span class="reply-time">${formatRelativeTime(reply.time)}</span>
                             <button class="reply-reply-btn" onclick="replyToComment('${reply.id}', '${escapeHtml(username)}')">Reply</button>
@@ -3713,7 +3764,7 @@
             }
         }
 
-        // ── submitCommentFromBar – updates stable ID ──
+        // ── submitCommentFromBar ──
         function submitCommentFromBar() {
             const textarea = document.getElementById('commentInput');
             const message = textarea.value.trim();
@@ -3736,7 +3787,6 @@
                         const countEl = document.getElementById('commentCount');
                         if (countEl) countEl.textContent = fmtNum(v.comments) + ' comments';
 
-                        // Update stable comment count on video card
                         const idx = videoPosts.indexOf(v);
                         const lbl = document.getElementById('commentCountLbl-' + idx);
                         if (lbl) lbl.textContent = fmtNum(v.comments);
@@ -3748,7 +3798,7 @@
                 });
         }
 
-        // ── refreshCommentsList – uses server values ──
+        // ── refreshCommentsList ──
         async function refreshCommentsList(postId, preserveScroll, prevScroll) {
             const container = document.getElementById('comments-list');
             const scrollBody = document.getElementById('commentBody');
@@ -3773,6 +3823,9 @@
                 if (preserveScroll && scrollBody) {
                     scrollBody.scrollTop = prevScroll;
                 }
+
+                // Hydrate link previews
+                hydrateCommentLinkPreviews(sorted);
             } catch (err) {
                 console.warn('Failed to load comments:', err);
                 container.innerHTML =
@@ -3780,13 +3833,12 @@
             }
         }
 
-        // ── toggleCommentLikeUI – async, server-backed ──
+        // ── toggleCommentLikeUI ──
         async function toggleCommentLikeUI(btn, commentId) {
             const wasLiked = btn.classList.contains('liked');
             const countEl = btn.querySelector('.like-count');
             let count = parseInt(countEl.textContent || '0') || 0;
 
-            // optimistic
             btn.classList.toggle('liked', !wasLiked);
             count = wasLiked ? Math.max(0, count - 1) : count + 1;
             countEl.textContent = count > 0 ? count : '';
@@ -3802,7 +3854,7 @@
             }
         }
 
-        // ── other comment helpers (reply, expand, etc.) unchanged ──
+        // ── other comment helpers (reply, expand, etc.) ──
         function replyToComment(commentId, username) {
             replyTarget = { commentId, username };
             updateReplyContextUI();
@@ -3914,7 +3966,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // SHARE SHEET (unchanged, except icons already in HTML)
+        // SHARE SHEET
         // ─────────────────────────────────────────────
         let _shareIdx = 0;
 
@@ -4050,7 +4102,7 @@
             showToast('Quote posted ✓');
         }
 
-        // ── Ripple micro-interaction (unchanged) ──
+        // ── Ripple micro-interaction ──
         document.addEventListener('pointerdown', function(e) {
             const el = e.target.closest(
                 '.share-item, .share-link-row, .composer-btn, .share-cancel-btn, .vt-more, .add-post-btn');
@@ -4070,7 +4122,7 @@
         });
 
         // ─────────────────────────────────────────────
-        // REACTIONS / MORE (unchanged)
+        // REACTIONS / MORE
         // ─────────────────────────────────────────────
         function openReactions(idx) {
             const strip = document.getElementById('reactionStrip');
@@ -4132,7 +4184,8 @@
             const v = videoPosts[idx];
             const profile = v.profile || {};
             const author = window.getAuthorFromProfile(profile);
-            const followRow = `
+
+            const followRow = v.isOwn ? '' : `
                 <button class="more-follow-row" id="moreFollowRow" onclick="toggleFollowFromMore(${idx})">
                     <img class="more-follow-avatar" src="${author.avatar}" alt="${author.name}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${author.name}'">
                     <div>
@@ -4140,6 +4193,7 @@
                         <div class="more-row-sub">${v.handle}</div>
                     </div>
                 </button>`;
+
             const otherRows = [
                 { ico: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
                     lbl: 'Not interested in this video' },
@@ -4160,6 +4214,7 @@
                     </div>
                 </button>
             `).join('');
+
             list.innerHTML = followRow + otherRows;
             openSheet('moreSheet');
         }
@@ -4170,7 +4225,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // DEEP-LINK (unchanged)
+        // DEEP-LINK
         // ─────────────────────────────────────────────
         function jumpToSharedPost() {
             const params = new URLSearchParams(window.location.search);
@@ -4184,7 +4239,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // HELPERS (unchanged)
+        // HELPERS
         // ─────────────────────────────────────────────
         function showToast(msg) {
             const el = document.getElementById('toast');
@@ -4223,7 +4278,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // UPDATE NAV AVATAR (unchanged)
+        // UPDATE NAV AVATAR
         // ─────────────────────────────────────────────
         function updateNavAvatar() {
             const user = getCurrentUser();
@@ -4234,7 +4289,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // REFRESH VIDEOS – UPDATED to use buildEligibleFeed
+        // REFRESH VIDEOS
         // ─────────────────────────────────────────────
         async function refreshVideos() {
             showToast('Refreshing videos…');
@@ -4255,12 +4310,11 @@
         }
 
         // ─────────────────────────────────────────────
-        // REALTIME – added comment likes & reposts channels
+        // REALTIME
         // ─────────────────────────────────────────────
         function setupRealtime() {
             if (!window.sb) return;
 
-            // Profile updates
             const profileChannel = window.sb.channel('profile-updates')
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' },
                     (payload) => {
@@ -4277,7 +4331,6 @@
                     })
                 .subscribe();
 
-            // Follow changes
             const followChannel = window.sb.channel('follow-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' },
                     () => {
@@ -4301,7 +4354,6 @@
                     })
                 .subscribe();
 
-            // Comment like count real-time (updates the like count on comments)
             const commentLikeChannel = window.sb.channel('comment-like-changes')
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comments' },
                     (payload) => {
@@ -4312,7 +4364,6 @@
                     })
                 .subscribe();
 
-            // New reposts – refresh the feed so they appear
             const repostChannel = window.sb.channel('repost-feed-changes')
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reposts' },
                     () => {
@@ -4370,6 +4421,7 @@
                 }
             });
 
+            // Comment input: keydown
             document.getElementById('commentInput').addEventListener('keydown', function(e) {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -4377,7 +4429,16 @@
                 }
             });
 
-            // Pull-to-refresh (unchanged)
+            // Link preview: attach to comment input
+            const commentInputEl = document.getElementById('commentInput');
+            const commentPreviewEl = document.getElementById('commentLinkPreview');
+            if (window.FreeupperLinkPreview && commentInputEl && commentPreviewEl) {
+                window.FreeupperLinkPreview.attachLinkPreview(commentInputEl, commentPreviewEl, (postId) => {
+                    _pendingCommentLinkPostId = postId;
+                });
+            }
+
+            // Pull-to-refresh
             const track = document.getElementById('feedTrack');
             let startY = 0;
             let isPulling = false;
@@ -4443,8 +4504,10 @@
         window.submitQuote = submitQuote;
         window.switchReactionTab = switchReactionTab;
         window.downloadVideo = downloadVideo;
-        window.openRepostModal = openRepostModal;
-        window.closeRepostModal = closeRepostModal;
+        window.goToProfile = goToProfile;
+        window.toggleRepostBannerComment = toggleRepostBannerComment;
+        window.toggleOwnRepostComment = toggleOwnRepostComment;
+        window.hydrateCommentLinkPreviews = hydrateCommentLinkPreviews;
         window.enforceWordLimit = enforceWordLimit;
         window.updateRepostPill = updateRepostPill;
     </script>
