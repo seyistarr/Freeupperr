@@ -2801,7 +2801,7 @@
             });
         }
 
-        // ─── buildCard (updated: repost removed, share above save) ───
+        // ─── buildCard (updated: repost removed, share above save, added data-post-id) ───
         function buildCard(v, i) {
             const profile = v.profile || {};
             const author = window.getAuthorFromProfile(profile);
@@ -2841,7 +2841,7 @@
             }
 
             return `
-            <div class="v-card" id="card-${i}" data-author-id="${author.id}">
+            <div class="v-card" id="card-${i}" data-post-id="${v.id}" data-author-id="${author.id}">
                 ${videoHtml}
                 <div class="v-skeleton" id="skel-${i}"><div class="v-skeleton-pulse"></div></div>
                 <div class="v-grad-top"></div>
@@ -3301,7 +3301,7 @@
         }
 
         // ─────────────────────────────────────────────
-        // COMMENTS – FIXED with proper error handling
+        // COMMENTS – UPDATED with fixes
         // ─────────────────────────────────────────────
 
         // Helper functions (renderCommentsHTML, renderCommentThread, renderReplyItem) are unchanged
@@ -3423,20 +3423,22 @@
             `;
         }
 
-        // ─────────────────────────────────────────────
-        // COMMENT ACTIONS (updated)
-        // ─────────────────────────────────────────────
+        // ── NEW addComment (better cache update and error handling) ──
         async function addComment(postId, parentId, message) {
             try {
                 const comment = await window.PostsAPI.addComment(postId, parentId, message);
+                // Update local cache
                 const post = appData.posts.find(p => p.id === postId);
                 if (post) {
                     if (!post.comments) post.comments = [];
                     post.comments.push(comment);
                     post.commentCount = (post.commentCount || 0) + 1;
                 }
+                // Update videoPosts
                 const v = videoPosts.find(p => p.id === postId);
-                if (v) v.comments = (v.comments || 0) + 1;
+                if (v) {
+                    v.comments = (v.comments || 0) + 1;
+                }
                 return comment;
             } catch (err) {
                 console.error('addComment error:', err);
@@ -3445,13 +3447,14 @@
             }
         }
 
+        // ── NEW submitCommentFromBar (updates video card count) ──
         function submitCommentFromBar() {
             const textarea = document.getElementById('commentInput');
             const message = textarea.value.trim();
             if (!message) return showToast('Comment cannot be empty.', 'o');
 
             const parentId = replyTarget ? replyTarget.commentId : null;
-            const submitBtn = document.getElementById('comment-send');
+            const submitBtn = document.querySelector('.comment-send');
             if (submitBtn) submitBtn.disabled = true;
 
             addComment(currentPostId, parentId, message)
@@ -3461,11 +3464,20 @@
                     updateReplyContextUI();
                     refreshCommentsList(currentPostId);
                     showToast(parentId ? 'Reply posted' : 'Comment posted', 'g');
+
+                    // Update video card comment count
                     const v = videoPosts.find(p => p.id === currentPostId);
                     if (v) {
-                        v.comments = (v.comments || 0) + 1;
+                        // Update the modal header count
                         const countEl = document.getElementById('commentCount');
                         if (countEl) countEl.textContent = fmtNum(v.comments) + ' comments';
+
+                        // Update the video card's comment count (in the action row)
+                        const videoCard = document.getElementById(`card-${videoPosts.indexOf(v)}`);
+                        if (videoCard) {
+                            const actionLbl = videoCard.querySelector('.v-actions .v-action:nth-child(2) .v-action-lbl');
+                            if (actionLbl) actionLbl.textContent = fmtNum(v.comments);
+                        }
                     }
                 })
                 .catch(() => {})
@@ -3474,6 +3486,44 @@
                 });
         }
 
+        // ── NEW refreshCommentsList (always fetches fresh data) ──
+        async function refreshCommentsList(postId, preserveScroll, prevScroll) {
+            const container = document.getElementById('comments-list');
+            const scrollBody = document.getElementById('commentBody');
+            if (!container) return;
+
+            try {
+                // Always fetch fresh comments to avoid stale cache
+                const comments = await window.PostsAPI.loadComments(postId);
+                // Update local cache
+                const post = appData.posts.find(p => p.id === postId);
+                if (post) {
+                    post.comments = comments;
+                    post.commentCount = comments.length;
+                }
+
+                // Sort comments
+                const sorted = [...comments].sort((a, b) => {
+                    if (commentSortMode === 'newest') return new Date(b.time) - new Date(a.time);
+                    const la = parseInt(localStorage.getItem('comment-like-' + a.id) || '0');
+                    const lb = parseInt(localStorage.getItem('comment-like-' + b.id) || '0');
+                    return lb - la;
+                });
+
+                const visibleCount = getVisibleComments(postId);
+                container.innerHTML = renderCommentsHTML(sorted, postId, visibleCount);
+
+                if (preserveScroll && scrollBody) {
+                    scrollBody.scrollTop = prevScroll;
+                }
+            } catch (err) {
+                console.warn('Failed to load comments:', err);
+                container.innerHTML =
+                    '<p style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Could not load comments.</p>';
+            }
+        }
+
+        // ── Other comment functions (unchanged) ──
         function replyToComment(commentId, username) {
             replyTarget = { commentId, username };
             updateReplyContextUI();
@@ -3549,32 +3599,6 @@
             const current = getVisibleComments(postId);
             setCommentsVisible(postId, current + 5);
             refreshCommentsList(postId);
-        }
-
-        async function refreshCommentsList(postId, preserveScroll, prevScroll) {
-            const container = document.getElementById('comments-list');
-            const scrollBody = document.getElementById('commentBody');
-            if (!container) return;
-            try {
-                const post = appData.posts.find(p => p.id === postId);
-                let comments = post?.comments?.length ? post.comments : await window.PostsAPI.loadComments(postId);
-                if (post) post.comments = comments;
-                comments = [...comments].sort((a, b) => {
-                    if (commentSortMode === 'newest') return new Date(b.time) - new Date(a.time);
-                    const la = parseInt(localStorage.getItem('comment-like-' + a.id) || '0');
-                    const lb = parseInt(localStorage.getItem('comment-like-' + b.id) || '0');
-                    return lb - la;
-                });
-                const visibleCount = getVisibleComments(postId);
-                container.innerHTML = renderCommentsHTML(comments, postId, visibleCount);
-                if (preserveScroll && scrollBody) {
-                    scrollBody.scrollTop = prevScroll;
-                }
-            } catch (err) {
-                console.warn('Failed to load comments:', err);
-                container.innerHTML =
-                    '<p style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Could not load comments.</p>';
-            }
         }
 
         function toggleSortMenu() {
@@ -4131,7 +4155,6 @@
         window.closeAllSheets = closeAllSheets;
         window.initYtListener = initYtListener;
         window.toggleYtControls = toggleYtControls;
-        window.toggleRepost = toggleRepost;
         window.submitRepost = submitRepost;
         window.submitQuote = submitQuote;
         window.switchReactionTab = switchReactionTab;
