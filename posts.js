@@ -15,8 +15,8 @@
     return raw ? JSON.parse(raw) : null;
   }
 
-  // Map post with profile data including verified_status
-  function mapPost(row, userLikes) {
+  // Map post with profile data including verified_status and repost info
+  function mapPost(row, userLikes, myRepost) {
     const profile = row.profiles || {};
     let media = row.media;
     if (!media || !Array.isArray(media) || media.length === 0) {
@@ -44,6 +44,10 @@
       comments: row.comments_count || 0,
       likes: row.likes_count || 0,
       likedByMe: userLikes.has(row.id),
+      repostCount: row.repost_count || 0,
+      myRepost: !!myRepost,
+      myRepostText: myRepost ? (myRepost.comment || '') : '',
+      myRepostTime: myRepost ? myRepost.created_at : null,
       // Profile data (single source of truth)
       profile: {
         id: profile.id,
@@ -82,17 +86,18 @@
 
     const user = getCurrentUser();
     let likedIds = new Set();
+    let repostMap = new Map();
     if (user && user.isLoggedIn && rows && rows.length > 0) {
       const postIds = rows.map(r => r.id);
-      const { data: likes } = await sb
-        .from('post_likes')
-        .select('post_id')
-        .eq('user_id', user.id)
-        .in('post_id', postIds);
+      const [{ data: likes }, { data: reposts }] = await Promise.all([
+        sb.from('post_likes').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+        sb.from('reposts').select('post_id, comment, created_at').eq('user_id', user.id).in('post_id', postIds),
+      ]);
       likedIds = new Set((likes || []).map(l => l.post_id));
+      (reposts || []).forEach(r => repostMap.set(r.post_id, r));
     }
 
-    return rows.map(row => mapPost(row, likedIds));
+    return rows.map(row => mapPost(row, likedIds, repostMap.get(row.id)));
   }
 
   // ─── LOAD COMMENTS (returns camelCase fields) ───
@@ -118,13 +123,27 @@
       return [];
     }
 
+    const user = getCurrentUser();
+    let likedIds = new Set();
+    if (user && user.isLoggedIn && data && data.length > 0) {
+      const commentIds = data.map(r => r.id);
+      const { data: likes } = await sb
+        .from('comment_likes')
+        .select('comment_id')
+        .eq('user_id', user.id)
+        .in('comment_id', commentIds);
+      likedIds = new Set((likes || []).map(l => l.comment_id));
+    }
+
     return data.map(row => ({
       id: row.id,
       message: row.message,
-      parentId: row.parent_id,      // ← snake → camel
-      userId: row.user_id,          // ← snake → camel
-      time: row.created_at,         // ← snake → camel
+      parentId: row.parent_id,
+      userId: row.user_id,
+      time: row.created_at,
       approved: row.approved,
+      likeCount: row.like_count || 0,
+      likedByMe: likedIds.has(row.id),
       profile: row.profiles || {},
     }));
   }
@@ -224,6 +243,34 @@
     return { liked: data[0].liked, count: data[0].new_count };
   }
 
+  async function toggleCommentLike(commentId) {
+    const user = getCurrentUser();
+    if (!user || !user.isLoggedIn) {
+      throw new Error('Please sign in to like.');
+    }
+    const { data, error } = await sb.rpc('toggle_comment_like', { p_comment_id: commentId });
+    if (error) throw error;
+    return { liked: data[0].liked, count: data[0].new_count };
+  }
+
+  async function toggleRepostAPI(postId, comment) {
+    const user = getCurrentUser();
+    if (!user || !user.isLoggedIn) {
+      throw new Error('Please sign in to repost.');
+    }
+    const { data, error } = await sb.rpc('toggle_repost', {
+      p_post_id: postId,
+      p_comment: comment || '',
+    });
+    if (error) throw error;
+    return {
+      reposted: data[0].reposted,
+      count: data[0].new_count,
+      comment: data[0].repost_comment,
+      time: data[0].reposted_at,
+    };
+  }
+
   async function deletePost(postId) {
     const user = getCurrentUser();
     if (!user || !user.isLoggedIn) {
@@ -246,12 +293,104 @@
     }
   }
 
+  // ─── REPOST FEED HELPERS ──────────────────────────
+
+  async function loadRepostFeedItems(offset = 0, limit = 20) {
+    const { data: rows, error } = await sb
+      .from('repost_feed_items')
+      .select('*')
+      .order('repost_created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('loadRepostFeedItems error:', error);
+      return [];
+    }
+    return rows;
+  }
+
+  async function loadFeedWithReposts(offset = 0, limit = 20) {
+    const [posts, repostItems] = await Promise.all([
+      loadAllPosts(offset, limit),
+      loadRepostFeedItems(offset, limit),
+    ]);
+
+    if (repostItems.length === 0) {
+      return posts.map(p => ({ feedType: 'post', sortTime: p.timestamp, post: p }));
+    }
+
+    // Fetch the original posts referenced by these reposts (may not be in `posts` page)
+    const neededIds = [...new Set(repostItems.map(r => r.post_id))];
+    const havePostIds = new Set(posts.map(p => p.id));
+    const missingIds = neededIds.filter(id => !havePostIds.has(id));
+
+    let extraPostsById = new Map();
+    if (missingIds.length > 0) {
+      const { data: extraRows, error } = await sb
+        .from('posts')
+        .select(`
+          *,
+          profiles:user_id (
+            id, display_name, username, avatar_url, verified, verified_status, is_private
+          )
+        `)
+        .in('id', missingIds);
+      if (!error && extraRows) {
+        const user = getCurrentUser();
+        let likedIds = new Set();
+        if (user && user.isLoggedIn && extraRows.length > 0) {
+          const { data: likes } = await sb
+            .from('post_likes')
+            .select('post_id')
+            .eq('user_id', user.id)
+            .in('post_id', extraRows.map(r => r.id));
+          likedIds = new Set((likes || []).map(l => l.post_id));
+        }
+        extraRows.forEach(row => extraPostsById.set(row.id, mapPost(row, likedIds)));
+      }
+    }
+
+    const postsById = new Map(posts.map(p => [p.id, p]));
+
+    const repostEntries = repostItems
+      .map(r => {
+        const originalPost = postsById.get(r.post_id) || extraPostsById.get(r.post_id);
+        if (!originalPost) return null;
+        return {
+          feedType: 'repost',
+          sortTime: r.repost_created_at,
+          repostId: r.repost_id,
+          reposter: {
+            id: r.reposter_id,
+            display_name: r.reposter_display_name || 'Anonymous',
+            username: r.reposter_username || '',
+            avatar_url: r.reposter_avatar_url || '',
+            verified_status: r.reposter_verified_status || 'none',
+          },
+          repostComment: r.repost_comment || '',
+          post: originalPost,
+        };
+      })
+      .filter(Boolean);
+
+    const postEntries = posts.map(p => ({ feedType: 'post', sortTime: p.timestamp, post: p }));
+
+    return [...postEntries, ...repostEntries].sort(
+      (a, b) => new Date(b.sortTime) - new Date(a.sortTime)
+    );
+  }
+
+  // ─── EXPOSE API ────────────────────────────────────
   window.PostsAPI = {
     loadAllPosts,
+    loadRepostFeedItems,
+    loadFeedWithReposts,
     loadComments,
     createPost,
     addComment,
     toggleLike,
+    toggleCommentLike,
+    toggleRepostAPI,
     deletePost,
     incrementView,
   };
