@@ -8,9 +8,7 @@
     <link rel="stylesheet" href="global.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
     <style>
-        /* ============================================================
-           ADMIN-SPECIFIC STYLES
-           ============================================================ */
+        /* ─── ADMIN STYLES ─── */
         *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
@@ -1304,9 +1302,13 @@
                     if (postError) throw postError;
                     posts = postData || [];
 
-                    // Load market items (still from localStorage)
-                    const blogData = loadBlogData();
-                    marketItems = blogData.marketItems || [];
+                    // Load market items count directly from Supabase (no localStorage)
+                    const { data: marketData, error: marketError } = await sb
+                        .from('market_items')
+                        .select('id', { count: 'exact' });
+
+                    if (marketError) throw marketError;
+                    marketItems = marketData || [];
 
                     // Update stats
                     renderStats();
@@ -1487,6 +1489,13 @@
                         .eq('id', reqData.user_id);
 
                     if (profileError) throw profileError;
+
+                    // Also set verified_status = 'verified' for consistency
+                    await sb
+                        .from('profiles')
+                        .update({ verified_status: 'verified' })
+                        .eq('id', reqData.user_id)
+                        .maybeSingle();
 
                     showToast('✅ Verification approved!', 'g');
 
