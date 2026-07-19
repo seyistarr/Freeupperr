@@ -1472,37 +1472,42 @@
                     if (reqError) throw reqError;
 
                     // Update verification request status
-                    const { error: updateError } = await sb
+                    const { data: updatedReq, error: updateReqError } = await sb
                         .from('verification_requests')
                         .update({
                             status: 'approved',
                             reviewed_at: new Date().toISOString()
                         })
-                        .eq('id', requestId);
+                        .eq('id', requestId)
+                        .select(); // ← return updated rows
 
-                    if (updateError) throw updateError;
+                    if (updateReqError) throw updateReqError;
+                    if (!updatedReq || updatedReq.length === 0) {
+                        throw new Error('Verification request update failed — check RLS policy.');
+                    }
 
-                    // Update user's verified flag in profiles
-                    const { error: profileError } = await sb
+                    // Update user's profile: set verified and verified_status
+                    const { data: updatedProfile, error: profileError } = await sb
                         .from('profiles')
-                        .update({ verified: true })
-                        .eq('id', reqData.user_id);
+                        .update({
+                            verified: true,
+                            verified_status: 'verified'
+                        })
+                        .eq('id', reqData.user_id)
+                        .select(); // ← return updated rows
 
                     if (profileError) throw profileError;
+                    if (!updatedProfile || updatedProfile.length === 0) {
+                        throw new Error('Profile update blocked — likely an RLS policy issue. Make sure admin can update any profile.');
+                    }
 
-                    // Also set verified_status = 'verified' for consistency
-                    await sb
-                        .from('profiles')
-                        .update({ verified_status: 'verified' })
-                        .eq('id', reqData.user_id)
-                        .maybeSingle();
-
-                    showToast('✅ Verification approved!', 'g');
+                    showToast('✅ Verification approved! User now has verified badge.', 'g');
 
                     // Refresh data
                     await loadData();
 
                 } catch (err) {
+                    console.error('Approve error:', err);
                     showToast('Failed to approve: ' + err.message, 'r');
                 }
             };
@@ -1543,16 +1548,20 @@
                     if (reqError) throw reqError;
 
                     // Update verification request status
-                    const { error: updateError } = await sb
+                    const { data: updatedReq, error: updateError } = await sb
                         .from('verification_requests')
                         .update({
                             status: 'rejected',
                             reviewed_at: new Date().toISOString(),
                             rejection_reason: reason || null
                         })
-                        .eq('id', pendingRequestId);
+                        .eq('id', pendingRequestId)
+                        .select(); // ← return updated rows
 
                     if (updateError) throw updateError;
+                    if (!updatedReq || updatedReq.length === 0) {
+                        throw new Error('Verification request update failed — check RLS policy.');
+                    }
 
                     closeMov('rejectModal');
                     showToast('❌ Verification rejected', 'o');
@@ -1561,6 +1570,7 @@
                     await loadData();
 
                 } catch (err) {
+                    console.error('Reject error:', err);
                     showToast('Failed to reject: ' + err.message, 'r');
                     document.getElementById('rejectConfirmBtn').disabled = false;
                     document.getElementById('rejectConfirmBtn').textContent = 'Reject';
