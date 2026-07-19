@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="global.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
     <style>
-        /* ─── ADMIN STYLES (same as before, plus minor additions) ─── */
+        /* ─── ADMIN STYLES ─── */
         *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
@@ -1023,7 +1023,7 @@
             let feedbackList = [];
             let pendingRequestId = null;
             let authMode = 'signin';
-            let filterUserId = null; // for filtering posts/listings by user
+            let filterUserId = null;
 
             const sb = window.sb;
 
@@ -1238,10 +1238,28 @@
                 }
             }
 
+            // ─── CLOUDINARY HELPER ────────────────────
+            async function deleteCloudinaryMedia(publicId, resourceType = 'image') {
+                if (!publicId) return;
+                try {
+                    const { data, error } = await sb.functions.invoke('delete-cloudinary', {
+                        body: { public_id: publicId, resource_type: resourceType }
+                    });
+                    if (error) throw error;
+                    console.log('Cloudinary deletion result:', data);
+                    if (data?.result !== 'ok') {
+                        console.warn('Cloudinary returned:', data);
+                    }
+                } catch (err) {
+                    console.warn('Cloudinary deletion failed:', err.message);
+                    // Non-critical; don't block the UI
+                }
+            }
+
             // ─── LOAD DATA ─────────────────────────────
             async function loadData() {
                 try {
-                    // Load verification requests
+                    // Verification requests
                     const { data: reqData, error: reqError } = await sb
                         .from('verification_requests')
                         .select('*')
@@ -1249,7 +1267,7 @@
                     if (reqError) throw reqError;
                     requests = reqData || [];
 
-                    // Load all users
+                    // Users
                     const { data: userData, error: userError } = await sb
                         .from('profiles')
                         .select('*')
@@ -1257,7 +1275,7 @@
                     if (userError) throw userError;
                     allUsers = userData || [];
 
-                    // Load full posts
+                    // Posts (full columns, including public_ids)
                     const { data: postData, error: postError } = await sb
                         .from('posts')
                         .select('*')
@@ -1265,7 +1283,7 @@
                     if (postError) throw postError;
                     posts = postData || [];
 
-                    // Load full market items
+                    // Market items (full columns)
                     const { data: marketData, error: marketError } = await sb
                         .from('market_items')
                         .select('*')
@@ -1273,7 +1291,7 @@
                     if (marketError) throw marketError;
                     marketItems = marketData || [];
 
-                    // Load reports
+                    // Reports
                     const { data: reportData, error: reportError } = await sb
                         .from('reports')
                         .select('*')
@@ -1281,7 +1299,7 @@
                     if (reportError) throw reportError;
                     reportsList = reportData || [];
 
-                    // Load feedback
+                    // Feedback
                     const { data: feedbackData, error: feedbackError } = await sb
                         .from('feedback')
                         .select('*')
@@ -1289,10 +1307,7 @@
                     if (feedbackError) throw feedbackError;
                     feedbackList = feedbackData || [];
 
-                    // Update stats and badges
                     updateStatsAndBadges();
-
-                    // Render current tab
                     renderTab(currentTab);
 
                 } catch (err) {
@@ -1309,7 +1324,6 @@
                 document.getElementById('statMarket').textContent = fmtNum(marketItems.length);
                 document.getElementById('statPending').textContent = fmtNum(pendingCount);
 
-                // Admin badge
                 const badge = document.getElementById('adminBadge');
                 if (pendingCount > 0) {
                     badge.textContent = 'Admin · ' + pendingCount + ' pending';
@@ -1323,7 +1337,6 @@
                     badge.style.color = 'var(--pl)';
                 }
 
-                // Tab badges
                 document.getElementById('requestsBadge').textContent = requests.length || '0';
                 document.getElementById('usersBadge').textContent = allUsers.length || '0';
                 document.getElementById('postsBadge').textContent = posts.length || '0';
@@ -1335,7 +1348,7 @@
             // ─── TAB SWITCHING ──────────────────────────
             window.switchTab = function(tab) {
                 currentTab = tab;
-                filterUserId = null; // reset filter
+                filterUserId = null;
                 document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
                 document.querySelector(`.admin-tab[data-tab="${tab}"]`).classList.add('active');
                 renderTab(tab);
@@ -1343,46 +1356,24 @@
 
             function renderTab(tab) {
                 switch (tab) {
-                    case 'requests':
-                        renderRequests();
-                        break;
-                    case 'users':
-                        renderUsers();
-                        break;
-                    case 'posts':
-                        renderPosts();
-                        break;
-                    case 'listings':
-                        renderListings();
-                        break;
-                    case 'reports':
-                        renderReports();
-                        break;
-                    case 'feedback':
-                        renderFeedback();
-                        break;
-                    default:
-                        document.getElementById('adminContent').innerHTML = '<div class="empty-state"><h3>Unknown tab</h3></div>';
+                    case 'requests': renderRequests(); break;
+                    case 'users': renderUsers(); break;
+                    case 'posts': renderPosts(); break;
+                    case 'listings': renderListings(); break;
+                    case 'reports': renderReports(); break;
+                    case 'feedback': renderFeedback(); break;
+                    default: document.getElementById('adminContent').innerHTML = '<div class="empty-state"><h3>Unknown tab</h3></div>';
                 }
             }
 
-            // ─── RENDER REQUESTS (verification) ────────
+            // ─── RENDER REQUESTS ────────────────────────
             function renderRequests() {
                 const list = document.getElementById('adminContent');
-                const filtered = requests;
-
-                if (!filtered.length) {
-                    list.innerHTML = `
-                        <div class="empty-state">
-                            <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-                            <h3>No verification requests</h3>
-                            <p>All caught up!</p>
-                        </div>
-                    `;
+                if (!requests.length) {
+                    list.innerHTML = `<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><h3>No verification requests</h3><p>All caught up!</p></div>`;
                     return;
                 }
-
-                list.innerHTML = filtered.map(req => {
+                list.innerHTML = requests.map(req => {
                     const reqUser = allUsers.find(u => u.id === req.user_id);
                     const name = reqUser ? reqUser.display_name || 'Unknown User' : 'Unknown User';
                     const username = reqUser ? reqUser.username || '' : '';
@@ -1443,10 +1434,7 @@
                                 ${req.link ? `<div class="link"><strong>Link:</strong> <a href="${escapeHtml(req.link)}" target="_blank" rel="noopener">${escapeHtml(req.link)}</a></div>` : ''}
                             </div>
                             <div class="expanded-details" id="expanded-${req.id}">
-                                <div class="field">
-                                    <div class="field-label">Full Reason</div>
-                                    <div class="field-value">${escapeHtml(req.reason || '—')}</div>
-                                </div>
+                                <div class="field"><div class="field-label">Full Reason</div><div class="field-value">${escapeHtml(req.reason || '—')}</div></div>
                                 ${req.link ? `<div class="field"><div class="field-label">Supporting Link</div><div class="field-value"><a href="${escapeHtml(req.link)}" target="_blank" rel="noopener">${escapeHtml(req.link)}</a></div></div>` : ''}
                                 ${req.reviewed_at ? `<div class="field"><div class="field-label">Reviewed At</div><div class="field-value">${formatDateTime(req.reviewed_at)}</div></div>` : ''}
                                 ${req.rejection_reason ? `<div class="field"><div class="field-label">Rejection Reason</div><div class="field-value" style="color:var(--danger)">${escapeHtml(req.rejection_reason)}</div></div>` : ''}
@@ -1464,7 +1452,6 @@
                     list.innerHTML = `<div class="empty-state"><h3>No users found</h3></div>`;
                     return;
                 }
-
                 list.innerHTML = allUsers.map(user => {
                     const statusBadges = [];
                     if (user.suspended) statusBadges.push('<span class="badge suspended">Suspended</span>');
@@ -1472,7 +1459,6 @@
                     if (user.is_admin) statusBadges.push('<span class="badge approved">Admin</span>');
                     const badgeHtml = statusBadges.length ? statusBadges.join(' ') : '';
 
-                    // Actions
                     let actionsHtml = '';
                     if (user.suspended) {
                         actionsHtml += `<button class="approve" onclick="unsuspendUser('${user.id}')">Restore</button>`;
@@ -1503,9 +1489,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="actions">
-                                ${actionsHtml}
-                            </div>
+                            <div class="actions">${actionsHtml}</div>
                         </div>
                     `;
                 }).join('');
@@ -1539,6 +1523,7 @@
                             <div class="details">
                                 <div class="reason">${escapeHtml(content)}</div>
                                 ${post.image_url ? `<div class="link"><a href="${escapeHtml(post.image_url)}" target="_blank">View image</a></div>` : ''}
+                                ${post.video_url ? `<div class="link"><a href="${escapeHtml(post.video_url)}" target="_blank">View video</a></div>` : ''}
                             </div>
                             <div class="actions">
                                 <button class="danger-btn" onclick="deletePost('${post.id}')">🗑️ Delete</button>
@@ -1577,6 +1562,8 @@
                             </div>
                             <div class="details">
                                 <div class="reason">${escapeHtml(item.description || '')}</div>
+                                ${item.image_url ? `<div class="link"><a href="${escapeHtml(item.image_url)}" target="_blank">View image</a></div>` : ''}
+                                ${item.video_url ? `<div class="link"><a href="${escapeHtml(item.video_url)}" target="_blank">View video</a></div>` : ''}
                             </div>
                             <div class="actions">
                                 <button class="danger-btn" onclick="deleteListing('${item.id}')">🗑️ Delete</button>
@@ -1593,7 +1580,6 @@
                     list.innerHTML = `<div class="empty-state"><h3>No reports</h3></div>`;
                     return;
                 }
-
                 list.innerHTML = reportsList.map(report => {
                     const reporter = allUsers.find(u => u.id === report.reporter_id);
                     const reporterName = reporter ? reporter.display_name : 'Unknown';
@@ -1651,7 +1637,6 @@
                     list.innerHTML = `<div class="empty-state"><h3>No feedback yet</h3></div>`;
                     return;
                 }
-
                 list.innerHTML = feedbackList.map(fb => {
                     const user = allUsers.find(u => u.id === fb.user_id);
                     const userName = user ? user.display_name : 'Unknown';
@@ -1694,7 +1679,6 @@
             // ─── VIEW USER POSTS / LISTINGS ────────────
             window.viewUserPosts = function(userId) {
                 filterUserId = userId;
-                // Switch to posts tab
                 document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
                 document.querySelector('.admin-tab[data-tab="posts"]').classList.add('active');
                 currentTab = 'posts';
@@ -1711,8 +1695,7 @@
 
             // ─── APPROVE REQUEST ──────────────────────
             window.approveRequest = async function(requestId) {
-                if (!confirm('Approve this verification request? The user will receive the verified badge.')) return;
-
+                if (!confirm('Approve this verification request?')) return;
                 try {
                     const { data: reqData, error: reqError } = await sb
                         .from('verification_requests')
@@ -1728,7 +1711,7 @@
                         .select();
                     if (updateReqError) throw updateReqError;
                     if (!updatedReq || updatedReq.length === 0) {
-                        throw new Error('Verification request update failed — check RLS policy.');
+                        throw new Error('Request update failed — check RLS policy.');
                     }
 
                     const { data: updatedProfile, error: profileError } = await sb
@@ -1738,12 +1721,11 @@
                         .select();
                     if (profileError) throw profileError;
                     if (!updatedProfile || updatedProfile.length === 0) {
-                        throw new Error('Profile update blocked — likely an RLS policy issue.');
+                        throw new Error('Profile update failed — check RLS policy.');
                     }
 
                     showToast('✅ Verification approved!', 'g');
                     await loadData();
-
                 } catch (err) {
                     console.error('Approve error:', err);
                     showToast('Failed to approve: ' + err.message, 'r');
@@ -1789,13 +1771,12 @@
                         .select();
                     if (updateError) throw updateError;
                     if (!updatedReq || updatedReq.length === 0) {
-                        throw new Error('Verification request update failed — check RLS policy.');
+                        throw new Error('Request update failed — check RLS policy.');
                     }
 
                     closeMov('rejectModal');
                     showToast('❌ Verification rejected', 'o');
                     await loadData();
-
                 } catch (err) {
                     console.error('Reject error:', err);
                     showToast('Failed to reject: ' + err.message, 'r');
@@ -1806,28 +1787,60 @@
                 }
             };
 
-            // ─── DELETE POST ──────────────────────────
+            // ─── DELETE POST (with Cloudinary) ────────
             window.deletePost = async function(postId) {
                 if (!confirm('Delete this post permanently? This cannot be undone.')) return;
                 try {
+                    // Fetch public_id fields
+                    const { data: post, error: fetchError } = await sb
+                        .from('posts')
+                        .select('image_public_id, video_public_id, media_type')
+                        .eq('id', postId)
+                        .single();
+                    if (fetchError) throw fetchError;
+
                     const { data, error } = await sb.from('posts').delete().eq('id', postId).select();
                     if (error) throw error;
                     if (!data?.length) throw new Error('Delete blocked — check RLS policy.');
-                    showToast('🗑️ Post deleted', 'o');
+
+                    // Delete Cloudinary media
+                    if (post?.image_public_id) {
+                        await deleteCloudinaryMedia(post.image_public_id, post.media_type || 'image');
+                    }
+                    if (post?.video_public_id) {
+                        await deleteCloudinaryMedia(post.video_public_id, 'video');
+                    }
+
+                    showToast('🗑️ Post deleted (media removed from Cloudinary)', 'o');
                     await loadData();
                 } catch (err) {
                     showToast('Failed to delete post: ' + err.message, 'r');
                 }
             };
 
-            // ─── DELETE LISTING ───────────────────────
+            // ─── DELETE LISTING (with Cloudinary) ─────
             window.deleteListing = async function(itemId) {
-                if (!confirm('Delete this listing permanently? This cannot be undone.')) return;
+                if (!confirm('Delete this listing permanently?')) return;
                 try {
+                    const { data: item, error: fetchError } = await sb
+                        .from('market_items')
+                        .select('image_public_id, video_public_id, media_type')
+                        .eq('id', itemId)
+                        .single();
+                    if (fetchError) throw fetchError;
+
                     const { data, error } = await sb.from('market_items').delete().eq('id', itemId).select();
                     if (error) throw error;
                     if (!data?.length) throw new Error('Delete blocked — check RLS policy.');
-                    showToast('🗑️ Listing deleted', 'o');
+
+                    if (item?.image_public_id) {
+                        await deleteCloudinaryMedia(item.image_public_id, item.media_type || 'image');
+                    }
+                    if (item?.video_public_id) {
+                        await deleteCloudinaryMedia(item.video_public_id, 'video');
+                    }
+
+                    showToast('🗑️ Listing deleted (media removed from Cloudinary)', 'o');
                     await loadData();
                 } catch (err) {
                     showToast('Failed to delete listing: ' + err.message, 'r');
@@ -1836,7 +1849,7 @@
 
             // ─── SUSPEND / UNSUSPEND ──────────────────
             window.suspendUser = async function(userId) {
-                const reason = prompt('Reason for suspension (shown to admins only):');
+                const reason = prompt('Reason for suspension:');
                 if (reason === null) return;
                 try {
                     const { data, error } = await sb
@@ -1876,7 +1889,7 @@
 
             // ─── WITHDRAW VERIFICATION ────────────────
             window.withdrawVerification = async function(userId) {
-                if (!confirm('Withdraw this user\'s verified badge?')) return;
+                if (!confirm('Withdraw verified badge?')) return;
                 try {
                     const { data, error } = await sb
                         .from('profiles')
