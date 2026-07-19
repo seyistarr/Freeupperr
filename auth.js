@@ -513,11 +513,12 @@
     if (onProgress) onProgress(100);
 
     // Use the secure RPC to update avatar_url
-    var { data: updatedProfile, error } = await sb.rpc('update_avatar', {
+    var { data: updatedProfileArr, error } = await sb.rpc('update_avatar', {
       p_avatar_url: data.secure_url
     });
 
     if (error) throw error;
+    var updatedProfile = updatedProfileArr[0];
 
     // Update local cache
     var updated = Object.assign({}, user, { avatar: updatedProfile.avatar_url });
