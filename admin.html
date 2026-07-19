@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="global.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
     <style>
-        /* ─── ADMIN STYLES ─── */
+        /* ─── ADMIN STYLES (same as before) ─── */
         *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
@@ -1256,6 +1256,14 @@
                 }
             }
 
+            // ─── EXTRACT PUBLIC_ID FROM URL (Option B) ───
+            function extractPublicIdFromUrl(url) {
+                if (!url) return null;
+                // Matches Cloudinary URL pattern: /upload/v[0-9]+/path/to/file.extension
+                const match = url.match(/\/upload\/v\d+\/(.+?)\./);
+                return match ? match[1] : null;
+            }
+
             // ─── LOAD DATA ─────────────────────────────
             async function loadData() {
                 try {
@@ -1787,44 +1795,56 @@
                 }
             };
 
-            // ─── DELETE POST (with Cloudinary) ────────
+            // ─── DELETE POST (with Cloudinary + extraction fallback) ────────
             window.deletePost = async function(postId) {
                 if (!confirm('Delete this post permanently? This cannot be undone.')) return;
                 try {
-                    // Fetch public_id fields
+                    // Fetch all relevant columns
                     const { data: post, error: fetchError } = await sb
                         .from('posts')
-                        .select('image_public_id, video_public_id, media_type')
+                        .select('image_public_id, video_public_id, image_url, video_url, media_type')
                         .eq('id', postId)
                         .single();
                     if (fetchError) throw fetchError;
 
+                    // Delete database row
                     const { data, error } = await sb.from('posts').delete().eq('id', postId).select();
                     if (error) throw error;
                     if (!data?.length) throw new Error('Delete blocked — check RLS policy.');
 
-                    // Delete Cloudinary media
-                    if (post?.image_public_id) {
-                        await deleteCloudinaryMedia(post.image_public_id, post.media_type || 'image');
+                    // ---- Cloudinary deletion with fallback ----
+                    // Try image
+                    let imagePublicId = post?.image_public_id;
+                    if (!imagePublicId && post?.image_url) {
+                        imagePublicId = extractPublicIdFromUrl(post.image_url);
                     }
-                    if (post?.video_public_id) {
-                        await deleteCloudinaryMedia(post.video_public_id, 'video');
+                    if (imagePublicId) {
+                        await deleteCloudinaryMedia(imagePublicId, post?.media_type || 'image');
                     }
 
-                    showToast('🗑️ Post deleted (media removed from Cloudinary)', 'o');
+                    // Try video
+                    let videoPublicId = post?.video_public_id;
+                    if (!videoPublicId && post?.video_url) {
+                        videoPublicId = extractPublicIdFromUrl(post.video_url);
+                    }
+                    if (videoPublicId) {
+                        await deleteCloudinaryMedia(videoPublicId, 'video');
+                    }
+
+                    showToast('🗑️ Post deleted (media removed from Cloudinary if found)', 'o');
                     await loadData();
                 } catch (err) {
                     showToast('Failed to delete post: ' + err.message, 'r');
                 }
             };
 
-            // ─── DELETE LISTING (with Cloudinary) ─────
+            // ─── DELETE LISTING (with Cloudinary + extraction fallback) ─────
             window.deleteListing = async function(itemId) {
                 if (!confirm('Delete this listing permanently?')) return;
                 try {
                     const { data: item, error: fetchError } = await sb
                         .from('market_items')
-                        .select('image_public_id, video_public_id, media_type')
+                        .select('image_public_id, video_public_id, image_url, video_url, media_type')
                         .eq('id', itemId)
                         .single();
                     if (fetchError) throw fetchError;
@@ -1833,14 +1853,25 @@
                     if (error) throw error;
                     if (!data?.length) throw new Error('Delete blocked — check RLS policy.');
 
-                    if (item?.image_public_id) {
-                        await deleteCloudinaryMedia(item.image_public_id, item.media_type || 'image');
+                    // Image
+                    let imagePublicId = item?.image_public_id;
+                    if (!imagePublicId && item?.image_url) {
+                        imagePublicId = extractPublicIdFromUrl(item.image_url);
                     }
-                    if (item?.video_public_id) {
-                        await deleteCloudinaryMedia(item.video_public_id, 'video');
+                    if (imagePublicId) {
+                        await deleteCloudinaryMedia(imagePublicId, item?.media_type || 'image');
                     }
 
-                    showToast('🗑️ Listing deleted (media removed from Cloudinary)', 'o');
+                    // Video
+                    let videoPublicId = item?.video_public_id;
+                    if (!videoPublicId && item?.video_url) {
+                        videoPublicId = extractPublicIdFromUrl(item.video_url);
+                    }
+                    if (videoPublicId) {
+                        await deleteCloudinaryMedia(videoPublicId, 'video');
+                    }
+
+                    showToast('🗑️ Listing deleted (media removed from Cloudinary if found)', 'o');
                     await loadData();
                 } catch (err) {
                     showToast('Failed to delete listing: ' + err.message, 'r');
