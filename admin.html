@@ -1,938 +1,2209 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Admin · Freeupper</title>
-    <link rel="icon" type="image/png" href="freeupper.png">
-    <link rel="stylesheet" href="global.css">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
-    <style>
-        /* ─── COMPLETE STYLES (same as before – full version) ─── */
-        * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-        button, input, select, textarea { font-family:inherit; }
-        svg { overflow:visible; }
-        :root { --p:#8b5cf6; --pd:#6c3fc5; --pl:#a78bfa; --pdim:rgba(139,92,246,.15); --pbrd:rgba(139,92,246,.28); --pglow:rgba(108,63,197,.45); --danger:#f87171; --warn:#fb923c; --ok:#4ade80; --blue:#60a5fa; }
-        [data-theme="dark"] { --bg:#000; --bg2:#0a0a0a; --bg3:#111; --bg4:#1a1a1a; --bg5:#222; --brd:rgba(255,255,255,.07); --brd2:rgba(255,255,255,.12); --text:#fff; --muted:rgba(255,255,255,.4); --muted2:rgba(255,255,255,.22); --inp:rgba(255,255,255,.05); --rowh:rgba(255,255,255,.04); --navbg:rgba(0,0,0,.97); --sidebg:#0a0a0a; --dotbg:rgba(255,255,255,.07); --dotc:#fff; --cardsh:0 2px 16px rgba(0,0,0,.5); }
-        [data-theme="light"] { --bg:#f2f2f7; --bg2:#fff; --bg3:#fff; --bg4:#e8e8ed; --bg5:#d8d8de; --brd:rgba(0,0,0,.08); --brd2:rgba(0,0,0,.13); --text:#0d0d0d; --muted:rgba(0,0,0,.44); --muted2:rgba(0,0,0,.26); --inp:rgba(0,0,0,.05); --rowh:rgba(0,0,0,.04); --navbg:rgba(242,242,247,.97); --sidebg:#fff; --dotbg:rgba(0,0,0,.07); --dotc:#0d0d0d; --cardsh:0 2px 16px rgba(0,0,0,.1); }
-        html,body { height:100%; font-family:'Plus Jakarta Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); transition:background .3s; overflow:hidden; }
-        .layout { display:flex; height:100vh; overflow:hidden; }
-        .side-nav { display:none; flex-direction:column; align-items:center; padding:28px 0 24px; background:var(--sidebg); border-right:1px solid var(--brd); width:70px; flex-shrink:0; gap:2px; z-index:10; }
-        .side-logo { font-size:20px; font-weight:900; color:var(--p); margin-bottom:20px; letter-spacing:-1px; cursor:pointer; }
-        .side-logo a { color:inherit; text-decoration:none; }
-        .side-btn { width:48px; height:48px; border-radius:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; transition:background .15s,transform .1s; background:none; border:none; position:relative; gap:3px; color:inherit; text-decoration:none; }
-        .side-btn:hover { background:var(--pdim); transform:scale(1.04); }
-        .side-btn svg { width:22px; height:22px; fill:none; stroke:var(--muted); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; transition:stroke .15s; }
-        .side-btn span { font-size:8px; color:var(--muted2); font-weight:600; }
-        .side-btn.active svg { stroke:var(--p); }
-        .side-btn.active span { color:var(--p); }
-        .side-gap { flex:1; }
-        .side-av { width:32px; height:32px; border-radius:50%; object-fit:cover; border:2px solid transparent; background:linear-gradient(135deg,#1a1035,#3b1a6b); }
-        .side-btn.active .side-av { border-color:var(--p); }
-        @media (min-width:768px) { .side-nav { display:flex; } }
-        @media (min-width:1024px) { .side-nav { width:82px; } }
-        .main { flex:1; overflow-y:auto; background:var(--bg); padding-bottom:24px; }
-        .main::-webkit-scrollbar { width:0; }
-        .admin-col { max-width:820px; margin:0 auto; padding:20px 16px 40px; }
-        .admin-header { display:flex; justify-content:space-between; align-items:center; padding:clamp(44px,8vw,56px) 0 10px; position:sticky; top:0; z-index:30; background:var(--bg); flex-wrap:wrap; gap:10px; }
-        .admin-header .back-btn { width:38px; height:38px; border-radius:50%; background:var(--dotbg); border:1.5px solid var(--brd2); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text); }
-        .admin-header .back-btn svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
-        .admin-header .title { font-size:clamp(18px,5vw,22px); font-weight:800; letter-spacing:-.3px; flex:1; min-width:120px; }
-        .admin-header .admin-badge { font-size:10px; font-weight:700; padding:4px 12px; border-radius:100px; background:var(--pdim); border:1px solid var(--pbrd); color:var(--pl); }
-        .admin-header .sign-out-btn { padding:6px 14px; border-radius:100px; font-size:12px; font-weight:700; background:rgba(248,113,113,.1); border:1.5px solid rgba(248,113,113,.3); color:var(--danger); cursor:pointer; transition:.15s; }
-        .admin-header .sign-out-btn:hover { background:rgba(248,113,113,.2); }
-        .admin-header .reload-btn { padding:6px 14px; border-radius:100px; font-size:14px; font-weight:700; background:var(--pdim); border:1.5px solid var(--pbrd); color:var(--pl); cursor:pointer; transition:.15s; }
-        .admin-header .reload-btn:hover { background:var(--pbrd); }
-        .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:20px; }
-        .stat-card { background:var(--bg3); border:1px solid var(--brd); border-radius:16px; padding:14px 12px; text-align:center; }
-        .stat-card .num { font-size:24px; font-weight:800; background:linear-gradient(135deg,var(--pl),var(--p)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-        .stat-card .lbl { font-size:11px; color:var(--muted); font-weight:600; margin-top:2px; }
-        .admin-tabs { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; border-bottom:1px solid var(--brd); padding-bottom:6px; }
-        .admin-tab { padding:8px 18px; border-radius:20px; border:1.5px solid transparent; background:transparent; color:var(--muted); font-size:13px; font-weight:600; cursor:pointer; transition:.15s; margin-bottom:4px; }
-        .admin-tab:hover { border-color:var(--pbrd); color:var(--pl); }
-        .admin-tab.active { background:var(--pdim); border-color:var(--p); color:var(--pl); }
-        .admin-tab .tab-badge { background:var(--pbrd); border-radius:100px; padding:0 8px; font-size:11px; margin-left:4px; color:var(--muted); }
-        .admin-tab.active .tab-badge { background:var(--p); color:#fff; }
-        /* Search bar */
-        .search-bar { margin-bottom:16px; display:flex; gap:10px; align-items:center; }
-        .search-bar input { flex:1; padding:10px 14px; border-radius:12px; border:1.5px solid var(--brd); background:var(--inp); color:var(--text); font-size:14px; outline:none; transition:border-color .15s; }
-        .search-bar input:focus { border-color:var(--p); }
-        .search-bar input::placeholder { color:var(--muted2); }
-        .req-card { background:var(--bg3); border:1px solid var(--brd); border-radius:18px; padding:16px; margin-bottom:12px; transition:background .15s; }
-        .req-card:hover { background:var(--rowh); }
-        .req-card .top { display:flex; align-items:center; gap:12px; }
-        .req-card .top .avatar { width:44px; height:44px; border-radius:50%; object-fit:cover; flex-shrink:0; background:var(--bg4); }
-        .req-card .top .info { flex:1; min-width:0; }
-        .req-card .top .info .name { font-weight:700; font-size:15px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-        .req-card .top .info .handle { font-size:13px; color:var(--muted); }
-        .req-card .top .info .meta { font-size:12px; color:var(--muted2); margin-top:2px; }
-        .req-card .top .badge { font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; flex-shrink:0; }
-        .req-card .top .badge.pending { background:rgba(251,146,60,.15); color:var(--warn); }
-        .req-card .top .badge.approved { background:rgba(74,222,128,.15); color:var(--ok); }
-        .req-card .top .badge.rejected { background:rgba(248,113,113,.15); color:var(--danger); }
-        .req-card .top .badge.resolved { background:rgba(74,222,128,.15); color:var(--ok); }
-        .req-card .top .badge.dismissed { background:rgba(251,146,60,.15); color:var(--warn); }
-        .req-card .top .badge.reviewed { background:rgba(96,165,250,.15); color:var(--blue); }
-        .req-card .top .badge.suspended { background:rgba(248,113,113,.2); color:var(--danger); }
-        .req-card .top .badge.verified { background:rgba(74,222,128,.15); color:var(--ok); }
-        .req-card .details { margin-top:12px; padding-top:12px; border-top:1px solid var(--brd); }
-        .req-card .details .reason { font-size:13px; color:var(--muted); line-height:1.5; white-space:pre-wrap; word-break:break-word; }
-        .req-card .details .reason strong { color:var(--text); }
-        .req-card .details .link { font-size:12px; color:var(--p); word-break:break-all; margin-top:4px; display:block; }
-        .req-card .details .link a { color:var(--p); text-decoration:underline; }
-        /* Media preview */
-        .media-preview { margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; }
-        .media-preview img, .media-preview video { max-width:100%; max-height:160px; border-radius:12px; object-fit:cover; background:var(--bg4); }
-        .media-preview a { display:inline-block; }
-        .req-card .actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
-        .req-card .actions button { padding:8px 18px; border-radius:12px; font-weight:700; font-size:13px; border:none; cursor:pointer; transition:.15s; display:flex; align-items:center; gap:6px; }
-        .req-card .actions .approve { background:linear-gradient(135deg,var(--ok),#22c55e); color:#fff; box-shadow:0 2px 10px rgba(74,222,128,.3); }
-        .req-card .actions .approve:hover { opacity:.85; transform:scale(1.02); }
-        .req-card .actions .reject { background:rgba(248,113,113,.15); color:var(--danger); border:1.5px solid rgba(248,113,113,.3); }
-        .req-card .actions .reject:hover { background:rgba(248,113,113,.25); }
-        .req-card .actions .view-btn { background:var(--inp); color:var(--muted); border:1.5px solid var(--brd2); }
-        .req-card .actions .view-btn:hover { background:var(--rowh); }
-        .req-card .actions .danger-btn { background:rgba(248,113,113,.15); color:var(--danger); border:1.5px solid rgba(248,113,113,.3); }
-        .req-card .actions .danger-btn:hover { background:rgba(248,113,113,.25); }
-        .req-card .actions .primary-btn { background:var(--p); color:#fff; border:1.5px solid var(--p); }
-        .req-card .actions .primary-btn:hover { opacity:.85; }
-        .req-card .expanded-details { display:none; margin-top:12px; padding-top:12px; border-top:1px solid var(--brd); }
-        .req-card .expanded-details.open { display:block; }
-        .req-card .expanded-details .field { margin-bottom:8px; }
-        .req-card .expanded-details .field-label { font-size:11px; font-weight:700; color:var(--muted2); text-transform:uppercase; letter-spacing:.06em; }
-        .req-card .expanded-details .field-value { font-size:13px; color:var(--text); margin-top:2px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
-        .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; gap:14px; text-align:center; }
-        .empty-state .icon { width:72px; height:72px; border-radius:50%; background:var(--pdim); border:1.5px solid var(--pbrd); display:flex; align-items:center; justify-content:center; }
-        .empty-state .icon svg { width:32px; height:32px; stroke:var(--p); fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
-        .empty-state h3 { font-size:18px; font-weight:800; }
-        .empty-state p { font-size:13px; color:var(--muted); max-width:300px; line-height:1.5; }
-        #tw { position:fixed; top:clamp(14px,4vw,22px); left:50%; transform:translateX(-50%); z-index:99999; display:flex; flex-direction:column; gap:8px; pointer-events:none; max-width:calc(100vw - 32px); }
-        .toast { background:var(--bg3); border:1px solid var(--brd2); border-radius:100px; padding:11px 18px; font-size:13px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:8px; box-shadow:0 8px 32px rgba(0,0,0,.55); animation:tIn .3s cubic-bezier(.34,1.2,.64,1) both; white-space:nowrap; }
-        .toast.out { animation:tOut .25s ease forwards; }
-        @keyframes tIn { from { transform:translateY(-14px); opacity:0; } to { transform:none; opacity:1; } }
-        @keyframes tOut { to { transform:translateY(-10px); opacity:0; } }
-        .td { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-        .tg { background:var(--ok); } .tp { background:var(--p); } .tr { background:var(--danger); } .to { background:var(--warn); }
-        .mov { position:fixed; inset:0; background:rgba(0,0,0,.78); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); z-index:11000; display:flex; align-items:flex-end; justify-content:center; visibility:hidden; opacity:0; transition:opacity .25s,visibility .25s; }
-        .mov.open { visibility:visible; opacity:1; }
-        .mov.center { align-items:center; padding:20px; }
-        .dialog { background:var(--bg3); border-radius:22px; width:100%; max-width:380px; overflow:hidden; border:1px solid var(--brd2); box-shadow:0 24px 80px rgba(0,0,0,.65); animation:popIn .28s cubic-bezier(.34,1.2,.64,1) both; }
-        @keyframes popIn { from { transform:scale(.92); opacity:0; } to { transform:scale(1); opacity:1; } }
-        .m-handle { width:40px; height:4px; border-radius:100px; background:var(--brd2); margin:14px auto 0; flex-shrink:0; }
-        .dlg-ico { width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:22px auto 14px; }
-        .dlg-ico svg { width:26px; height:26px; fill:none; stroke-width:1.8; stroke-linecap:round; }
-        .dlg-ico.danger { background:rgba(248,113,113,.1); border:1.5px solid rgba(248,113,113,.25); }
-        .dlg-ico.danger svg { stroke:var(--danger); }
-        .dlg-ico.warn { background:rgba(251,146,60,.1); border:1.5px solid rgba(251,146,60,.25); }
-        .dlg-ico.warn svg { stroke:var(--warn); }
-        .dlg-ttl { font-size:18px; font-weight:800; text-align:center; padding:0 20px; }
-        .dlg-desc { font-size:13px; color:var(--muted); text-align:center; line-height:1.6; padding:10px 24px 16px; }
-        .dlg-btns { display:flex; gap:10px; padding:0 20px 22px; }
-        .dlg-cancel { flex:1; padding:13px; border-radius:14px; border:1.5px solid var(--brd2); background:var(--inp); color:var(--text); font-size:14px; font-weight:700; cursor:pointer; }
-        .dlg-cancel:hover { background:var(--rowh); }
-        .dlg-danger { flex:1; padding:13px; border-radius:14px; background:var(--danger); color:#fff; font-size:14px; font-weight:800; border:none; cursor:pointer; opacity:.35; }
-        .dlg-danger:not(:disabled) { opacity:1; }
-        .dlg-danger:not(:disabled):hover { opacity:.88; }
-        .spinner { border:3px solid var(--brd); border-top-color:var(--p); border-radius:50%; animation:spin .8s linear infinite; }
-        @keyframes spin { to { transform:rotate(360deg); } }
-        #debugBox { margin-top:16px; padding:12px; border-radius:12px; background:rgba(248,113,113,.1); border:1px solid rgba(248,113,113,.2); font-size:12px; color:var(--muted); word-break:break-word; display:none; }
-        #debugBox.error { display:block; border-color:var(--danger); color:var(--danger); }
-        #debugBox pre { white-space:pre-wrap; font-family:inherit; margin:0; }
-        @media (max-width:600px) {
-            .admin-header .sign-out-btn, .admin-header .reload-btn { font-size:10px; padding:4px 10px; }
-            .stats-grid { grid-template-columns:repeat(2,1fr); }
-            .admin-tab { font-size:12px; padding:6px 12px; }
-            .media-preview img, .media-preview video { max-height:120px; }
-        }
-        .reject-modal .reject-textarea { width:100%; min-height:80px; padding:12px; border-radius:12px; border:1.5px solid var(--brd); background:var(--inp); color:var(--text); font-size:14px; resize:vertical; font-family:inherit; transition:border-color .15s; line-height:1.5; }
-        .reject-modal .reject-textarea:focus { outline:none; border-color:var(--p); }
-        .reject-modal .reject-textarea::placeholder { color:var(--muted2); }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Admin · Freeupper</title>
+  <link rel="icon" type="image/png" href="freeupper.png" />
+  <link rel="stylesheet" href="global.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    /* ────────────────────────────────────────────────
+       DESIGN SYSTEM
+    ──────────────────────────────────────────────── */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --bg: #09090b;
+      --surface: #15151a;
+      --surface2: #1f1f26;
+      --border: rgba(255, 255, 255, 0.06);
+      --border2: rgba(255, 255, 255, 0.10);
+      --text: #ffffff;
+      --text-secondary: rgba(255, 255, 255, 0.6);
+      --text-tertiary: rgba(255, 255, 255, 0.35);
+      --primary: #7c3aed;
+      --primary-dim: rgba(124, 58, 237, 0.15);
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 20px;
+      --radius-sm: 12px;
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    }
+
+    html,
+    body {
+      height: 100%;
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* ─── LAYOUT ─────────────────────────────── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 480px;
+      margin: 0 auto;
+      background: var(--bg);
+      position: relative;
+    }
+
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 16px 80px;
+      scroll-behavior: smooth;
+    }
+    .main-content::-webkit-scrollbar {
+      width: 0;
+    }
+
+    /* ─── BOTTOM NAV ─────────────────────────── */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-width: 480px;
+      margin: 0 auto;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 6px 0 env(safe-area-inset-bottom);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 100;
+    }
+    .nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 0;
+      background: none;
+      border: none;
+      color: var(--text-tertiary);
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 0.2s;
+      position: relative;
+    }
+    .nav-item svg {
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke 0.2s;
+    }
+    .nav-item.active {
+      color: var(--primary);
+    }
+    .nav-item .badge-dot {
+      position: absolute;
+      top: 4px;
+      right: 50%;
+      transform: translateX(calc(50% + 12px));
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      border: 2px solid var(--surface);
+    }
+    .nav-item .badge-count {
+      position: absolute;
+      top: 2px;
+      right: 50%;
+      transform: translateX(calc(50% + 14px));
+      background: var(--danger);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 0 5px;
+      border-radius: 100px;
+      line-height: 14px;
+      min-width: 18px;
+      text-align: center;
+      border: 2px solid var(--surface);
+    }
+
+    /* ─── MORE OVERLAY ───────────────────────── */
+    .more-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.25s, visibility 0.25s;
+    }
+    .more-overlay.open {
+      visibility: visible;
+      opacity: 1;
+    }
+    .more-sheet {
+      width: 100%;
+      max-width: 480px;
+      background: var(--surface);
+      border-radius: 24px 24px 0 0;
+      padding: 16px 20px 30px;
+      transform: translateY(40px);
+      transition: transform 0.34s cubic-bezier(0.32, 1, 0.64, 1);
+    }
+    .more-overlay.open .more-sheet {
+      transform: translateY(0);
+    }
+    .more-sheet .handle {
+      width: 40px;
+      height: 4px;
+      border-radius: 100px;
+      background: var(--border2);
+      margin: 0 auto 16px;
+    }
+    .more-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 12px;
+      border-radius: var(--radius-sm);
+      background: none;
+      border: none;
+      width: 100%;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .more-item:hover {
+      background: var(--surface2);
+    }
+    .more-item svg {
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+    }
+    .more-item.danger {
+      color: var(--danger);
+    }
+
+    /* ─── CARDS & COMMON ────────────────────── */
+    .page-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .page-title .back-btn {
+      background: none;
+      border: none;
+      color: var(--text);
+      cursor: pointer;
+      padding: 4px;
+    }
+    .page-title .back-btn svg {
+      width: 28px;
+      height: 28px;
+      stroke: currentColor;
+      stroke-width: 2;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+    .stat-card .label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 800;
+      margin-top: 4px;
+      line-height: 1.2;
+    }
+    .stat-card .value .accent {
+      color: var(--primary);
+    }
+    .stat-card .value .success {
+      color: var(--success);
+    }
+    .stat-card .value .danger {
+      color: var(--danger);
+    }
+    .stat-card .value .warning {
+      color: var(--warning);
+    }
+
+    .activity-list {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 0;
+    }
+    .activity-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .activity-item:last-child {
+      border-bottom: none;
+    }
+    .activity-item .icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--surface2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .activity-item .icon svg {
+      width: 18px;
+      height: 18px;
+      stroke: var(--text-secondary);
+      stroke-width: 1.8;
+    }
+    .activity-item .content {
+      flex: 1;
+    }
+    .activity-item .content .primary {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .activity-item .content .secondary {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .activity-item .time {
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    /* ─── TABS ────────────────────────────────── */
+    .filter-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .filter-tab {
+      padding: 6px 16px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    .filter-tab.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+    .filter-tab:hover {
+      border-color: var(--primary);
+    }
+
+    /* ─── SEARCH BAR ────────────────────────── */
+    .search-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .search-bar input {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-bar input:focus {
+      border-color: var(--primary);
+    }
+    .search-bar input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    /* ─── REQUEST / USER / POST CARDS ──────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .card .top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .card .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--surface2);
+      flex-shrink: 0;
+    }
+    .card .info {
+      flex: 1;
+      min-width: 0;
+    }
+    .card .info .name {
+      font-weight: 700;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .card .info .handle {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .card .info .meta {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 2px;
+    }
+    .card .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 100px;
+      flex-shrink: 0;
+    }
+    .badge.pending {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+    }
+    .badge.approved,
+    .badge.resolved {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+    }
+    .badge.rejected {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+    }
+    .badge.verified {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+    }
+    .badge.suspended {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+    }
+    .badge.admin {
+      background: rgba(124, 58, 237, 0.15);
+      color: var(--primary);
+    }
+
+    .card .details {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .card .details .reason {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .card .details .reason strong {
+      color: var(--text);
+    }
+
+    .card .media-preview {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .card .media-preview img,
+    .card .media-preview video {
+      max-width: 100%;
+      max-height: 160px;
+      border-radius: var(--radius-sm);
+      object-fit: cover;
+      background: var(--surface2);
+    }
+
+    .card .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .card .actions button {
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      font-size: 13px;
+      border: none;
+      cursor: pointer;
+      transition: 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      opacity: 0.85;
+    }
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+    }
+    .btn-success:hover {
+      opacity: 0.85;
+    }
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+    .btn-danger:hover {
+      opacity: 0.85;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--text-secondary);
+    }
+    .btn-outline:hover {
+      background: var(--surface2);
+    }
+    .btn-ghost {
+      background: var(--surface2);
+      color: var(--text);
+    }
+    .btn-ghost:hover {
+      background: var(--border);
+    }
+
+    /* ─── MODAL (Bottom Sheet) ──────────────── */
+    .sheet-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.25s, visibility 0.25s;
+    }
+    .sheet-overlay.open {
+      visibility: visible;
+      opacity: 1;
+    }
+    .sheet {
+      width: 100%;
+      max-width: 480px;
+      background: var(--surface);
+      border-radius: 24px 24px 0 0;
+      padding: 16px 20px 30px;
+      transform: translateY(40px);
+      transition: transform 0.34s cubic-bezier(0.32, 1, 0.64, 1);
+    }
+    .sheet-overlay.open .sheet {
+      transform: translateY(0);
+    }
+    .sheet .handle {
+      width: 40px;
+      height: 4px;
+      border-radius: 100px;
+      background: var(--border2);
+      margin: 0 auto 16px;
+    }
+    .sheet .title {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .sheet .sub {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+    .sheet .action-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .sheet .action-row button {
+      flex: 1;
+      padding: 14px;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      font-size: 15px;
+      border: none;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+
+    /* ─── EMPTY STATE ───────────────────────── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      gap: 14px;
+      text-align: center;
+    }
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      stroke: var(--text-tertiary);
+      stroke-width: 1.2;
+      fill: none;
+    }
+    .empty-state h3 {
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .empty-state p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      max-width: 280px;
+    }
+
+    /* ─── TOAST ───────────────────────────────── */
+    #tw {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+      max-width: calc(100vw - 32px);
+    }
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 12px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: var(--shadow);
+      animation: tIn 0.3s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+    }
+    .toast.out {
+      animation: tOut 0.25s ease forwards;
+    }
+    @keyframes tIn {
+      from {
+        transform: translateY(-14px);
+        opacity: 0;
+      }
+      to {
+        transform: none;
+        opacity: 1;
+      }
+    }
+    @keyframes tOut {
+      to {
+        transform: translateY(-10px);
+        opacity: 0;
+      }
+    }
+    .td {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .tg {
+      background: var(--success);
+    }
+    .tr {
+      background: var(--danger);
+    }
+    .to {
+      background: var(--warning);
+    }
+
+    /* ─── AUTH OVERLAY ───────────────────────── */
+    .auth-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-overlay.hidden {
+      display: none;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 380px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+    }
+    .auth-card .logo {
+      font-size: 28px;
+      font-weight: 900;
+      text-align: center;
+      color: var(--primary);
+      margin-bottom: 6px;
+    }
+    .auth-card .title {
+      font-size: 20px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .auth-card .sub {
+      font-size: 13px;
+      color: var(--text-secondary);
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .auth-card .field {
+      margin-bottom: 14px;
+    }
+    .auth-card .field input {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .auth-card .field input:focus {
+      border-color: var(--primary);
+    }
+    .auth-card .error {
+      font-size: 12px;
+      color: var(--danger);
+      min-height: 20px;
+      margin-bottom: 6px;
+    }
+    .auth-card .btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: var(--radius-sm);
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      font-size: 16px;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .auth-card .btn:hover {
+      opacity: 0.85;
+    }
+    .auth-card .btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .auth-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 16px 0;
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+    .auth-divider::before,
+    .auth-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .auth-switch {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 16px;
+    }
+    .auth-switch button {
+      background: none;
+      border: none;
+      color: var(--primary);
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    /* ─── MISC ────────────────────────────────── */
+    .hidden {
+      display: none !important;
+    }
+    .mt-8 {
+      margin-top: 8px;
+    }
+    .mt-16 {
+      margin-top: 16px;
+    }
+    .gap-8 {
+      gap: 8px;
+    }
+    .flex {
+      display: flex;
+    }
+    .flex-1 {
+      flex: 1;
+    }
+    .items-center {
+      align-items: center;
+    }
+    .justify-between {
+      justify-content: space-between;
+    }
+  </style>
 </head>
 <body>
 
-<div id="tw"></div>
-<div class="layout">
-    <!-- SIDE NAV -->
-    <nav class="side-nav">
-        <div class="side-logo"><a href="index.html">◈</a></div>
-        <a href="index.html" class="side-btn"><svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg><span>Home</span></a>
-        <a href="search.html" class="side-btn"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Search</span></a>
-        <a href="create.html" class="side-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg><span>Create</span></a>
-        <a href="video.html" class="side-btn"><svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span>Video</span></a>
-        <div class="side-gap"></div>
-        <a href="profile.html" class="side-btn" id="sideProfileBtn"><img class="side-av" id="sideAv" src="" alt="" onerror="this.style.display='none'"><span>Profile</span></a>
+  <!-- ─── TOAST CONTAINER ────────────────────── -->
+  <div id="tw"></div>
+
+  <!-- ─── APP ─────────────────────────────────── -->
+  <div class="app" id="app">
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content" id="mainContent">
+      <!-- Rendered by JS -->
+    </div>
+
+    <!-- BOTTOM NAVIGATION -->
+    <nav class="bottom-nav" id="bottomNav">
+      <button class="nav-item active" data-tab="dashboard">
+        <svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-item" data-tab="requests">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <span>Requests</span>
+        <span class="badge-count" id="requestsBadgeNav">0</span>
+      </button>
+      <button class="nav-item" data-tab="users">
+        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <span>Users</span>
+      </button>
+      <button class="nav-item" data-tab="reports">
+        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+        <span>Reports</span>
+        <span class="badge-count" id="reportsBadgeNav">0</span>
+      </button>
+      <button class="nav-item" data-tab="more">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        <span>More</span>
+      </button>
     </nav>
+  </div>
 
-    <!-- MAIN -->
-    <div class="main">
-        <div class="admin-col">
-            <!-- Header -->
-            <div class="admin-header">
-                <button class="back-btn" onclick="window.location.href='profile.html'"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
-                <span class="title">Admin Dashboard</span>
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                    <span class="admin-badge" id="adminBadge">Admin</span>
-                    <button class="reload-btn" onclick="loadData()" title="Reload data">⟳</button>
-                    <button class="sign-out-btn" onclick="adminSignOut()">Sign Out</button>
-                </div>
-            </div>
-
-            <!-- Stats -->
-            <div class="stats-grid" id="statsGrid">
-                <div class="stat-card"><div class="num" id="statUsers">0</div><div class="lbl">Users</div></div>
-                <div class="stat-card"><div class="num" id="statPosts">0</div><div class="lbl">Posts</div></div>
-                <div class="stat-card"><div class="num" id="statMarket">0</div><div class="lbl">Listings</div></div>
-                <div class="stat-card"><div class="num" id="statPending">0</div><div class="lbl">Pending Req.</div></div>
-            </div>
-
-            <!-- Tabs -->
-            <div class="admin-tabs" id="adminTabs">
-                <button class="admin-tab active" data-tab="requests" onclick="switchTab('requests')">Requests <span class="tab-badge" id="requestsBadge">0</span></button>
-                <button class="admin-tab" data-tab="users" onclick="switchTab('users')">Users <span class="tab-badge" id="usersBadge">0</span></button>
-                <button class="admin-tab" data-tab="posts" onclick="switchTab('posts')">Posts <span class="tab-badge" id="postsBadge">0</span></button>
-                <button class="admin-tab" data-tab="listings" onclick="switchTab('listings')">Listings <span class="tab-badge" id="listingsBadge">0</span></button>
-                <button class="admin-tab" data-tab="reports" onclick="switchTab('reports')">Reports <span class="tab-badge" id="reportsBadge">0</span></button>
-                <button class="admin-tab" data-tab="feedback" onclick="switchTab('feedback')">Feedback <span class="tab-badge" id="feedbackBadge">0</span></button>
-            </div>
-
-            <!-- Search bar (shown only on Users tab) -->
-            <div class="search-bar" id="userSearchBar" style="display:none;">
-                <input type="text" id="userSearchInput" placeholder="Search users by name or username..." oninput="filterUsers()">
-            </div>
-
-            <!-- Content -->
-            <div id="adminContent"></div>
-            <!-- Debug -->
-            <div id="debugBox"></div>
-        </div>
+  <!-- ─── MORE OVERLAY (BOTTOM SHEET) ──────────── -->
+  <div class="more-overlay" id="moreOverlay">
+    <div class="more-sheet">
+      <div class="handle"></div>
+      <button class="more-item" data-action="posts">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M21 15l-5-5-5 5"/><path d="M3 9l5 5 5-5"/></svg>
+        Posts
+      </button>
+      <button class="more-item" data-action="marketplace">
+        <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+        Marketplace Review
+      </button>
+      <button class="more-item" data-action="feedback">
+        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Feedback
+      </button>
+      <button class="more-item" data-action="activity">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Activity Logs
+      </button>
+      <button class="more-item" data-action="settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </button>
+      <button class="more-item danger" data-action="logout">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Logout
+      </button>
     </div>
-</div>
+  </div>
 
-<!-- AUTH OVERLAY -->
-<div class="auth-overlay" id="authOverlay">
-    <div class="auth-card" id="authCard">
-        <div class="auth-logo">Free<span>Upper</span></div>
-        <div class="auth-title" id="authTitle">Admin Access</div>
-        <div class="auth-sub" id="authSub">Sign in to manage the platform.</div>
-        <div class="auth-error" id="authError"></div>
-        <div class="auth-field" id="adminNameField"><input type="text" id="adminName" placeholder="Full name"></div>
-        <div class="auth-field"><input type="email" id="adminEmail" placeholder="Email address"></div>
-        <div class="auth-field"><input type="password" id="adminPassword" placeholder="Password"></div>
-        <button class="auth-btn" id="authSubmitBtn">Sign In</button>
-        <div class="auth-divider">OR</div>
-        <button class="auth-btn" id="authGoogleBtn" style="background:transparent;border:1.5px solid var(--brd2);color:var(--text);box-shadow:none;">
-            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3 14.6 2 12 2 6.9 2 2.7 6.1 2.7 11.8S6.9 21.6 12 21.6c6.9 0 9.3-4.8 9.3-7.3 0-.5-.1-.9-.1-1.3H12z"/></svg>
-            Continue with Google
-        </button>
-        <div class="auth-switch" id="authSwitch">Already have an account? <button id="authSwitchBtn">Sign In</button></div>
+  <!-- ─── AUTH OVERLAY ────────────────────────── -->
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-card">
+      <div class="logo">◈ FreeUpper</div>
+      <div class="title" id="authTitle">Admin Access</div>
+      <div class="sub" id="authSub">Sign in to manage the platform.</div>
+      <div class="error" id="authError"></div>
+      <div class="field" id="adminNameField">
+        <input type="text" id="adminName" placeholder="Full name" />
+      </div>
+      <div class="field">
+        <input type="email" id="adminEmail" placeholder="Email address" />
+      </div>
+      <div class="field">
+        <input type="password" id="adminPassword" placeholder="Password" />
+      </div>
+      <button class="btn" id="authSubmitBtn">Sign In</button>
+      <div class="auth-divider">OR</div>
+      <button class="btn" id="authGoogleBtn" style="background:transparent;border:1.5px solid var(--border);color:var(--text);box-shadow:none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" style="display:inline;margin-right:8px;"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3 14.6 2 12 2 6.9 2 2.7 6.1 2.7 11.8S6.9 21.6 12 21.6c6.9 0 9.3-4.8 9.3-7.3 0-.5-.1-.9-.1-1.3H12z"/></svg>
+        Continue with Google
+      </button>
+      <div class="auth-switch" id="authSwitch">
+        Already have an account? <button id="authSwitchBtn">Sign In</button>
+      </div>
     </div>
-</div>
+  </div>
 
-<!-- REJECT MODAL -->
-<div class="mov center reject-modal" id="rejectModal">
-    <div class="dialog" style="max-width:420px;width:100%;padding:0 0 20px">
-        <div class="m-handle"></div>
-        <div style="padding:20px 24px 16px">
-            <div style="font-size:18px;font-weight:800;margin-bottom:4px">Reject Verification</div>
-            <div style="font-size:13px;color:var(--muted)">Provide a reason for rejecting this verification request.</div>
-        </div>
-        <div style="padding:0 24px">
-            <textarea class="reject-textarea" id="rejectReasonInput" placeholder="Reason for rejection (optional)…" maxlength="500"></textarea>
-            <div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:11px;color:var(--muted2)" id="rejectCharCount">0 / 500</span></div>
-        </div>
-        <div style="display:flex;gap:10px;padding:16px 24px 0">
-            <button class="dlg-cancel" onclick="closeMov('rejectModal')">Cancel</button>
-            <button class="dlg-danger" id="rejectConfirmBtn" onclick="confirmReject()" style="opacity:1;background:var(--danger)">Reject</button>
-        </div>
+  <!-- ─── BOTTOM SHEET (for user actions, etc.) ──── -->
+  <div class="sheet-overlay" id="bottomSheet">
+    <div class="sheet" id="bottomSheetContent">
+      <div class="handle"></div>
+      <div id="sheetBody"></div>
     </div>
-</div>
+  </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="global.js"></script>
-<script src="auth.js"></script>
-<script src="settings.js"></script>
+  <!-- ─── REJECT MODAL (reuse sheet) ──────────── -->
+  <!-- We'll reuse the bottom sheet for reject reason -->
 
-<script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="global.js"></script>
+  <script src="auth.js"></script>
+  <script src="settings.js"></script>
+
+  <script>
     (function() {
-        'use strict';
+      'use strict';
 
-        // ─── STATE ──────────────────────────────────
-        let currentTab = 'requests';
-        let requests = [];
-        let allUsers = [];
-        let posts = [];
-        let marketItems = [];
-        let reportsList = [];
-        let feedbackList = [];
-        let pendingRequestId = null;
-        let authMode = 'signin';
-        let filterUserId = null;
-        let userSearchTerm = '';
+      // ─── STATE ──────────────────────────────────────────
+      let currentTab = 'dashboard';
+      let requests = [];
+      let allUsers = [];
+      let posts = [];
+      let marketItems = [];
+      let reportsList = [];
+      let feedbackList = [];
+      let pendingRequestId = null;
+      let authMode = 'signin';
+      let filterUserId = null;
+      let userSearchTerm = '';
+      let currentFilter = 'all'; // for requests, reports
 
-        const sb = window.sb;
-        const debugBox = document.getElementById('debugBox');
+      const sb = window.sb;
+      const main = document.getElementById('mainContent');
+      const bottomNav = document.getElementById('bottomNav');
+      const moreOverlay = document.getElementById('moreOverlay');
 
-        // ─── HELPERS ──────────────────────────────
-        function fmtNum(n) {
-            if (n >= 1000000) return (n/1000000).toFixed(1).replace('.0','')+'M';
-            if (n >= 1000) return (n/1000).toFixed(1).replace('.0','')+'K';
-            return String(n);
+      // ─── HELPERS ─────────────────────────────────────────
+      function fmtNum(n) {
+        if (n >= 1000000) return (n/1000000).toFixed(1).replace('.0','')+'M';
+        if (n >= 1000) return (n/1000).toFixed(1).replace('.0','')+'K';
+        return String(n);
+      }
+      function escapeHtml(s) { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+      function formatDate(iso) { if(!iso) return '—'; return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+      function formatDateTime(iso) { if(!iso) return '—'; return new Date(iso).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+      function timeAgo(iso) {
+        if(!iso) return '';
+        const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+        if(diff < 60) return diff + 's ago';
+        if(diff < 3600) return Math.floor(diff/60) + 'm ago';
+        if(diff < 86400) return Math.floor(diff/3600) + 'h ago';
+        return Math.floor(diff/86400) + 'd ago';
+      }
+      function getStatusBadgeClass(status) {
+        const map = { 'pending':'pending', 'approved':'approved', 'rejected':'rejected', 'revoked':'rejected', 'resolved':'resolved', 'dismissed':'dismissed', 'reviewed':'reviewed', 'new':'pending' };
+        return map[status] || '';
+      }
+      function getStatusLabel(status) {
+        const map = { 'pending':'Pending','approved':'Approved','rejected':'Rejected','revoked':'Revoked','resolved':'Resolved','dismissed':'Dismissed','reviewed':'Reviewed','new':'New' };
+        return map[status] || status || 'Unknown';
+      }
+
+      // ─── AUTH ────────────────────────────────────────────
+      function renderAuth() {
+        const title = document.getElementById('authTitle');
+        const sub = document.getElementById('authSub');
+        const nameField = document.getElementById('adminNameField');
+        const submitBtn = document.getElementById('authSubmitBtn');
+        const switchText = document.getElementById('authSwitch');
+        if (authMode === 'signup') {
+          title.textContent = 'Create Admin Account';
+          sub.textContent = 'Sign up as an admin to manage the platform.';
+          nameField.style.display = 'block';
+          submitBtn.textContent = 'Create Account';
+          switchText.innerHTML = 'Already have an account? <button id="authSwitchBtn">Sign In</button>';
+        } else {
+          title.textContent = 'Admin Access';
+          sub.textContent = 'Sign in to manage the platform.';
+          nameField.style.display = 'none';
+          submitBtn.textContent = 'Sign In';
+          switchText.innerHTML = "Don't have an account? <button id=\"authSwitchBtn\">Sign Up</button>";
         }
-        function escapeHtml(s) { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
-        function formatDate(iso) { if(!iso) return '—'; return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
-        function formatDateTime(iso) { if(!iso) return '—'; return new Date(iso).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
-        function getStatusBadgeClass(status) {
-            const map = { 'pending':'pending', 'approved':'approved', 'rejected':'rejected', 'revoked':'rejected', 'resolved':'resolved', 'dismissed':'dismissed', 'reviewed':'reviewed', 'new':'pending' };
-            return map[status] || '';
-        }
-        function getStatusLabel(status) {
-            const map = { 'pending':'Pending','approved':'Approved','rejected':'Rejected','revoked':'Revoked','resolved':'Resolved','dismissed':'Dismissed','reviewed':'Reviewed','new':'New' };
-            return map[status] || status || 'Unknown';
-        }
-
-        // ─── AUTH ──────────────────────────────────
-        function renderAuth() {
-            const title = document.getElementById('authTitle');
-            const sub = document.getElementById('authSub');
-            const nameField = document.getElementById('adminNameField');
-            const submitBtn = document.getElementById('authSubmitBtn');
-            const switchText = document.getElementById('authSwitch');
-            if (authMode === 'signup') {
-                title.textContent = 'Create Admin Account';
-                sub.textContent = 'Sign up as an admin to manage the platform.';
-                nameField.style.display = 'block';
-                submitBtn.textContent = 'Create Account';
-                switchText.innerHTML = 'Already have an account? <button id="authSwitchBtn">Sign In</button>';
-            } else {
-                title.textContent = 'Admin Access';
-                sub.textContent = 'Sign in to manage the platform.';
-                nameField.style.display = 'none';
-                submitBtn.textContent = 'Sign In';
-                switchText.innerHTML = "Don't have an account? <button id=\"authSwitchBtn\">Sign Up</button>";
-            }
-            document.getElementById('authSwitchBtn').addEventListener('click', function() { authMode = authMode==='signin'?'signup':'signin'; renderAuth(); });
-        }
-
-        async function handleAuth() {
-            const email = document.getElementById('adminEmail').value.trim();
-            const password = document.getElementById('adminPassword').value;
-            const name = document.getElementById('adminName').value.trim();
-            const errorEl = document.getElementById('authError');
-            const btn = document.getElementById('authSubmitBtn');
-            errorEl.textContent = '';
-            if (!email || !password) { errorEl.textContent = 'Please fill in email and password.'; return; }
-            if (authMode === 'signup' && !name) { errorEl.textContent = 'Please enter your full name.'; return; }
-            btn.disabled = true; btn.textContent = 'Please wait…';
-            try {
-                let result;
-                if (authMode === 'signup') {
-                    result = await sb.auth.signUp({ email, password, options: { data: { display_name: name, username: name.toLowerCase().replace(/\s+/g,''), is_admin: true } } });
-                    if (result.error) throw result.error;
-                    if (result.data.session) {
-                        await new Promise(r => setTimeout(r,1000));
-                        await sb.from('profiles').update({ is_admin: true }).eq('id', result.data.session.user.id);
-                    }
-                } else {
-                    result = await sb.auth.signInWithPassword({ email, password });
-                    if (result.error) throw result.error;
-                }
-                document.getElementById('authOverlay').classList.add('hidden');
-                loadData();
-            } catch (e) {
-                errorEl.textContent = e.message || 'Something went wrong.';
-                btn.disabled = false;
-                btn.textContent = authMode === 'signup' ? 'Create Account' : 'Sign In';
-            }
-        }
-
-        document.getElementById('authSubmitBtn').addEventListener('click', handleAuth);
-        document.getElementById('adminPassword').addEventListener('keydown', e => { if(e.key==='Enter') handleAuth(); });
-        document.getElementById('adminEmail').addEventListener('keydown', e => { if(e.key==='Enter') handleAuth(); });
-
-        document.getElementById('authGoogleBtn').addEventListener('click', async function() {
-            const { error } = await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin+'/admin.html' } });
-            if (error) document.getElementById('authError').textContent = error.message;
+        document.getElementById('authSwitchBtn').addEventListener('click', function() {
+          authMode = authMode === 'signin' ? 'signup' : 'signin';
+          renderAuth();
         });
+      }
 
-        window.adminSignOut = async function() {
-            await sb.auth.signOut();
-            document.getElementById('authOverlay').classList.remove('hidden');
-            document.getElementById('adminContent').innerHTML = '';
-            debugBox.textContent = ''; debugBox.className = '';
-            renderAuth();
-        };
-
-        // ─── CHECK ADMIN STATUS ──────────────────
-        async function checkAdminStatus() {
-            const user = getCurrentUser();
-            if (!user.isLoggedIn && user.id.startsWith('GUEST-')) {
-                document.getElementById('authOverlay').classList.remove('hidden');
-                renderAuth();
-                return false;
-            }
-            try {
-                const { data, error } = await sb.from('profiles').select('is_admin, suspended').eq('id', user.id).single();
-                if (error) {
-                    console.error('Profile fetch error:', error);
-                    if (error.code === 'PGRST116') { document.getElementById('authOverlay').classList.remove('hidden'); renderAuth(); return false; }
-                    throw error;
+      async function handleAuth() {
+        const email = document.getElementById('adminEmail').value.trim();
+        const password = document.getElementById('adminPassword').value;
+        const name = document.getElementById('adminName').value.trim();
+        const errorEl = document.getElementById('authError');
+        const btn = document.getElementById('authSubmitBtn');
+        errorEl.textContent = '';
+        if (!email || !password) { errorEl.textContent = 'Please fill in email and password.'; return; }
+        if (authMode === 'signup' && !name) { errorEl.textContent = 'Please enter your full name.'; return; }
+        btn.disabled = true; btn.textContent = 'Please wait…';
+        try {
+          let result;
+          if (authMode === 'signup') {
+            result = await sb.auth.signUp({
+              email,
+              password,
+              options: {
+                data: {
+                  display_name: name,
+                  username: name.toLowerCase().replace(/\s+/g, ''),
+                  is_admin: true
                 }
-                if (!data || !data.is_admin) {
-                    document.getElementById('authOverlay').classList.add('hidden');
-                    showToast('Access denied. Admin privileges required.', 'r');
-                    setTimeout(() => { window.location.href='index.html'; }, 1500);
-                    return false;
-                }
-                if (data.suspended) {
-                    document.getElementById('authOverlay').classList.add('hidden');
-                    showToast('Your admin account has been suspended.', 'r');
-                    setTimeout(() => { window.location.href='index.html'; }, 1500);
-                    return false;
-                }
-                user.isAdmin = true;
-                saveCurrentUser(user);
-                document.getElementById('authOverlay').classList.add('hidden');
-                return true;
-            } catch (err) {
-                console.error('Failed to check admin status:', err);
-                showToast('Error checking admin status: ' + err.message, 'r');
-                document.getElementById('authOverlay').classList.remove('hidden');
-                renderAuth();
-                return false;
+              }
+            });
+            if (result.error) throw result.error;
+            if (result.data.session) {
+              await new Promise(r => setTimeout(r, 1000));
+              await sb.from('profiles').update({ is_admin: true }).eq('id', result.data.session.user.id);
             }
+          } else {
+            result = await sb.auth.signInWithPassword({ email, password });
+            if (result.error) throw result.error;
+          }
+          document.getElementById('authOverlay').classList.add('hidden');
+          loadData();
+        } catch (e) {
+          errorEl.textContent = e.message || 'Something went wrong.';
+          btn.disabled = false;
+          btn.textContent = authMode === 'signup' ? 'Create Account' : 'Sign In';
         }
+      }
 
-        // ─── CLOUDINARY HELPERS ────────────────────
-        async function deleteCloudinaryMedia(publicId, resourceType = 'image') {
-            if (!publicId) return;
-            try {
-                const { data, error } = await sb.functions.invoke('delete-cloudinary', { body: { public_id: publicId, resource_type: resourceType } });
-                if (error) throw error;
-                console.log('Cloudinary deletion result:', data);
-                if (data?.result !== 'ok') console.warn('Cloudinary returned:', data);
-            } catch (err) { console.warn('Cloudinary deletion failed:', err.message); }
+      document.getElementById('authSubmitBtn').addEventListener('click', handleAuth);
+      document.getElementById('adminPassword').addEventListener('keydown', e => { if(e.key === 'Enter') handleAuth(); });
+      document.getElementById('adminEmail').addEventListener('keydown', e => { if(e.key === 'Enter') handleAuth(); });
+
+      document.getElementById('authGoogleBtn').addEventListener('click', async function() {
+        const { error } = await sb.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: window.location.origin + '/admin.html' }
+        });
+        if (error) document.getElementById('authError').textContent = error.message;
+      });
+
+      window.adminSignOut = async function() {
+        await sb.auth.signOut();
+        document.getElementById('authOverlay').classList.remove('hidden');
+        closeMore();
+        renderAuth();
+        main.innerHTML = '';
+      };
+
+      // ─── CHECK ADMIN STATUS ────────────────────────────
+      async function checkAdminStatus() {
+        const user = getCurrentUser();
+        if (!user.isLoggedIn && user.id.startsWith('GUEST-')) {
+          document.getElementById('authOverlay').classList.remove('hidden');
+          renderAuth();
+          return false;
         }
-        function extractPublicIdFromUrl(url) {
-            if (!url) return null;
-            const match = url.match(/\/upload\/v\d+\/(.+?)\./);
-            return match ? match[1] : null;
+        try {
+          const { data, error } = await sb.from('profiles').select('is_admin, suspended').eq('id', user.id).single();
+          if (error) {
+            console.error('Profile fetch error:', error);
+            if (error.code === 'PGRST116') { document.getElementById('authOverlay').classList.remove('hidden');
+              renderAuth(); return false; }
+            throw error;
+          }
+          if (!data || !data.is_admin) {
+            document.getElementById('authOverlay').classList.add('hidden');
+            showToast('Access denied. Admin privileges required.', 'r');
+            setTimeout(() => { window.location.href = 'index.html'; }, 1500);
+            return false;
+          }
+          if (data.suspended) {
+            document.getElementById('authOverlay').classList.add('hidden');
+            showToast('Your admin account has been suspended.', 'r');
+            setTimeout(() => { window.location.href = 'index.html'; }, 1500);
+            return false;
+          }
+          user.isAdmin = true;
+          saveCurrentUser(user);
+          document.getElementById('authOverlay').classList.add('hidden');
+          return true;
+        } catch (err) {
+          console.error('Failed to check admin status:', err);
+          showToast('Error checking admin status: ' + err.message, 'r');
+          document.getElementById('authOverlay').classList.remove('hidden');
+          renderAuth();
+          return false;
         }
+      }
 
-        // ─── LOAD DATA ─────────────────────────────
-        window.loadData = async function() {
-            debugBox.className = ''; debugBox.textContent = '';
-            document.getElementById('adminContent').innerHTML = `<div class="empty-state"><div class="icon"><div class="spinner" style="width:32px;height:32px;"></div></div><h3>Loading...</h3></div>`;
-            try {
-                const { data: reqData, error: reqError } = await sb.from('verification_requests').select('*').order('created_at', { ascending: false });
-                if (reqError) throw reqError;
-                requests = reqData || [];
-                const { data: userData, error: userError } = await sb.from('profiles').select('*').order('display_name');
-                if (userError) throw userError;
-                allUsers = userData || [];
-                const { data: postData, error: postError } = await sb.from('posts').select('*').order('created_at', { ascending: false });
-                if (postError) throw postError;
-                posts = postData || [];
-                const { data: marketData, error: marketError } = await sb.from('market_items').select('*').order('created_at', { ascending: false });
-                if (marketError) throw marketError;
-                marketItems = marketData || [];
-                const { data: reportData, error: reportError } = await sb.from('reports').select('*').order('created_at', { ascending: false });
-                if (reportError) throw reportError;
-                reportsList = reportData || [];
-                const { data: feedbackData, error: feedbackError } = await sb.from('feedback').select('*').order('created_at', { ascending: false });
-                if (feedbackError) throw feedbackError;
-                feedbackList = feedbackData || [];
-                updateStatsAndBadges();
-                renderTab(currentTab);
-            } catch (err) {
-                console.error('Failed to load admin data:', err);
-                const errorMessage = err.message || 'Unknown error';
-                showToast('Failed to load data: ' + errorMessage, 'r');
-                debugBox.className = 'error';
-                debugBox.innerHTML = `<strong>⚠️ Error loading data:</strong><pre>${escapeHtml(errorMessage)}</pre><p style="margin-top:8px;font-size:12px;color:var(--muted)">Check console (F12) for full stack trace.</p><p style="font-size:12px;color:var(--muted)">Common causes: missing GRANT permissions, missing tables, or RLS policies not set for admins.</p>`;
-                document.getElementById('adminContent').innerHTML = `
-                    <div class="empty-state">
-                        <div class="icon" style="border-color:var(--danger)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
-                        <h3>Data Loading Failed</h3>
-                        <p>${escapeHtml(errorMessage)}</p>
-                        <button class="primary-btn" onclick="loadData()" style="padding:10px 24px;border-radius:12px;background:var(--p);color:#fff;border:none;font-weight:700;cursor:pointer;">Retry</button>
-                    </div>
-                `;
-            }
-        };
+      // ─── CLOUDINARY HELPERS ────────────────────────────
+      async function deleteCloudinaryMedia(publicId, resourceType = 'image') {
+        if (!publicId) return;
+        try {
+          const { data, error } = await sb.functions.invoke('delete-cloudinary', {
+            body: { public_id: publicId, resource_type: resourceType }
+          });
+          if (error) throw error;
+          console.log('Cloudinary deletion result:', data);
+          if (data?.result !== 'ok') console.warn('Cloudinary returned:', data);
+        } catch (err) { console.warn('Cloudinary deletion failed:', err.message); }
+      }
+      function extractPublicIdFromUrl(url) {
+        if (!url) return null;
+        const match = url.match(/\/upload\/v\d+\/(.+?)\./);
+        return match ? match[1] : null;
+      }
 
-        // ─── UPDATE STATS & BADGES ──────────────────
-        function updateStatsAndBadges() {
-            const pendingCount = requests.filter(r => r.status === 'pending').length;
-            document.getElementById('statUsers').textContent = fmtNum(allUsers.length);
-            document.getElementById('statPosts').textContent = fmtNum(posts.length);
-            document.getElementById('statMarket').textContent = fmtNum(marketItems.length);
-            document.getElementById('statPending').textContent = fmtNum(pendingCount);
-            const badge = document.getElementById('adminBadge');
-            if (pendingCount > 0) {
-                badge.textContent = 'Admin · ' + pendingCount + ' pending';
-                badge.style.background = 'rgba(251,146,60,.15)';
-                badge.style.borderColor = 'rgba(251,146,60,.3)';
-                badge.style.color = 'var(--warn)';
-            } else {
-                badge.textContent = 'Admin';
-                badge.style.background = 'var(--pdim)';
-                badge.style.borderColor = 'var(--pbrd)';
-                badge.style.color = 'var(--pl)';
-            }
-            document.getElementById('requestsBadge').textContent = requests.length || '0';
-            document.getElementById('usersBadge').textContent = allUsers.length || '0';
-            document.getElementById('postsBadge').textContent = posts.length || '0';
-            document.getElementById('listingsBadge').textContent = marketItems.length || '0';
-            document.getElementById('reportsBadge').textContent = reportsList.filter(r => r.status === 'pending').length || '0';
-            document.getElementById('feedbackBadge').textContent = feedbackList.filter(f => f.status === 'new').length || '0';
+      // ─── TOAST ──────────────────────────────────────────
+      function showToast(msg, type = 'g') {
+        const container = document.getElementById('tw');
+        const el = document.createElement('div');
+        el.className = 'toast';
+        el.innerHTML = `<span class="td ${type === 'g' ? 'tg' : type === 'r' ? 'tr' : 'to'}"></span> ${msg}`;
+        container.appendChild(el);
+        setTimeout(() => {
+          el.classList.add('out');
+          setTimeout(() => el.remove(), 300);
+        }, 2800);
+      }
+      window.showToast = showToast;
+
+      // ─── BOTTOM SHEET ──────────────────────────────────
+      function openSheet(html) {
+        document.getElementById('sheetBody').innerHTML = html;
+        document.getElementById('bottomSheet').classList.add('open');
+      }
+      function closeSheet() {
+        document.getElementById('bottomSheet').classList.remove('open');
+      }
+      window.openSheet = openSheet;
+      window.closeSheet = closeSheet;
+
+      // ─── MORE OVERLAY ──────────────────────────────────
+      function openMore() {
+        moreOverlay.classList.add('open');
+      }
+      function closeMore() {
+        moreOverlay.classList.remove('open');
+      }
+      document.querySelectorAll('.more-item').forEach(item => {
+        item.addEventListener('click', function() {
+          const action = this.dataset.action;
+          closeMore();
+          switch (action) {
+            case 'posts': switchTab('posts'); break;
+            case 'marketplace': switchTab('marketplace'); break;
+            case 'feedback': switchTab('feedback'); break;
+            case 'activity': switchTab('activity'); break;
+            case 'settings': switchTab('settings'); break;
+            case 'logout': adminSignOut(); break;
+            default: break;
+          }
+        });
+      });
+      // Click outside to close
+      moreOverlay.addEventListener('click', function(e) {
+        if (e.target === this) closeMore();
+      });
+
+      // ─── NAVIGATION ────────────────────────────────────
+      function switchTab(tab) {
+        currentTab = tab;
+        // update nav active
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        const navBtn = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+        if (navBtn) navBtn.classList.add('active');
+        // close more if open
+        closeMore();
+        // render
+        renderView(tab);
+      }
+
+      // Click nav items
+      document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const tab = this.dataset.tab;
+          if (tab === 'more') {
+            openMore();
+            return;
+          }
+          switchTab(tab);
+        });
+      });
+
+      // ─── LOAD DATA ──────────────────────────────────────
+      async function loadData() {
+        try {
+          const { data: reqData, error: reqError } = await sb
+            .from('verification_requests')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (reqError) throw reqError;
+          requests = reqData || [];
+
+          const { data: userData, error: userError } = await sb
+            .from('profiles')
+            .select('*')
+            .order('display_name');
+          if (userError) throw userError;
+          allUsers = userData || [];
+
+          const { data: postData, error: postError } = await sb
+            .from('posts')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (postError) throw postError;
+          posts = postData || [];
+
+          const { data: marketData, error: marketError } = await sb
+            .from('market_items')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (marketError) throw marketError;
+          marketItems = marketData || [];
+
+          const { data: reportData, error: reportError } = await sb
+            .from('reports')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (reportError) throw reportError;
+          reportsList = reportData || [];
+
+          const { data: feedbackData, error: feedbackError } = await sb
+            .from('feedback')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (feedbackError) throw feedbackError;
+          feedbackList = feedbackData || [];
+
+          updateBadges();
+          renderView(currentTab);
+        } catch (err) {
+          console.error('Failed to load admin data:', err);
+          showToast('Failed to load data: ' + err.message, 'r');
+          main.innerHTML = `
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <h3>Data Loading Failed</h3>
+              <p>${escapeHtml(err.message)}</p>
+              <button class="btn-primary" style="padding:10px 24px;border-radius:var(--radius-sm);border:none;font-weight:700;cursor:pointer;" onclick="loadData()">Retry</button>
+            </div>
+          `;
         }
+      }
 
-        // ─── TAB SWITCHING ──────────────────────────
-        window.switchTab = function(tab) {
-            currentTab = tab;
-            filterUserId = null;
-            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-            document.querySelector(`.admin-tab[data-tab="${tab}"]`).classList.add('active');
-            // Show/hide search bar
-            const searchBar = document.getElementById('userSearchBar');
-            if (tab === 'users') {
-                searchBar.style.display = 'flex';
-                document.getElementById('userSearchInput').value = '';
-                userSearchTerm = '';
-            } else {
-                searchBar.style.display = 'none';
-            }
-            renderTab(tab);
-        };
+      function updateBadges() {
+        const pendingReqs = requests.filter(r => r.status === 'pending').length;
+        const openReports = reportsList.filter(r => r.status === 'pending' || r.status === 'under_review').length;
+        document.getElementById('requestsBadgeNav').textContent = pendingReqs || '';
+        document.getElementById('requestsBadgeNav').style.display = pendingReqs ? 'block' : 'none';
+        document.getElementById('reportsBadgeNav').textContent = openReports || '';
+        document.getElementById('reportsBadgeNav').style.display = openReports ? 'block' : 'none';
+      }
 
-        // ─── USER SEARCH ──────────────────────────
-        window.filterUsers = function() {
-            const input = document.getElementById('userSearchInput');
-            userSearchTerm = input.value.toLowerCase().trim();
-            renderUsers();
-        };
-
-        function renderTab(tab) {
-            switch (tab) {
-                case 'requests': renderRequests(); break;
-                case 'users': renderUsers(); break;
-                case 'posts': renderPosts(); break;
-                case 'listings': renderListings(); break;
-                case 'reports': renderReports(); break;
-                case 'feedback': renderFeedback(); break;
-                default: document.getElementById('adminContent').innerHTML = '<div class="empty-state"><h3>Unknown tab</h3></div>';
-            }
+      // ─── RENDER VIEWS ──────────────────────────────────
+      function renderView(tab) {
+        switch (tab) {
+          case 'dashboard': renderDashboard(); break;
+          case 'requests': renderRequests(); break;
+          case 'users': renderUsers(); break;
+          case 'posts': renderPosts(); break;
+          case 'marketplace': renderMarketplace(); break;
+          case 'reports': renderReports(); break;
+          case 'feedback': renderFeedback(); break;
+          case 'activity': renderActivity(); break;
+          case 'settings': renderSettings(); break;
+          default: main.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
         }
+      }
 
-        // ─── RENDER REQUESTS ────────────────────────
-        function renderRequests() {
-            const list = document.getElementById('adminContent');
-            if (!requests.length) { list.innerHTML = `<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><h3>No verification requests</h3><p>All caught up!</p></div>`; return; }
-            list.innerHTML = requests.map(req => {
-                const reqUser = allUsers.find(u => u.id === req.user_id);
-                const name = reqUser ? reqUser.display_name || 'Unknown User' : 'Unknown User';
-                const username = reqUser ? reqUser.username || '' : '';
-                const avatar = reqUser ? reqUser.avatar_url : '';
-                const statusClass = getStatusBadgeClass(req.status);
-                const statusLabel = getStatusLabel(req.status);
-                const isPending = req.status === 'pending';
-                let actionsHtml = '';
-                if (isPending) {
-                    actionsHtml = `<div class="actions"><button class="approve" onclick="approveRequest('${req.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Approve</button><button class="reject" onclick="openRejectModal('${req.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Reject</button><button class="view-btn" onclick="toggleExpand(this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg> View Details</button></div>`;
-                } else {
-                    actionsHtml = `<div class="actions"><button class="view-btn" onclick="toggleExpand(this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg> View Details</button>${req.rejection_reason ? `<span style="font-size:12px;color:var(--muted);margin-left:8px;">Rejected: ${escapeHtml(req.rejection_reason)}</span>` : ''}</div>`;
-                }
-                return `<div class="req-card" data-request-id="${req.id}">
-                    <div class="top">${avatar ? `<img class="avatar" src="${avatar}" onerror="this.style.display='none'" alt="">` : `<div class="avatar" style="display:flex;align-items:center;justify-content:center;background:var(--bg4);font-weight:700;font-size:18px;color:var(--muted);">${name.charAt(0).toUpperCase()}</div>`}
-                        <div class="info"><div class="name">${escapeHtml(name)}${reqUser && reqUser.verified ? `<span style="color:var(--ok);font-size:14px;">✅</span>` : ''}</div>
-                        <div class="handle">${username ? '@' + escapeHtml(username) : ''}</div>
-                        <div class="meta">Category: <strong>${escapeHtml(req.category || '—')}</strong> · Submitted ${formatDate(req.created_at)}</div></div>
-                        <span class="badge ${statusClass}">${statusLabel}</span>
-                    </div>
-                    <div class="details"><div class="reason"><strong>Reason:</strong> ${escapeHtml(req.reason || '—')}</div>${req.link ? `<div class="link"><strong>Link:</strong> <a href="${escapeHtml(req.link)}" target="_blank" rel="noopener">${escapeHtml(req.link)}</a></div>` : ''}</div>
-                    <div class="expanded-details" id="expanded-${req.id}">
-                        <div class="field"><div class="field-label">Full Reason</div><div class="field-value">${escapeHtml(req.reason || '—')}</div></div>
-                        ${req.link ? `<div class="field"><div class="field-label">Supporting Link</div><div class="field-value"><a href="${escapeHtml(req.link)}" target="_blank" rel="noopener">${escapeHtml(req.link)}</a></div></div>` : ''}
-                        ${req.reviewed_at ? `<div class="field"><div class="field-label">Reviewed At</div><div class="field-value">${formatDateTime(req.reviewed_at)}</div></div>` : ''}
-                        ${req.rejection_reason ? `<div class="field"><div class="field-label">Rejection Reason</div><div class="field-value" style="color:var(--danger)">${escapeHtml(req.rejection_reason)}</div></div>` : ''}
-                    </div>
-                    ${actionsHtml}
-                </div>`;
-            }).join('');
+      // ─── DASHBOARD ──────────────────────────────────────
+      function renderDashboard() {
+        const usersCount = allUsers.length;
+        const postsCount = posts.length;
+        const reportsOpen = reportsList.filter(r => r.status === 'pending' || r.status === 'under_review').length;
+        const pendingReqs = requests.filter(r => r.status === 'pending').length;
+
+        // recent activity: combine latest events
+        const activities = [];
+        // latest verifications (approved requests)
+        const approvedReqs = requests.filter(r => r.status === 'approved').slice(0, 3);
+        approvedReqs.forEach(r => {
+          const user = allUsers.find(u => u.id === r.user_id);
+          if (user) activities.push({ text: `✅ ${user.display_name} verified`, time: r.reviewed_at || r.created_at });
+        });
+        // latest suspensions from profiles (we don't track separately, so we can show a sample)
+        // we'll add a dummy or skip
+        // show latest reports
+        const recentReports = reportsList.slice(0, 2);
+        recentReports.forEach(r => {
+          const reporter = allUsers.find(u => u.id === r.reporter_id);
+          activities.push({ text: `⚠️ Report from ${reporter ? reporter.display_name : 'Unknown'}`, time: r.created_at });
+        });
+        // sort by time
+        activities.sort((a, b) => new Date(b.time) - new Date(a.time));
+        const topActivities = activities.slice(0, 5);
+
+        const activityHtml = topActivities.length ? topActivities.map(a => `
+          <div class="activity-item">
+            <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div class="content"><div class="primary">${escapeHtml(a.text)}</div></div>
+            <div class="time">${timeAgo(a.time)}</div>
+          </div>
+        `).join('') : '<div class="activity-item"><div class="content" style="color:var(--text-secondary)">No recent activity</div></div>';
+
+        main.innerHTML = `
+          <div style="padding:4px 0 8px;">
+            <div style="font-size:20px;font-weight:800;">Admin Dashboard</div>
+            <div style="font-size:14px;color:var(--text-secondary);">Welcome back, Admin</div>
+            <div style="font-size:13px;color:var(--text-tertiary);margin-top:2px;">${formatDate(new Date().toISOString())}</div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card"><div class="label">Users</div><div class="value">${fmtNum(usersCount)}</div></div>
+            <div class="stat-card"><div class="label">Posts</div><div class="value">${fmtNum(postsCount)}</div></div>
+            <div class="stat-card"><div class="label">Reports</div><div class="value ${reportsOpen > 0 ? 'danger' : ''}">${fmtNum(reportsOpen)}</div></div>
+            <div class="stat-card"><div class="label">Requests</div><div class="value ${pendingReqs > 0 ? 'warning' : ''}">${fmtNum(pendingReqs)}</div></div>
+          </div>
+
+          <div style="font-weight:700;font-size:16px;margin-bottom:12px;">Recent Moderation Activity</div>
+          <div class="activity-list">${activityHtml}</div>
+        `;
+      }
+
+      // ─── REQUESTS ──────────────────────────────────────
+      function renderRequests() {
+        let filtered = requests;
+        if (currentFilter !== 'all') {
+          filtered = requests.filter(r => r.status === currentFilter);
         }
+        const html = filtered.length ? filtered.map(req => {
+          const user = allUsers.find(u => u.id === req.user_id);
+          const name = user ? user.display_name : 'Unknown';
+          const username = user ? user.username : '';
+          const avatar = user ? user.avatar_url : '';
+          const statusClass = getStatusBadgeClass(req.status);
+          const statusLabel = getStatusLabel(req.status);
+          const isPending = req.status === 'pending';
 
-        // ─── RENDER USERS (with search filter) ──────────
-        function renderUsers() {
-            const list = document.getElementById('adminContent');
-            const search = userSearchTerm.toLowerCase().trim();
-            let filtered = allUsers;
-            if (search) {
-                filtered = allUsers.filter(u =>
-                    (u.display_name && u.display_name.toLowerCase().includes(search)) ||
-                    (u.username && u.username.toLowerCase().includes(search))
-                );
-            }
-            if (!filtered.length) {
-                list.innerHTML = `<div class="empty-state"><h3>${search ? 'No users match your search' : 'No users found'}</h3></div>`;
-                return;
-            }
-            list.innerHTML = filtered.map(user => {
-                const statusBadges = [];
-                if (user.suspended) statusBadges.push('<span class="badge suspended">Suspended</span>');
-                if (user.verified) statusBadges.push('<span class="badge verified">Verified</span>');
-                if (user.is_admin) statusBadges.push('<span class="badge approved">Admin</span>');
-                const badgeHtml = statusBadges.length ? statusBadges.join(' ') : '';
-                let actionsHtml = '';
-                if (user.suspended) {
-                    actionsHtml += `<button class="approve" onclick="unsuspendUser('${user.id}')">Restore</button>`;
-                } else {
-                    actionsHtml += `<button class="reject" onclick="suspendUser('${user.id}')">Suspend</button>`;
-                }
-                if (!user.verified) {
-                    actionsHtml += `<button class="approve" onclick="verifyUserDirectly('${user.id}')">✅ Verify</button>`;
-                } else {
-                    actionsHtml += `<button class="danger-btn" onclick="withdrawVerification('${user.id}')">Withdraw ✅</button>`;
-                }
-                actionsHtml += `<button class="view-btn" onclick="viewUserPosts('${user.id}')">📄 Posts</button><button class="view-btn" onclick="viewUserListings('${user.id}')">🛒 Listings</button>`;
-                return `<div class="req-card" data-user-id="${user.id}">
-                    <div class="top">${user.avatar_url ? `<img class="avatar" src="${user.avatar_url}" onerror="this.style.display='none'" alt="">` : `<div class="avatar" style="display:flex;align-items:center;justify-content:center;background:var(--bg4);font-weight:700;font-size:18px;color:var(--muted);">${(user.display_name || 'U').charAt(0).toUpperCase()}</div>`}
-                        <div class="info"><div class="name">${escapeHtml(user.display_name || 'Unknown')} ${badgeHtml}</div>
-                        <div class="handle">${user.username ? '@' + escapeHtml(user.username) : ''}</div>
-                        <div class="meta">Joined ${formatDate(user.created_at)}${user.suspended ? ` · Suspended: ${escapeHtml(user.suspended_reason || 'No reason')}` : ''}</div></div>
-                    </div>
-                    <div class="actions">${actionsHtml}</div>
-                </div>`;
-            }).join('');
+          let actions = '';
+          if (isPending) {
+            actions = `
+              <div class="actions">
+                <button class="btn-success" onclick="approveRequest('${req.id}')">Approve</button>
+                <button class="btn-danger" onclick="openRejectSheet('${req.id}')">Reject</button>
+                <button class="btn-outline" onclick="toggleExpand(this)">View Details</button>
+              </div>
+            `;
+          } else {
+            actions = `
+              <div class="actions">
+                <button class="btn-outline" onclick="toggleExpand(this)">View Details</button>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="card" data-request-id="${req.id}">
+              <div class="top">
+                ${avatar ? `<img class="avatar" src="${avatar}" onerror="this.style.display='none'" alt="">` :
+                  `<div class="avatar" style="display:flex;align-items:center;justify-content:center;background:var(--surface2);font-weight:700;font-size:18px;color:var(--text-secondary);">${name.charAt(0).toUpperCase()}</div>`}
+                <div class="info">
+                  <div class="name">${escapeHtml(name)} ${user && user.verified ? `<span class="badge verified">Verified</span>` : ''}</div>
+                  <div class="handle">${username ? '@' + escapeHtml(username) : ''}</div>
+                  <div class="meta">Category: ${escapeHtml(req.category || '—')} · Submitted ${timeAgo(req.created_at)}</div>
+                </div>
+                <span class="badge ${statusClass}">${statusLabel}</span>
+              </div>
+              <div class="details">
+                <div class="reason"><strong>Reason:</strong> ${escapeHtml(req.reason || '—')}</div>
+                ${req.link ? `<div class="link"><a href="${escapeHtml(req.link)}" target="_blank">Supporting link</a></div>` : ''}
+              </div>
+              <div class="expanded-details hidden" id="expanded-${req.id}">
+                <div class="field"><div class="field-label">Full Reason</div><div class="field-value">${escapeHtml(req.reason || '—')}</div></div>
+                ${req.link ? `<div class="field"><div class="field-label">Link</div><div class="field-value"><a href="${escapeHtml(req.link)}" target="_blank">${escapeHtml(req.link)}</a></div></div>` : ''}
+                ${req.reviewed_at ? `<div class="field"><div class="field-label">Reviewed</div><div class="field-value">${formatDateTime(req.reviewed_at)}</div></div>` : ''}
+                ${req.rejection_reason ? `<div class="field"><div class="field-label">Rejection Reason</div><div class="field-value" style="color:var(--danger)">${escapeHtml(req.rejection_reason)}</div></div>` : ''}
+              </div>
+              ${actions}
+            </div>
+          `;
+        }).join('') : `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <h3>No requests</h3>
+            <p>${currentFilter === 'all' ? 'No verification requests found.' : `No ${currentFilter} requests.`}</p>
+          </div>
+        `;
+
+        main.innerHTML = `
+          <div class="page-title">
+            <span>Requests</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="text" placeholder="Search requests..." style="padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;width:150px;" id="reqSearch" oninput="filterRequests()">
+            </div>
+          </div>
+          <div class="filter-tabs">
+            <button class="filter-tab ${currentFilter === 'all' ? 'active' : ''}" onclick="setReqFilter('all')">All</button>
+            <button class="filter-tab ${currentFilter === 'pending' ? 'active' : ''}" onclick="setReqFilter('pending')">Pending</button>
+            <button class="filter-tab ${currentFilter === 'approved' ? 'active' : ''}" onclick="setReqFilter('approved')">Approved</button>
+            <button class="filter-tab ${currentFilter === 'rejected' ? 'active' : ''}" onclick="setReqFilter('rejected')">Rejected</button>
+          </div>
+          ${html}
+        `;
+      }
+
+      window.setReqFilter = function(filter) {
+        currentFilter = filter;
+        renderRequests();
+      };
+
+      window.filterRequests = function() {
+        // simple client-side search (we can implement later)
+      };
+
+      // ─── USERS ──────────────────────────────────────────
+      function renderUsers() {
+        const search = userSearchTerm.toLowerCase().trim();
+        let filtered = allUsers;
+        if (search) {
+          filtered = allUsers.filter(u =>
+            (u.display_name && u.display_name.toLowerCase().includes(search)) ||
+            (u.username && u.username.toLowerCase().includes(search))
+          );
         }
+        const html = filtered.length ? filtered.map(user => {
+          const badges = [];
+          if (user.suspended) badges.push('<span class="badge suspended">Suspended</span>');
+          if (user.verified) badges.push('<span class="badge verified">Verified</span>');
+          if (user.is_admin) badges.push('<span class="badge admin">Admin</span>');
+          const badgeHtml = badges.join(' ');
 
-        // ─── RENDER POSTS (with media preview) ──────────
-        function renderPosts(filterUserIdOverride = null) {
-            const list = document.getElementById('adminContent');
-            const userId = filterUserIdOverride !== undefined ? filterUserIdOverride : filterUserId;
-            const filtered = userId ? posts.filter(p => p.user_id === userId) : posts;
-            if (!filtered.length) {
-                list.innerHTML = `<div class="empty-state"><h3>${userId ? 'No posts by this user' : 'No posts found'}</h3></div>`;
-                return;
-            }
-            list.innerHTML = filtered.map(post => {
-                const author = allUsers.find(u => u.id === post.user_id);
-                const name = author ? author.display_name : 'Unknown';
-                const content = post.content || post.caption || '';
-                const avatar = author ? author.avatar_url : '';
-                // Media preview
-                let mediaHtml = '';
-                if (post.image_url) {
-                    mediaHtml += `<a href="${escapeHtml(post.image_url)}" target="_blank"><img src="${escapeHtml(post.image_url)}" alt="Image" loading="lazy" onerror="this.style.display='none'"></a>`;
-                }
-                if (post.video_url) {
-                    mediaHtml += `<a href="${escapeHtml(post.video_url)}" target="_blank"><video src="${escapeHtml(post.video_url)}" muted preload="metadata" controls style="max-height:160px;border-radius:12px;"></video></a>`;
-                }
-                return `<div class="req-card" data-post-id="${post.id}">
-                    <div class="top">${avatar ? `<img class="avatar" src="${avatar}" onerror="this.style.display='none'" alt="">` : ''}
-                        <div class="info"><div class="name">${escapeHtml(name)}</div><div class="meta">${formatDate(post.created_at)}</div></div>
-                    </div>
-                    <div class="details"><div class="reason">${escapeHtml(content)}</div></div>
-                    ${mediaHtml ? `<div class="media-preview">${mediaHtml}</div>` : ''}
-                    <div class="actions"><button class="danger-btn" onclick="deletePost('${post.id}')">🗑️ Delete</button></div>
-                </div>`;
-            }).join('');
+          let actions = `
+            <button class="btn-outline" onclick="viewUserActions('${user.id}')">•••</button>
+          `;
+
+          return `
+            <div class="card" data-user-id="${user.id}">
+              <div class="top">
+                ${user.avatar_url ? `<img class="avatar" src="${user.avatar_url}" onerror="this.style.display='none'" alt="">` :
+                  `<div class="avatar" style="display:flex;align-items:center;justify-content:center;background:var(--surface2);font-weight:700;font-size:18px;color:var(--text-secondary);">${(user.display_name || 'U').charAt(0).toUpperCase()}</div>`}
+                <div class="info">
+                  <div class="name">${escapeHtml(user.display_name || 'Unknown')} ${badgeHtml}</div>
+                  <div class="handle">${user.username ? '@' + escapeHtml(user.username) : ''}</div>
+                  <div class="meta">Joined ${formatDate(user.created_at)}${user.suspended ? ` · Suspended: ${escapeHtml(user.suspended_reason || 'No reason')}` : ''}</div>
+                </div>
+              </div>
+              <div class="actions">
+                ${actions}
+              </div>
+            </div>
+          `;
+        }).join('') : `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            <h3>No users</h3>
+            <p>${search ? 'No users match your search' : 'No users found'}</p>
+          </div>
+        `;
+
+        main.innerHTML = `
+          <div class="page-title">
+            <span>Users</span>
+            <span style="font-size:13px;color:var(--text-secondary);">${filtered.length}</span>
+          </div>
+          <div class="search-bar">
+            <input type="text" placeholder="Search users..." id="userSearch" value="${userSearchTerm}" oninput="userSearchTerm=this.value; renderUsers();" />
+          </div>
+          ${html}
+        `;
+      }
+
+      window.viewUserActions = function(userId) {
+        const user = allUsers.find(u => u.id === userId);
+        if (!user) return;
+        const isSuspended = user.suspended;
+        const isVerified = user.verified;
+        let html = `
+          <div class="title">${escapeHtml(user.display_name || 'User')}</div>
+          <div class="sub">${user.username ? '@' + escapeHtml(user.username) : ''}</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+            <button class="btn-primary" onclick="viewUserPosts('${user.id}'); closeSheet();">View Posts</button>
+            <button class="btn-primary" onclick="viewUserListings('${user.id}'); closeSheet();">View Listings</button>
+            ${!isVerified ? `<button class="btn-success" onclick="verifyUserDirectly('${user.id}'); closeSheet();">Verify User</button>` :
+              `<button class="btn-danger" onclick="withdrawVerification('${user.id}'); closeSheet();">Withdraw Verification</button>`}
+            ${isSuspended ? `<button class="btn-success" onclick="unsuspendUser('${user.id}'); closeSheet();">Restore User</button>` :
+              `<button class="btn-danger" onclick="suspendUser('${user.id}'); closeSheet();">Suspend User</button>`}
+            <button class="btn-outline" onclick="copyUID('${user.id}'); closeSheet();">Copy User ID</button>
+          </div>
+          <div class="action-row">
+            <button class="btn-outline" style="flex:1;" onclick="closeSheet();">Close</button>
+          </div>
+        `;
+        openSheet(html);
+      };
+
+      window.copyUID = function(uid) {
+        navigator.clipboard?.writeText(uid).then(() => showToast('User ID copied', 'g')).catch(() => {});
+      };
+
+      // ─── POSTS ──────────────────────────────────────────
+      function renderPosts() {
+        const html = posts.length ? posts.map(post => {
+          const author = allUsers.find(u => u.id === post.user_id);
+          const name = author ? author.display_name : 'Unknown';
+          const content = post.content || post.caption || '';
+          const avatar = author ? author.avatar_url : '';
+          let mediaHtml = '';
+          if (post.image_url) mediaHtml += `<a href="${escapeHtml(post.image_url)}" target="_blank"><img src="${escapeHtml(post.image_url)}" loading="lazy" onerror="this.style.display='none'"></a>`;
+          if (post.video_url) mediaHtml += `<a href="${escapeHtml(post.video_url)}" target="_blank"><video src="${escapeHtml(post.video_url)}" muted preload="metadata" controls></video></a>`;
+
+          return `
+            <div class="card" data-post-id="${post.id}">
+              <div class="top">
+                ${avatar ? `<img class="avatar" src="${avatar}" onerror="this.style.display='none'" alt="">` : ''}
+                <div class="info">
+                  <div class="name">${escapeHtml(name)}</div>
+                  <div class="meta">${formatDate(post.created_at)}</div>
+                </div>
+              </div>
+              <div class="details">
+                <div class="reason">${escapeHtml(content)}</div>
+              </div>
+              ${mediaHtml ? `<div class="media-preview">${mediaHtml}</div>` : ''}
+              <div class="actions">
+                <button class="btn-danger" onclick="deletePost('${post.id}')">Delete</button>
+              </div>
+            </div>
+          `;
+        }).join('') : `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M21 15l-5-5-5 5"/><path d="M3 9l5 5 5-5"/></svg>
+            <h3>No posts</h3>
+            <p>No posts found.</p>
+          </div>
+        `;
+
+        main.innerHTML = `
+          <div class="page-title">
+            <button class="back-btn" onclick="switchTab('dashboard')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <span>Posts</span>
+            <span style="font-size:13px;color:var(--text-secondary);">${posts.length}</span>
+          </div>
+          ${html}
+        `;
+      }
+
+      // ─── MARKETPLACE REVIEW ──────────────────────────
+      function renderMarketplace() {
+        const html = marketItems.length ? marketItems.map(item => {
+          const seller = allUsers.find(u => u.id === item.user_id);
+          const name = seller ? seller.display_name : 'Unknown';
+          let mediaHtml = '';
+          if (item.image_url) mediaHtml += `<a href="${escapeHtml(item.image_url)}" target="_blank"><img src="${escapeHtml(item.image_url)}" loading="lazy" onerror="this.style.display='none'"></a>`;
+          if (item.video_url) mediaHtml += `<a href="${escapeHtml(item.video_url)}" target="_blank"><video src="${escapeHtml(item.video_url)}" muted preload="metadata" controls></video></a>`;
+
+          return `
+            <div class="card" data-listing-id="${item.id}">
+              <div class="top">
+                ${item.image_url ? `<img class="avatar" src="${escapeHtml(item.image_url)}" onerror="this.style.display='none'" alt="">` : ''}
+                <div class="info">
+                  <div class="name">${escapeHtml(item.title || 'Untitled')}</div>
+                  <div class="handle">${escapeHtml(name)}</div>
+                  <div class="meta">${item.price != null ? '$' + escapeHtml(String(item.price)) : ''}${item.price != null ? ' · ' : ''}${formatDate(item.created_at)}</div>
+                </div>
+              </div>
+              <div class="details">
+                <div class="reason">${escapeHtml(item.description || '')}</div>
+              </div>
+              ${mediaHtml ? `<div class="media-preview">${mediaHtml}</div>` : ''}
+              <div class="actions">
+                <button class="btn-danger" onclick="deleteListing('${item.id}')">Delete</button>
+              </div>
+            </div>
+          `;
+        }).join('') : `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+            <h3>No listings</h3>
+            <p>No marketplace listings found.</p>
+          </div>
+        `;
+
+        main.innerHTML = `
+          <div class="page-title">
+            <button class="back-btn" onclick="switchTab('dashboard')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <span>Marketplace Review</span>
+            <span style="font-size:13px;color:var(--text-secondary);">${marketItems.length}</span>
+          </div>
+          ${html}
+        `;
+      }
+
+      // ─── REPORTS ──────────────────────────────────────
+      function renderReports() {
+        const openReports = reportsList.filter(r => r.status === 'pending' || r.status === 'under_review');
+        const resolvedReports = reportsList.filter(r => r.status === 'resolved' || r.status === 'dismissed');
+        let filtered = reportsList;
+        if (currentFilter === 'open') filtered = openReports;
+        else if (currentFilter === 'resolved') filtered = resolvedReports;
+
+        const html = filtered.length ? filtered.map(report => {
+          const reporter = allUsers.find(u => u.id === report.reporter_id);
+          const reporterName = reporter ? reporter.display_name : 'Unknown';
+          const target = report.target_type === 'user' ? allUsers.find(u => u.id === report.target_id) : null;
+          const targetName = target ? target.display_name : report.target_id;
+          const statusClass = getStatusBadgeClass(report.status);
+          const statusLabel = getStatusLabel(report.status);
+          const isOpen = report.status === 'pending' || report.status === 'under_review';
+
+          return `
+            <div class="card" data-report-id="${report.id}">
+              <div class="top">
+                <div class="info">
+                  <div class="name">${escapeHtml(report.reason || 'Report')} <span class="badge ${statusClass}">${statusLabel}</span></div>
+                  <div class="handle">Reported by ${escapeHtml(reporterName)}</div>
+                  <div class="meta">Target: ${escapeHtml(targetName)} · ${timeAgo(report.created_at)}</div>
+                </div>
+              </div>
+              ${report.details ? `<div class="details"><div class="reason">${escapeHtml(report.details)}</div></div>` : ''}
+              <div class="actions">
+                ${isOpen ? `<button class="btn-primary" onclick="viewReport('${report.id}')">View Report</button>` : ''}
+                <button class="btn-outline" onclick="viewReport('${report.id}')">Details</button>
+              </div>
+            </div>
+          `;
+        }).join('') : `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+            <h3>No reports</h3>
+            <p>No reports in this status.</p>
+          </div>
+        `;
+
+        main.innerHTML = `
+          <div class="page-title">
+            <span>Reports</span>
+            <span style="font-size:13px;color:var(--text-secondary);">${openReports.length} open</span>
+          </div>
+          <div class="filter-tabs">
+            <button class="filter-tab ${currentFilter === 'all' ? 'active' : ''}" onclick="setReportFilter('all')">All</button>
+            <button class="filter-tab ${currentFilter === 'open' ? 'active' : ''}" onclick="setReportFilter('open')">Open</button>
+            <button class="filter-tab ${currentFilter === 'resolved' ? 'active' : ''}" onclick="setReportFilter('resolved')">Resolved</button>
+          </div>
+          ${html}
+        `;
+      }
+
+      window.setReportFilter = function(filter) {
+        currentFilter = filter;
+        renderReports();
+      };
+
+      window.viewReport = function(reportId) {
+        const report = reportsList.find(r => r.id === reportId);
+        if (!report) return;
+        const reporter = allUsers.find(u => u.id === report.reporter_id);
+        const target = allUsers.find(u => u.id === report.target_id);
+        const html = `
+          <div class="title">Report Details</div>
+          <div style="margin-top:8px;">
+            <div><strong>Reason:</strong> ${escapeHtml(report.reason)}</div>
+            ${report.details ? `<div><strong>Details:</strong> ${escapeHtml(report.details)}</div>` : ''}
+            <div><strong>Target:</strong> ${report.target_type} – ${escapeHtml(target ? target.display_name : report.target_id)}</div>
+            <div><strong>Reported by:</strong> ${escapeHtml(reporter ? reporter.display_name : 'Unknown')}</div>
+            <div><strong>Status:</strong> ${getStatusLabel(report.status)}</div>
+            <div><strong>Created:</strong> ${formatDateTime(report.created_at)}</div>
+          </div>
+          ${report.status === 'pending' || report.status === 'under_review' ? `
+          <div class="action-row">
+            <button class="btn-success" onclick="resolveReport('${report.id}','resolved'); closeSheet();">Resolve</button>
+            <button class="btn-danger" onclick="resolveReport('${report.id}','dismissed'); closeSheet();">Dismiss</button>
+          </div>` : ''}
+          <div class="action-row">
+            <button class="btn-outline" style="flex:1;" onclick="closeSheet();">Close</button>
+          </div>
+        `;
+        openSheet(html);
+      };
+
+      // ─── FEEDBACK ──────────────────────────────────────
+      function renderFeedback() {
+        const html = feedbackList.length ? feedbackList.map(fb => {
+          const user = allUsers.find(u => u.id === fb.user_id);
+          const userName = user ? user.display_name : 'Unknown';
+          const isNew = fb.status === 'new';
+          return `
+            <div class="card" data-feedback-id="${fb.id}">
+              <div class="top">
+                <div class="info">
+                  <div class="name">${escapeHtml(userName)} <span class="badge ${isNew ? 'pending' : 'reviewed'}">${isNew ? 'New' : 'Reviewed'}</span></div>
+                  <div class="meta">${formatDate(fb.created_at)}</div>
+                </div>
+              </div>
+              <div class="details">
+                <div class="reason">${escapeHtml(fb.message)}</div>
+                ${fb.category ? `<div class="reason"><strong>Category:</strong> ${escapeHtml(fb.category)}</div>` : ''}
+              </div>
+              <div class="actions">
+                ${isNew ? `<button class="btn-success" onclick="markFeedbackReviewed('${fb.id}')">Mark Reviewed</button>` : ''}
+                <button class="btn-outline" onclick="viewFeedback('${fb.id}')">View</button>
+              </div>
+            </div>
+          `;
+        }).join('') : `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <h3>No feedback</h3>
+            <p>No feedback submissions yet.</p>
+          </div>
+        `;
+
+        main.innerHTML = `
+          <div class="page-title">
+            <button class="back-btn" onclick="switchTab('dashboard')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <span>Feedback</span>
+            <span style="font-size:13px;color:var(--text-secondary);">${feedbackList.filter(f => f.status === 'new').length} new</span>
+          </div>
+          ${html}
+        `;
+      }
+
+      window.viewFeedback = function(feedbackId) {
+        const fb = feedbackList.find(f => f.id === feedbackId);
+        if (!fb) return;
+        const user = allUsers.find(u => u.id === fb.user_id);
+        const html = `
+          <div class="title">Feedback from ${escapeHtml(user ? user.display_name : 'Unknown')}</div>
+          <div style="margin-top:8px;">
+            <div><strong>Message:</strong> ${escapeHtml(fb.message)}</div>
+            ${fb.category ? `<div><strong>Category:</strong> ${escapeHtml(fb.category)}</div>` : ''}
+            <div><strong>Status:</strong> ${fb.status}</div>
+            <div><strong>Date:</strong> ${formatDateTime(fb.created_at)}</div>
+          </div>
+          ${fb.status === 'new' ? `<div class="action-row"><button class="btn-success" onclick="markFeedbackReviewed('${fb.id}'); closeSheet();">Mark Reviewed</button></div>` : ''}
+          <div class="action-row">
+            <button class="btn-outline" style="flex:1;" onclick="closeSheet();">Close</button>
+          </div>
+        `;
+        openSheet(html);
+      };
+
+      // ─── ACTIVITY LOGS ──────────────────────────────────
+      function renderActivity() {
+        // Build a combined log
+        const logs = [];
+        // Verified users
+        requests.filter(r => r.status === 'approved').forEach(r => {
+          const user = allUsers.find(u => u.id === r.user_id);
+          logs.push({ type: 'verified', text: `Verified ${user ? user.display_name : 'user'}`, time: r.reviewed_at || r.created_at });
+        });
+        // Suspended users
+        allUsers.filter(u => u.suspended).forEach(u => {
+          logs.push({ type: 'suspended', text: `Suspended ${u.display_name}`, time: u.suspended_at || u.created_at });
+        });
+        // Deleted posts (we don't have log, so skip)
+        // Sort by time
+        logs.sort((a, b) => new Date(b.time) - new Date(a.time));
+        const top = logs.slice(0, 50);
+
+        const html = top.length ? top.map(log => `
+          <div class="card" style="padding:12px 16px;">
+            <div class="top">
+              <div class="info">
+                <div class="name">${escapeHtml(log.text)}</div>
+                <div class="meta">${formatDateTime(log.time)}</div>
+              </div>
+            </div>
+          </div>
+        `).join('') : `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <h3>No activity</h3>
+            <p>No moderation activity logged yet.</p>
+          </div>
+        `;
+
+        main.innerHTML = `
+          <div class="page-title">
+            <button class="back-btn" onclick="switchTab('dashboard')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <span>Activity Logs</span>
+          </div>
+          ${html}
+        `;
+      }
+
+      // ─── SETTINGS ──────────────────────────────────────
+      function renderSettings() {
+        main.innerHTML = `
+          <div class="page-title">
+            <button class="back-btn" onclick="switchTab('dashboard')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <span>Settings</span>
+          </div>
+          <div class="card">
+            <div class="top"><div class="info"><div class="name">Theme</div></div></div>
+            <div class="actions">
+              <button class="btn-outline" onclick="toggleTheme()">Toggle Dark/Light</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="top"><div class="info"><div class="name">Sign Out</div></div></div>
+            <div class="actions">
+              <button class="btn-danger" onclick="adminSignOut()">Sign Out</button>
+            </div>
+          </div>
+        `;
+      }
+
+      window.toggleTheme = function() {
+        const html = document.documentElement;
+        const current = html.getAttribute('data-theme');
+        html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+        showToast('Theme toggled', 'g');
+      };
+
+      // ─── EXPAND TOGGLE ──────────────────────────────────
+      window.toggleExpand = function(btn) {
+        const card = btn.closest('.card');
+        if (!card) return;
+        const details = card.querySelector('.expanded-details');
+        if (!details) return;
+        details.classList.toggle('hidden');
+        btn.textContent = details.classList.contains('hidden') ? 'View Details' : 'Hide Details';
+      };
+
+      // ─── VIEW USER POSTS / LISTINGS ────────────────────
+      window.viewUserPosts = function(userId) {
+        filterUserId = userId;
+        switchTab('posts');
+        // filter posts by userId
+        // we need to re-render posts with filter
+        renderPostsFiltered(userId);
+      };
+
+      window.viewUserListings = function(userId) {
+        filterUserId = userId;
+        switchTab('marketplace');
+        renderMarketplaceFiltered(userId);
+      };
+
+      function renderPostsFiltered(userId) {
+        const filtered = posts.filter(p => p.user_id === userId);
+        // reuse renderPosts but with filtered data
+        const html = filtered.length ? filtered.map(post => {
+          const author = allUsers.find(u => u.id === post.user_id);
+          const name = author ? author.display_name : 'Unknown';
+          const content = post.content || post.caption || '';
+          const avatar = author ? author.avatar_url : '';
+          let mediaHtml = '';
+          if (post.image_url) mediaHtml += `<a href="${escapeHtml(post.image_url)}" target="_blank"><img src="${escapeHtml(post.image_url)}" loading="lazy" onerror="this.style.display='none'"></a>`;
+          if (post.video_url) mediaHtml += `<a href="${escapeHtml(post.video_url)}" target="_blank"><video src="${escapeHtml(post.video_url)}" muted preload="metadata" controls></video></a>`;
+
+          return `
+            <div class="card" data-post-id="${post.id}">
+              <div class="top">
+                ${avatar ? `<img class="avatar" src="${avatar}" onerror="this.style.display='none'" alt="">` : ''}
+                <div class="info">
+                  <div class="name">${escapeHtml(name)}</div>
+                  <div class="meta">${formatDate(post.created_at)}</div>
+                </div>
+              </div>
+              <div class="details">
+                <div class="reason">${escapeHtml(content)}</div>
+              </div>
+              ${mediaHtml ? `<div class="media-preview">${mediaHtml}</div>` : ''}
+              <div class="actions">
+                <button class="btn-danger" onclick="deletePost('${post.id}')">Delete</button>
+              </div>
+            </div>
+          `;
+        }).join('') : `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M21 15l-5-5-5 5"/><path d="M3 9l5 5 5-5"/></svg>
+            <h3>No posts</h3>
+            <p>This user has no posts.</p>
+          </div>
+        `;
+        main.innerHTML = `
+          <div class="page-title">
+            <button class="back-btn" onclick="switchTab('users')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <span>User Posts</span>
+          </div>
+          ${html}
+        `;
+      }
+
+      function renderMarketplaceFiltered(userId) {
+        const filtered = marketItems.filter(m => m.user_id === userId);
+        const html = filtered.length ? filtered.map(item => {
+          const seller = allUsers.find(u => u.id === item.user_id);
+          const name = seller ? seller.display_name : 'Unknown';
+          let mediaHtml = '';
+          if (item.image_url) mediaHtml += `<a href="${escapeHtml(item.image_url)}" target="_blank"><img src="${escapeHtml(item.image_url)}" loading="lazy" onerror="this.style.display='none'"></a>`;
+          if (item.video_url) mediaHtml += `<a href="${escapeHtml(item.video_url)}" target="_blank"><video src="${escapeHtml(item.video_url)}" muted preload="metadata" controls></video></a>`;
+
+          return `
+            <div class="card" data-listing-id="${item.id}">
+              <div class="top">
+                ${item.image_url ? `<img class="avatar" src="${escapeHtml(item.image_url)}" onerror="this.style.display='none'" alt="">` : ''}
+                <div class="info">
+                  <div class="name">${escapeHtml(item.title || 'Untitled')}</div>
+                  <div class="handle">${escapeHtml(name)}</div>
+                  <div class="meta">${item.price != null ? '$' + escapeHtml(String(item.price)) : ''}${item.price != null ? ' · ' : ''}${formatDate(item.created_at)}</div>
+                </div>
+              </div>
+              <div class="details">
+                <div class="reason">${escapeHtml(item.description || '')}</div>
+              </div>
+              ${mediaHtml ? `<div class="media-preview">${mediaHtml}</div>` : ''}
+              <div class="actions">
+                <button class="btn-danger" onclick="deleteListing('${item.id}')">Delete</button>
+              </div>
+            </div>
+          `;
+        }).join('') : `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+            <h3>No listings</h3>
+            <p>This user has no listings.</p>
+          </div>
+        `;
+        main.innerHTML = `
+          <div class="page-title">
+            <button class="back-btn" onclick="switchTab('users')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <span>User Listings</span>
+          </div>
+          ${html}
+        `;
+      }
+
+      // ─── VERIFICATION FUNCTIONS ──────────────────────────
+      window.approveRequest = async function(requestId) {
+        if (!confirm('Approve this verification request?')) return;
+        try {
+          const { data: reqData, error: reqError } = await sb.from('verification_requests').select('*').eq('id', requestId).single();
+          if (reqError) throw reqError;
+          const { data: updatedReq, error: updateReqError } = await sb
+            .from('verification_requests')
+            .update({ status: 'approved', reviewed_at: new Date().toISOString() })
+            .eq('id', requestId)
+            .select();
+          if (updateReqError) throw updateReqError;
+          if (!updatedReq || updatedReq.length === 0) throw new Error('Request update failed – check RLS.');
+          const { data: updatedProfile, error: profileError } = await sb
+            .from('profiles')
+            .update({ verified: true, verified_status: 'verified' })
+            .eq('id', reqData.user_id)
+            .select();
+          if (profileError) throw profileError;
+          if (!updatedProfile || updatedProfile.length === 0) throw new Error('Profile update failed – check RLS.');
+          showToast('✅ Verification approved!', 'g');
+          await loadData();
+        } catch (err) {
+          showToast('Failed to approve: ' + err.message, 'r');
         }
+      };
 
-        // ─── RENDER LISTINGS (with media preview) ──────
-        function renderListings(filterUserIdOverride = null) {
-            const list = document.getElementById('adminContent');
-            const userId = filterUserIdOverride !== undefined ? filterUserIdOverride : filterUserId;
-            const filtered = userId ? marketItems.filter(m => m.user_id === userId) : marketItems;
-            if (!filtered.length) {
-                list.innerHTML = `<div class="empty-state"><h3>${userId ? 'No listings by this user' : 'No listings found'}</h3></div>`;
-                return;
-            }
-            list.innerHTML = filtered.map(item => {
-                const seller = allUsers.find(u => u.id === item.user_id);
-                const name = seller ? seller.display_name : 'Unknown';
-                let mediaHtml = '';
-                if (item.image_url) {
-                    mediaHtml += `<a href="${escapeHtml(item.image_url)}" target="_blank"><img src="${escapeHtml(item.image_url)}" alt="Image" loading="lazy" onerror="this.style.display='none'"></a>`;
-                }
-                if (item.video_url) {
-                    mediaHtml += `<a href="${escapeHtml(item.video_url)}" target="_blank"><video src="${escapeHtml(item.video_url)}" muted preload="metadata" controls style="max-height:160px;border-radius:12px;"></video></a>`;
-                }
-                return `<div class="req-card" data-listing-id="${item.id}">
-                    <div class="top">${item.image_url ? `<img class="avatar" src="${escapeHtml(item.image_url)}" onerror="this.style.display='none'" alt="">` : ''}
-                        <div class="info"><div class="name">${escapeHtml(item.title || 'Untitled')}</div><div class="handle">${escapeHtml(name)}</div>
-                        <div class="meta">${item.price != null ? '$' + escapeHtml(String(item.price)) : ''}${item.price != null ? ' · ' : ''}${formatDate(item.created_at)}</div></div>
-                    </div>
-                    <div class="details"><div class="reason">${escapeHtml(item.description || '')}</div></div>
-                    ${mediaHtml ? `<div class="media-preview">${mediaHtml}</div>` : ''}
-                    <div class="actions"><button class="danger-btn" onclick="deleteListing('${item.id}')">🗑️ Delete</button></div>
-                </div>`;
-            }).join('');
+      window.verifyUserDirectly = async function(userId) {
+        if (!confirm('Verify this user directly?')) return;
+        try {
+          const { data, error } = await sb
+            .from('profiles')
+            .update({ verified: true, verified_status: 'verified' })
+            .eq('id', userId)
+            .select();
+          if (error) throw error;
+          if (!data?.length) throw new Error('Update blocked – check RLS.');
+          showToast('✅ User verified directly!', 'g');
+          await loadData();
+        } catch (err) {
+          showToast('Failed to verify: ' + err.message, 'r');
         }
+      };
 
-        // ─── RENDER REPORTS ──────────────────────
-        function renderReports() {
-            const list = document.getElementById('adminContent');
-            if (!reportsList.length) { list.innerHTML = `<div class="empty-state"><h3>No reports</h3></div>`; return; }
-            list.innerHTML = reportsList.map(report => {
-                const reporter = allUsers.find(u => u.id === report.reporter_id);
-                const reporterName = reporter ? reporter.display_name : 'Unknown';
-                const targetUser = report.target_type === 'user' ? allUsers.find(u => u.id === report.target_id) : null;
-                const targetName = targetUser ? targetUser.display_name : 'Unknown';
-                const statusClass = getStatusBadgeClass(report.status);
-                const statusLabel = getStatusLabel(report.status);
-                const isPending = report.status === 'pending';
-                let actionsHtml = '';
-                if (isPending) {
-                    actionsHtml = `<div class="actions"><button class="approve" onclick="resolveReport('${report.id}', 'resolved')">✅ Resolve</button><button class="reject" onclick="resolveReport('${report.id}', 'dismissed')">🚫 Dismiss</button></div>`;
-                } else {
-                    actionsHtml = `<div class="actions"><span style="font-size:12px;color:var(--muted);">Reviewed ${formatDate(report.reviewed_at)}</span></div>`;
-                }
-                return `<div class="req-card" data-report-id="${report.id}">
-                    <div class="top"><div class="info"><div class="name">Report on ${report.target_type} <span class="badge ${statusClass}">${statusLabel}</span></div>
-                    <div class="handle">Reported by ${escapeHtml(reporterName)}</div>
-                    <div class="meta">Target: ${report.target_type === 'user' ? escapeHtml(targetName) : escapeHtml(report.target_id)} · ${formatDate(report.created_at)}</div></div></div>
-                    <div class="details"><div class="reason"><strong>Reason:</strong> ${escapeHtml(report.reason)}</div>${report.details ? `<div class="reason"><strong>Details:</strong> ${escapeHtml(report.details)}</div>` : ''}</div>
-                    ${actionsHtml}
-                </div>`;
-            }).join('');
+      window.withdrawVerification = async function(userId) {
+        if (!confirm('Withdraw verified badge?')) return;
+        try {
+          const { data, error } = await sb
+            .from('profiles')
+            .update({ verified: false, verified_status: 'none' })
+            .eq('id', userId)
+            .select();
+          if (error) throw error;
+          if (!data?.length) throw new Error('Update blocked – check RLS.');
+          await sb.from('verification_requests')
+            .update({ status: 'revoked', reviewed_at: new Date().toISOString() })
+            .eq('user_id', userId)
+            .eq('status', 'approved');
+          showToast('Verification withdrawn', 'o');
+          await loadData();
+        } catch (err) {
+          showToast('Failed to withdraw: ' + err.message, 'r');
         }
+      };
 
-        // ─── RENDER FEEDBACK ────────────────────
-        function renderFeedback() {
-            const list = document.getElementById('adminContent');
-            if (!feedbackList.length) { list.innerHTML = `<div class="empty-state"><h3>No feedback yet</h3></div>`; return; }
-            list.innerHTML = feedbackList.map(fb => {
-                const user = allUsers.find(u => u.id === fb.user_id);
-                const userName = user ? user.display_name : 'Unknown';
-                const isNew = fb.status === 'new';
-                return `<div class="req-card" data-feedback-id="${fb.id}">
-                    <div class="top"><div class="info"><div class="name">${escapeHtml(userName)} <span class="badge ${isNew ? 'pending' : 'reviewed'}">${isNew ? 'New' : 'Reviewed'}</span></div>
-                    <div class="meta">${formatDate(fb.created_at)}</div></div></div>
-                    <div class="details"><div class="reason">${escapeHtml(fb.message)}</div>${fb.category ? `<div class="reason"><strong>Category:</strong> ${escapeHtml(fb.category)}</div>` : ''}</div>
-                    <div class="actions">${isNew ? `<button class="approve" onclick="markFeedbackReviewed('${fb.id}')">Mark reviewed</button>` : ''}</div>
-                </div>`;
-            }).join('');
-        }
-
-        // ─── EXPAND ─────────────────────────────
-        window.toggleExpand = function(btn) {
-            const card = btn.closest('.req-card');
-            if (!card) return;
-            const details = card.querySelector('.expanded-details');
-            if (!details) return;
-            details.classList.toggle('open');
-            btn.innerHTML = details.classList.contains('open') ?
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg> Hide Details' :
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg> View Details';
-        };
-
-        // ─── VIEW USER POSTS / LISTINGS ────────────
-        window.viewUserPosts = function(userId) {
-            filterUserId = userId;
-            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-            document.querySelector('.admin-tab[data-tab="posts"]').classList.add('active');
-            currentTab = 'posts';
-            document.getElementById('userSearchBar').style.display = 'none';
-            renderPosts(userId);
-        };
-        window.viewUserListings = function(userId) {
-            filterUserId = userId;
-            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-            document.querySelector('.admin-tab[data-tab="listings"]').classList.add('active');
-            currentTab = 'listings';
-            document.getElementById('userSearchBar').style.display = 'none';
-            renderListings(userId);
-        };
-
-        // ─── DIRECT VERIFY (no request needed) ──────
-        window.verifyUserDirectly = async function(userId) {
-            if (!confirm('Verify this user directly (no pending request)?')) return;
-            try {
-                const { data, error } = await sb.from('profiles')
-                    .update({ verified: true, verified_status: 'verified' })
-                    .eq('id', userId)
-                    .select();
-                if (error) throw error;
-                if (!data?.length) throw new Error('Update blocked — check RLS policy.');
-                showToast('✅ User verified directly!', 'g');
-                await loadData();
-            } catch (err) {
-                showToast('Failed to verify: ' + err.message, 'r');
-            }
-        };
-
-        // ─── APPROVE REQUEST ──────────────────────
-        window.approveRequest = async function(requestId) {
-            if (!confirm('Approve this verification request?')) return;
-            try {
-                const { data: reqData, error: reqError } = await sb.from('verification_requests').select('*').eq('id', requestId).single();
-                if (reqError) throw reqError;
-                const { data: updatedReq, error: updateReqError } = await sb.from('verification_requests').update({ status:'approved', reviewed_at:new Date().toISOString() }).eq('id', requestId).select();
-                if (updateReqError) throw updateReqError;
-                if (!updatedReq || updatedReq.length === 0) throw new Error('Request update failed — check RLS policy.');
-                const { data: updatedProfile, error: profileError } = await sb.from('profiles').update({ verified:true, verified_status:'verified' }).eq('id', reqData.user_id).select();
-                if (profileError) throw profileError;
-                if (!updatedProfile || updatedProfile.length === 0) throw new Error('Profile update failed — check RLS policy.');
-                showToast('✅ Verification approved!', 'g');
-                await loadData();
-            } catch (err) {
-                showToast('Failed to approve: ' + err.message, 'r');
-            }
-        };
-
-        // ─── REJECT MODAL ──────────────────────────
-        window.openRejectModal = function(requestId) {
-            pendingRequestId = requestId;
-            document.getElementById('rejectReasonInput').value = '';
-            document.getElementById('rejectCharCount').textContent = '0 / 500';
-            document.getElementById('rejectConfirmBtn').disabled = false;
-            openMov('rejectModal');
-        };
+      // ─── REJECT SHEET ────────────────────────────────────
+      window.openRejectSheet = function(requestId) {
+        pendingRequestId = requestId;
+        const html = `
+          <div class="title">Reject Verification</div>
+          <div class="sub">Provide a reason (optional)</div>
+          <textarea id="rejectReasonInput" class="reject-textarea" placeholder="Reason for rejection…" style="width:100%;min-height:80px;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;resize:vertical;font-family:inherit;"></textarea>
+          <div style="text-align:right;font-size:12px;color:var(--text-tertiary);margin-top:4px;" id="rejectCharCount">0 / 500</div>
+          <div class="action-row">
+            <button class="btn-outline" style="flex:1;" onclick="closeSheet();">Cancel</button>
+            <button class="btn-danger" style="flex:1;" onclick="confirmRejectSheet();">Reject</button>
+          </div>
+        `;
+        openSheet(html);
         document.getElementById('rejectReasonInput')?.addEventListener('input', function() {
-            document.getElementById('rejectCharCount').textContent = this.value.length + ' / 500';
+          document.getElementById('rejectCharCount').textContent = this.value.length + ' / 500';
         });
+      };
 
-        window.confirmReject = async function() {
-            if (!pendingRequestId) return;
-            const reason = document.getElementById('rejectReasonInput').value.trim();
-            try {
-                const btn = document.getElementById('rejectConfirmBtn');
-                btn.disabled = true;
-                btn.textContent = 'Processing…';
-                const { data: reqData, error: reqError } = await sb.from('verification_requests').select('*').eq('id', pendingRequestId).single();
-                if (reqError) throw reqError;
-                const { data: updatedReq, error: updateError } = await sb.from('verification_requests').update({ status:'rejected', reviewed_at:new Date().toISOString(), rejection_reason:reason||null }).eq('id', pendingRequestId).select();
-                if (updateError) throw updateError;
-                if (!updatedReq || updatedReq.length === 0) throw new Error('Request update failed — check RLS policy.');
-                closeMov('rejectModal');
-                showToast('❌ Verification rejected', 'o');
-                await loadData();
-            } catch (err) {
-                showToast('Failed to reject: ' + err.message, 'r');
-                document.getElementById('rejectConfirmBtn').disabled = false;
-                document.getElementById('rejectConfirmBtn').textContent = 'Reject';
-            } finally { pendingRequestId = null; }
-        };
-
-        // ─── DELETE POST (with Cloudinary + fallback) ────────
-        window.deletePost = async function(postId) {
-            if (!confirm('Delete this post permanently?')) return;
-            try {
-                const { data: post, error: fetchError } = await sb.from('posts').select('image_public_id, video_public_id, image_url, video_url, media_type').eq('id', postId).single();
-                if (fetchError) throw fetchError;
-                const { data, error } = await sb.from('posts').delete().eq('id', postId).select();
-                if (error) throw error;
-                if (!data?.length) throw new Error('Delete blocked — check RLS policy.');
-                let imagePublicId = post?.image_public_id;
-                if (!imagePublicId && post?.image_url) imagePublicId = extractPublicIdFromUrl(post.image_url);
-                if (imagePublicId) await deleteCloudinaryMedia(imagePublicId, post?.media_type || 'image');
-                let videoPublicId = post?.video_public_id;
-                if (!videoPublicId && post?.video_url) videoPublicId = extractPublicIdFromUrl(post.video_url);
-                if (videoPublicId) await deleteCloudinaryMedia(videoPublicId, 'video');
-                showToast('🗑️ Post deleted (media removed from Cloudinary if found)', 'o');
-                await loadData();
-            } catch (err) { showToast('Failed to delete post: ' + err.message, 'r'); }
-        };
-
-        // ─── DELETE LISTING (with Cloudinary + fallback) ─────
-        window.deleteListing = async function(itemId) {
-            if (!confirm('Delete this listing permanently?')) return;
-            try {
-                const { data: item, error: fetchError } = await sb.from('market_items').select('image_public_id, video_public_id, image_url, video_url, media_type').eq('id', itemId).single();
-                if (fetchError) throw fetchError;
-                const { data, error } = await sb.from('market_items').delete().eq('id', itemId).select();
-                if (error) throw error;
-                if (!data?.length) throw new Error('Delete blocked — check RLS policy.');
-                let imagePublicId = item?.image_public_id;
-                if (!imagePublicId && item?.image_url) imagePublicId = extractPublicIdFromUrl(item.image_url);
-                if (imagePublicId) await deleteCloudinaryMedia(imagePublicId, item?.media_type || 'image');
-                let videoPublicId = item?.video_public_id;
-                if (!videoPublicId && item?.video_url) videoPublicId = extractPublicIdFromUrl(item.video_url);
-                if (videoPublicId) await deleteCloudinaryMedia(videoPublicId, 'video');
-                showToast('🗑️ Listing deleted (media removed from Cloudinary if found)', 'o');
-                await loadData();
-            } catch (err) { showToast('Failed to delete listing: ' + err.message, 'r'); }
-        };
-
-        // ─── SUSPEND / UNSUSPEND ──────────────────
-        window.suspendUser = async function(userId) {
-            const reason = prompt('Reason for suspension:');
-            if (reason === null) return;
-            try {
-                const { data, error } = await sb.from('profiles').update({ suspended:true, suspended_reason:reason||null, suspended_at:new Date().toISOString() }).eq('id', userId).select();
-                if (error) throw error;
-                if (!data?.length) throw new Error('Update blocked — check RLS policy.');
-                showToast('🚫 User suspended', 'o');
-                await loadData();
-            } catch (err) { showToast('Failed to suspend: ' + err.message, 'r'); }
-        };
-        window.unsuspendUser = async function(userId) {
-            if (!confirm('Restore this user\'s access?')) return;
-            try {
-                const { data, error } = await sb.from('profiles').update({ suspended:false, suspended_reason:null, suspended_at:null }).eq('id', userId).select();
-                if (error) throw error;
-                if (!data?.length) throw new Error('Update blocked — check RLS policy.');
-                showToast('✅ User restored', 'g');
-                await loadData();
-            } catch (err) { showToast('Failed to restore: ' + err.message, 'r'); }
-        };
-
-        // ─── WITHDRAW VERIFICATION ────────────────
-        window.withdrawVerification = async function(userId) {
-            if (!confirm('Withdraw verified badge?')) return;
-            try {
-                const { data, error } = await sb.from('profiles').update({ verified:false, verified_status:'none' }).eq('id', userId).select();
-                if (error) throw error;
-                if (!data?.length) throw new Error('Update blocked — check RLS policy.');
-                await sb.from('verification_requests').update({ status:'revoked', reviewed_at:new Date().toISOString() }).eq('user_id', userId).eq('status', 'approved');
-                showToast('Verification withdrawn', 'o');
-                await loadData();
-            } catch (err) { showToast('Failed to withdraw: ' + err.message, 'r'); }
-        };
-
-        // ─── RESOLVE REPORT ──────────────────────
-        window.resolveReport = async function(reportId, status) {
-            try {
-                const user = getCurrentUser();
-                const { data, error } = await sb.from('reports').update({ status, reviewed_at:new Date().toISOString(), reviewed_by:user.id }).eq('id', reportId).select();
-                if (error) throw error;
-                if (!data?.length) throw new Error('Update blocked — check RLS policy.');
-                showToast(status === 'resolved' ? '✅ Report resolved' : 'Report dismissed', 'g');
-                await loadData();
-            } catch (err) { showToast('Failed: ' + err.message, 'r'); }
-        };
-
-        // ─── MARK FEEDBACK REVIEWED ──────────────
-        window.markFeedbackReviewed = async function(feedbackId) {
-            try {
-                const { data, error } = await sb.from('feedback').update({ status:'reviewed' }).eq('id', feedbackId).select();
-                if (error) throw error;
-                if (!data?.length) throw new Error('Update blocked — check RLS policy.');
-                showToast('Marked as reviewed', 'g');
-                await loadData();
-            } catch (err) { showToast('Failed: ' + err.message, 'r'); }
-        };
-
-        // ─── MODAL HELPERS ──────────────────────────
-        window.openMov = function(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow = 'hidden'; };
-        window.closeMov = function(id) { document.getElementById(id).classList.remove('open'); document.body.style.overflow = ''; };
-
-        // ─── INIT ──────────────────────────────────
-        async function init() {
-            document.getElementById('adminContent').innerHTML = `<div class="empty-state"><div class="icon"><div class="spinner" style="width:32px;height:32px;"></div></div><h3>Loading...</h3></div>`;
-            const isAdmin = await checkAdminStatus();
-            if (isAdmin) {
-                await loadData();
-                setupProfileSync(function(user) { loadData(); });
-            }
+      window.confirmRejectSheet = async function() {
+        if (!pendingRequestId) return;
+        const reason = document.getElementById('rejectReasonInput')?.value.trim() || '';
+        try {
+          const { data: reqData, error: reqError } = await sb.from('verification_requests').select('*').eq('id', pendingRequestId).single();
+          if (reqError) throw reqError;
+          const { data: updatedReq, error: updateError } = await sb
+            .from('verification_requests')
+            .update({ status: 'rejected', reviewed_at: new Date().toISOString(), rejection_reason: reason || null })
+            .eq('id', pendingRequestId)
+            .select();
+          if (updateError) throw updateError;
+          if (!updatedReq || updatedReq.length === 0) throw new Error('Update failed – check RLS.');
+          closeSheet();
+          showToast('❌ Verification rejected', 'o');
+          await loadData();
+        } catch (err) {
+          showToast('Failed to reject: ' + err.message, 'r');
+        } finally {
+          pendingRequestId = null;
         }
+      };
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else { init(); }
+      // ─── DELETE POST / LISTING ─────────────────────────
+      window.deletePost = async function(postId) {
+        if (!confirm('Delete this post permanently?')) return;
+        try {
+          const { data: post, error: fetchError } = await sb
+            .from('posts')
+            .select('image_public_id, video_public_id, image_url, video_url, media_type')
+            .eq('id', postId)
+            .single();
+          if (fetchError) throw fetchError;
+          const { data, error } = await sb.from('posts').delete().eq('id', postId).select();
+          if (error) throw error;
+          if (!data?.length) throw new Error('Delete blocked – check RLS.');
+          let imagePublicId = post?.image_public_id;
+          if (!imagePublicId && post?.image_url) imagePublicId = extractPublicIdFromUrl(post.image_url);
+          if (imagePublicId) await deleteCloudinaryMedia(imagePublicId, post?.media_type || 'image');
+          let videoPublicId = post?.video_public_id;
+          if (!videoPublicId && post?.video_url) videoPublicId = extractPublicIdFromUrl(post.video_url);
+          if (videoPublicId) await deleteCloudinaryMedia(videoPublicId, 'video');
+          showToast('🗑️ Post deleted', 'o');
+          await loadData();
+        } catch (err) {
+          showToast('Failed to delete post: ' + err.message, 'r');
+        }
+      };
+
+      window.deleteListing = async function(itemId) {
+        if (!confirm('Delete this listing permanently?')) return;
+        try {
+          const { data: item, error: fetchError } = await sb
+            .from('market_items')
+            .select('image_public_id, video_public_id, image_url, video_url, media_type')
+            .eq('id', itemId)
+            .single();
+          if (fetchError) throw fetchError;
+          const { data, error } = await sb.from('market_items').delete().eq('id', itemId).select();
+          if (error) throw error;
+          if (!data?.length) throw new Error('Delete blocked – check RLS.');
+          let imagePublicId = item?.image_public_id;
+          if (!imagePublicId && item?.image_url) imagePublicId = extractPublicIdFromUrl(item.image_url);
+          if (imagePublicId) await deleteCloudinaryMedia(imagePublicId, item?.media_type || 'image');
+          let videoPublicId = item?.video_public_id;
+          if (!videoPublicId && item?.video_url) videoPublicId = extractPublicIdFromUrl(item.video_url);
+          if (videoPublicId) await deleteCloudinaryMedia(videoPublicId, 'video');
+          showToast('🗑️ Listing deleted', 'o');
+          await loadData();
+        } catch (err) {
+          showToast('Failed to delete listing: ' + err.message, 'r');
+        }
+      };
+
+      // ─── SUSPEND / UNSUSPEND ──────────────────────────
+      window.suspendUser = async function(userId) {
+        const reason = prompt('Reason for suspension:');
+        if (reason === null) return;
+        try {
+          const { data, error } = await sb
+            .from('profiles')
+            .update({ suspended: true, suspended_reason: reason || null, suspended_at: new Date().toISOString() })
+            .eq('id', userId)
+            .select();
+          if (error) throw error;
+          if (!data?.length) throw new Error('Update blocked – check RLS.');
+          showToast('🚫 User suspended', 'o');
+          await loadData();
+        } catch (err) {
+          showToast('Failed to suspend: ' + err.message, 'r');
+        }
+      };
+
+      window.unsuspendUser = async function(userId) {
+        if (!confirm('Restore this user\'s access?')) return;
+        try {
+          const { data, error } = await sb
+            .from('profiles')
+            .update({ suspended: false, suspended_reason: null, suspended_at: null })
+            .eq('id', userId)
+            .select();
+          if (error) throw error;
+          if (!data?.length) throw new Error('Update blocked – check RLS.');
+          showToast('✅ User restored', 'g');
+          await loadData();
+        } catch (err) {
+          showToast('Failed to restore: ' + err.message, 'r');
+        }
+      };
+
+      // ─── RESOLVE REPORT ──────────────────────────────
+      window.resolveReport = async function(reportId, status) {
+        try {
+          const user = getCurrentUser();
+          const { data, error } = await sb
+            .from('reports')
+            .update({ status, reviewed_at: new Date().toISOString(), reviewed_by: user.id })
+            .eq('id', reportId)
+            .select();
+          if (error) throw error;
+          if (!data?.length) throw new Error('Update blocked – check RLS.');
+          showToast(status === 'resolved' ? '✅ Report resolved' : 'Report dismissed', 'g');
+          await loadData();
+          closeSheet();
+        } catch (err) {
+          showToast('Failed: ' + err.message, 'r');
+        }
+      };
+
+      // ─── MARK FEEDBACK REVIEWED ──────────────────────
+      window.markFeedbackReviewed = async function(feedbackId) {
+        try {
+          const { data, error } = await sb
+            .from('feedback')
+            .update({ status: 'reviewed' })
+            .eq('id', feedbackId)
+            .select();
+          if (error) throw error;
+          if (!data?.length) throw new Error('Update blocked – check RLS.');
+          showToast('Marked as reviewed', 'g');
+          await loadData();
+          closeSheet();
+        } catch (err) {
+          showToast('Failed: ' + err.message, 'r');
+        }
+      };
+
+      // ─── INIT ──────────────────────────────────────────
+      async function init() {
+        document.getElementById('authOverlay').classList.remove('hidden');
+        renderAuth();
+        const isAdmin = await checkAdminStatus();
+        if (isAdmin) {
+          await loadData();
+          setupProfileSync && setupProfileSync(function(user) { loadData(); });
+        }
+      }
+
+      // expose loadData globally for reload button
+      window.loadData = loadData;
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
 
     })();
-</script>
+  </script>
 </body>
 </html>
