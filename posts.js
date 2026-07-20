@@ -12,18 +12,16 @@
   }
   const sb = window.sb;
 
-  // ── Get current user (fallback to localStorage) ──────────────────
-  function getCurrentUser() {
-    if (window.AuthUser && typeof window.AuthUser.getCurrentUser === 'function') {
-      return window.AuthUser.getCurrentUser();
-    }
-    const raw = localStorage.getItem('freeupper_user_profile');
-    return raw ? JSON.parse(raw) : null;
+  // ── Internal auth helper ──────────────────────────────────────────
+  async function _getUserId() {
+    const { data: { user }, error } = await sb.auth.getUser();
+    if (error || !user) throw new Error('You must be logged in to perform this action.');
+    return user.id;
   }
 
   // ── Map a raw post row (with profile) to a clean client object ──
   function mapPost(row, userLikes = new Set(), myRepost = null) {
-    const profile = row.profiles || null;  // CHANGED: explicitly null if missing
+    const profile = row.profiles || null;
 
     // Normalize media array
     let media = row.media;
@@ -55,14 +53,13 @@
       tags: row.tags || [],
       timestamp: row.created_at || new Date().toISOString(),
       views: row.views || 0,
-      comments: row.comment_count || 0,        // denormalized
-      likes: row.like_count || 0,              // denormalized
+      comments: row.comment_count || 0,
+      likes: row.like_count || 0,
       likedByMe: userLikes.has(row.id),
-      repostCount: row.repost_count || 0,      // denormalized
+      repostCount: row.repost_count || 0,
       myRepost: !!myRepost,
       myRepostText: myRepost ? (myRepost.comment || '') : '',
       myRepostTime: myRepost ? myRepost.created_at : null,
-      // Profile data (single source of truth) – now returns null if profile missing
       profile: profile ? {
         id: profile.id,
         display_name: profile.display_name || 'Anonymous',
@@ -99,15 +96,21 @@
       return [];
     }
 
-    const user = getCurrentUser();
+    // Get current user ID from auth
+    let userId = null;
+    try {
+      const { data: { user } } = await sb.auth.getUser();
+      if (user) userId = user.id;
+    } catch (_) {}
+
     let likedIds = new Set();
     let repostMap = new Map();
 
-    if (user && user.isLoggedIn && rows && rows.length > 0) {
+    if (userId && rows && rows.length > 0) {
       const postIds = rows.map(r => r.id);
       const [{ data: likes }, { data: reposts }] = await Promise.all([
-        sb.from('post_likes').select('post_id').eq('user_id', user.id).in('post_id', postIds),
-        sb.from('reposts').select('post_id, comment, created_at').eq('user_id', user.id).in('post_id', postIds),
+        sb.from('post_likes').select('post_id').eq('user_id', userId).in('post_id', postIds),
+        sb.from('reposts').select('post_id, comment, created_at').eq('user_id', userId).in('post_id', postIds),
       ]);
       likedIds = new Set((likes || []).map(l => l.post_id));
       (reposts || []).forEach(r => repostMap.set(r.post_id, r));
@@ -139,14 +142,20 @@
       return [];
     }
 
-    const user = getCurrentUser();
+    // Get current user ID
+    let userId = null;
+    try {
+      const { data: { user } } = await sb.auth.getUser();
+      if (user) userId = user.id;
+    } catch (_) {}
+
     let likedIds = new Set();
-    if (user && user.isLoggedIn && data && data.length > 0) {
+    if (userId && data && data.length > 0) {
       const commentIds = data.map(r => r.id);
       const { data: likes } = await sb
         .from('comment_likes')
         .select('comment_id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .in('comment_id', commentIds);
       likedIds = new Set((likes || []).map(l => l.comment_id));
     }
@@ -166,16 +175,13 @@
 
   // ── ADD COMMENT ──────────────────────────────────────────────────
   async function addComment(postId, parentId, message) {
-    const user = getCurrentUser();
-    if (!user || !user.isLoggedIn) {
-      throw new Error('Please sign in to comment.');
-    }
+    const userId = await _getUserId();
 
     const { data, error } = await sb
       .from('comments')
       .insert({
         post_id: postId,
-        user_id: user.id,
+        user_id: userId,
         parent_id: parentId || null,
         message: message,
       })
@@ -201,22 +207,18 @@
       userId: data.user_id,
       time: data.created_at,
       approved: data.approved,
-      likeCount: 0,          // new comment has no likes yet
-      likedByMe: false,      // user just posted it, so not liked by themselves
+      likeCount: 0,
+      likedByMe: false,
       profile: data.profiles || {},
     };
   }
 
   // ── CREATE POST ──────────────────────────────────────────────────
   async function createPost(fields) {
-    const user = getCurrentUser();
-    if (!user || !user.isLoggedIn) {
-      throw new Error('Please sign in to post.');
-    }
+    const userId = await _getUserId();
 
-    // Only store user_id – profile data is fetched via join
     const payload = {
-      user_id: user.id,
+      user_id: userId,
       title: fields.title || '',
       description: fields.description || '',
       content: fields.content || '',
@@ -227,7 +229,6 @@
       media_type: fields.mediaType || null,
     };
 
-    // If media array is provided, extract the first item
     if (fields.media && fields.media.length > 0) {
       payload.media_url = fields.media[0].url || null;
       payload.media_type = fields.media[0].type || null;
@@ -251,16 +252,12 @@
 
     if (error) throw error;
 
-    // Pass null as third arg because a new post hasn't been reposted by the user yet
     return mapPost(data, new Set(), null);
   }
 
   // ── TOGGLE POST LIKE ────────────────────────────────────────────
   async function toggleLike(postId) {
-    const user = getCurrentUser();
-    if (!user || !user.isLoggedIn) {
-      throw new Error('Please sign in to like.');
-    }
+    // RPC uses auth.uid() internally – no need to pass user ID
     const { data, error } = await sb.rpc('toggle_post_like', { p_post_id: postId });
     if (error) throw error;
     return { liked: data[0].liked, count: data[0].new_count };
@@ -268,10 +265,6 @@
 
   // ── TOGGLE COMMENT LIKE ─────────────────────────────────────────
   async function toggleCommentLike(commentId) {
-    const user = getCurrentUser();
-    if (!user || !user.isLoggedIn) {
-      throw new Error('Please sign in to like.');
-    }
     const { data, error } = await sb.rpc('toggle_comment_like', { p_comment_id: commentId });
     if (error) throw error;
     return { liked: data[0].liked, count: data[0].new_count };
@@ -279,10 +272,7 @@
 
   // ── TOGGLE REPOST (with optional comment) ──────────────────────
   async function toggleRepostAPI(postId, comment = '') {
-    const user = getCurrentUser();
-    if (!user || !user.isLoggedIn) {
-      throw new Error('Please sign in to repost.');
-    }
+    // RPC uses auth.uid()
     const { data, error } = await sb.rpc('toggle_repost', {
       p_post_id: postId,
       p_comment: comment || '',
@@ -298,10 +288,7 @@
 
   // ── DELETE POST ──────────────────────────────────────────────────
   async function deletePost(postId) {
-    const user = getCurrentUser();
-    if (!user || !user.isLoggedIn) {
-      throw new Error('Please sign in.');
-    }
+    // RPC uses auth.uid() – will check ownership
     const { error } = await sb.rpc('delete_post', { p_post_id: postId });
     if (error) throw error;
   }
@@ -309,10 +296,11 @@
   // ── INCREMENT VIEW (analytics) ──────────────────────────────────
   async function incrementView(postId) {
     try {
+      const sessionId = localStorage.getItem('freeupper_session_id') || null;
       const { error } = await sb.rpc('add_view', {
         p_post_id: postId,
-        p_user_id: null,
-        p_session_id: localStorage.getItem('freeupper_session_id') || null,
+        p_user_id: null, // RPC may use auth.uid() automatically
+        p_session_id: sessionId,
       });
       if (error) console.error('incrementView error:', error);
     } catch (err) {
@@ -351,6 +339,25 @@
     };
   }
 
+  // ── REPORT POST (unified reports table) ─────────────────────────
+  async function reportPost(postId, reason) {
+    const userId = await _getUserId();
+    const { data, error } = await sb
+      .from('reports')
+      .insert({
+        reporter_id: userId,
+        target_type: 'post',
+        target_id: postId,
+        reason: reason || 'Inappropriate content',
+        status: 'pending',
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
   // ── REPOST FEED HELPERS ──────────────────────────────────────────
 
   // Fetch raw repost events (with reposter info)
@@ -379,7 +386,7 @@
       return posts.map(p => ({ feedType: 'post', sortTime: p.timestamp, post: p }));
     }
 
-    // Fetch the original posts referenced by these reposts (may not be in `posts` page)
+    // Fetch the original posts referenced by these reposts
     const neededIds = [...new Set(repostItems.map(r => r.post_id))];
     const havePostIds = new Set(posts.map(p => p.id));
     const missingIds = neededIds.filter(id => !havePostIds.has(id));
@@ -396,13 +403,18 @@
         `)
         .in('id', missingIds);
       if (!error && extraRows) {
-        const user = getCurrentUser();
+        // Get current user likes for these posts
+        let userId = null;
+        try {
+          const { data: { user } } = await sb.auth.getUser();
+          if (user) userId = user.id;
+        } catch (_) {}
         let likedIds = new Set();
-        if (user && user.isLoggedIn && extraRows.length > 0) {
+        if (userId && extraRows.length > 0) {
           const { data: likes } = await sb
             .from('post_likes')
             .select('post_id')
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .in('post_id', extraRows.map(r => r.id));
           likedIds = new Set((likes || []).map(l => l.post_id));
         }
@@ -415,7 +427,7 @@
     const repostEntries = repostItems
       .map(r => {
         const originalPost = postsById.get(r.post_id) || extraPostsById.get(r.post_id);
-        if (!originalPost) return null; // original was deleted or inaccessible
+        if (!originalPost) return null;
         return {
           feedType: 'repost',
           sortTime: r.repost_created_at,
@@ -435,10 +447,50 @@
 
     const postEntries = posts.map(p => ({ feedType: 'post', sortTime: p.timestamp, post: p }));
 
-    // Merge and sort by time (newest first)
     return [...postEntries, ...repostEntries].sort(
       (a, b) => new Date(b.sortTime) - new Date(a.sortTime)
     );
+  }
+
+  // ── REAL-TIME SUBSCRIPTION ──────────────────────────────────────
+
+  let _realtimeChannel = null;
+  let _realtimeCallbacks = [];
+
+  function subscribe(callback) {
+    if (typeof callback === 'function') {
+      _realtimeCallbacks.push(callback);
+    }
+    if (_realtimeChannel) return;
+
+    _realtimeChannel = sb
+      .channel('posts_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'posts'
+        },
+        (payload) => {
+          _realtimeCallbacks.forEach(fn => {
+            try { fn(payload); } catch (e) { console.warn('Realtime callback error:', e); }
+          });
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Subscribed to posts realtime');
+        }
+      });
+  }
+
+  function unsubscribe() {
+    if (_realtimeChannel) {
+      sb.removeChannel(_realtimeChannel);
+      _realtimeChannel = null;
+      _realtimeCallbacks = [];
+    }
   }
 
   // ── EXPOSE PUBLIC API ──────────────────────────────────────────
@@ -455,6 +507,9 @@
     deletePost,
     incrementView,
     loadPostPreview,
+    reportPost,
+    subscribe,
+    unsubscribe,
   };
 
 })();
