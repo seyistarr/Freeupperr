@@ -1,35 +1,28 @@
-// listings.js
-// Complete marketplace API for Freeupper.
-// Uses Supabase RPC for views, secure auth for user IDs, unified reports, realtime, and Cloudinary uploads.
-// All methods are under the ListingsAPI namespace.
+// ============================================================
+// listings.js – Marketplace API (final)
+// Uses Supabase, Cloudinary, and secure auth.
+// All methods are under ListingsAPI and CategoryAPI.
+// ============================================================
 
 (function() {
     'use strict';
 
-    // ──────────────────────────────────────────────
-    //  CONFIG
-    // ──────────────────────────────────────────────
-    const CLOUDINARY_CLOUD_NAME = 'duzyf1kda'; // replace with your cloud name
-    const CLOUDINARY_UPLOAD_PRESET = 'market_upload'; // your upload preset
+    // ─── CONFIG ──────────────────────────────────────────────
+    const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
+    const CLOUDINARY_UPLOAD_PRESET = 'market_upload';
 
-    // ──────────────────────────────────────────────
-    //  CATEGORY CACHE (simple in-memory)
-    // ──────────────────────────────────────────────
-    let _categories = []; // array of category objects
+    // ─── CATEGORY CACHE ──────────────────────────────────────
+    let _categories = [];
     let _subcategories = {}; // { categoryId: [sub] }
 
-    // ──────────────────────────────────────────────
-    //  AUTH HELPER – get the current user ID
-    // ──────────────────────────────────────────────
+    // ─── AUTH HELPER ─────────────────────────────────────────
     async function _getUserId() {
         const { data: { user }, error } = await window.sb.auth.getUser();
         if (error || !user) throw new Error('You must be logged in to perform this action.');
         return user.id;
     }
 
-    // ──────────────────────────────────────────────
-    //  CATEGORY & SUBCATEGORY METHODS
-    // ──────────────────────────────────────────────
+    // ─── CATEGORY & SUBCATEGORY METHODS ─────────────────────
 
     /**
      * Load all active categories (cached).
@@ -85,9 +78,7 @@
         return data;
     }
 
-    // ──────────────────────────────────────────────
-    //  IMAGE UPLOAD HELPER (Cloudinary)
-    // ──────────────────────────────────────────────
+    // ─── IMAGE UPLOAD HELPER (Cloudinary) ──────────────────
 
     /**
      * Upload one or more image files to Cloudinary.
@@ -114,23 +105,19 @@
         return results;
     }
 
-    // ──────────────────────────────────────────────
-    //  REAL-TIME SUBSCRIPTION
-    // ──────────────────────────────────────────────
+    // ─── REAL-TIME SUBSCRIPTION ────────────────────────────
 
     let _realtimeChannel = null;
     let _realtimeCallbacks = [];
 
     /**
      * Subscribe to real-time changes on market_listings.
-     * @param {Function} callback - function(payload) called on any change
-     * @returns {void}
      */
     function subscribe(callback) {
         if (typeof callback === 'function') {
             _realtimeCallbacks.push(callback);
         }
-        if (_realtimeChannel) return; // already subscribed
+        if (_realtimeChannel) return;
 
         _realtimeChannel = window.sb
             .channel('market_listings_changes')
@@ -142,7 +129,6 @@
                     table: 'market_listings'
                 },
                 (payload) => {
-                    // Notify all registered callbacks
                     _realtimeCallbacks.forEach(fn => {
                         try { fn(payload); } catch (e) { console.warn('Realtime callback error:', e); }
                     });
@@ -155,9 +141,6 @@
             });
     }
 
-    /**
-     * Unsubscribe from real-time changes.
-     */
     function unsubscribe() {
         if (_realtimeChannel) {
             window.sb.removeChannel(_realtimeChannel);
@@ -166,9 +149,7 @@
         }
     }
 
-    // ──────────────────────────────────────────────
-    //  LISTINGS CRUD (ALL USER IDs FROM AUTH)
-    // ──────────────────────────────────────────────
+    // ─── LISTINGS CRUD ──────────────────────────────────────
 
     const ListingsAPI = {
 
@@ -187,14 +168,12 @@
 
         // ─── Create Listing ───
         async createListing(data) {
-            // Get authenticated user ID – never trust frontend
             const userId = await _getUserId();
 
             if (!data.title?.trim()) throw new Error('Title is required');
             if (!data.price || data.price <= 0) throw new Error('Valid price is required');
             if (!data.category_id) throw new Error('Category is required');
 
-            // Validate subcategory belongs to category
             if (data.subcategory_id) {
                 const sub = await getSubcategory(data.subcategory_id);
                 if (!sub) throw new Error('Invalid subcategory');
@@ -203,8 +182,6 @@
                 }
             }
 
-            // Ensure images are uploaded; if not, we accept them as is (the caller should have used uploadImages)
-            const images = data.images || [];
             const payload = {
                 seller_id: userId,
                 title: data.title.trim(),
@@ -214,7 +191,7 @@
                 location: data.location || 'Campus',
                 lat: data.lat || null,
                 lng: data.lng || null,
-                images: images,
+                images: data.images || [],
                 description: data.description || '',
                 condition: data.condition || 'New',
                 status: 'active'
@@ -256,27 +233,22 @@
                     market_subcategories (name)
                 `, { count: 'exact' });
 
-            // Filters
             if (filters.category_id) query = query.eq('category_id', filters.category_id);
             if (filters.subcategory_id) query = query.eq('subcategory_id', filters.subcategory_id);
             if (filters.seller_id) query = query.eq('seller_id', filters.seller_id);
-            // Default status: active
             const status = filters.status || 'active';
             query = query.eq('status', status);
 
-            // Search in title and description
             if (filters.search) {
                 query = query.or(
                     `title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`
                 );
             }
 
-            // Order
             const orderBy = filters.order_by || 'created_at';
             const orderDir = filters.order_dir || 'desc';
             query = query.order(orderBy, { ascending: orderDir === 'asc' });
 
-            // Pagination: use range only
             const limit = filters.limit || 20;
             const offset = filters.offset || 0;
             query = query.range(offset, offset + limit - 1);
@@ -288,8 +260,6 @@
 
         // ─── Update listing ───
         async updateListing(listingId, updates) {
-            // Only the seller or admin should be allowed; we don't check here to keep it flexible,
-            // but your RLS policy should enforce that.
             const allowed = ['title', 'price', 'description', 'location', 'lat', 'lng', 'images', 'condition', 'category_id', 'subcategory_id', 'status'];
             const payload = {};
             for (const key of allowed) {
@@ -297,7 +267,6 @@
                     payload[key] = updates[key];
                 }
             }
-            // Validate subcategory if provided
             if (payload.subcategory_id && payload.category_id) {
                 const sub = await getSubcategory(payload.subcategory_id);
                 if (!sub) throw new Error('Invalid subcategory');
@@ -367,14 +336,12 @@
             return await this.getListings({
                 search: query,
                 limit: options.limit || 20,
-                offset: options.offset || 0,
-                order_by: 'relevance' // you might want to use a search index for ranking
+                offset: options.offset || 0
             });
         },
 
         // ─── Increment views (RPC) ───
         async incrementViews(listingId) {
-            // Call the PostgreSQL RPC function
             const { error } = await window.sb.rpc('increment_listing_views', {
                 listing_id: listingId
             });
@@ -454,7 +421,6 @@
 
             const { data, error } = await query;
             if (error) throw error;
-            // Flatten
             return data.map(item => ({
                 ...item.market_listings,
                 saved_at: item.created_at
@@ -463,9 +429,6 @@
 
         // ─── Additional discovery methods ───
 
-        /**
-         * Get listings by category (wrapper around getListings).
-         */
         async getListingsByCategory(categoryId, options = {}) {
             return await this.getListings({
                 category_id: categoryId,
@@ -473,12 +436,7 @@
             });
         },
 
-        /**
-         * Get listings near a location (lat/lng with simple bounding box).
-         * For MVP, we use a rough filter; you could use PostGIS for more accuracy.
-         */
         async getNearbyListings(lat, lng, radiusKm = 10, options = {}) {
-            // Approximate: 1 degree ~ 111 km
             const delta = radiusKm / 111;
             const minLat = lat - delta;
             const maxLat = lat + delta;
@@ -509,9 +467,6 @@
             return { data, count };
         },
 
-        /**
-         * Get recent listings (just order by created_at).
-         */
         async getRecentListings(options = {}) {
             return await this.getListings({
                 order_by: 'created_at',
@@ -520,9 +475,6 @@
             });
         },
 
-        /**
-         * Get trending listings (by views_count or other metric).
-         */
         async getTrendingListings(options = {}) {
             return await this.getListings({
                 order_by: 'views_count',
@@ -532,11 +484,14 @@
         }
     };
 
-    // ──────────────────────────────────────────────
-    //  EXPOSE GLOBALLY
-    // ──────────────────────────────────────────────
+    // ─── EXPOSE ──────────────────────────────────────────────
     window.ListingsAPI = ListingsAPI;
+    window.CategoryAPI = {
+        loadCategories,
+        loadSubcategories,
+        getCategory,
+        getSubcategory
+    };
 
-    console.log('✅ listings.js loaded (production-ready)');
-
+    console.log('✅ listings.js loaded (final)');
 })();
