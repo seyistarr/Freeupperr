@@ -1,5 +1,6 @@
 // ============================================================
 // GLOBAL UTILITIES – THEME, TOAST, USER CACHE, AUTHOR HELPERS
+// Marketplace helpers: currency, time, badges, listings
 // Used across all Freeupper pages
 // ============================================================
 
@@ -126,7 +127,6 @@
   // ─── AUTHOR HELPER ───────────────────────────────────────────
   // Given a profile object (from a post or comment join), return a clean author object.
   // Supports both new verified_status and old verified boolean columns.
-  // Now safe: always returns an object with an id (empty if profile missing).
   window.getAuthorFromProfile = function(profile) {
     if (!profile || !profile.id) {
       return {
@@ -140,7 +140,6 @@
       };
     }
 
-    // Determine verified status: prefer verified_status, fallback to verified boolean
     let verifiedStatus = profile.verified_status || 'none';
     if (verifiedStatus === 'none' && profile.verified === true) {
       verifiedStatus = 'verified';
@@ -158,7 +157,6 @@
   };
 
   // ─── VERIFIED BADGE HTML ─────────────────────────────────────
-  // Now accepts verifiedStatus and optional size.
   window.getVerifiedBadgeHTML = function(verifiedStatus, size) {
     if (!verifiedStatus || verifiedStatus === 'none' || verifiedStatus === 'pending') return '';
     const sizeClass = size === 'sm' ? 'verified-badge-sm' :
@@ -168,6 +166,24 @@
                   verifiedStatus === 'staff' ? 'Staff' :
                   verifiedStatus === 'business' ? 'Business' : 'Verified';
     return `<span class="${sizeClass}" title="${label}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>`;
+  };
+
+  // ─── UPDATE ALL VERIFIED BADGES IN A CONTAINER ──────────────
+  // Scans all [data-author-badge-wrapper] elements and updates them
+  window.updateVerifiedBadges = function(container) {
+    if (!container) container = document.body;
+    const wrappers = container.querySelectorAll('[data-author-badge-wrapper]');
+    wrappers.forEach(wrapper => {
+      const status = wrapper.dataset.verificationStatus || 'none';
+      const size = wrapper.dataset.badgeSize || 'sm';
+      wrapper.innerHTML = window.getVerifiedBadgeHTML(status, size);
+      // Show/hide based on status
+      if (status && status !== 'none' && status !== 'pending') {
+        wrapper.style.display = 'inline-flex';
+      } else {
+        wrapper.style.display = 'none';
+      }
+    });
   };
 
   // ─── UPDATE AUTHOR UI ────────────────────────────────────────
@@ -185,7 +201,7 @@
       // Display name
       const nameEl = el.querySelector('[data-author-name]');
       if (nameEl) nameEl.textContent = displayName;
-      // Verified badge wrapper (use innerHTML to replace content)
+      // Verified badge wrapper
       const badgeWrapper = el.querySelector('[data-author-badge-wrapper]');
       if (badgeWrapper) {
         if (isVerified) {
@@ -244,9 +260,128 @@
     });
   };
 
+  // ─── MARKETPLACE HELPERS ─────────────────────────────────────
+
+  /**
+   * Format a number as Nigerian Naira (₦) with commas.
+   * @param {number|string} amount - The amount to format.
+   * @returns {string} Formatted currency string.
+   */
+  window.formatCurrency = function(amount) {
+    if (amount == null) return '₦0';
+    const num = Number(amount);
+    if (isNaN(num)) return '₦0';
+    return '₦' + num.toLocaleString('en-US');
+  };
+
+  /**
+   * Get a human-readable relative time (e.g., "2h", "3d").
+   * @param {string|Date} date - The date to compare.
+   * @returns {string} Relative time string.
+   */
+  window.timeAgo = function(date) {
+    const now = new Date();
+    const diff = now - new Date(date);
+    if (diff < 0) return 'just now';
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return minutes + 'm';
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours + 'h';
+    const days = Math.floor(hours / 24);
+    if (days < 7) return days + 'd';
+    const weeks = Math.floor(days / 7);
+    if (weeks < 4) return weeks + 'w';
+    const months = Math.floor(days / 30);
+    if (months < 12) return months + 'mo';
+    const years = Math.floor(days / 365);
+    return years + 'y';
+  };
+
+  /**
+   * Generate skeleton loader HTML for a listing card.
+   * @param {number} count - Number of skeleton cards to generate.
+   * @returns {string} HTML string of skeleton cards.
+   */
+  window.getListingSkeletons = function(count) {
+    let html = '';
+    for (let i = 0; i < count; i++) {
+      html += `
+        <div class="skeleton-card fade-in">
+          <div class="skeleton skeleton-image"></div>
+          <div class="skeleton skeleton-text w-75 mt-2"></div>
+          <div class="skeleton skeleton-text w-50"></div>
+          <div class="skeleton skeleton-text w-25 mt-1"></div>
+        </div>
+      `;
+    }
+    return html;
+  };
+
+  /**
+   * Render a single listing card (for use in market tab or profile).
+   * @param {Object} listing - Listing data from API.
+   * @param {Object} options - { showSeller, showActions, onSave, onSelect }
+   * @returns {string} HTML string.
+   */
+  window.renderListingCard = function(listing, options) {
+    options = options || {};
+    const cover = listing.images && listing.images.length > 0 ? listing.images[0].url : '';
+    const price = window.formatCurrency(listing.price);
+    const time = window.timeAgo(listing.created_at);
+    const status = listing.status || 'active';
+    const statusClass = status === 'active' ? 'active' :
+                        status === 'sold' ? 'sold' :
+                        status === 'archived' ? 'archived' : 'deleted';
+    const seller = listing.profiles || {};
+    const sellerName = seller.display_name || 'Anonymous';
+    const sellerAvatar = seller.avatar_url || DEFAULT_AVATAR;
+    const isVerified = seller.verified_status && seller.verified_status !== 'none' && seller.verified_status !== 'pending';
+    const badgeHTML = isVerified ? window.getVerifiedBadgeHTML(seller.verified_status, 'sm') : '';
+
+    const showSeller = options.showSeller !== false;
+    const showActions = options.showActions !== false;
+
+    let actionsHTML = '';
+    if (showActions) {
+      const isSaved = listing.saved || false;
+      actionsHTML = `
+        <button class="fav-btn ${isSaved ? 'saved' : ''}" data-listing-id="${listing.id}" onclick="event.stopPropagation();${options.onSave ? `window.${options.onSave}('${listing.id}')` : ''}">
+          <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        </button>
+      `;
+    }
+
+    return `
+      <div class="listing-card fade-in" data-listing-id="${listing.id}" onclick="${options.onSelect ? `window.${options.onSelect}('${listing.id}')` : ''}">
+        <div class="relative">
+          ${cover ? `<img class="cover-image" src="${cover}" alt="${listing.title}" loading="lazy" />` : `<div class="cover-image skeleton" style="aspect-ratio:16/9;"></div>`}
+          ${actionsHTML}
+        </div>
+        <div class="title">${listing.title}</div>
+        <div class="price">${price}</div>
+        ${showSeller ? `
+          <div class="seller">
+            <img class="avatar" src="${sellerAvatar}" alt="" />
+            <span class="name">${sellerName} ${badgeHTML}</span>
+          </div>
+        ` : ''}
+        <div class="meta">
+          <span class="status-badge ${statusClass}">${status}</span>
+          <span>📍 ${listing.location || 'Campus'}</span>
+          <span>${time}</span>
+          ${listing.views_count ? `<span>👁️ ${listing.views_count}</span>` : ''}
+        </div>
+      </div>
+    `;
+  };
+
   // ─── INIT ────────────────────────────────────────────────────
   function initGlobal() {
     updateNavAvatar();
+    // Update all badges on the page
+    window.updateVerifiedBadges(document.body);
   }
 
   if (document.readyState === 'loading') {
@@ -255,5 +390,5 @@
     initGlobal();
   }
 
-  console.log('✅ global.js loaded (theme, toast, helpers, Supabase profile joins)');
+  console.log('✅ global.js loaded (full version with marketplace helpers)');
 })();
