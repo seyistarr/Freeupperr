@@ -126,8 +126,19 @@
   // ─── AUTHOR HELPER ───────────────────────────────────────────
   // Given a profile object (from a post or comment join), return a clean author object.
   // Supports both new verified_status and old verified boolean columns.
+  // Now safe: always returns an object with an id (empty if profile missing).
   window.getAuthorFromProfile = function(profile) {
-    if (!profile) return null;
+    if (!profile || !profile.id) {
+      return {
+        id: '',
+        name: 'Anonymous',
+        username: '',
+        avatar: DEFAULT_AVATAR,
+        verified_status: 'none',
+        verified: false,
+        is_private: false,
+      };
+    }
 
     // Determine verified status: prefer verified_status, fallback to verified boolean
     let verifiedStatus = profile.verified_status || 'none';
