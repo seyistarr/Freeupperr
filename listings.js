@@ -1,5 +1,5 @@
 // ============================================================
-// listings.js – Marketplace API (final)
+// listings.js – Marketplace API (with WhatsApp support)
 // Uses Supabase, Cloudinary, and secure auth.
 // All methods are under ListingsAPI and CategoryAPI.
 // ============================================================
@@ -149,7 +149,7 @@
         }
     }
 
-    // ─── LISTINGS CRUD ──────────────────────────────────────
+    // ─── LISTINGS CRUD (with WhatsApp) ──────────────────────
 
     const ListingsAPI = {
 
@@ -194,7 +194,8 @@
                 images: data.images || [],
                 description: data.description || '',
                 condition: data.condition || 'New',
-                status: 'active'
+                status: 'active',
+                whatsapp: data.whatsapp || null  // ← NEW: WhatsApp number
             };
 
             const { data: inserted, error } = await window.sb
@@ -212,7 +213,7 @@
                 .from('market_listings')
                 .select(`
                     *,
-                    profiles:seller_id (display_name, avatar_url, verified),
+                    profiles:seller_id (display_name, avatar_url, verified, phone),
                     market_categories (name),
                     market_subcategories (name)
                 `)
@@ -228,7 +229,7 @@
                 .from('market_listings')
                 .select(`
                     *,
-                    profiles:seller_id (display_name, avatar_url, verified),
+                    profiles:seller_id (display_name, avatar_url, verified, phone),
                     market_categories (name),
                     market_subcategories (name)
                 `, { count: 'exact' });
@@ -260,7 +261,7 @@
 
         // ─── Update listing ───
         async updateListing(listingId, updates) {
-            const allowed = ['title', 'price', 'description', 'location', 'lat', 'lng', 'images', 'condition', 'category_id', 'subcategory_id', 'status'];
+            const allowed = ['title', 'price', 'description', 'location', 'lat', 'lng', 'images', 'condition', 'category_id', 'subcategory_id', 'status', 'whatsapp'];
             const payload = {};
             for (const key of allowed) {
                 if (updates.hasOwnProperty(key)) {
@@ -320,7 +321,7 @@
                 .from('market_listings')
                 .select(`
                     *,
-                    profiles:seller_id (display_name, avatar_url)
+                    profiles:seller_id (display_name, avatar_url, phone)
                 `)
                 .eq('category_id', categoryId)
                 .eq('status', 'active')
@@ -407,7 +408,7 @@
                     created_at,
                     market_listings!inner (
                         *,
-                        profiles:seller_id (display_name, avatar_url, verified),
+                        profiles:seller_id (display_name, avatar_url, verified, phone),
                         market_categories (name),
                         market_subcategories (name)
                     )
@@ -447,7 +448,7 @@
                 .from('market_listings')
                 .select(`
                     *,
-                    profiles:seller_id (display_name, avatar_url, verified),
+                    profiles:seller_id (display_name, avatar_url, verified, phone),
                     market_categories (name),
                     market_subcategories (name)
                 `, { count: 'exact' })
@@ -493,5 +494,5 @@
         getSubcategory
     };
 
-    console.log('✅ listings.js loaded (final)');
+    console.log('✅ listings.js loaded (with WhatsApp support)');
 })();
