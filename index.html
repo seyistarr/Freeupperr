@@ -1104,6 +1104,19 @@
             animation: bookmarkBreathe 0.4s cubic-bezier(.34, 1.56, .64, 1);
         }
 
+        @keyframes shareBounce {
+            0% { transform: scale(1) rotate(0deg); }
+            35% { transform: scale(1.25) rotate(12deg); }
+            65% { transform: scale(0.92) rotate(-4deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+        .share-btn.share-bounce svg {
+            animation: shareBounce 0.45s cubic-bezier(.34, 1.56, .64, 1);
+        }
+        .share-btn.shared {
+            color: #7C3AED;
+        }
+
         .skeleton-post {
             padding: 16px 0;
             border-bottom: 1px solid var(--brd);
@@ -1906,7 +1919,7 @@
             .post-actions-row {
                 gap: 2px;
                 flex-wrap: nowrap;
-                justify-content: space-between;
+                justify-content: flex-start;
             }
             .post-actions-row .comment-btn,
             .post-actions-row .reaction-btn,
@@ -1971,14 +1984,25 @@
             opacity: 1;
         }
 
-        /* ──────────────── POST ACTIONS ROW - ORIGINAL INLINE LAYOUT ──────────────── */
+        /* ──────────────── POST ACTIONS ROW - ELASTIC SPACING ──────────────── */
         .post-actions-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-start;
+            gap: 4px;
             margin-top: 10px;
             max-width: 100%;
         }
+        .post-actions-row > * {
+            flex: 1 1 auto;
+            display: inline-flex;
+            justify-content: center;
+        }
+        .post-actions-row .bookmark-badge {
+            flex: 0 1 auto;
+            margin-left: auto;
+        }
+
         .post-actions-row .comment-btn,
         .post-actions-row .reaction-btn,
         .post-actions-row .views-count,
@@ -2029,7 +2053,8 @@
             flex-shrink: 0;
         }
         .post-actions-row .reaction-count,
-        .post-actions-row .comment-count {
+        .post-actions-row .comment-count,
+        .post-actions-row .share-count {
             font-weight: 600;
             font-variant-numeric: tabular-nums;
             font-size: .85rem;
@@ -2073,6 +2098,58 @@
         }
         [data-theme="dark"] .tab-pill--active {
             color: #fff;
+        }
+
+        /* ──────────────── FOLLOW BUTTON 4-STATE ──────────────── */
+        .follow-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: .72rem;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1.5px solid transparent;
+            background: #7C3AED;
+            color: #fff;
+            transition: background .15s, color .15s, border-color .15s, transform .1s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .follow-btn:active {
+            transform: scale(.95);
+        }
+        .follow-btn.hidden-follow {
+            display: none;
+        }
+        .follow-btn.rel-follow {
+            background: #7C3AED;
+            color: #fff;
+        }
+        .follow-btn.rel-follow-back {
+            background: #A855F7;
+            color: #fff;
+        }
+        .follow-btn.rel-following {
+            background: rgba(124, 58, 237, .12);
+            color: #7C3AED;
+            border-color: rgba(124, 58, 237, .35);
+        }
+        .follow-btn.rel-friends {
+            background: rgba(124, 58, 237, .1);
+            color: #8B5CF6;
+            border-color: rgba(139, 92, 246, .3);
+        }
+        [data-theme="dark"] .follow-btn.rel-following {
+            background: rgba(139, 92, 246, .18);
+            color: #C4B5FD;
+            border-color: rgba(139, 92, 246, .4);
+        }
+        [data-theme="dark"] .follow-btn.rel-friends {
+            background: rgba(139, 92, 246, .15);
+            color: #C4B5FD;
+            border-color: rgba(139, 92, 246, .35);
         }
 
         #category-chips {
@@ -2319,7 +2396,8 @@
             };
 
             // ── Caches for follows, bookmarks, shares (Supabase) ──
-            let followingSet = new Set();
+            let followingSet = new Set();   // users I follow
+            let followerSet = new Set();    // users who follow me
             let bookmarksSet = new Set();
             let sharesSet = new Set();
 
@@ -2357,9 +2435,14 @@
                     );
             }
 
-            function formatCount(n) { if (!n) return '0'; if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/,
-                    '') + 'B'; if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'; if (n >= 1e3)
-                    return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K'; return String(n); }
+            // ─── FIX: formatCount with lowercase k/m/b ───
+            function formatCount(n) {
+                n = Number(n) || 0;
+                if (n < 1000) return String(n);
+                if (n < 1e6) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+                if (n < 1e9) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'm';
+                return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'b';
+            }
 
             function formatPrice(a) { return a.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 
@@ -2849,13 +2932,17 @@
             // FOLLOW, BOOKMARK, SHARE – Supabase
             // ───────────────────────────────────────────────────────────────
 
+            // ─── FIX: load both following & followers ───
             async function loadFollows() {
                 const user = getCurrentUser();
-                if (!user || !user.isLoggedIn) { followingSet = new Set(); return; }
+                if (!user || !user.isLoggedIn) { followingSet = new Set(); followerSet = new Set(); return; }
                 try {
-                    const { data, error } = await window.sb.from('follows').select('following_id').eq('follower_id', user
-                        .id);
-                    if (!error) followingSet = new Set(data.map(f => f.following_id));
+                    const [followingRes, followerRes] = await Promise.all([
+                        window.sb.from('follows').select('following_id').eq('follower_id', user.id),
+                        window.sb.from('follows').select('follower_id').eq('following_id', user.id)
+                    ]);
+                    if (!followingRes.error) followingSet = new Set(followingRes.data.map(f => f.following_id));
+                    if (!followerRes.error) followerSet = new Set(followerRes.data.map(f => f.follower_id));
                 } catch (e) { console.warn('loadFollows error:', e); }
             }
 
@@ -2877,12 +2964,22 @@
                 } catch (e) { console.warn('loadShares error:', e); }
             }
 
-            function isFollowing(userId) { return followingSet.has(userId); }
+            function isFollowedByMe(userId) { return followingSet.has(userId); }
+            function doesFollowMe(userId) { return followerSet.has(userId); }
+            function getRelationshipState(userId) {
+                const iFollowThem = isFollowedByMe(userId);
+                const theyFollowMe = doesFollowMe(userId);
+                if (iFollowThem && theyFollowMe) return 'friends';
+                if (iFollowThem) return 'following';
+                if (theyFollowMe) return 'follow-back';
+                return 'follow';
+            }
 
+            // ─── FIX: toggleFollowUser uses the renamed check ───
             async function toggleFollowUser(userId) {
                 const user = getCurrentUser();
                 if (!user || !user.isLoggedIn) { showToast('Please sign in to follow', 'o'); return false; }
-                const currently = isFollowing(userId);
+                const currently = isFollowedByMe(userId);
                 try {
                     if (currently) {
                         await window.sb.from('follows').delete().eq('follower_id', user.id).eq('following_id', userId);
@@ -2944,7 +3041,7 @@
             // POSTS — via PostsAPI (Supabase)
             // ───────────────────────────────────────────────────────────────
 
-            // ─── FIX: add reactions object from likes ─────────────────────
+            // ─── FIX: add reactions object and shareCount ───
             async function reloadPosts() {
                 try {
                     const posts = await window.PostsAPI.loadAllPosts();
@@ -2952,7 +3049,8 @@
                     appData.posts = posts;
                     appData.userReactions = {};
                     posts.forEach(p => {
-                        p.reactions = { like: p.likes || 0 };   // ✅ FIX
+                        p.reactions = { like: p.likes || 0 };
+                        p.shareCount = p.shareCount || 0;
                         if (p.likedByMe) appData.userReactions[p.id + '-like'] = true;
                     });
                     return posts;
@@ -3042,36 +3140,45 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // FOLLOW BUTTON
+            // FOLLOW BUTTON – 4-state
             // ───────────────────────────────────────────────────────────────
+
+            function relLabel(state) {
+                if (state === 'friends') return 'Friends';
+                if (state === 'following') return 'Following';
+                if (state === 'follow-back') return 'Follow Back';
+                return 'Follow';
+            }
 
             function buildFollowButton(authorId, authorName) {
                 const cu = getCurrentUser();
                 if (!authorId || authorId === cu.id) return `<span class="follow-btn hidden-follow"></span>`;
-                const following = isFollowing(authorId);
-                return `<button class="follow-btn ${following?'following':''}" data-user-id="${authorId}" onclick="toggleFollowHandler(event, '${authorId}')">${following?'Following':'Follow'}</button>`;
+                const state = getRelationshipState(authorId);
+                return `<button class="follow-btn rel-${state}" data-user-id="${authorId}" data-rel-state="${state}" onclick="toggleFollowHandler(event, '${authorId}')">${relLabel(state)}</button>`;
             }
 
             window.toggleFollowHandler = async function(e, userId) {
                 e.stopPropagation();
                 const btn = e.currentTarget;
-                const newState = await toggleFollowUser(userId);
-                btn.textContent = newState ? 'Following' : 'Follow';
-                btn.classList.toggle('following', newState);
+                await toggleFollowUser(userId);
+                const newState = getRelationshipState(userId);
                 document.querySelectorAll(`.follow-btn[data-user-id="${userId}"]`).forEach(b => {
-                    if (b !== btn) {
-                        b.textContent = newState ? 'Following' : 'Follow';
-                        b.classList.toggle('following', newState);
-                    }
+                    b.textContent = relLabel(newState);
+                    b.className = `follow-btn rel-${newState}`;
+                    b.dataset.relState = newState;
                 });
-                showToast(newState ? 'Following ✓' : 'Unfollowed');
+                const toastMsg = newState === 'friends' ? 'You are now friends' :
+                    newState === 'following' ? 'Following ✓' :
+                    newState === 'follow-back' ? 'Unfollowed' : 'Unfollowed';
+                showToast(toastMsg);
             };
 
             // ───────────────────────────────────────────────────────────────
-            // ACTIONS ROW — FIXED: p.comments as number
+            // ACTIONS ROW — FIX: p.comments as number, add share count ───
             // ───────────────────────────────────────────────────────────────
             function buildActionsRow(p) {
                 const bm = isBookmarked(p.id),
+                    shared = isShared(p.id),
                     cc = Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false).length : (p
                         .comments || 0);
                 return `<div class="post-actions-row" data-post-reactions="${p.id}">
@@ -3079,21 +3186,15 @@
                 ${buildReactionButton(p.id)}
                 <span class="views-count">${svgEye()}<span>${formatCount(p.views||0)}</span></span>
                 <span class="bookmark-badge ${bm?'bookmarked':''}" data-bookmark="${p.id}">${bookmarkIcon(bm)}</span>
-                <span class="share-btn" data-share-post="${p.id}">${svgShare()}</span>
+                <span class="share-btn ${shared?'shared':''}" data-share-post="${p.id}">${svgShare()}<span class="share-count">${formatCount(p.shareCount||0)}</span></span>
               </div>`;
             }
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD POST HTML
+            // BUILD POST HTML — using direct getAuthorFromProfile ────────
             // ───────────────────────────────────────────────────────────────
             function buildPostHTML(p, index) {
-                const profile = p.profile || {};
-                const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : {
-                    name: 'Anonymous',
-                    avatar: '',
-                    verified_status: 'none',
-                    verified: false
-                };
+                const author = window.getAuthorFromProfile(p.profile);
                 const da = author.name;
                 const aa = author.avatar;
                 const verifiedStatus = author.verified_status;
@@ -3176,7 +3277,7 @@
                 lastScrollY = currentScroll;
             }
 
-            // ─── FIX 1: getFilteredSortedPosts() — handle p.comments as number ───
+            // ─── FIX: getFilteredSortedPosts — p.comments as number ───
             function getFilteredSortedPosts() {
                 const currentUser = getCurrentUser();
                 let p = [...allPosts];
@@ -3345,6 +3446,7 @@
                 });
             }
 
+            // ─── FIX: double-tap/single-tap logic with stable snapshot ──
             function setupPostEventDelegation(article) {
                 article.addEventListener('click', function(e) {
                     const t = e.target,
@@ -3355,11 +3457,15 @@
                         toggleReaction(pid); return; }
                     if (t.closest('.bookmark-badge')) { e.stopPropagation();
                         toggleBookmarkUI(article); return; }
-                    if (t.closest('.share-btn')) { e.stopPropagation();
+                    if (t.closest('.share-btn')) {
+                        e.stopPropagation();
                         const btn = t.closest('.share-btn');
                         const postId = btn.dataset.sharePost || pid;
+                        btn.classList.add('share-bounce');
+                        setTimeout(() => btn.classList.remove('share-bounce'), 450);
                         openShareModal(postId);
-                        return; }
+                        return;
+                    }
                     if (t.closest('.comment-btn')) { e.stopPropagation();
                         openExplorePost(pid, 'home', true); return; }
                     if (t.closest('.user-mini-avatar') || t.closest('.font-bold.text-sm')) {
@@ -3386,11 +3492,18 @@
                     if (t.closest('.carousel-arrow') || t.closest('.carousel-dot')) { e.stopPropagation(); return; }
                     const now = Date.now(),
                         gap = now - lastDoubleTapTime;
-                    if (gap < 300 && gap > 0) { e.preventDefault();
-                        toggleReaction(pid); }
+                    if (gap < 300 && gap > 0) {
+                        e.preventDefault();
+                        toggleReaction(pid);
+                        lastDoubleTapTime = 0;
+                        return;
+                    }
                     lastDoubleTapTime = now;
-                    if (gap >= 300) { setTimeout(() => { if (Date.now() - lastDoubleTapTime >= 300)
-                            openExplorePost(pid, 'home'); }, 310); }
+                    setTimeout(() => {
+                        if (lastDoubleTapTime === now) {
+                            openExplorePost(pid, 'home');
+                        }
+                    }, 300);
                 });
             }
 
@@ -3450,6 +3563,7 @@
                 sharePostId = null;
             }
 
+            // ─── FIX: update share count on share toggle ───
             function handleShareAction(action) {
                 if (!sharePostId) return;
                 const post = allPosts.find(p => p.id === sharePostId);
@@ -3458,6 +3572,13 @@
                 const title = post.title || 'FreeUpper post';
 
                 toggleShare(sharePostId).then(shared => {
+                    post.shareCount = Math.max(0, (post.shareCount || 0) + (shared ? 1 : -1));
+                    document.querySelectorAll(`article[data-post-id="${sharePostId}"] .share-btn, #single-share-btn[data-share-post="${sharePostId}"]`)
+                        .forEach(el => {
+                            el.classList.toggle('shared', shared);
+                            const cnt = el.querySelector('.share-count');
+                            if (cnt) cnt.textContent = formatCount(post.shareCount);
+                        });
                     if (action === 'profile') {
                         showToast('Shared to your profile! ✨');
                         closeShareModal();
@@ -3533,14 +3654,9 @@
                 return h;
             }
 
+            // ─── FIX: use direct getAuthorFromProfile ───
             function renderCommentThread(c, allComments, postId) {
-                const profile = c.profile || {};
-                const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : {
-                    name: 'Anonymous',
-                    avatar: '',
-                    verified_status: 'none',
-                    verified: false
-                };
+                const author = window.getAuthorFromProfile(c.profile);
                 const username = author.name;
                 const avatar = author.avatar;
                 const verifiedStatus = author.verified_status;
@@ -3589,13 +3705,7 @@
             }
 
             function renderReplyItem(r, allComments, postId) {
-                const profile = r.profile || {};
-                const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : {
-                    name: 'Anonymous',
-                    avatar: '',
-                    verified_status: 'none',
-                    verified: false
-                };
+                const author = window.getAuthorFromProfile(r.profile);
                 const username = author.name;
                 const avatar = author.avatar;
                 const verifiedStatus = author.verified_status;
@@ -3631,6 +3741,7 @@
               </div>`;
             }
 
+            // ─── FIX: addComment ensure p.comments is array ───
             async function addComment(postId, parentId, message) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
@@ -3680,7 +3791,7 @@
                 }, 200);
             }
 
-            // ─── FIX 5: updateCommentCount() — handle number ───
+            // ─── FIX: updateCommentCount — handle number ───
             function updateCommentCount(postId) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
@@ -3853,17 +3964,11 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // EXPLORE FULLSCREEN — FIX 3: check array vs number
+            // EXPLORE FULLSCREEN — FIX: check array vs number ───────────
             // ───────────────────────────────────────────────────────────────
             function buildSinglePostHTML(post) {
                 if (!post) return '<div class="p-8 text-center" style="color:var(--muted);">Post not found</div>';
-                const profile = post.profile || {};
-                const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : {
-                    name: 'Anonymous',
-                    avatar: '',
-                    verified_status: 'none',
-                    verified: false
-                };
+                const author = window.getAuthorFromProfile(post.profile);
                 const aa = author.avatar;
                 const da = author.name;
                 const verifiedStatus = author.verified_status;
@@ -3905,6 +4010,7 @@
               </div>`;
             }
 
+            // ─── FIX: only load comments if not an array ───
             async function openExplorePost(id, returnPage, focusComment) {
                 pauseHomepageVideos();
                 const fs = document.getElementById('explore-fullscreen'),
@@ -3921,7 +4027,6 @@
                         window.PostsAPI.incrementView(id);
                     }
                     post.views = (post.views || 0) + 1;
-                    // FIX 3: only load comments if not already an array
                     if (!Array.isArray(post.comments)) {
                         if (window.PostsAPI && window.PostsAPI.loadComments) {
                             try {
@@ -4000,6 +4105,9 @@
                     const t = e.target;
                     if (t.closest('#single-share-btn')) {
                         const pid = t.closest('#single-share-btn').dataset.sharePost || postId;
+                        const btn = t.closest('#single-share-btn');
+                        btn.classList.add('share-bounce');
+                        setTimeout(() => btn.classList.remove('share-bounce'), 450);
                         openShareModal(pid);
                         return;
                     }
@@ -4082,14 +4190,10 @@
                 return h;
             }
 
+            // ─── FIX: remove click-blocking yt-tap overlay ───
             function buildExploreCards(posts) {
                 return posts.map(post => {
-                    const profile = post.profile || {};
-                    const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : {
-                        name: 'Anonymous',
-                        avatar: '',
-                        verified_status: 'none'
-                    };
+                    const author = window.getAuthorFromProfile(post.profile);
                     const av = author.avatar;
                     const au = author.name;
                     const mediaItems = getMediaItems(post);
@@ -4102,8 +4206,9 @@
                             if (isVideo && isYouTubeUrl(url)) {
                                 const ytId = extractYouTubeId(url);
                                 if (ytId) {
+                                    // No yt-tap overlay, iframe pointer-events: none
                                     mh =
-                                        `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;position:relative;background:#000;"><div class="yt-wrap" style="padding-bottom:56.25%;height:0;position:relative;width:100%;"><iframe src="https://www.youtube.com/embed/${ytId}?autoplay=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0" allow="autoplay; encrypted-media" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"></iframe><div class="yt-tap" onclick="event.stopPropagation();"></div></div></div>`;
+                                        `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;position:relative;background:#000;"><div class="yt-wrap" style="padding-bottom:56.25%;height:0;position:relative;width:100%;"><iframe style="pointer-events:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;" src="https://www.youtube.com/embed/${ytId}?autoplay=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0" allow="autoplay; encrypted-media"></iframe></div></div>`;
                                 } else {
                                     mh =
                                         `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;"><video src="${url}" muted playsinline preload="metadata" class="explore-card-thumb" style="pointer-events:none;object-fit:cover;width:100%;height:100%;"></video></div>`;
@@ -4213,10 +4318,10 @@
                 return `<div class="max-w-2xl mx-auto px-4 py-4"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><div><h2 class="font-heading font-extrabold text-lg" style="color:var(--text);">Campus Market</h2><p class="text-xs" style="color:var(--muted);">Buy & sell within your campus.</p></div><button class="subtitle-filter-btn ${marketCategoryFilter?'active':''}" id="market-filter-inline-btn">${svgFilter()} ${marketCategoryFilter||'Filter'}</button></div><div id="market-container">${marketSkeleton()}</div></div>`;
             }
 
+            // ─── FIX: market card click uses string UUID, not parseInt ───
             function setupMarketGridEvents() {
                 document.querySelectorAll('.market-card').forEach(card => {
-                    card.addEventListener('click', () => openMarketFullscreen(parseInt(card.dataset
-                        .itemId)));
+                    card.addEventListener('click', () => openMarketFullscreen(card.dataset.itemId));
                 });
             }
 
