@@ -52,7 +52,8 @@
             --pbrd: #7C3AED;
             --navbg: rgba(255, 255, 255, 0.92);
             --sidebg: #f9fafb;
-            --bottom-nav-height: 64px;
+            --bottom-nav-height: 72px;
+            --nav-h: 78px;
         }
 
         [data-theme="dark"] {
@@ -225,10 +226,10 @@
             display: flex;
             justify-content: space-around;
             align-items: center;
-            padding: 8px 0 max(env(safe-area-inset-bottom), 12px);
-            z-index: 30;
+            padding: 10px 0 max(env(safe-area-inset-bottom), 16px);
+            z-index: 50;
             transition: transform 0.35s cubic-bezier(0.32, 0.94, 0.6, 1), background .3s, border-color .3s;
-            height: var(--bottom-nav-height);
+            height: var(--nav-h, 78px);
             transform: translateY(0);
             will-change: transform;
         }
@@ -240,9 +241,9 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 2px;
+            gap: 4px;
             cursor: pointer;
-            padding: 4px clamp(6px, 2vw, 12px);
+            padding: 6px clamp(8px, 3vw, 14px);
             border-radius: 14px;
             transition: background .15s;
             position: relative;
@@ -265,7 +266,7 @@
             transition: stroke .15s;
         }
         .nav-item span {
-            font-size: clamp(8px, 1.8vw, 10px);
+            font-size: clamp(9px, 2vw, 10px);
             color: var(--muted);
             font-weight: 600;
             letter-spacing: .03em;
@@ -296,6 +297,34 @@
             border-radius: 50%;
             background: #EF4444;
             border: 1.5px solid var(--bg);
+        }
+
+        /* Raised "Create" button */
+        .add-post-btn {
+            background: var(--p);
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(139, 92, 246, .4);
+            transform: translateY(-2px);
+            flex-shrink: 0;
+            transition: transform .15s, box-shadow .15s;
+        }
+        .add-post-btn:active {
+            transform: translateY(-2px) scale(.92);
+        }
+        .add-post-btn svg {
+            width: 22px;
+            height: 22px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
         }
 
         /* ────────────────── TOP HEADER ────────────────── */
@@ -2241,7 +2270,7 @@
         </div>
     </div>
 
-    <!-- ═══════════════════ BOTTOM NAV (mobile) ═══════════════════ -->
+    <!-- ═══════════════════ BOTTOM NAV (mobile) — RAISED CREATE BUTTON ═══════════════════ -->
     <nav class="bottom-nav" id="bottomNav">
         <a href="index.html" class="nav-item active" data-nav="home" id="bottomHomeBtn">
             <svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg>
@@ -2251,10 +2280,9 @@
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>Search</span>
         </a>
-        <a href="create.html" class="nav-item" data-nav="create">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            <span>Create</span>
-        </a>
+        <button class="add-post-btn" aria-label="Create" onclick="window.location.href='create.html'">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
         <a href="video.html" class="nav-item" data-nav="video">
             <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
             <span>Video</span>
@@ -2314,9 +2342,6 @@
                 }
                 return { id: 'guest', isLoggedIn: false, displayName: 'Guest', avatar: '' };
             }
-
-            // We no longer use getAllUsers() – profile is joined in posts.
-            // getAllUsers is removed.
 
             function updateNavAvatar() {
                 const u = getCurrentUser();
@@ -3046,11 +3071,12 @@
             };
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD ACTIONS ROW (unchanged – uses bookmark & share helpers)
+            // BUILD ACTIONS ROW — FIXED: handles p.comments as number
             // ───────────────────────────────────────────────────────────────
             function buildActionsRow(p) {
                 const bm = isBookmarked(p.id),
-                    cc = p.comments ? p.comments.filter(c => c.approved !== false).length : (p.commentCount || 0);
+                    cc = Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false).length : (p
+                        .comments || 0);
                 return `<div class="post-actions-row" data-post-reactions="${p.id}">
                 <span class="comment-btn">${svgComment()}<span class="comment-count">${formatCount(cc)}</span></span>
                 ${buildReactionButton(p.id)}
@@ -3064,7 +3090,6 @@
             // BUILD POST HTML – using post.profile (single source of truth)
             // ───────────────────────────────────────────────────────────────
             function buildPostHTML(p, index) {
-                // Use the author helper from global.js (assumes getAuthorFromProfile is available)
                 const profile = p.profile || {};
                 const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : {
                     name: 'Anonymous',
@@ -3156,10 +3181,10 @@
                 lastScrollY = currentScroll;
             }
 
+            // ─── FIX 1: getFilteredSortedPosts() — handle p.comments as number ───
             function getFilteredSortedPosts() {
                 const currentUser = getCurrentUser();
                 let p = [...allPosts];
-                // Use profile.is_private (from join) to filter
                 p = p.filter(post => {
                     if (post.user_id === currentUser.id) return true;
                     const profile = post.profile || {};
@@ -3176,10 +3201,15 @@
                 else if (currentSortMethod === 'foryou') {
                     const uc = getUserCategories();
                     p.sort((a, b) => {
-                        const score = p => { const ah = (Date.now() - new Date(p.timestamp || p.date)) / 36e5,
-                                eg = (p.views || 0) + ((p.reactions.like || 0) * 2) + ((p.comments ?
-                                    p.comments.filter(c => c.approved !== false).length : 0) * 2); return eg /
-                                Math.pow(ah + 2, 1.5); };
+                        const score = p => {
+                            const ah = (Date.now() - new Date(p.timestamp || p.date)) / 36e5;
+                            // FIX: p.comments might be a number, not an array
+                            const commentCount = Array.isArray(p.comments) ? p.comments.filter(c => c
+                                .approved !== false).length : (p.comments || 0);
+                            const eg = (p.views || 0) + ((p.reactions.like || 0) * 2) + (commentCount *
+                            2);
+                            return eg / Math.pow(ah + 2, 1.5);
+                        };
                         return (score(b) * (uc.includes(b.category) ? 1.4 : 1)) - (score(a) * (uc
                             .includes(a.category) ? 1.4 : 1));
                     });
@@ -3510,7 +3540,6 @@
             }
 
             function renderCommentThread(c, allComments, postId) {
-                // Use profile data from comment (loaded via join)
                 const profile = c.profile || {};
                 const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : {
                     name: 'Anonymous',
@@ -3620,7 +3649,8 @@
                             try {
                                 const comment = await window.PostsAPI.addComment(postId, parentId,
                                 message);
-                                if (!p.comments) p.comments = [];
+                                // FIX 4: ensure p.comments is an array before pushing
+                                if (!Array.isArray(p.comments)) p.comments = [];
                                 p.comments.push(comment);
                                 p.commentCount = (p.commentCount || 0) + 1;
                                 resolve(comment);
@@ -3640,7 +3670,7 @@
                         approved: true,
                         parentId: parentId || null
                     };
-                    if (!p.comments) p.comments = [];
+                    if (!Array.isArray(p.comments)) p.comments = [];
                     p.comments.push(comment);
                     p.commentCount = (p.commentCount || 0) + 1;
                     return comment;
@@ -3652,7 +3682,7 @@
                 if (!p) return;
                 const cl = document.getElementById(listId);
                 if (!cl) return;
-                const ac = p.comments ? p.comments.filter(c => c.approved !== false) : [],
+                const ac = Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false) : [],
                     vc = getVisibleComments(postId);
                 cl.innerHTML = commentSkeletons(3);
                 setTimeout(() => {
@@ -3660,10 +3690,12 @@
                 }, 200);
             }
 
+            // ─── FIX 5: updateCommentCount() — handle number ───
             function updateCommentCount(postId) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
-                const cc = p.comments ? p.comments.filter(c => c.approved !== false).length : 0;
+                const cc = Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false).length : (p
+                    .comments || 0);
                 document.querySelectorAll(`article[data-post-id="${postId}"] .comment-btn .comment-count`).forEach(el =>
                     el.textContent = formatCount(cc));
                 const h3 = document.querySelector(`#comments-count-${postId}`);
@@ -3831,7 +3863,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // EXPLORE FULLSCREEN (uses buildSinglePostHTML updated to use profile)
+            // EXPLORE FULLSCREEN — FIX 3: check array vs number
             // ───────────────────────────────────────────────────────────────
             function buildSinglePostHTML(post) {
                 if (!post) return '<div class="p-8 text-center" style="color:var(--muted);">Post not found</div>';
@@ -3848,7 +3880,7 @@
                 const isVerified = author.verified;
                 const mh = buildMediaHTML(post, 'single');
                 const bm = isBookmarked(post.id);
-                const comments = post.comments ? post.comments.filter(c => c.approved !== false) : [],
+                const comments = Array.isArray(post.comments) ? post.comments.filter(c => c.approved !== false) : [],
                     vc = getVisibleComments(post.id);
                 const followBtn = buildFollowButton(post.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
@@ -3900,7 +3932,8 @@
                         window.PostsAPI.incrementView(id);
                     }
                     post.views = (post.views || 0) + 1;
-                    if (!post.comments || post.comments.length === 0) {
+                    // FIX 3: only load comments if not already an array
+                    if (!Array.isArray(post.comments)) {
                         if (window.PostsAPI && window.PostsAPI.loadComments) {
                             try {
                                 post.comments = await window.PostsAPI.loadComments(id);
@@ -4115,7 +4148,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MARKET – Supabase (updated seller lookup – uses profile)
+            // MARKET – Supabase
             // ───────────────────────────────────────────────────────────────
 
             const MARKET_CATEGORIES = [
@@ -4154,7 +4187,6 @@
             }
 
             function buildMarketCard(item) {
-                // Support both old and new image formats
                 let imageUrls = [];
                 if (item.images && Array.isArray(item.images)) {
                     if (item.images.length > 0 && typeof item.images[0] === 'object' && item.images[0].url) {
@@ -4169,8 +4201,6 @@
                 const ih = imageUrls.length > 0 ?
                     `<img src="${imageUrls[0]}" alt="${escapeHtml(item.title)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'market-card-no-image\\'><svg width=\\'32\\' height=\\'32\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'#D1D5DB\\' stroke-width=\\'1.5\\'><rect x=\\'3\\' y=\\'3\\' width=\\'18\\' height=\\'18\\' rx=\\'2\\'/></svg></div>'">` :
                     '<div class="market-card-no-image"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>';
-                // For seller, we could join profiles, but we use seller_name/avatar from item; we could also fetch from profiles if needed.
-                // For simplicity, keep as is.
                 const seller = { displayName: item.seller_name || 'Seller', avatar: item.seller_avatar || '' };
                 const sr =
                     `<div class="market-card-seller-row"><img src="${seller.avatar}" class="market-card-seller-avatar" onerror="this.style.display='none'" alt=""><span class="market-card-seller-name">${escapeHtml(seller.displayName)}</span></div>`;
@@ -4387,8 +4417,6 @@
 
             function navigateToProfileByUsername(username) {
                 if (!username || username === 'Guest') return;
-                // We no longer use getAllUsers – we'd need to fetch user by username from Supabase.
-                // For now, fallback to first matching username from allPosts profile.
                 const found = allPosts.find(p => p.profile && p.profile.username === username);
                 if (found) navigateToProfile(found.user_id);
                 else showToast('User not found');
@@ -4663,8 +4691,8 @@
                                     const cl = document.getElementById('comments-list');
                                     if (cl) {
                                         const vc = getVisibleComments(currentPostId);
-                                        const ac = post.comments.filter(c => c.approved !==
-                                            false);
+                                        const ac = Array.isArray(post.comments) ? post.comments
+                                            .filter(c => c.approved !== false) : [];
                                         cl.innerHTML = renderCommentsHTML(ac,
                                         currentPostId, vc);
                                     }
@@ -4675,13 +4703,6 @@
                     }
                 });
 
-                window.addEventListener('storage', (e) => {
-                    if (e.key === UK || e.key === BK || e.key === FOLLOW_KEY) {
-                        // only UI state; we can ignore heavy reloads
-                    }
-                });
-
-                // Setup Realtime for profile updates
                 if (window.sb) {
                     const channel = window.sb.channel('profile-updates')
                         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' },
@@ -4690,11 +4711,9 @@
                                 if (typeof window.updateAuthorUI === 'function') {
                                     window.updateAuthorUI(updated);
                                 }
-                                // Update in-memory data
                                 allPosts = allPosts.map(post => {
                                     if (post.user_id === updated.id) {
                                         post.profile = { ...post.profile, ...updated };
-                                        // author will be re-computed when rendering
                                     }
                                     return post;
                                 });
