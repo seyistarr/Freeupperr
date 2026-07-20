@@ -1,27 +1,27 @@
 /* ============================================================
-   FreeUpper — auth.js
+   FreeUpper — auth.js (revised)
    ============================================================ */
 (function () {
   'use strict';
 
   // ─── CONFIG ────────────────────────────────────────────────
-  var SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
-  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptanRxaWRpcnBtbmVnenZtaWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4ODk0OTAsImV4cCI6MjA5OTQ2NTQ5MH0.Lfxtyexew35L3uzy3bxPcBHogsnlMcAVOE-Ho50FZpk';
+  const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptanRxaWRpcnBtbmVnenZtaWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4ODk0OTAsImV4cCI6MjA5OTQ2NTQ5MH0.Lfxtyexew35L3uzy3bxPcBHogsnlMcAVOE-Ho50FZpk';
 
-  var CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
-  var CLOUDINARY_AVATAR_PRESET = 'image_upload';
+  const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
+  const CLOUDINARY_AVATAR_PRESET = 'image_upload';
 
-  var USER_KEY = 'freeupper_user_profile';
+  const USER_KEY = 'freeupper_user_profile';
 
   if (!window.supabase) {
     console.error('auth.js: include the Supabase CDN script before this file.');
     return;
   }
-  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   window.sb = sb;
 
   // ─── CHANGE LISTENERS ──────────────────────────────────────
-  var changeListeners = [];
+  const changeListeners = [];
 
   // ─── LOCAL PROFILE MIRROR (only for current user session) ──
   function defaultGuest() {
@@ -41,7 +41,7 @@
 
   function readLocalUser() {
     try {
-      var raw = localStorage.getItem(USER_KEY);
+      const raw = localStorage.getItem(USER_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch (e) {
       return null;
@@ -50,12 +50,9 @@
 
   function writeLocalUser(user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
-    // Update all static avatar elements (nav, profile, etc.)
     updateAvatarEls(user.avatar);
-    // Dispatch event for other tabs/pages
     document.dispatchEvent(new CustomEvent('profileUpdated', { detail: { user: user } }));
-    // Notify listeners
-    for (var i = 0; i < changeListeners.length; i++) {
+    for (let i = 0; i < changeListeners.length; i++) {
       try {
         changeListeners[i](user);
       } catch (e) {
@@ -65,80 +62,94 @@
   }
 
   function updateAvatarEls(src) {
-    var els = document.querySelectorAll('.side-av, .nav-av, #profileAvatar, #editAv, #qrAvatar');
-    for (var i = 0; i < els.length; i++) {
+    const els = document.querySelectorAll('.side-av, .nav-av, #profileAvatar, #editAv, #qrAvatar');
+    for (let i = 0; i < els.length; i++) {
       if (els[i]) els[i].src = src;
     }
   }
 
+  // ─── CACHED USER (synchronous) ────────────────────────────
   function getCurrentUser() {
-    var cached = readLocalUser();
+    const cached = readLocalUser();
     if (cached) return cached;
-    var guest = defaultGuest();
+    const guest = defaultGuest();
     localStorage.setItem(USER_KEY, JSON.stringify(guest));
     return guest;
   }
 
-  // ─── SYNC SUPABASE SESSION -> LOCAL PROFILE ──────────────
-  async function syncSessionToLocal(session) {
-    if (!session || !session.user) return;
-    var authUser = session.user;
+  // ─── AUTHENTICATED USER (async, from Supabase) ─────────────
+  async function getAuthenticatedUser() {
+    const { data: { user }, error } = await sb.auth.getUser();
+    if (error || !user) {
+      // Not authenticated – return guest
+      return getCurrentUser();
+    }
 
-    var result = await sb
+    // Fetch profile from DB
+    const { data: profile, error: profileError } = await sb
       .from('profiles')
       .select('*')
-      .eq('id', authUser.id)
+      .eq('id', user.id)
       .maybeSingle();
 
-    var profile = result.data;
-    var fetchError = result.error;
-
-    if (fetchError) {
-      console.warn('syncSessionToLocal: profile fetch failed, skipping sync', fetchError);
-      return;
+    if (profileError) {
+      console.warn('getAuthenticatedUser: profile fetch failed', profileError);
+      // Still return a minimal user based on auth data
+      return {
+        id: user.id,
+        username: user.user_metadata?.username || '',
+        displayName: user.user_metadata?.display_name || 'User',
+        bio: '',
+        avatar: user.user_metadata?.avatar_url || defaultGuest().avatar,
+        email: user.email,
+        isLoggedIn: true,
+        verified: false,
+        verificationStatus: 'none',
+        isPrivate: false,
+        hideFollowerCount: false,
+        activityStatus: true,
+        gender: '',
+        country: '',
+        phone: '',
+        dob: null
+      };
     }
 
     if (!profile) {
-      // Create profile if it doesn't exist
-      var insertPayload = {
-        id: authUser.id,
-        display_name: authUser.user_metadata?.display_name || authUser.email.split('@')[0],
-        username: authUser.user_metadata?.username || authUser.email.split('@')[0],
-        avatar_url: authUser.user_metadata?.avatar_url || null,
+      // Profile missing – create one (rare, but handle gracefully)
+      const insertPayload = {
+        id: user.id,
+        display_name: user.user_metadata?.display_name || user.email.split('@')[0],
+        username: user.user_metadata?.username || user.email.split('@')[0],
+        avatar_url: user.user_metadata?.avatar_url || null,
         verified_status: 'none'
       };
-      var insertResult = await sb
+      const { data: newProfile, error: insertError } = await sb
         .from('profiles')
         .insert(insertPayload)
         .select()
         .single();
-
-      if (insertResult.error) {
-        var refetchResult = await sb
-          .from('profiles')
-          .select('*')
-          .eq('id', authUser.id)
-          .maybeSingle();
-        if (refetchResult.error || !refetchResult.data) {
-          console.error('syncSessionToLocal: could not create or find profile', insertResult.error);
-          return;
-        }
-        profile = refetchResult.data;
-      } else {
-        profile = insertResult.data;
+      if (insertError) {
+        console.error('getAuthenticatedUser: could not create profile', insertError);
+        return getCurrentUser(); // fallback to cached
       }
+      // Use newProfile
+      profile = newProfile;
     }
 
-    // Build local user object – derive 'verified' from verified_status
-    var localUser = {
-      id: authUser.id,
+    // Build user object
+    const localUser = {
+      id: user.id,
       username: profile.username || '',
       displayName: profile.display_name || 'User',
       bio: profile.bio || '',
       avatar: profile.avatar_url || defaultGuest().avatar,
-      email: authUser.email,
+      email: user.email,
       isLoggedIn: true,
-      verified: profile.verified_status === 'verified' || profile.verified_status === 'official' || profile.verified_status === 'staff' || profile.verified_status === 'business',
+      verified: profile.verified_status === 'verified' ||
+               profile.verified_status === 'official' ||
+               profile.verified_status === 'staff' ||
+               profile.verified_status === 'business',
       verificationStatus: profile.verified_status || 'none',
       isPrivate: profile.is_private || false,
       hideFollowerCount: profile.hide_follower_count || false,
@@ -148,13 +159,82 @@
       phone: profile.phone || '',
       dob: profile.dob || null
     };
+
+    // Update cache
     writeLocalUser(localUser);
+    return localUser;
+  }
+
+  // ─── SYNC SUPABASE SESSION -> LOCAL PROFILE ──────────────
+  async function syncSessionToLocal(session) {
+    if (!session || !session.user) return;
+    const authUser = session.user;
+
+    try {
+      const { data: profile, error } = await sb
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('syncSessionToLocal: profile fetch failed', error);
+        return;
+      }
+
+      let finalProfile = profile;
+      if (!profile) {
+        // Create profile if missing
+        const insertPayload = {
+          id: authUser.id,
+          display_name: authUser.user_metadata?.display_name || authUser.email.split('@')[0],
+          username: authUser.user_metadata?.username || authUser.email.split('@')[0],
+          avatar_url: authUser.user_metadata?.avatar_url || null,
+          verified_status: 'none'
+        };
+        const { data: inserted, error: insertError } = await sb
+          .from('profiles')
+          .insert(insertPayload)
+          .select()
+          .single();
+        if (insertError) {
+          console.error('syncSessionToLocal: could not create profile', insertError);
+          return;
+        }
+        finalProfile = inserted;
+      }
+
+      const localUser = {
+        id: authUser.id,
+        username: finalProfile.username || '',
+        displayName: finalProfile.display_name || 'User',
+        bio: finalProfile.bio || '',
+        avatar: finalProfile.avatar_url || defaultGuest().avatar,
+        email: authUser.email,
+        isLoggedIn: true,
+        verified: finalProfile.verified_status === 'verified' ||
+                   finalProfile.verified_status === 'official' ||
+                   finalProfile.verified_status === 'staff' ||
+                   finalProfile.verified_status === 'business',
+        verificationStatus: finalProfile.verified_status || 'none',
+        isPrivate: finalProfile.is_private || false,
+        hideFollowerCount: finalProfile.hide_follower_count || false,
+        activityStatus: finalProfile.activity_status !== undefined ? finalProfile.activity_status : true,
+        gender: finalProfile.gender || '',
+        country: finalProfile.country || '',
+        phone: finalProfile.phone || '',
+        dob: finalProfile.dob || null
+      };
+      writeLocalUser(localUser);
+    } catch (err) {
+      console.error('syncSessionToLocal: unexpected error', err);
+    }
   }
 
   // ─── PUBLIC: updateCurrentUser ────────────────────────────
   function updateCurrentUser(partialUpdates) {
-    var current = getCurrentUser();
-    var merged = Object.assign({}, current, partialUpdates);
+    const current = getCurrentUser();
+    const merged = Object.assign({}, current, partialUpdates);
     writeLocalUser(merged);
     return merged;
   }
@@ -166,25 +246,24 @@
   }
 
   // ─── SUPABASE AUTH STATE ──────────────────────────────────
-  sb.auth.onAuthStateChange(function (_event, session) {
+  sb.auth.onAuthStateChange((_event, session) => {
     if (session) {
       syncSessionToLocal(session);
     } else {
-      var guest = defaultGuest();
+      const guest = defaultGuest();
       localStorage.setItem(USER_KEY, JSON.stringify(guest));
       updateAvatarEls(guest.avatar);
     }
   });
 
-  sb.auth.getSession().then(function (_ref) {
-    var data = _ref.data;
+  sb.auth.getSession().then(({ data }) => {
     if (data.session) syncSessionToLocal(data.session);
   });
 
-  // ─── AUTH MODAL (unchanged) ──────────────────────────────
-  var mode = 'signup';
-  var pendingAction = null;
-  var modalInitialized = false;
+  // ─── AUTH MODAL ──────────────────────────────────────────────
+  let mode = 'signup';
+  let pendingAction = null;
+  let modalInitialized = false;
 
   function renderAuthForm() {
     document.getElementById('fu-auth-error').textContent = '';
@@ -203,9 +282,9 @@
       document.getElementById('fu-auth-switch').innerHTML =
         "Don't have an account? <button id=\"fu-switch-btn\" type=\"button\">Sign Up</button>";
     }
-    var switchBtn = document.getElementById('fu-switch-btn');
+    const switchBtn = document.getElementById('fu-switch-btn');
     if (switchBtn) {
-      switchBtn.addEventListener('click', function () {
+      switchBtn.addEventListener('click', () => {
         mode = mode === 'signup' ? 'signin' : 'signup';
         renderAuthForm();
       });
@@ -222,7 +301,7 @@
     }
 
     renderAuthForm();
-    var overlay = document.getElementById('fu-auth-overlay');
+    const overlay = document.getElementById('fu-auth-overlay');
     if (overlay) {
       overlay.classList.add('open');
       document.body.style.overflow = 'hidden';
@@ -232,7 +311,7 @@
   }
 
   function closeModal() {
-    var overlay = document.getElementById('fu-auth-overlay');
+    const overlay = document.getElementById('fu-auth-overlay');
     if (overlay) {
       overlay.classList.remove('open');
       document.body.style.overflow = '';
@@ -243,7 +322,6 @@
   function createAuthModal() {
     if (modalInitialized) return;
     if (!document.body) {
-      console.warn('document.body not ready, retrying...');
       setTimeout(createAuthModal, 100);
       return;
     }
@@ -252,7 +330,7 @@
       return;
     }
 
-    var modalCSS = `
+    const modalCSS = `
     #fu-auth-overlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.7);
       backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;
       opacity:0;pointer-events:none;transition:opacity .25s;padding:20px}
@@ -295,13 +373,13 @@
     `;
 
     if (!document.getElementById('fu-auth-styles')) {
-      var style = document.createElement('style');
+      const style = document.createElement('style');
       style.id = 'fu-auth-styles';
       style.textContent = modalCSS;
       document.head.appendChild(style);
     }
 
-    var overlay = document.createElement('div');
+    const overlay = document.createElement('div');
     overlay.id = 'fu-auth-overlay';
     overlay.innerHTML = `
       <div id="fu-auth-card">
@@ -370,11 +448,11 @@
     document.getElementById('fu-google-btn').addEventListener('click', handleGoogleAuth);
 
     // Password visibility toggle
-    var passwordInput = document.getElementById('fu-password');
-    var toggleBtn = document.getElementById('fu-password-toggle');
+    const passwordInput = document.getElementById('fu-password');
+    const toggleBtn = document.getElementById('fu-password-toggle');
     if (passwordInput && toggleBtn) {
-      var eyeIcon = toggleBtn.querySelector('.icon-eye');
-      var eyeOffIcon = toggleBtn.querySelector('.icon-eye-off');
+      const eyeIcon = toggleBtn.querySelector('.icon-eye');
+      const eyeOffIcon = toggleBtn.querySelector('.icon-eye-off');
 
       toggleBtn.addEventListener('click', function () {
         if (passwordInput.type === 'password') {
@@ -395,10 +473,10 @@
 
   // ─── AUTH HANDLERS ──────────────────────────────────────────
   async function handleAuthSubmit() {
-    var errEl = document.getElementById('fu-auth-error');
-    var email = document.getElementById('fu-email').value.trim();
-    var password = document.getElementById('fu-password').value;
-    var name = document.getElementById('fu-name').value.trim();
+    const errEl = document.getElementById('fu-auth-error');
+    const email = document.getElementById('fu-email').value.trim();
+    const password = document.getElementById('fu-password').value;
+    const name = document.getElementById('fu-name').value.trim();
     errEl.textContent = '';
 
     if (!email || !password) {
@@ -406,15 +484,15 @@
       return;
     }
 
-    var btn = document.getElementById('fu-submit-btn');
+    const btn = document.getElementById('fu-submit-btn');
     btn.disabled = true;
     btn.textContent = 'Please wait...';
 
     try {
       if (mode === 'signup') {
-        var result = await sb.auth.signUp({
-          email: email,
-          password: password,
+        const result = await sb.auth.signUp({
+          email,
+          password,
           options: {
             data: {
               display_name: name || email.split('@')[0],
@@ -425,13 +503,13 @@
         if (result.error) throw result.error;
         if (result.data.session) await syncSessionToLocal(result.data.session);
       } else {
-        var signInResult = await sb.auth.signInWithPassword({ email: email, password: password });
+        const signInResult = await sb.auth.signInWithPassword({ email, password });
         if (signInResult.error) throw signInResult.error;
         await syncSessionToLocal(signInResult.data.session);
       }
       closeModal();
       if (pendingAction) {
-        var fn = pendingAction;
+        const fn = pendingAction;
         pendingAction = null;
         fn();
       }
@@ -452,7 +530,7 @@
 
   // ─── PROTECTED ACTION WRAPPER ────────────────────────────
   function requireAuth(fn) {
-    var user = getCurrentUser();
+    const user = getCurrentUser();
     if (user && user.isLoggedIn) {
       fn();
       return;
@@ -465,7 +543,7 @@
 
   // ─── AVATAR UPLOAD ────────────────────────────────────────
   async function uploadAvatar(file, onProgress) {
-    var user = getCurrentUser();
+    const user = getCurrentUser();
     if (!user.isLoggedIn) {
       openModal('signup');
       return null;
@@ -479,13 +557,13 @@
     }
 
     // Upload to Cloudinary
-    var url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
-    var formData = new FormData();
+    const url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
+    const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_AVATAR_PRESET);
 
-    var data = await new Promise(function (resolve, reject) {
-      var xhr = new XMLHttpRequest();
+    const data = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
       xhr.open('POST', url);
       xhr.upload.onprogress = function (e) {
         if (onProgress && e.lengthComputable) {
@@ -494,7 +572,7 @@
       };
       xhr.onload = function () {
         try {
-          var res = JSON.parse(xhr.responseText);
+          const res = JSON.parse(xhr.responseText);
           if (xhr.status >= 200 && xhr.status < 300 && !res.error) {
             resolve(res);
           } else {
@@ -512,29 +590,42 @@
 
     if (onProgress) onProgress(100);
 
-    // Use the secure RPC to update avatar_url
-    var { data: updatedProfileArr, error } = await sb.rpc('update_avatar', {
-      p_avatar_url: data.secure_url
-    });
-
-    if (error) throw error;
-    var updatedProfile = updatedProfileArr[0];
-
-    // Update local cache
-    var updated = Object.assign({}, user, { avatar: updatedProfile.avatar_url });
-    writeLocalUser(updated);
-
-    // Update all visible elements for this user using the global helper
-    if (typeof window.updateAuthorUI === 'function') {
-      window.updateAuthorUI(updatedProfile);
+    // Update avatar_url in profiles table (direct update or RPC)
+    // We'll try the RPC first, fallback to direct update
+    try {
+      const { data: updatedProfileArr, error: rpcError } = await sb.rpc('update_avatar', {
+        p_avatar_url: data.secure_url
+      });
+      if (rpcError) throw rpcError;
+      // RPC returns an array
+      const updatedProfile = updatedProfileArr[0];
+      const updated = Object.assign({}, user, { avatar: updatedProfile.avatar_url });
+      writeLocalUser(updated);
+      return updatedProfile.avatar_url;
+    } catch (rpcErr) {
+      console.warn('RPC update_avatar failed, trying direct update', rpcErr);
+      // Fallback: direct update
+      const { data: updatedProfile, error: updateError } = await sb
+        .from('profiles')
+        .update({ avatar_url: data.secure_url })
+        .eq('id', user.id)
+        .select()
+        .single();
+      if (updateError) throw new Error('Failed to update avatar: ' + updateError.message);
+      const updated = Object.assign({}, user, { avatar: updatedProfile.avatar_url });
+      writeLocalUser(updated);
+      return updatedProfile.avatar_url;
     }
-
-    return updatedProfile.avatar_url;
   }
 
   // ─── SIGN OUT ──────────────────────────────────────────────
   async function signOut() {
     await sb.auth.signOut();
+    // Clear local cache and set guest
+    const guest = defaultGuest();
+    localStorage.setItem(USER_KEY, JSON.stringify(guest));
+    updateAvatarEls(guest.avatar);
+    document.dispatchEvent(new CustomEvent('profileUpdated', { detail: { user: guest } }));
   }
 
   // ─── INIT ──────────────────────────────────────────────────
@@ -548,17 +639,18 @@
 
   // ─── EXPOSE ───────────────────────────────────────────────
   window.AuthUser = {
-    getCurrentUser: getCurrentUser,
-    requireAuth: requireAuth,
-    uploadAvatar: uploadAvatar,
-    signOut: signOut,
-    openModal: openModal,
-    closeModal: closeModal,
-    updateCurrentUser: updateCurrentUser,
-    onChange: onChange
+    getCurrentUser,
+    getAuthenticatedUser,   // new async method
+    requireAuth,
+    uploadAvatar,
+    signOut,
+    openModal,
+    closeModal,
+    updateCurrentUser,
+    onChange
   };
 
-  window.getCurrentUser = getCurrentUser;
+  window.getCurrentUser = getCurrentUser; // for backward compatibility
 
   initAuth();
 
