@@ -774,13 +774,9 @@
             background: #111;
             cursor: pointer;
             aspect-ratio: 1 / 1;
-            opacity: 1;           /* visible by default */
-            transform: scale(1);
-            transition: opacity .35s ease, transform .35s ease;
-        }
-        .explore-card.loaded {
-            opacity: 1;
-            transform: scale(1);
+            opacity: 1;           /* visible by default — no fade-in dependency */
+            transform: none;
+            transition: transform .18s ease;
         }
         .explore-card:active {
             transform: scale(.97);
@@ -4266,14 +4262,15 @@
                 return items;
             }
 
+            // ─── FIX: robust JSON parsing for images ───
             function buildMarketCard(item) {
                 let imageUrls = [];
-                if (item.images && Array.isArray(item.images)) {
-                    if (item.images.length > 0 && typeof item.images[0] === 'object' && item.images[0].url) {
-                        imageUrls = item.images.map(img => img.url);
-                    } else {
-                        imageUrls = item.images;
-                    }
+                let images = item.images;
+                if (typeof images === 'string') {
+                    try { images = JSON.parse(images); } catch (e) { images = []; }
+                }
+                if (Array.isArray(images) && images.length > 0) {
+                    imageUrls = (typeof images[0] === 'object' && images[0].url) ? images.map(img => img.url) : images;
                 } else if (item.imageUrl) {
                     imageUrls = [item.imageUrl];
                 }
@@ -4312,17 +4309,18 @@
                 });
             }
 
+            // ─── FIX: robust JSON parsing for images inside openMarketFullscreen ───
             function openMarketFullscreen(itemId) {
                 const item = getMarketItems().find(i => i.id === itemId);
                 if (!item) return;
 
                 let imageUrls = [];
-                if (item.images && Array.isArray(item.images)) {
-                    if (item.images.length > 0 && typeof item.images[0] === 'object' && item.images[0].url) {
-                        imageUrls = item.images.map(img => img.url);
-                    } else {
-                        imageUrls = item.images;
-                    }
+                let images = item.images;
+                if (typeof images === 'string') {
+                    try { images = JSON.parse(images); } catch (e) { images = []; }
+                }
+                if (Array.isArray(images) && images.length > 0) {
+                    imageUrls = (typeof images[0] === 'object' && images[0].url) ? images.map(img => img.url) : images;
                 } else if (item.imageUrl) {
                     imageUrls = [item.imageUrl];
                 }
