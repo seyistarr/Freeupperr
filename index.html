@@ -15,13 +15,7 @@
             theme: {
                 extend: {
                     colors: {
-                        brand: {
-                            50: '#f5f3ff',
-                            100: '#ede9fe',
-                            500: '#8b5cf6',
-                            600: '#7c3aed',
-                            700: '#6d28d9',
-                        },
+                        brand: { 50: '#f5f3ff', 100: '#ede9fe', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9' },
                         primary: '#7C3AED',
                         'primary-light': '#8B5CF6',
                         'primary-dark': '#6D28D9'
@@ -35,14 +29,15 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-    <!-- ═══ global.css for verified badges ═══ -->
+    <!-- global.css for verified badges & marketplace styles -->
     <link rel="stylesheet" href="global.css" />
 
-    <!-- ═══ Supabase & API modules (global.js loaded once) ═══ -->
+    <!-- Supabase & API modules -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="global.js"></script>
     <script src="auth.js"></script>
     <script src="posts.js"></script>
+    <script src="listings.js"></script>
 
     <style>
         /* ===== CSS VARIABLES ===== */
@@ -850,7 +845,6 @@
             100% { background-position: 200% 0; }
         }
 
-        /* Market grid (for fallback if any) */
         .market-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -863,18 +857,6 @@
                 gap: 12px;
             }
         }
-        .market-card { background: #fff; border-radius: 16px; overflow: hidden; border: 1px solid #f3f4f6; transition: transform .18s ease; cursor: pointer; }
-        .market-card:active { transform: scale(.97); }
-        .market-card-image-wrap { position: relative; width: 100%; aspect-ratio: 1/1; overflow: hidden; background: #f9fafb; }
-        .market-card-image-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .market-card-price-tag { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,.78); color: #fff; font-weight: 700; font-size: .8rem; padding: 4px 10px; border-radius: 20px; }
-        .market-card-body { padding: 10px 12px 12px; }
-        .market-card-title { font-size: .82rem; font-weight: 600; color: #111827; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 4px; }
-        .market-card-location { font-size: .68rem; color: #9ca3af; display: flex; align-items: center; gap: 3px; }
-        .market-card-seller-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #f3f4f6; }
-        .market-card-seller-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-        .market-card-seller-name { font-size: .68rem; color: #6b7280; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .market-card-category-badge { position: absolute; top: 8px; left: 8px; background: rgba(124,58,237,.9); color: #fff; font-size: .55rem; font-weight: 700; padding: 3px 7px; border-radius: 20px; letter-spacing: .04em; text-transform: uppercase; z-index: 2; }
 
         /* ─── COMMENTS ─── */
         .comment-item {
@@ -1680,6 +1662,10 @@
         .market-main-content {
             display: block;
         }
+
+        /* Existing styles for old market modals (kept for backward compatibility) */
+        .market-fullscreen { z-index: 85; }
+        .market-filter-modal { z-index: 86; }
     </style>
 </head>
 <body>
@@ -1988,7 +1974,7 @@
             'use strict';
 
             // ───────────────────────────────────────────────────────────────
-            // CONSTANTS & GLOBAL STATE (from previous index.html)
+            // CONSTANTS & GLOBAL STATE
             // ───────────────────────────────────────────────────────────────
 
             const CVK = 'freeupper_comments_visible';
@@ -2025,7 +2011,6 @@
                 exploreReplyTarget = null,
                 expandedThreads = new Map(),
                 lastDoubleTapTime = 0;
-            let marketCategoryFilter = '';
             const tabScrollPositions = { home: 0, explore: 0, market: 0 };
             let lastScrollY = 0,
                 bottomNavHidden = false;
@@ -2073,7 +2058,7 @@
                     );
             }
 
-            // ─── formatCount (lowercase k/m/b) ───
+            // formatCount (lowercase k/m/b) – already defined globally, but we also have it here
             function formatCount(n) {
                 n = Number(n) || 0;
                 if (n < 1000) return String(n);
@@ -2121,13 +2106,13 @@
             function svgHeart(reacted) {
                 return reacted ?
                     '<svg class="heart-icon" viewBox="0 0 24 24" fill="#DC2626" stroke="#DC2626" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>' :
-                    '<svg class="heart-icon" viewBox="0 0 24 24" fill="#FFFFFF" stroke="currentColor" stroke-width="1.7"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+                    '<svg class="heart-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
             }
 
             function bookmarkIcon(filled) { const color = filled ? 'var(--gold)' : 'none'; return `<svg width="19" height="19" viewBox="0 0 24 24" fill="${color}" stroke="var(--gold)" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`; }
 
             // ───────────────────────────────────────────────────────────────
-            // YOUTUBE PLAYER (reused)
+            // YOUTUBE PLAYER (reused from original)
             // ───────────────────────────────────────────────────────────────
 
             let ytState = {};
@@ -2701,62 +2686,40 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MARKET – Supabase (NEW)
+            // MARKET – using ListingsAPI and CategoryAPI
             // ───────────────────────────────────────────────────────────────
 
             async function loadMarketCategories() {
-                if (!window.sb) return;
+                if (!window.CategoryAPI) return;
                 try {
-                    const { data, error } = await window.sb
-                        .from('market_categories')
-                        .select('*')
-                        .eq('active', true)
-                        .order('sort_order');
-                    if (error) throw error;
-                    marketCategories = data || [];
+                    marketCategories = await window.CategoryAPI.loadCategories();
                 } catch (e) {
                     console.error('Error loading market categories:', e);
                     marketCategories = [];
                 }
             }
 
-            async function loadMarketSubcategories() {
-                if (!window.sb) return;
+            async function loadMarketSubcategoriesForCategory(categoryId) {
+                if (!window.CategoryAPI) return [];
                 try {
-                    const { data, error } = await window.sb
-                        .from('market_subcategories')
-                        .select('*')
-                        .eq('active', true)
-                        .order('sort_order');
-                    if (error) throw error;
-                    marketSubcategories = data || [];
+                    return await window.CategoryAPI.loadSubcategories(categoryId);
                 } catch (e) {
-                    console.error('Error loading market subcategories:', e);
-                    marketSubcategories = [];
+                    console.error('Error loading subcategories:', e);
+                    return [];
                 }
             }
 
             async function loadMarketListings() {
-                if (!window.sb) return;
+                if (!window.ListingsAPI) return;
                 try {
-                    const { data, error } = await window.sb
-                        .from('market_listings')
-                        .select(`
-                                *,
-                                profiles: seller_id (id, username, display_name, avatar_url),
-                                categories: category_id (name),
-                                subcategories: subcategory_id (name)
-                            `)
-                        .eq('status', 'active')
-                        .order('created_at', { ascending: false });
-                    if (error) throw error;
-                    marketListings = (data || []).map(item => ({
+                    const result = await window.ListingsAPI.getListings({ status: 'active', limit: 100 });
+                    marketListings = result.data.map(item => ({
                         id: item.id,
                         title: item.title,
                         price: item.price,
                         priceFormatted: '₦' + Number(item.price).toLocaleString(),
-                        category: item.categories ? item.categories.name : 'General',
-                        subcategory: item.subcategories ? item.subcategories.name : 'General',
+                        category: item.market_categories ? item.market_categories.name : 'General',
+                        subcategory: item.market_subcategories ? item.market_subcategories.name : 'General',
                         seller: item.profiles ? (item.profiles.display_name || item.profiles.username) : 'Unknown',
                         sellerImg: item.profiles ? (item.profiles.avatar_url || '') : '',
                         sellerId: item.seller_id,
@@ -2801,10 +2764,9 @@
                     subBar.innerHTML = '';
                     return;
                 }
-                const subcats = marketSubcategories.filter(s => {
-                    const cat = marketCategories.find(c => c.id === s.category_id);
-                    return cat && cat.name === activeCategory;
-                });
+                const cat = marketCategories.find(c => c.name === activeCategory);
+                if (!cat) { subBar.classList.add('hidden'); return; }
+                const subcats = marketSubcategories.filter(s => s.category_id === cat.id);
                 subBar.classList.remove('hidden');
                 let subHtml = `
                         <button onclick="selectSubcategory('All')" class="px-3 py-1.5 rounded-lg text-xs font-bold flex-shrink-0 transition ${activeSubcategory === 'All' ? 'bg-brand-100 text-brand-600' : 'bg-gray-100 text-gray-600'}">
@@ -2827,6 +2789,21 @@
                 activeSubcategory = 'All';
                 renderCategoryBars();
                 applyFiltersAndRender();
+                // Load subcategories for this category (if not All)
+                if (cat !== 'All') {
+                    const catObj = marketCategories.find(c => c.name === cat);
+                    if (catObj) {
+                        loadMarketSubcategoriesForCategory(catObj.id).then(subs => {
+                            marketSubcategories = subs;
+                            renderCategoryBars();
+                            applyFiltersAndRender();
+                        });
+                    }
+                } else {
+                    marketSubcategories = [];
+                    renderCategoryBars();
+                    applyFiltersAndRender();
+                }
             }
 
             function selectSubcategory(sub) {
@@ -3261,7 +3238,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // FEED / EXPLORE RENDER FUNCTIONS (unchanged)
+            // FEED / EXPLORE RENDER FUNCTIONS
             // ───────────────────────────────────────────────────────────────
 
             function getFilteredSortedPosts() {
@@ -3594,7 +3571,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // COMMENTS (unchanged, only the most important functions)
+            // COMMENTS
             // ───────────────────────────────────────────────────────────────
 
             function getAllDescendants(pid, comments) { const r = [];
@@ -4117,7 +4094,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // EXPLORE GRID (unchanged)
+            // EXPLORE GRID
             // ───────────────────────────────────────────────────────────────
 
             function renderExploreGrid() {
@@ -4338,11 +4315,10 @@
                     // Initialize marketplace after DOM render
                     setTimeout(async () => {
                         await loadMarketCategories();
-                        await loadMarketSubcategories();
+                        // Subcategories will be loaded on category selection
                         await loadMarketListings();
                         renderCategoryBars();
                         applyFiltersAndRender();
-                        // Bind search input if already exists
                         const searchInput = document.getElementById('searchInput');
                         if (searchInput) {
                             searchInput.oninput = function(e) { handleSearch(this.value); };
@@ -4520,32 +4496,38 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // LOAD DATA
+            // REALTIME SUBSCRIPTIONS
             // ───────────────────────────────────────────────────────────────
 
-            async function reloadData() {
-                await reloadPosts();
-                await loadMarketItems();
-                await loadFollows();
-                await loadBookmarks();
-                await loadShares();
-                return appData;
-            }
+            function setupRealtime() {
+                // Posts realtime
+                if (window.PostsAPI && window.PostsAPI.subscribe) {
+                    window.PostsAPI.subscribe((payload) => {
+                        // Re-fetch posts if a new post is inserted or updated
+                        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                            reloadPosts().then(() => {
+                                if (uiPage === 'home' || uiPage === 'single-post-explore') {
+                                    renderUI();
+                                }
+                            });
+                        }
+                    });
+                }
 
-            // ───────────────────────────────────────────────────────────────
-            // REFRESH HOME
-            // ───────────────────────────────────────────────────────────────
-
-            async function refreshHome() {
-                await reloadData();
-                currentCategoryFilter = '';
-                searchQuery = '';
-                currentSortMethod = 'foryou';
-                feedPage = 1;
-                uiPage = 'home';
-                renderUI();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-                showToast('Feed refreshed');
+                // Listings realtime
+                if (window.ListingsAPI && window.ListingsAPI.subscribe) {
+                    window.ListingsAPI.subscribe((payload) => {
+                        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' ||
+                            payload.eventType === 'DELETE') {
+                            // Reload market data if on market tab
+                            if (uiPage === 'market') {
+                                loadMarketListings().then(() => {
+                                    applyFiltersAndRender();
+                                });
+                            }
+                        }
+                    });
+                }
             }
 
             // ───────────────────────────────────────────────────────────────
@@ -4562,6 +4544,7 @@
                     registerCurrentUserInDirectory();
                 }
                 await reloadData();
+                setupRealtime();
 
                 // Top header: messages button
                 document.getElementById('topMsgBtn').addEventListener('click', () => {
@@ -4760,6 +4743,23 @@
                 // Not used in new UI, but kept for compatibility
                 marketCategoryFilter = (marketCategoryFilter === c) ? '' : c;
                 // This would re-render old market grid, but we don't use it anymore.
+            }
+
+            function handleNavScroll() {
+                // simple scroll handler for bottom nav hide
+                const currentScrollY = window.scrollY;
+                if (currentScrollY > lastScrollY && currentScrollY > 100) {
+                    if (!bottomNavHidden) {
+                        bottomNavHidden = true;
+                        document.getElementById('bottomNav').classList.add('hidden-nav');
+                    }
+                } else if (currentScrollY < lastScrollY) {
+                    if (bottomNavHidden) {
+                        bottomNavHidden = false;
+                        document.getElementById('bottomNav').classList.remove('hidden-nav');
+                    }
+                }
+                lastScrollY = currentScrollY;
             }
 
             // ─── Expose functions globally ──────────────────────────────
