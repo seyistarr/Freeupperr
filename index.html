@@ -24,6 +24,9 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
+    <!-- ═══ FIX: load global.css for verified badge styles ═══ -->
+    <link rel="stylesheet" href="global.css" />
+
     <!-- ═══ SUPABASE & API MODULES (global.js loaded once) ═══ -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="global.js"></script>
@@ -774,7 +777,7 @@
             background: #111;
             cursor: pointer;
             aspect-ratio: 1 / 1;
-            opacity: 1;           /* visible by default — no fade-in dependency */
+            opacity: 1;
             transform: none;
             transition: transform .18s ease;
         }
@@ -851,7 +854,7 @@
             border-radius: 20px;
             letter-spacing: .04em;
             text-transform: uppercase;
-            display: none;       /* hidden — category still stored & filterable */
+            display: none;
         }
         .explore-card-video-badge {
             position: absolute;
@@ -2218,9 +2221,9 @@
         </div>
     </div>
 
-    <!-- ═══════════════════ FILTER BACKDROP & DRAWER ═══════════════════ -->
-    <div id="filter-backdrop" class="fixed inset-0 z-40 bg-black bg-opacity-0 pointer-events-none transition-all duration-300"></div>
-    <div id="filter-drawer" class="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl transform translate-y-full transition-transform duration-300 ease-out max-h-[75vh] overflow-hidden flex flex-col" style="padding-bottom:var(--safe-bottom);">
+    <!-- ═══════════════════ FILTER BACKDROP & DRAWER — FIXED Z-INDEX ═══════════════════ -->
+    <div id="filter-backdrop" class="fixed inset-0 z-[90] bg-black bg-opacity-0 pointer-events-none transition-all duration-300"></div>
+    <div id="filter-drawer" class="fixed bottom-0 left-0 right-0 z-[95] bg-white rounded-t-2xl shadow-2xl transform translate-y-full transition-transform duration-300 ease-out max-h-[75vh] overflow-hidden flex flex-col" style="padding-bottom:var(--safe-bottom);">
         <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b" style="border-color:var(--brd);">
             <h3 class="font-heading font-bold text-base" id="drawer-title" style="color:var(--text);">Browse by category</h3>
             <button class="w-8 h-8 rounded-full flex items-center justify-center" id="drawer-close-btn" style="background:var(--inp);color:var(--muted);">
@@ -4262,15 +4265,24 @@
                 return items;
             }
 
-            // ─── FIX: robust JSON parsing for images ───
+            // ─── FIX: robust JSON parsing for images (handles double-encoded) ───
             function buildMarketCard(item) {
                 let imageUrls = [];
                 let images = item.images;
-                if (typeof images === 'string') {
-                    try { images = JSON.parse(images); } catch (e) { images = []; }
+                // Unwrap up to 2 layers of string-encoding
+                for (let i = 0; i < 2 && typeof images === 'string'; i++) {
+                    try { images = JSON.parse(images); } catch (e) { images = []; break; }
                 }
                 if (Array.isArray(images) && images.length > 0) {
-                    imageUrls = (typeof images[0] === 'object' && images[0].url) ? images.map(img => img.url) : images;
+                    imageUrls = images.map(img => {
+                        if (typeof img === 'string') {
+                            try {
+                                const parsed = JSON.parse(img);
+                                return parsed && parsed.url ? parsed.url : img;
+                            } catch (e) { return img; }
+                        }
+                        return img && img.url ? img.url : '';
+                    }).filter(Boolean);
                 } else if (item.imageUrl) {
                     imageUrls = [item.imageUrl];
                 }
@@ -4316,11 +4328,20 @@
 
                 let imageUrls = [];
                 let images = item.images;
-                if (typeof images === 'string') {
-                    try { images = JSON.parse(images); } catch (e) { images = []; }
+                // Unwrap up to 2 layers of string-encoding
+                for (let i = 0; i < 2 && typeof images === 'string'; i++) {
+                    try { images = JSON.parse(images); } catch (e) { images = []; break; }
                 }
                 if (Array.isArray(images) && images.length > 0) {
-                    imageUrls = (typeof images[0] === 'object' && images[0].url) ? images.map(img => img.url) : images;
+                    imageUrls = images.map(img => {
+                        if (typeof img === 'string') {
+                            try {
+                                const parsed = JSON.parse(img);
+                                return parsed && parsed.url ? parsed.url : img;
+                            } catch (e) { return img; }
+                        }
+                        return img && img.url ? img.url : '';
+                    }).filter(Boolean);
                 } else if (item.imageUrl) {
                     imageUrls = [item.imageUrl];
                 }
