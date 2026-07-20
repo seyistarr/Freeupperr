@@ -35,8 +35,14 @@
     <script src="global.js"></script>
     <script src="auth.js"></script>
     <script src="posts.js"></script>
+    <script src="listings.js"></script>
 
     <style>
+        /* ── all existing CSS is kept exactly as in the old video.html ── */
+        /* (It’s huge – we copy it verbatim to preserve the polished video UI) */
+        /* For brevity in this response, I’ll include the full CSS below. */
+        /* (I’ll paste the same CSS from your old video.html) */
+
         /* ── TOKENS ── */
         :root {
             --bg: #000;
@@ -2423,7 +2429,7 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════
-         SHARE SHEET (glossy icons)
+         SHARE SHEET
     ══════════════════════════════════════════════════════ -->
     <div class="sheet" id="shareSheet">
         <div class="sheet-handle"></div>
@@ -2574,257 +2580,93 @@
     <div id="toast"></div>
 
     <!-- ══════════════════════════════════════════════════════
-         MAIN SCRIPT
+         MAIN SCRIPT – COMPLETELY REWRITTEN FOR SUPABASE
     ══════════════════════════════════════════════════════ -->
     <script>
         'use strict';
 
-        // ─────────────────────────────────────────────
-        // CONFIG
-        // ─────────────────────────────────────────────
-        const SITE_URL = 'https://freeupper.vercel.app';
-        const STORAGE_KEY = 'freeupper_blog_data_v2';
-        const USER_KEY = 'freeupper_user_profile';
-        const FOLLOW_KEY = 'freeupper_follows';
-        const CVK = 'freeupper_comments_visible';
-        const REPLY_FIRST_BATCH = 4;
-        const REPLY_BATCH = 5;
-        const PAGE_SIZE = 5;
-
-        // ─────────────────────────────────────────────
-        // DATA LAYER
-        // ─────────────────────────────────────────────
-        function loadData() {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            return raw ? JSON.parse(raw) : { posts: [], marketItems: [] };
-        }
-
-        function getCurrentUser() {
-            let user = JSON.parse(localStorage.getItem(USER_KEY));
-            if (!user) {
-                user = {
-                    id: 'FU-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
-                    username: '',
-                    displayName: 'Guest',
-                    avatar: 'data:image/svg+xml,' + encodeURIComponent(
-                        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
-                    ),
-                    isLoggedIn: false,
-                    verified: false
-                };
-                localStorage.setItem(USER_KEY, JSON.stringify(user));
-            }
-            return user;
-        }
-
-        // ── Follows ──
-        let followingSet = new Set();
-
-        async function loadFollows() {
-            const user = getCurrentUser();
-            if (!user || !user.isLoggedIn) { followingSet = new Set(); return; }
-            try {
-                const { data, error } = await window.sb.from('follows').select('following_id').eq('follower_id', user.id);
-                if (!error) followingSet = new Set(data.map(f => f.following_id));
-            } catch (e) { console.warn('loadFollows error:', e); }
-        }
-
-        function isFollowing(userId) { return followingSet.has(userId); }
-
-        async function toggleFollowUser(userId) {
-            const user = getCurrentUser();
-            if (!user || !user.isLoggedIn) { showToast('Please sign in to follow'); return false; }
-            const currently = isFollowing(userId);
-            try {
-                if (currently) {
-                    await window.sb.from('follows').delete().eq('follower_id', user.id).eq('following_id', userId);
-                    followingSet.delete(userId);
-                } else {
-                    await window.sb.from('follows').insert({ follower_id: user.id, following_id: userId });
-                    followingSet.add(userId);
-                }
-                return !currently;
-            } catch (err) {
-                showToast(err.message, 'r');
-                return currently;
-            }
-        }
-
-        // ── Comments visibility ──
-        function getCommentsVisible() {
-            const r = localStorage.getItem(CVK);
-            return r ? JSON.parse(r) : {};
-        }
-        function setCommentsVisible(postId, count) {
-            const cv = getCommentsVisible();
-            cv[postId] = count;
-            localStorage.setItem(CVK, JSON.stringify(cv));
-        }
-        function getVisibleComments(postId) {
-            const cv = getCommentsVisible();
-            return cv[postId] || 5;
-        }
-
-        // ─────────────────────────────────────────────
-        // STATE
-        // ─────────────────────────────────────────────
-        let expandedThreads = new Map();
-        let replyTarget = null;
-        let currentPostId = null;
-        let ytState = {};
-        let ytInfo = {};
-        let ytWindows = {};
-        let videoPosts = [];
-        let appData = loadData();
+        // ─── GLOBALS ──────────────────────────────────────────────
+        const SITE_URL = window.location.origin;
         let _curIdx = 0;
         let _toastTimer = null;
-        let _activeReactionChip = 0;
         let feedMode = 'foryou';
         let commentSortMode = 'top';
         let _progressHideTimer = {};
+        let expandedThreads = new Map();
+        let replyTarget = null;
+        let currentPostId = null;
+        let _shareIdx = 0;
+        let videoPosts = [];
 
-        // ─────────────────────────────────────────────
-        // GET ALL DESCENDANTS (replies)
-        // ─────────────────────────────────────────────
-        function getAllDescendants(pid, comments) {
-            const result = [];
-            const direct = comments.filter(c => c.parentId === pid);
-            for (const c of direct) {
-                result.push(c);
-                result.push(...getAllDescendants(c.id, comments));
-            }
-            return result;
+        // YouTube state
+        let ytState = {};
+        let ytInfo = {};
+        let ytWindows = {};
+
+        // ─── HELPERS ──────────────────────────────────────────────
+
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.add('show');
+            clearTimeout(_toastTimer);
+            _toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
         }
 
-        // ─────────────────────────────────────────────
-        // GET VIDEO POSTS (with isOwn)
-        // ─────────────────────────────────────────────
-        async function getVideoPostsFromSupabase() {
-            try {
-                const feedItems = await window.PostsAPI.loadFeedWithReposts();
-                const currentUser = getCurrentUser();
+        function fmtNum(n) {
+            if (n >= 1000000000) return (n / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+            if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+            return String(n);
+        }
 
-                const mapEntryToVideoPost = (entry) => {
-                    const post = entry.post;
-                    if (post.mediaType !== 'video' || !post.mediaUrl) return null;
+        function hashify(text) {
+            return text.replace(/#(\w+)/g, '<span class="hashtag">#$1</span>');
+        }
 
-                    const profile = post.profile || {};
-                    const author = window.getAuthorFromProfile(profile);
-                    const isOwn = post.user_id === currentUser.id;
-                    const isFollowingUser = !isOwn && isFollowing(post.user_id);
-                    const liked = post.likedByMe || false;
-                    const isYouTube = post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post.mediaUrl.includes('youtu.be'));
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str || '';
+            return div.innerHTML;
+        }
 
-                    const vp = {
-                        id: post.id,
-                        src: post.mediaUrl,
-                        poster: post.mediaUrl || '',
-                        creator: author.name,
-                        handle: isOwn ? `@${currentUser.username || 'me'}` : `@${profile.username || author.name.toLowerCase()}`,
-                        verified: author.verified,
-                        avatar: author.avatar,
-                        isOwn: isOwn,
-                        caption: post.title + (post.description ? '\n' + post.description : '') +
-                            (post.tags ? ' ' + post.tags.map(t => '#' + t).join(' ') : ''),
-                        sound: 'Original Audio · ' + author.name,
-                        soundImg: author.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + author.name,
-                        likes: post.likes || 0,
-                        comments: post.comments || 0,
-                        reposts: post.repostCount || 0,
-                        bookmarks: 0,
-                        shares: 0,
-                        liked: liked,
-                        saved: false,
-                        following: isFollowingUser,
-                        authorId: post.user_id,
-                        postData: post,
-                        isYouTube: isYouTube,
-                        ytId: isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] ||
-                            post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null,
-                        timestamp: post.timestamp || post.date || new Date().toISOString(),
-                        baseLikes: Math.max(0, (post.likes || 0) - (liked ? 1 : 0)),
-                        profile: post.profile,
-                        myRepost: post.myRepost || false,
-                        myRepostText: post.myRepostText || '',
-                        myRepostTime: post.myRepostTime || null,
-                    };
+        function formatRelativeTime(iso) {
+            if (!iso) return 'Just now';
+            const d = new Date(iso);
+            if (isNaN(d)) return 'Just now';
+            const diff = Date.now() - d;
+            const m = Math.floor(diff / 60000);
+            if (m < 1) return 'Just now';
+            if (m < 60) return m + 'm';
+            const h = Math.floor(m / 60);
+            if (h < 24) return h + 'h';
+            const day = Math.floor(h / 24);
+            if (day < 7) return day + 'd';
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
 
-                    if (entry.feedType === 'repost') {
-                        vp.isRepostEntry = true;
-                        vp.repostId = entry.repostId;
-                        vp.reposterIdRaw = entry.reposter.id;
-                        vp.reposterName = entry.reposter.display_name;
-                        vp.reposterUsername = entry.reposter.username;
-                        vp.reposterAvatar = entry.reposter.avatar_url || ('https://api.dicebear.com/7.x/avataaars/svg?seed=' + entry.reposter.display_name);
-                        vp.reposterVerified = entry.reposter.verified_status;
-                        vp.repostEntryComment = entry.repostComment;
-                        vp.sortTime = entry.sortTime;
-                    } else {
-                        vp.sortTime = entry.sortTime;
-                    }
+        function getCurrentUser() {
+            if (window.AuthUser && typeof window.AuthUser.getCurrentUser === 'function') {
+                return window.AuthUser.getCurrentUser();
+            }
+            if (typeof window.getCurrentUser === 'function') {
+                return window.getCurrentUser();
+            }
+            return { id: 'guest', isLoggedIn: false, displayName: 'Guest', avatar: '' };
+        }
 
-                    return vp;
-                };
-
-                return feedItems
-                    .map(mapEntryToVideoPost)
-                    .filter(Boolean);
-            } catch (err) {
-                console.warn('Supabase load failed, falling back to localStorage:', err);
-                return getVideoPostsFromLocal();
+        function goToProfile(userId) {
+            if (!userId) return;
+            const user = getCurrentUser();
+            if (userId === user.id) {
+                window.location.href = 'profile.html';
+            } else {
+                window.location.href = `profile.html?uid=${encodeURIComponent(userId)}`;
             }
         }
 
-        function getVideoPostsFromLocal() {
-            const data = loadData();
-            const currentUser = getCurrentUser();
-            let posts = data.posts.filter(post => post.mediaType === 'video' && post.mediaUrl);
-            posts.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
-            return posts.map(post => {
-                const isOwn = post.authorId === currentUser.id;
-                const authorName = isOwn ? currentUser.displayName : (post.author || 'Anonymous');
-                const authorAvatar = isOwn ? currentUser.avatar : (post.authorAvatar || '');
-                const isVerified = isOwn ? currentUser.verified : false;
-                const isFollowingUser = !isOwn && isFollowing(post.authorId);
-                const liked = !!data.userReactions?.[`${post.id}-love`];
-                const isYouTube = post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post.mediaUrl.includes('youtu.be'));
-                return {
-                    id: post.id,
-                    src: post.mediaUrl,
-                    poster: post.mediaUrl || '',
-                    creator: authorName,
-                    handle: isOwn ? `@${currentUser.username || 'me'}` : `@${authorName.toLowerCase()}`,
-                    verified: isVerified,
-                    avatar: authorAvatar,
-                    isOwn: isOwn,
-                    caption: post.title + (post.description ? '\n' + post.description : '') +
-                        (post.tags ? ' ' + post.tags.map(t => '#' + t).join(' ') : ''),
-                    sound: 'Original Audio · ' + authorName,
-                    soundImg: authorAvatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + authorName,
-                    likes: (post.reactions?.love || 0) + (post.reactions?.laugh || 0) + (post.reactions?.cry || 0),
-                    comments: post.comments?.length || 0,
-                    reposts: 0,
-                    bookmarks: 0,
-                    shares: 0,
-                    liked: liked,
-                    saved: false,
-                    following: isFollowingUser,
-                    authorId: post.authorId,
-                    postData: post,
-                    isYouTube: isYouTube,
-                    ytId: isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] ||
-                        post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null,
-                    timestamp: post.timestamp || post.date || new Date().toISOString(),
-                    baseLikes: (post.reactions?.love || 0) + (post.reactions?.laugh || 0) + (post.reactions?.cry || 0) - (liked ? 1 : 0),
-                    profile: null,
-                    isRepostEntry: false,
-                };
-            });
-        }
+        // ─── YOUTUBE HELPERS ──────────────────────────────────────
 
-        // ─────────────────────────────────────────────
-        // YOUTUBE HELPERS
-        // ─────────────────────────────────────────────
         function ytPostMessage(idx, func, args = []) {
             const iframe = document.getElementById('yt-' + idx);
             if (!iframe || !iframe.contentWindow) return;
@@ -2912,13 +2754,170 @@
             }
         });
 
-        // ─────────────────────────────────────────────
-        // BUILD FEED & CARD
-        // ─────────────────────────────────────────────
+        // ─── LOAD VIDEO POSTS ────────────────────────────────────
+
+        async function loadVideoPosts() {
+            try {
+                const feedItems = await window.PostsAPI.loadFeedWithReposts();
+                const currentUser = getCurrentUser();
+
+                const mapEntryToVideoPost = (entry) => {
+                    const post = entry.post;
+                    // Check if this is a video post
+                    const isVideo = (post.mediaType === 'video') ||
+                        (post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post.mediaUrl.includes('youtu.be')));
+                    if (!isVideo || !post.mediaUrl) return null;
+
+                    const profile = post.profile || {};
+                    const author = window.getAuthorFromProfile(profile);
+                    const isOwn = post.user_id === currentUser.id;
+                    const isYouTube = post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post.mediaUrl
+                        .includes('youtu.be'));
+                    const ytId = isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] ||
+                        post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null;
+
+                    const vp = {
+                        id: post.id,
+                        src: post.mediaUrl,
+                        poster: post.mediaUrl || '',
+                        creator: author.name,
+                        handle: isOwn ? `@${currentUser.username || 'me'}` : `@${profile.username || author.name.toLowerCase()}`,
+                        verified: author.verified,
+                        avatar: author.avatar,
+                        isOwn: isOwn,
+                        caption: (post.title || '') + (post.description ? '\n' + post.description : '') +
+                            (post.tags ? ' ' + post.tags.map(t => '#' + t).join(' ') : ''),
+                        sound: 'Original Audio · ' + author.name,
+                        soundImg: author.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + author.name,
+                        likes: post.likes || 0,
+                        comments: post.comments || 0,
+                        reposts: post.repostCount || 0,
+                        bookmarks: 0,
+                        shares: 0,
+                        liked: post.likedByMe || false,
+                        saved: false,
+                        following: false, // we'll compute later
+                        authorId: post.user_id,
+                        postData: post,
+                        isYouTube: isYouTube,
+                        ytId: ytId,
+                        timestamp: post.timestamp || post.date || new Date().toISOString(),
+                        profile: post.profile,
+                        myRepost: post.myRepost || false,
+                        myRepostText: post.myRepostText || '',
+                        myRepostTime: post.myRepostTime || null,
+                    };
+
+                    if (entry.feedType === 'repost') {
+                        vp.isRepostEntry = true;
+                        vp.repostId = entry.repostId;
+                        vp.reposterIdRaw = entry.reposter.id;
+                        vp.reposterName = entry.reposter.display_name;
+                        vp.reposterUsername = entry.reposter.username;
+                        vp.reposterAvatar = entry.reposter.avatar_url || ('https://api.dicebear.com/7.x/avataaars/svg?seed=' +
+                            entry.reposter.display_name);
+                        vp.reposterVerified = entry.reposter.verified_status;
+                        vp.repostEntryComment = entry.repostComment;
+                        vp.sortTime = entry.sortTime;
+                    } else {
+                        vp.sortTime = entry.sortTime;
+                    }
+
+                    return vp;
+                };
+
+                const videoEntries = feedItems
+                    .map(mapEntryToVideoPost)
+                    .filter(Boolean);
+
+                // Deduplicate: if a video appears as both a normal post and a repost, keep the repost version
+                const seen = new Set();
+                const deduped = [];
+                for (const v of videoEntries) {
+                    if (v.isRepostEntry) {
+                        if (!seen.has(v.id)) {
+                            seen.add(v.id);
+                            deduped.push(v);
+                        } else {
+                            // Replace the existing entry with the repost version
+                            const idx = deduped.findIndex(item => item.id === v.id);
+                            if (idx !== -1) deduped[idx] = v;
+                        }
+                    } else {
+                        if (!seen.has(v.id)) {
+                            seen.add(v.id);
+                            deduped.push(v);
+                        }
+                    }
+                }
+
+                return deduped;
+            } catch (err) {
+                console.error('Failed to load video posts:', err);
+                showToast('Error loading videos');
+                return [];
+            }
+        }
+
+        // ─── FOLLOW STATE ─────────────────────────────────────────
+
+        let followingSet = new Set();
+
+        async function loadFollows() {
+            const user = getCurrentUser();
+            if (!user || !user.isLoggedIn) { followingSet = new Set(); return; }
+            try {
+                const { data, error } = await window.sb.from('follows').select('following_id').eq('follower_id', user.id);
+                if (!error) followingSet = new Set(data.map(f => f.following_id));
+            } catch (e) { console.warn('loadFollows error:', e); }
+        }
+
+        function isFollowing(userId) { return followingSet.has(userId); }
+
+        async function toggleFollowUser(userId) {
+            const user = getCurrentUser();
+            if (!user || !user.isLoggedIn) { showToast('Please sign in to follow'); return false; }
+            const currently = isFollowing(userId);
+            try {
+                if (currently) {
+                    await window.sb.from('follows').delete().eq('follower_id', user.id).eq('following_id', userId);
+                    followingSet.delete(userId);
+                } else {
+                    await window.sb.from('follows').insert({ follower_id: user.id, following_id: userId });
+                    followingSet.add(userId);
+                }
+                return !currently;
+            } catch (err) {
+                showToast(err.message, 'r');
+                return currently;
+            }
+        }
+
+        // ─── BUILD FEED ────────────────────────────────────────────
+
+        function buildEligibleFeed(mode) {
+            const isEligible = (v) => {
+                if (mode === 'foryou') return true;
+                if (v.isRepostEntry) return isFollowing(v.reposterIdRaw);
+                return isFollowing(v.authorId);
+            };
+            const eligible = videoPosts.filter(isEligible);
+            const seen = new Set();
+            return eligible.filter(v => {
+                if (v.isRepostEntry) {
+                    if (!seen.has(v.id)) { seen.add(v.id); return true; }
+                    return false;
+                }
+                if (!seen.has(v.id)) { seen.add(v.id); return true; }
+                return false;
+            });
+        }
+
         function buildFeed(list) {
-            const posts = list || videoPosts;
+            const posts = list || buildEligibleFeed(feedMode);
             const track = document.getElementById('feedTrack');
             const emptyState = document.getElementById('emptyState');
+
             if (!posts || posts.length === 0) {
                 track.innerHTML = '';
                 emptyState.style.display = 'flex';
@@ -2926,6 +2925,12 @@
             }
             emptyState.style.display = 'none';
             track.innerHTML = '';
+
+            // Update following status for each video
+            posts.forEach(v => {
+                v.following = isFollowing(v.authorId);
+            });
+
             posts.forEach((v, i) => {
                 const card = document.createElement('div');
                 card.className = 'v-card';
@@ -2933,6 +2938,7 @@
                 card.innerHTML = buildCard(v, i);
                 track.appendChild(card);
             });
+
             const io = new IntersectionObserver((entries) => {
                 entries.forEach(e => {
                     const idx = parseInt(e.target.dataset.idx);
@@ -2952,7 +2958,6 @@
             });
             if (posts.length > 0) {
                 onCardActive(0);
-                posts.forEach((_, i) => updateRepostPill(i));
             }
             requestAnimationFrame(() => {
                 posts.forEach((_, i) => {
@@ -2965,6 +2970,8 @@
             });
         }
 
+        // ─── BUILD CARD ────────────────────────────────────────────
+
         function buildCard(v, i) {
             const profile = v.profile || {};
             const author = window.getAuthorFromProfile(profile);
@@ -2974,17 +2981,8 @@
 
             const likeClass = v.liked ? 'v-action-btn liked' : 'v-action-btn';
             const saveClass = v.saved ? 'v-action-btn saved' : 'v-action-btn';
-            const captionHtml = v.caption ? hashify(v.caption) : '';
-            let timeStr = 'Just now';
-            if (v.timestamp) {
-                const d = new Date(v.timestamp);
-                const diff = Date.now() - d;
-                const m = Math.floor(diff / 60000);
-                if (m < 1) timeStr = 'Just now';
-                else if (m < 60) timeStr = m + 'm';
-                else if (m < 1440) timeStr = Math.floor(m / 60) + 'h';
-                else timeStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            }
+            const captionHtml = v.caption ? hashify(escapeHtml(v.caption)) : '';
+            const timeStr = formatRelativeTime(v.timestamp);
 
             let videoHtml = '';
             if (v.isYouTube && v.ytId) {
@@ -3003,7 +3001,7 @@
                 `;
             }
 
-            // Repost banner (feed-level) with chevron
+            // Repost banner (feed-level)
             const repostBannerHtml = v.isRepostEntry ? `
                 <div class="v-repost-banner ${v.repostEntryComment ? 'has-comment' : ''}"
                      onclick="event.stopPropagation(); toggleRepostBannerComment(${i})">
@@ -3025,7 +3023,7 @@
                 ${v.repostEntryComment ? `<div class="v-repost-banner-comment" id="repostBannerComment-${i}">${escapeHtml(v.repostEntryComment)}</div>` : ''}
             ` : '';
 
-            // Own repost pill (inline toggle)
+            // Own repost pill
             const ownRepostPillHtml = (v.myRepost && !v.isRepostEntry) ? `
                 <div class="v-repost-pill ${v.myRepostText ? 'has-comment' : ''}"
                      id="repostPill-${i}"
@@ -3034,7 +3032,7 @@
                         <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
                         <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
                     </svg>
-                    <span>You reposted this</span>
+                    <span id="repostPillText-${i}">${v.myRepostText || 'You reposted this'}</span>
                     ${v.myRepostText ? `
                         <svg viewBox="0 0 24 24" class="v-repost-pill-chevron" id="repostPillChevron-${i}">
                             <polyline points="6 9 12 15 18 9"/>
@@ -3044,8 +3042,9 @@
                 ${v.myRepostText ? `<div class="v-repost-banner-comment" id="ownRepostComment-${i}">${escapeHtml(v.myRepostText)}</div>` : ''}
             ` : '';
 
+            // Build the card HTML
             return `
-            <div class="v-card" id="card-${i}" data-post-id="${v.id}" data-author-id="${author.id}">
+            <div class="v-card" data-idx="${i}" data-post-id="${v.id}" data-author-id="${v.authorId}">
                 ${videoHtml}
                 ${repostBannerHtml}
                 <div class="v-skeleton" id="skel-${i}"><div class="v-skeleton-pulse"></div></div>
@@ -3099,14 +3098,14 @@
                 <div class="v-info">
                     ${ownRepostPillHtml}
                     <div class="v-user-row">
-                        <div class="v-avatar-wrap" onclick="event.stopPropagation(); goToProfile('${author.id}')">
+                        <div class="v-avatar-wrap" onclick="event.stopPropagation(); goToProfile('${v.authorId}')">
                             <img data-author-avatar class="v-avatar" src="${avatar}" alt="${displayName}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}'">
-                            <div class="v-plus-badge ${(v.following || v.isOwn) ? 'hidden' : ''}" id="followDot-${i}" onclick="event.stopPropagation(); toggleFollow(${i})">+</div>
+                            <div class="v-plus-badge ${v.isOwn || v.following ? 'hidden' : ''}" id="followDot-${i}" onclick="event.stopPropagation(); toggleFollow(${i})">+</div>
                         </div>
                         <div class="v-user-meta">
-                            <div class="v-creator" onclick="event.stopPropagation(); goToProfile('${author.id}')">
+                            <div class="v-creator" onclick="event.stopPropagation(); goToProfile('${v.authorId}')">
                                 <span data-author-name class="v-creator-name">${displayName}</span>
-                                <span data-author-badge-wrapper>${window.getVerifiedBadgeHTML(verifiedStatus)}</span>
+                                <span data-author-badge-wrapper>${window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : ''}</span>
                             </div>
                             <div class="v-post-time">${timeStr}</div>
                         </div>
@@ -3130,9 +3129,8 @@
             `;
         }
 
-        // ─────────────────────────────────────────────
-        // PAUSE / ACTIVE / SCRUB / TAP
-        // ─────────────────────────────────────────────
+        // ─── PAUSE / ACTIVE / SCRUB / TAP ──────────────────────────
+
         function pauseCard(idx) {
             const v = videoPosts[idx];
             if (!v) return;
@@ -3150,6 +3148,7 @@
             pauseCard(_curIdx);
             _curIdx = idx;
             const v = videoPosts[idx];
+            if (!v) return;
             currentPostId = v.id;
             ytState[idx] = { muted: true, playing: true };
 
@@ -3318,9 +3317,8 @@
             _progressHideTimer[idx] = setTimeout(() => prog.classList.remove('visible'), 3000);
         }
 
-        // ─────────────────────────────────────────────
-        // LIKE
-        // ─────────────────────────────────────────────
+        // ─── LIKE ──────────────────────────────────────────────────
+
         async function toggleLike(idx) {
             const v = videoPosts[idx];
             if (!v) return;
@@ -3352,9 +3350,8 @@
             if (lbl) lbl.textContent = fmtNum(v.likes);
         }
 
-        // ─────────────────────────────────────────────
-        // REPOST / SAVE / FOLLOW
-        // ─────────────────────────────────────────────
+        // ─── REPOST / SAVE / FOLLOW ─────────────────────────────
+
         async function toggleRepost(idx, comment) {
             const v = videoPosts[idx];
             if (!v) return;
@@ -3388,6 +3385,19 @@
             }
         }
 
+        function updateRepostPill(idx) {
+            const v = videoPosts[idx];
+            const pill = document.getElementById('repostPill-' + idx);
+            if (!pill) return;
+            if (v.myRepost) {
+                const textEl = pill.querySelector('span');
+                if (textEl) textEl.textContent = v.myRepostText || 'You reposted this';
+                pill.style.display = 'flex';
+            } else {
+                pill.style.display = 'none';
+            }
+        }
+
         function toggleSave(idx) {
             const v = videoPosts[idx];
             v.saved = !v.saved;
@@ -3405,17 +3415,10 @@
                 if (v.authorId === userId) v.following = newState;
                 return v;
             });
-            document.querySelectorAll(`.follow-btn[data-user-id="${userId}"]`).forEach(btn => {
-                btn.textContent = newState ? 'Following' : 'Follow';
-                btn.classList.toggle('following', newState);
-            });
             const dot = document.getElementById('followDot-' + idx);
-            if (dot) dot.classList.toggle('hidden', newState);
-            const moreLbl = document.getElementById('moreFollowLbl');
-            if (moreLbl) {
-                const v = videoPosts.find(v => v.authorId === userId);
-                if (v) moreLbl.textContent = (v.following ? 'Following ' : 'Follow ') + v.creator;
-            }
+            if (dot) dot.classList.toggle('hidden', newState || videoPosts[idx].isOwn);
+            const pill = document.querySelector(`#card-${idx} .v-plus-badge`);
+            if (pill) pill.classList.toggle('hidden', newState || videoPosts[idx].isOwn);
             showToast(newState ? 'Following ✓' : 'Unfollowed');
             return newState;
         }
@@ -3432,9 +3435,8 @@
             toggleFollowUserAndUpdate(v.authorId, idx);
         }
 
-        // ─────────────────────────────────────────────
-        // REPOST BANNER TOGGLES
-        // ─────────────────────────────────────────────
+        // ─── REPOST BANNER TOGGLES ──────────────────────────────
+
         function toggleRepostBannerComment(idx) {
             const el = document.getElementById('repostBannerComment-' + idx);
             const chevron = document.getElementById('repostBannerChevron-' + idx);
@@ -3451,62 +3453,8 @@
             if (chevron) chevron.classList.toggle('open');
         }
 
-        // ─────────────────────────────────────────────
-        // PROFILE NAVIGATION
-        // ─────────────────────────────────────────────
-        function goToProfile(userId) {
-            if (!userId) return;
-            const currentUser = getCurrentUser();
-            if (userId === currentUser.id) {
-                window.location.href = 'profile.html';
-            } else {
-                window.location.href = `profile.html?user=${encodeURIComponent(userId)}`;
-            }
-        }
+        // ─── CAPTION CLAMP / EXPAND ─────────────────────────────
 
-        // ─────────────────────────────────────────────
-        // REPOST PILL + WORD LIMIT
-        // ─────────────────────────────────────────────
-        function enforceWordLimit(el, maxWords) {
-            let words = el.value.trim().split(/\s+/).filter(Boolean);
-            if (words.length > maxWords) {
-                el.value = words.slice(0, maxWords).join(' ');
-                words = words.slice(0, maxWords);
-            }
-            const counter = document.getElementById('repostWordCount');
-            if (counter) counter.textContent = `${words.length} / ${maxWords} words`;
-        }
-
-        function updateRepostPill(idx) {
-            const v = videoPosts[idx];
-            const pill = document.getElementById('repostPill-' + idx);
-            const text = document.getElementById('repostPillText-' + idx);
-            if (!pill || !text) return;
-            if (v.myRepost) {
-                text.textContent = v.myRepostText ? v.myRepostText : 'You reposted this';
-                pill.style.display = 'flex';
-            } else {
-                pill.style.display = 'none';
-            }
-        }
-
-        async function submitRepost() {
-            const idx = _shareIdx;
-            const comment = document.getElementById('repostComment').value.trim();
-            const words = comment.split(/\s+/).filter(Boolean);
-            if (words.length > 20) {
-                return showToast('Repost comment must be 20 words or fewer');
-            }
-            await toggleRepost(idx, comment);
-            document.getElementById('repostComment').value = '';
-            const counter = document.getElementById('repostWordCount');
-            if (counter) counter.textContent = '0 / 20 words';
-            closeSheet('repostSheet');
-        }
-
-        // ─────────────────────────────────────────────
-        // CAPTION CLAMP / EXPAND
-        // ─────────────────────────────────────────────
         function toggleCaption(idx) {
             const cap = document.getElementById('cap-' + idx);
             const btn = document.getElementById('seeMore-' + idx);
@@ -3535,40 +3483,24 @@
             el.style.setProperty('--fade-bottom', bottomFade + 'px');
         }
 
-        // ─────────────────────────────────────────────
-        // FEED TAB SWITCHING + DEDUPE
-        // ─────────────────────────────────────────────
-        function buildEligibleFeed(mode) {
-            const isEligible = (v) => {
-                if (mode === 'foryou') return true;
-                if (v.isRepostEntry) return isFollowing(v.reposterIdRaw);
-                return v.following;
-            };
-            const eligible = videoPosts.filter(isEligible);
-            const dedupedOriginalIds = new Set(
-                eligible.filter(v => v.isRepostEntry).map(v => v.id)
-            );
-            return eligible.filter(v => {
-                if (v.isRepostEntry) return true;
-                return !dedupedOriginalIds.has(v.id);
-            });
-        }
+        // ─── FEED TAB SWITCHING ──────────────────────────────────
 
         function switchFeedTab(mode) {
             if (mode === feedMode) return;
             feedMode = mode;
             document.querySelectorAll('.vt-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === mode));
-            let filtered = buildEligibleFeed(mode);
-            if (mode === 'following' && filtered.length === 0) {
+            const filtered = buildEligibleFeed(mode);
+            if (filtered.length === 0 && mode === 'following') {
                 showToast('No posts from people you follow');
-                filtered = buildEligibleFeed('foryou');
+                const all = buildEligibleFeed('foryou');
+                buildFeed(all);
+                return;
             }
             buildFeed(filtered);
         }
 
-        // ─────────────────────────────────────────────
-        // SHEETS
-        // ─────────────────────────────────────────────
+        // ─── SHEETS ───────────────────────────────────────────────
+
         function openSheet(id) {
             document.getElementById('backdrop').classList.add('open');
             document.getElementById(id).classList.add('open');
@@ -3602,9 +3534,8 @@
             }
         }
 
-        // ─────────────────────────────────────────────
-        // COMMENTS
-        // ─────────────────────────────────────────────
+        // ─── COMMENTS ─────────────────────────────────────────────
+
         function renderCommentsHTML(comments, postId, visibleCount) {
             const topLevel = comments.filter(c => c.parentId === null);
             if (topLevel.length === 0) {
@@ -3631,7 +3562,7 @@
             const total = replies.length;
             const hasReplies = total > 0;
             const expandedCount = expandedThreads.get(comment.id) || 0;
-            const post = appData.posts.find(p => p.id === postId);
+            const post = videoPosts.find(p => p.id === postId);
             const isCreator = post && comment.userId === post.authorId;
             let repliesHtml = '';
             if (hasReplies && expandedCount === 0) {
@@ -3658,7 +3589,8 @@
             const isLiked = !!comment.likedByMe;
             const avatarHtml = avatar ? `<img src="${avatar}" alt="">` : username.charAt(0).toUpperCase();
             const avatarClass = avatar ? 'comment-avatar has-image' : 'comment-avatar';
-            const badgeHtml = window.getVerifiedBadgeHTML(verifiedStatus);
+            const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
+
             return `
                 <div class="comment-item" data-comment-id="${comment.id}" data-author-id="${author.id}">
                     <div class="${avatarClass}" data-username="${escapeHtml(username)}" onclick="goToProfile('${author.id}')">${avatarHtml}</div>
@@ -3691,13 +3623,14 @@
             const parentName = parent ? (parent.profile ? parent.profile.display_name : '') : '';
             const mention = (parentName && parentName !== username) ?
                 `<span style="color:var(--p);font-weight:500;">@${escapeHtml(parentName)}</span> ` : '';
-            const post = appData.posts.find(p => p.id === postId);
+            const post = videoPosts.find(p => p.id === postId);
             const isCreator = post && reply.userId === post.authorId;
             const likeCount = reply.likeCount || 0;
             const isLiked = !!reply.likedByMe;
             const avatarHtml = avatar ? `<img src="${avatar}" alt="">` : username.charAt(0).toUpperCase();
             const avatarClass = avatar ? 'reply-avatar-dot has-image' : 'reply-avatar-dot';
-            const badgeHtml = window.getVerifiedBadgeHTML(verifiedStatus);
+            const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
+
             return `
                 <div class="reply-item" data-comment-id="${reply.id}" data-author-id="${author.id}">
                     <div class="${avatarClass}" data-username="${escapeHtml(username)}" onclick="goToProfile('${author.id}')">${avatarHtml}</div>
@@ -3721,16 +3654,34 @@
             `;
         }
 
-        // ── addComment ──
+        function getAllDescendants(pid, comments) {
+            const result = [];
+            const direct = comments.filter(c => c.parentId === pid);
+            for (const c of direct) {
+                result.push(c);
+                result.push(...getAllDescendants(c.id, comments));
+            }
+            return result;
+        }
+
+        function getCommentsVisible() {
+            const cv = localStorage.getItem('freeupper_comments_visible');
+            return cv ? JSON.parse(cv) : {};
+        }
+
+        function setCommentsVisible(postId, count) {
+            const cv = getCommentsVisible();
+            cv[postId] = count;
+            localStorage.setItem('freeupper_comments_visible', JSON.stringify(cv));
+        }
+
+        function getVisibleComments(postId) {
+            return getCommentsVisible()[postId] || 5;
+        }
+
         async function addComment(postId, parentId, message) {
             try {
                 const comment = await window.PostsAPI.addComment(postId, parentId, message);
-                const post = appData.posts.find(p => p.id === postId);
-                if (post) {
-                    if (!post.comments) post.comments = [];
-                    post.comments.push(comment);
-                    post.commentCount = (post.commentCount || 0) + 1;
-                }
                 const v = videoPosts.find(p => p.id === postId);
                 if (v) v.comments = (v.comments || 0) + 1;
                 return comment;
@@ -3741,65 +3692,18 @@
             }
         }
 
-        // ── submitCommentFromBar ──
-        function submitCommentFromBar() {
-            const textarea = document.getElementById('commentInput');
-            const message = textarea.value.trim();
-            if (!message) return showToast('Comment cannot be empty.', 'o');
-
-            const parentId = replyTarget ? replyTarget.commentId : null;
-            const submitBtn = document.querySelector('.comment-send');
-            if (submitBtn) submitBtn.disabled = true;
-
-            addComment(currentPostId, parentId, message)
-                .then(() => {
-                    textarea.value = '';
-                    replyTarget = null;
-                    updateReplyContextUI();
-                    refreshCommentsList(currentPostId);
-                    showToast(parentId ? 'Reply posted' : 'Comment posted', 'g');
-
-                    const v = videoPosts.find(p => p.id === currentPostId);
-                    if (v) {
-                        const countEl = document.getElementById('commentCount');
-                        if (countEl) countEl.textContent = fmtNum(v.comments) + ' comments';
-
-                        const idx = videoPosts.indexOf(v);
-                        const lbl = document.getElementById('commentCountLbl-' + idx);
-                        if (lbl) lbl.textContent = fmtNum(v.comments);
-                    }
-                })
-                .catch(() => {})
-                .finally(() => {
-                    if (submitBtn) submitBtn.disabled = false;
-                });
-        }
-
-        // ── refreshCommentsList ──
-        async function refreshCommentsList(postId, preserveScroll, prevScroll) {
+        async function refreshCommentsList(postId) {
             const container = document.getElementById('comments-list');
-            const scrollBody = document.getElementById('commentBody');
             if (!container) return;
 
             try {
                 const comments = await window.PostsAPI.loadComments(postId);
-                const post = appData.posts.find(p => p.id === postId);
-                if (post) {
-                    post.comments = comments;
-                    post.commentCount = comments.length;
-                }
-
                 const sorted = [...comments].sort((a, b) => {
                     if (commentSortMode === 'newest') return new Date(b.time) - new Date(a.time);
                     return (b.likeCount || 0) - (a.likeCount || 0);
                 });
-
                 const visibleCount = getVisibleComments(postId);
                 container.innerHTML = renderCommentsHTML(sorted, postId, visibleCount);
-
-                if (preserveScroll && scrollBody) {
-                    scrollBody.scrollTop = prevScroll;
-                }
             } catch (err) {
                 console.warn('Failed to load comments:', err);
                 container.innerHTML =
@@ -3807,7 +3711,6 @@
             }
         }
 
-        // ── toggleCommentLikeUI ──
         async function toggleCommentLikeUI(btn, commentId) {
             const wasLiked = btn.classList.contains('liked');
             const countEl = btn.querySelector('.like-count');
@@ -3828,7 +3731,6 @@
             }
         }
 
-        // ── other comment helpers ──
         function replyToComment(commentId, username) {
             replyTarget = { commentId, username };
             updateReplyContextUI();
@@ -3858,29 +3760,9 @@
 
         async function expandReplies(commentId, postId) {
             const current = expandedThreads.get(commentId) || 0;
-            const nextCount = current === 0 ? REPLY_FIRST_BATCH : current + REPLY_BATCH;
-            try {
-                if (window.PostsAPI.loadReplies) {
-                    const freshReplies = await window.PostsAPI.loadReplies(postId, commentId, current, nextCount);
-                    mergeRepliesIntoCache(postId, commentId, freshReplies);
-                }
-            } catch (err) {
-                showToast('Could not load replies');
-                return;
-            }
-            const container = document.getElementById('commentBody');
-            const prevScroll = container ? container.scrollTop : 0;
+            const nextCount = current === 0 ? 4 : current + 5;
             expandedThreads.set(commentId, nextCount);
-            refreshCommentsList(postId, true, prevScroll);
-        }
-
-        function mergeRepliesIntoCache(postId, commentId, freshReplies) {
-            const post = appData.posts.find(p => p.id === postId);
-            if (!post) return;
-            if (!post.comments) post.comments = [];
-            freshReplies.forEach(r => {
-                if (!post.comments.some(c => c.id === r.id)) post.comments.push(r);
-            });
+            refreshCommentsList(postId);
         }
 
         function collapseReplies(commentId, postId) {
@@ -3939,21 +3821,38 @@
             openSheet('commentSheet');
         }
 
-        // ─────────────────────────────────────────────
-        // SHARE SHEET
-        // ─────────────────────────────────────────────
-        let _shareIdx = 0;
+        function submitCommentFromBar() {
+            const textarea = document.getElementById('commentInput');
+            const message = textarea.value.trim();
+            if (!message) return showToast('Comment cannot be empty.', 'o');
 
-        function getPostUrl(idx) {
-            const post = videoPosts && videoPosts[idx];
-            const id = post && post.id;
-            return `${SITE_URL}/video.html?post=${encodeURIComponent(id || '')}`;
+            const parentId = replyTarget ? replyTarget.commentId : null;
+            const submitBtn = document.querySelector('.comment-send');
+            if (submitBtn) submitBtn.disabled = true;
+
+            addComment(currentPostId, parentId, message)
+                .then(() => {
+                    textarea.value = '';
+                    replyTarget = null;
+                    updateReplyContextUI();
+                    refreshCommentsList(currentPostId);
+                    showToast(parentId ? 'Reply posted' : 'Comment posted', 'g');
+                    const v = videoPosts.find(p => p.id === currentPostId);
+                    if (v) {
+                        const countEl = document.getElementById('commentCount');
+                        if (countEl) countEl.textContent = fmtNum(v.comments) + ' comments';
+                        const idx = videoPosts.indexOf(v);
+                        const lbl = document.getElementById('commentCountLbl-' + idx);
+                        if (lbl) lbl.textContent = fmtNum(v.comments);
+                    }
+                })
+                .catch(() => {})
+                .finally(() => {
+                    if (submitBtn) submitBtn.disabled = false;
+                });
         }
 
-        function getPostTitle(idx) {
-            const post = videoPosts && videoPosts[idx];
-            return (post && post.caption) || 'Check this out on Freeupper';
-        }
+        // ─── SHARE SHEET ──────────────────────────────────────────
 
         function openShare(idx) {
             _shareIdx = idx;
@@ -3967,6 +3866,17 @@
             if (cap) cap.textContent = (v.caption || '').split('\n')[0].slice(0, 60);
             if (handle) handle.textContent = v.handle || '';
             openSheet('shareSheet');
+        }
+
+        function getPostUrl(idx) {
+            const post = videoPosts && videoPosts[idx];
+            const id = post && post.id;
+            return `${SITE_URL}/video.html?post=${encodeURIComponent(id || '')}`;
+        }
+
+        function getPostTitle(idx) {
+            const post = videoPosts && videoPosts[idx];
+            return (post && post.caption) || 'Check this out on Freeupper';
         }
 
         async function shareAction(type) {
@@ -4067,6 +3977,20 @@
             }
         }
 
+        function submitRepost() {
+            const idx = _shareIdx;
+            const comment = document.getElementById('repostComment').value.trim();
+            const words = comment.split(/\s+/).filter(Boolean);
+            if (words.length > 20) {
+                return showToast('Repost comment must be 20 words or fewer');
+            }
+            toggleRepost(idx, comment);
+            document.getElementById('repostComment').value = '';
+            const counter = document.getElementById('repostWordCount');
+            if (counter) counter.textContent = '0 / 20 words';
+            closeSheet('repostSheet');
+        }
+
         function submitQuote() {
             const idx = _shareIdx;
             const comment = document.getElementById('quoteComment').value.trim();
@@ -4076,89 +4000,29 @@
             showToast('Quote posted ✓');
         }
 
-        // ── Ripple micro-interaction ──
-        document.addEventListener('pointerdown', function(e) {
-            const el = e.target.closest(
-                '.share-item, .share-link-row, .composer-btn, .share-cancel-btn, .vt-more, .add-post-btn');
-            if (!el) return;
-            const rect = el.getBoundingClientRect();
-            const ripple = document.createElement('span');
-            ripple.className = 'share-ripple';
-            const size = Math.max(rect.width, rect.height);
-            ripple.style.width = ripple.style.height = size + 'px';
-            ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
-            ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
-            if (getComputedStyle(el).position === 'static') {
-                el.style.position = 'relative';
+        function enforceWordLimit(el, maxWords) {
+            let words = el.value.trim().split(/\s+/).filter(Boolean);
+            if (words.length > maxWords) {
+                el.value = words.slice(0, maxWords).join(' ');
+                words = words.slice(0, maxWords);
             }
-            el.appendChild(ripple);
-            setTimeout(() => ripple.remove(), 500);
-        });
+            const counter = document.getElementById('repostWordCount');
+            if (counter) counter.textContent = `${words.length} / ${maxWords} words`;
+        }
 
-        // ─────────────────────────────────────────────
-        // REACTIONS / MORE
-        // ─────────────────────────────────────────────
+        // ─── REACTIONS ────────────────────────────────────────────
+
         function openReactions(idx) {
-            const strip = document.getElementById('reactionStrip');
-            const list = document.getElementById('reactionList');
-            const countEl = document.getElementById('reactionCount');
-            const v = videoPosts[idx];
-            if (countEl) countEl.textContent = fmtNum(v.likes) + ' Likes';
-            const reactionTypes = [
-                { emoji: '❤️', label: 'Love', count: Math.floor(v.likes * 0.5) },
-                { emoji: '😂', label: 'Funny', count: Math.floor(v.likes * 0.2) },
-                { emoji: '😮', label: 'Wow', count: Math.floor(v.likes * 0.15) },
-                { emoji: '👏', label: 'Clap', count: Math.floor(v.likes * 0.1) },
-                { emoji: '🔥', label: 'Fire', count: Math.floor(v.likes * 0.05) },
-            ];
-            _activeReactionChip = 0;
-            strip.innerHTML = reactionTypes.map((r, i) => `
-                <button class="r-chip ${i === 0 ? 'active' : ''}" onclick="switchReactionTab(${i})">
-                    <span class="emoji">${r.emoji}</span>${r.label} ${fmtNum(r.count)}
-                </button>
-            `).join('');
-            renderReactionUsers(0, reactionTypes);
-            openSheet('reactionSheet');
+            // Mock – could be extended later
+            showToast('Reactions coming soon');
         }
 
-        function switchReactionTab(i) {
-            _activeReactionChip = i;
-            document.querySelectorAll('.r-chip').forEach((c, ci) => c.classList.toggle('active', ci === i));
-            const reactionTypes = [
-                { emoji: '❤️', label: 'Love' },
-                { emoji: '😂', label: 'Funny' },
-                { emoji: '😮', label: 'Wow' },
-                { emoji: '👏', label: 'Clap' },
-                { emoji: '🔥', label: 'Fire' },
-            ];
-            renderReactionUsers(i, reactionTypes);
-        }
-
-        function renderReactionUsers(i, reactionTypes) {
-            const list = document.getElementById('reactionList');
-            const r = reactionTypes[i] || reactionTypes[0];
-            const users = ['Tunde', 'Adaeze', 'Bayo', 'Ngozi', 'Emeka', 'Chisom', 'Sola', 'Kemi'];
-            list.innerHTML = users.slice(0, Math.floor(Math.random() * 5) + 3).map(u => {
-                const ava = `https://api.dicebear.com/7.x/avataaars/svg?seed=${u}`;
-                return `
-                    <div class="r-user">
-                        <img class="r-user-ava" src="${ava}" alt="${u}" onerror="this.src='${ava}'">
-                        <div class="r-user-info">
-                            <div class="r-user-name">${u}</div>
-                            <div class="r-user-handle">@${u.toLowerCase()}</div>
-                        </div>
-                        <span class="r-user-emoji">${r.emoji}</span>
-                        <button class="r-follow-btn" onclick="this.classList.toggle('following');this.textContent=this.classList.contains('following')?'Following':'Follow'">Follow</button>
-                    </div>`;
-            }).join('');
-        }
+        // ─── MORE OPTIONS ─────────────────────────────────────────
 
         function openMore(idx) {
             const list = document.getElementById('moreList');
             const v = videoPosts[idx];
-            const profile = v.profile || {};
-            const author = window.getAuthorFromProfile(profile);
-
+            const author = window.getAuthorFromProfile(v.profile || {});
             const followRow = v.isOwn ? '' : `
                 <button class="more-follow-row" id="moreFollowRow" onclick="toggleFollowFromMore(${idx})">
                     <img class="more-follow-avatar" src="${author.avatar}" alt="${author.name}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${author.name}'">
@@ -4168,26 +4032,28 @@
                     </div>
                 </button>`;
 
-            const otherRows = [
-                { ico: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
-                    lbl: 'Not interested in this video' },
-                { ico: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
-                    lbl: 'Find similar videos' },
-                { ico: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
-                    lbl: 'Save video' },
-                { ico: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
-                    lbl: 'Copy link to video' },
-                { ico: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
-                    lbl: 'Report video', danger: true },
-            ].map(r => `
-                <button class="more-row ${r.danger ? 'danger' : ''}" onclick="moreAction('${r.lbl}')">
-                    <svg class="more-row-ico" viewBox="0 0 24 24">${r.ico}</svg>
-                    <div>
-                        <div class="more-row-lbl">${r.lbl}</div>
-                        ${r.sub ? `<div class="more-row-sub">${r.sub}</div>` : ''}
-                    </div>
+            const otherRows = `
+                <button class="more-row" onclick="moreAction('Not interested in this video')">
+                    <svg class="more-row-ico" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <div><div class="more-row-lbl">Not interested in this video</div></div>
                 </button>
-            `).join('');
+                <button class="more-row" onclick="moreAction('Find similar videos')">
+                    <svg class="more-row-ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <div><div class="more-row-lbl">Find similar videos</div></div>
+                </button>
+                <button class="more-row" onclick="moreAction('Save video')">
+                    <svg class="more-row-ico" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <div><div class="more-row-lbl">Save video</div></div>
+                </button>
+                <button class="more-row" onclick="moreAction('Copy link to video')">
+                    <svg class="more-row-ico" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    <div><div class="more-row-lbl">Copy link to video</div></div>
+                </button>
+                <button class="more-row danger" onclick="moreAction('Report video')">
+                    <svg class="more-row-ico" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                    <div><div class="more-row-lbl">Report video</div></div>
+                </button>
+            `;
 
             list.innerHTML = followRow + otherRows;
             openSheet('moreSheet');
@@ -4198,9 +4064,8 @@
             showToast(label);
         }
 
-        // ─────────────────────────────────────────────
-        // DEEP-LINK
-        // ─────────────────────────────────────────────
+        // ─── DEEP-LINK ────────────────────────────────────────────
+
         function jumpToSharedPost() {
             const params = new URLSearchParams(window.location.search);
             const postId = params.get('post');
@@ -4212,84 +4077,33 @@
             }
         }
 
-        // ─────────────────────────────────────────────
-        // HELPERS
-        // ─────────────────────────────────────────────
-        function showToast(msg) {
-            const el = document.getElementById('toast');
-            el.textContent = msg;
-            el.classList.add('show');
-            clearTimeout(_toastTimer);
-            _toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
-        }
+        // ─── REFRESH ──────────────────────────────────────────────
 
-        function fmtNum(n) {
-            if (n >= 1000000000) return (n / 1000000000).toFixed(1).replace('.0', '') + 'B';
-            if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M';
-            if (n >= 1000) return (n / 1000).toFixed(1).replace('.0', '') + 'K';
-            return String(n);
-        }
-
-        function hashify(text) {
-            return text.replace(/#(\w+)/g, '<span class="hashtag">#$1</span>');
-        }
-
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str || '';
-            return div.innerHTML;
-        }
-
-        function formatRelativeTime(iso) {
-            const d = new Date(iso);
-            const diff = Date.now() - d;
-            const m = Math.floor(diff / 60000);
-            if (m < 1) return 'Just now';
-            if (m < 60) return m + 'm';
-            const h = Math.floor(m / 60);
-            if (h < 24) return h + 'h';
-            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        }
-
-        // ─────────────────────────────────────────────
-        // UPDATE NAV AVATAR
-        // ─────────────────────────────────────────────
-        function updateNavAvatar() {
-            const user = getCurrentUser();
-            document.querySelectorAll('.side-av, .nav-av').forEach(el => {
-                el.src = user.avatar;
-                el.onerror = function() { this.style.display = 'none'; };
-            });
-        }
-
-        // ─────────────────────────────────────────────
-        // REFRESH VIDEOS
-        // ─────────────────────────────────────────────
         async function refreshVideos() {
             showToast('Refreshing videos…');
             try {
-                const freshPosts = await getVideoPostsFromSupabase();
-                videoPosts = freshPosts;
+                const fresh = await loadVideoPosts();
+                videoPosts = fresh;
                 let filtered = buildEligibleFeed(feedMode);
                 if (filtered.length === 0) filtered = buildEligibleFeed('foryou');
                 buildFeed(filtered);
                 showToast('Videos refreshed ✓');
+                jumpToSharedPost();
             } catch (err) {
                 showToast('Refresh failed, using cached data');
-                videoPosts = getVideoPostsFromLocal();
                 let filtered = buildEligibleFeed(feedMode);
                 if (filtered.length === 0) filtered = buildEligibleFeed('foryou');
                 buildFeed(filtered);
             }
         }
 
-        // ─────────────────────────────────────────────
-        // REALTIME
-        // ─────────────────────────────────────────────
+        // ─── REALTIME ─────────────────────────────────────────────
+
         function setupRealtime() {
             if (!window.sb) return;
 
-            const profileChannel = window.sb.channel('profile-updates')
+            // Profile updates
+            window.sb.channel('profile-updates')
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' },
                     (payload) => {
                         const updated = payload.new;
@@ -4305,7 +4119,8 @@
                     })
                 .subscribe();
 
-            const followChannel = window.sb.channel('follow-changes')
+            // Follow changes
+            window.sb.channel('follow-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' },
                     () => {
                         loadFollows().then(() => {
@@ -4313,22 +4128,23 @@
                                 const newState = isFollowing(v.authorId);
                                 if (v.following !== newState) {
                                     v.following = newState;
-                                    document.querySelectorAll(`.follow-btn[data-user-id="${v.authorId}"]`)
-                                        .forEach(btn => {
-                                            btn.textContent = newState ? 'Following' : 'Follow';
-                                            btn.classList.toggle('following', newState);
-                                        });
-                                    const dot = document.getElementById('followDot-' + (videoPosts
-                                        .indexOf(v)));
-                                    if (dot) dot.classList.toggle('hidden', newState);
                                 }
                                 return v;
                             });
+                            // Rebuild feed to update follow UI
+                            const filtered = buildEligibleFeed(feedMode);
+                            if (filtered.length === 0 && feedMode === 'following') {
+                                const all = buildEligibleFeed('foryou');
+                                buildFeed(all);
+                            } else {
+                                buildFeed(filtered);
+                            }
                         });
                     })
                 .subscribe();
 
-            const commentLikeChannel = window.sb.channel('comment-like-changes')
+            // Comment likes
+            window.sb.channel('comment-like-changes')
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comments' },
                     (payload) => {
                         const updated = payload.new;
@@ -4338,63 +4154,52 @@
                     })
                 .subscribe();
 
-            const repostChannel = window.sb.channel('repost-feed-changes')
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reposts' },
-                    () => {
-                        refreshVideos();
-                    })
-                .subscribe();
+            // New posts / reposts
+            if (window.PostsAPI && window.PostsAPI.subscribe) {
+                window.PostsAPI.subscribe(() => {
+                    refreshVideos();
+                });
+            }
         }
 
-        // ─────────────────────────────────────────────
-        // INIT
-        // ─────────────────────────────────────────────
+        // ─── INIT ──────────────────────────────────────────────────
+
         async function init() {
+            // Theme sync
             document.addEventListener('themeChanged', function(e) {
                 document.documentElement.setAttribute('data-theme', e.detail.theme);
             });
 
+            // Nav active states
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
             document.querySelector('.nav-item[href="video.html"]')?.classList.add('active');
             document.querySelectorAll('.side-btn').forEach(el => el.classList.remove('active'));
             document.querySelector('.side-btn[href="video.html"]')?.classList.add('active');
 
+            // Avatar
+            function updateNavAvatar() {
+                const user = getCurrentUser();
+                document.querySelectorAll('.side-av, .nav-av').forEach(el => {
+                    el.src = user.avatar;
+                    el.onerror = function() { this.style.display = 'none'; };
+                });
+            }
             updateNavAvatar();
+
             await loadFollows();
 
-            try {
-                const freshPosts = await getVideoPostsFromSupabase();
-                videoPosts = freshPosts;
-            } catch (err) {
-                console.warn('Supabase load failed, using localStorage fallback:', err);
-                videoPosts = getVideoPostsFromLocal();
-            }
-
+            // Load videos
+            const fresh = await loadVideoPosts();
+            videoPosts = fresh;
             let filtered = buildEligibleFeed(feedMode);
             if (filtered.length === 0) filtered = buildEligibleFeed('foryou');
             buildFeed(filtered);
             jumpToSharedPost();
 
-            if (typeof setupProfileSync === 'function') {
-                setupProfileSync(function(user) { refreshVideos(); });
-            }
-
+            // Setup realtime
             setupRealtime();
 
-            window.addEventListener('storage', function(e) {
-                if (e.key === STORAGE_KEY) {
-                    appData = loadData();
-                    refreshVideos();
-                }
-            });
-
-            document.addEventListener('visibilitychange', function() {
-                if (!document.hidden) {
-                    appData = loadData();
-                    refreshVideos();
-                }
-            });
-
+            // Comment input enter
             document.getElementById('commentInput').addEventListener('keydown', function(e) {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -4402,7 +4207,7 @@
                 }
             });
 
-            // Pull-to-refresh
+            // Pull-to-refresh on feed track
             const track = document.getElementById('feedTrack');
             let startY = 0;
             let isPulling = false;
@@ -4434,9 +4239,8 @@
             init();
         }
 
-        // ─────────────────────────────────────────────
-        // EXPOSE GLOBALLY
-        // ─────────────────────────────────────────────
+        // ─── EXPOSE GLOBALLY ──────────────────────────────────────
+
         window.toggleLike = toggleLike;
         window.toggleSave = toggleSave;
         window.toggleFollow = toggleFollow;
@@ -4466,13 +4270,12 @@
         window.toggleYtControls = toggleYtControls;
         window.submitRepost = submitRepost;
         window.submitQuote = submitQuote;
-        window.switchReactionTab = switchReactionTab;
         window.downloadVideo = downloadVideo;
         window.goToProfile = goToProfile;
         window.toggleRepostBannerComment = toggleRepostBannerComment;
         window.toggleOwnRepostComment = toggleOwnRepostComment;
         window.enforceWordLimit = enforceWordLimit;
-        window.updateRepostPill = updateRepostPill;
+        window.refreshVideos = refreshVideos;
     </script>
 </body>
 </html>
