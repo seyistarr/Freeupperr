@@ -2066,7 +2066,6 @@
                 exploreReplyTarget = null,
                 expandedThreads = new Map(),
                 lastDoubleTapTime = 0;
-            let marketCategoryFilter = '';
             const tabScrollPositions = { home: 0, explore: 0, market: 0 };
             let lastScrollY = 0,
                 bottomNavHidden = false;
@@ -2772,22 +2771,50 @@
                 if (!window.ListingsAPI) return;
                 try {
                     const result = await window.ListingsAPI.getListings({ status: 'active', limit: 100 });
-                    marketListings = result.data.map(item => ({
-                        id: item.id,
-                        title: item.title,
-                        price: item.price,
-                        priceFormatted: '₦' + Number(item.price).toLocaleString(),
-                        category: item.market_categories ? item.market_categories.name : 'General',
-                        subcategory: item.market_subcategories ? item.market_subcategories.name : 'General',
-                        seller: item.profiles ? (item.profiles.display_name || item.profiles.username) : 'Unknown',
-                        sellerImg: item.profiles ? (item.profiles.avatar_url || '') : '',
-                        sellerId: item.seller_id,
-                        images: Array.isArray(item.images) ? item.images : (item.images ? [item.images] : ['']),
-                        location: item.location || 'Nigeria',
-                        featured: item.featured || false,
-                        description: item.description || '',
-                        created_at: item.created_at,
-                    }));
+                    // Map images to array of strings for easier display
+                    marketListings = result.data.map(item => {
+                        let images = [];
+                        if (Array.isArray(item.images)) {
+                            images = item.images.map(img => {
+                                // If img is an object with url, extract url; else treat as string
+                                return typeof img === 'object' && img !== null ? (img.url || '') : String(img);
+                            }).filter(Boolean);
+                        } else if (typeof item.images === 'string') {
+                            try {
+                                const parsed = JSON.parse(item.images);
+                                if (Array.isArray(parsed)) {
+                                    images = parsed.map(img => typeof img === 'object' && img !== null ? (img
+                                    .url || '') : String(img)).filter(Boolean);
+                                } else {
+                                    images = [item.images];
+                                }
+                            } catch (e) {
+                                images = [item.images];
+                            }
+                        } else {
+                            images = [];
+                        }
+                        return {
+                            id: item.id,
+                            title: item.title,
+                            price: item.price,
+                            priceFormatted: '₦' + Number(item.price).toLocaleString(),
+                            category: item.market_categories ? item.market_categories.name : 'General',
+                            subcategory: item.market_subcategories ? item.market_subcategories.name : 'General',
+                            seller: item.profiles ? (item.profiles.display_name || item.profiles.username) : 'Unknown',
+                            sellerImg: item.profiles ? (item.profiles.avatar_url || '') : '',
+                            sellerId: item.seller_id,
+                            images: images,
+                            location: item.location || 'Nigeria',
+                            featured: item.featured || false,
+                            description: item.description || '',
+                            created_at: item.created_at,
+                            whatsapp: item.whatsapp || '', // ← NEW
+                            profiles: item.profiles || {},
+                            market_categories: item.market_categories || {},
+                            market_subcategories: item.market_subcategories || {},
+                        };
+                    });
                 } catch (e) {
                     console.error('Error loading market listings:', e);
                     marketListings = [];
@@ -2849,7 +2876,6 @@
                 activeMarketSubcategory = 'All';
                 renderMarketCategoryBars();
                 applyMarketFiltersAndRender();
-                // Load subcategories for this category (if not All)
                 if (cat !== 'All') {
                     const catObj = marketCategories.find(c => c.name === cat);
                     if (catObj) {
@@ -2999,10 +3025,18 @@
                 document.getElementById('modalLocationText').textContent = product.location + ' • Active Today';
                 document.getElementById('modalDesc').textContent = product.description || 'No description provided.';
 
-                const message = encodeURIComponent(
-                    `Hello ${product.seller}, I saw your listing for "${product.title}" (${product.priceFormatted}) under ${product.category} -> ${product.subcategory} on FreeUpper. Is it available?`
+                // WhatsApp logic
+                const whatsappNumber = product.whatsapp || product.profiles?.phone || '';
+                if (whatsappNumber) {
+                    const cleanNumber = whatsappNumber.replace(/\D/g, '');
+                    const message = encodeURIComponent(
+                        `Hello ${product.seller}, I saw your listing for "${product.title}" (${product.priceFormatted}) under ${product.category} -> ${product.subcategory} on FreeUpper. Is it available?`
                     );
-                document.getElementById('whatsappBtn').href = `https://wa.me/?text=${message}`;
+                    document.getElementById('whatsappBtn').href = `https://wa.me/${cleanNumber}?text=${message}`;
+                    document.getElementById('whatsappBtn').style.display = 'flex';
+                } else {
+                    document.getElementById('whatsappBtn').style.display = 'none';
+                }
 
                 const modalDots = document.getElementById('modalDots');
                 modalDots.innerHTML = '';
@@ -3254,7 +3288,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // THREE-DOT MENU
+            // THREE-DOT MENU (with report)
             // ───────────────────────────────────────────────────────────────
 
             function togglePostMore(postId, event) {
@@ -3262,7 +3296,6 @@
                 const overlay = document.getElementById('post-more-' + postId);
                 if (!overlay) return;
                 const isOpen = overlay.classList.contains('open');
-                // Close all others
                 document.querySelectorAll('.post-more-overlay').forEach(el => el.classList.remove('open'));
                 if (!isOpen) {
                     overlay.classList.add('open');
@@ -3287,9 +3320,27 @@
             function reportPost(postId) {
                 const reason = prompt('Please describe why you are reporting this post:');
                 if (reason && reason.trim().length > 0) {
-                    window.PostsAPI.reportPost(postId, reason)
-                        .then(() => showToast('Report submitted. Thank you for helping keep Freeupper safe.', 'p'))
-                        .catch(err => showToast(err.message, 'r'));
+                    // Use PostsAPI.reportPost (if available)
+                    if (window.PostsAPI && typeof window.PostsAPI.reportPost === 'function') {
+                        window.PostsAPI.reportPost(postId, reason)
+                            .then(() => showToast('Report submitted. Thank you for helping keep Freeupper safe.', 'p'))
+                            .catch(err => showToast(err.message, 'r'));
+                    } else {
+                        // Fallback: direct insert
+                        const user = getCurrentUser();
+                        if (!user || !user.isLoggedIn) { showToast('Please sign in', 'o'); return; }
+                        window.sb.from('reports').insert({
+                            reporter_id: user.id,
+                            target_type: 'post',
+                            target_id: postId,
+                            reason: reason,
+                            status: 'pending',
+                            created_at: new Date().toISOString()
+                        }).then(({ error }) => {
+                            if (error) showToast('Error: ' + error.message, 'r');
+                            else showToast('Report submitted', 'p');
+                        });
+                    }
                 } else {
                     showToast('Report cancelled', 'o');
                 }
@@ -4459,14 +4510,11 @@
                     co.innerHTML = renderMarketView();
                     setCommentBarVisible(false);
                     refreshTabStates();
-                    // Initialize marketplace after DOM render
                     setTimeout(async () => {
                         await loadMarketCategories();
-                        // Subcategories will be loaded on category selection
                         await loadMarketListings();
                         renderMarketCategoryBars();
                         applyMarketFiltersAndRender();
-                        // Bind search input
                         const searchInput = document.getElementById('searchInput');
                         if (searchInput) {
                             searchInput.oninput = function(e) { handleMarketSearch(this.value); };
@@ -4648,7 +4696,6 @@
             // ───────────────────────────────────────────────────────────────
 
             function setupRealtime() {
-                // Posts realtime
                 if (window.PostsAPI && window.PostsAPI.subscribe) {
                     window.PostsAPI.subscribe((payload) => {
                         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -4661,7 +4708,6 @@
                     });
                 }
 
-                // Listings realtime
                 if (window.ListingsAPI && window.ListingsAPI.subscribe) {
                     window.ListingsAPI.subscribe((payload) => {
                         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' ||
@@ -4682,7 +4728,6 @@
 
             async function reloadData() {
                 await reloadPosts();
-                // Market data will be loaded when the tab is active
                 await loadFollows();
                 await loadBookmarks();
                 await loadShares();
@@ -4721,14 +4766,12 @@
                 await reloadData();
                 setupRealtime();
 
-                // Top header: messages button
                 document.getElementById('topMsgBtn').addEventListener('click', () => {
                     window.location.href = 'chat.html';
                 });
 
                 document.getElementById('logo-text').addEventListener('click', refreshHome);
 
-                // Tab buttons
                 document.getElementById('tab-foryou').addEventListener('click', () => setTab('foryou'));
                 document.getElementById('tab-explore').addEventListener('click', () => setTab('explore'));
                 document.getElementById('tab-market').addEventListener('click', () => setTab('market'));
@@ -4741,7 +4784,6 @@
                     });
                 }
 
-                // Filter drawer
                 document.getElementById('filter-backdrop').addEventListener('click', closeFilterDrawer);
                 document.getElementById('drawer-close-btn').addEventListener('click', closeFilterDrawer);
                 document.getElementById('clear-filter-btn').addEventListener('click', () => { closeFilterDrawer();
@@ -4750,7 +4792,6 @@
                     uiPage = 'home';
                     renderUI(); });
 
-                // Global comment bar
                 const commentTextarea = document.getElementById('global-comment-textarea');
                 if (commentTextarea) {
                     commentTextarea.addEventListener('input', function() { this.style.height = 'auto';
@@ -4764,7 +4805,6 @@
                     submitCommentFromBar);
                 document.getElementById('reply-cancel-btn').addEventListener('click', cancelReply);
 
-                // Explore comment bar
                 const exploreCommentTextarea = document.getElementById('explore-comment-textarea');
                 if (exploreCommentTextarea) {
                     exploreCommentTextarea.addEventListener('input', function() { this.style.height = 'auto';
@@ -4780,19 +4820,16 @@
                 cancelExploreReply);
                 document.getElementById('explore-back-btn').addEventListener('click', closeExploreFullscreen);
 
-                // Lightbox
                 document.getElementById('lightbox').addEventListener('click', function(e) { if (e.target ===
                         this || e.target.classList.contains('lightbox-close')) closeLightbox(); });
                 document.querySelector('.lightbox-close').addEventListener('click', closeLightbox);
 
-                // Webview
                 document.getElementById('webview-close-btn').addEventListener('click', closeInAppWebView);
                 document.getElementById('external-browser-btn').addEventListener('click', () => { if (window
                         ._currentWebviewUrl) window.open(window._currentWebviewUrl, '_blank'); });
                 document.getElementById('inapp-webview-overlay').addEventListener('click', function(e) { if (
                         e.target === this) closeInAppWebView(); });
 
-                // Share modal
                 document.getElementById('share-close-btn').addEventListener('click', closeShareModal);
                 document.getElementById('share-modal').addEventListener('click', function(e) {
                     if (e.target === this) closeShareModal();
@@ -4804,7 +4841,6 @@
                     });
                 });
 
-                // Keyboard shortcuts
                 document.addEventListener('keydown', e => {
                     if (e.key === 'Escape') {
                         closeLightbox();
@@ -4821,7 +4857,6 @@
                     }
                 });
 
-                // Click outside post more menu to close
                 document.addEventListener('click', function(e) {
                     if (!e.target.closest('.post-more-btn') && !e.target.closest('.post-more-overlay')) {
                         closeAllPostMenus();
@@ -4930,7 +4965,6 @@
             window.reportPost = reportPost;
             window.closeAllPostMenus = closeAllPostMenus;
 
-            // Market exports
             window.selectMarketCategory = selectMarketCategory;
             window.selectMarketSubcategory = selectMarketSubcategory;
             window.openProductModal = openProductModal;
@@ -4948,7 +4982,6 @@
             window.changeMarketImage = changeMarketImage;
             window.triggerToast = triggerToast;
 
-            // Start the app
             if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
             else init();
 
