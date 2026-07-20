@@ -2294,16 +2294,15 @@
     </nav>
 
     <!-- ═══════════════════ SCRIPTS ═══════════════════ -->
-    <script src="global.js"></script>
+    <!-- global.js is loaded once in <head> — DO NOT DUPLICATE -->
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
         (function() {
             'use strict';
 
             // ───────────────────────────────────────────────────────────────
-            // DATA LAYER - ALL SUPABASE
+            // CONSTANTS
             // ───────────────────────────────────────────────────────────────
-
             const CVK = 'freeupper_comments_visible';
             const UCK = 'freeupper_user_categories';
             const REPLY_BATCH = 3,
@@ -2317,17 +2316,15 @@
                 posts: [],
                 userReactions: {},
                 marketItems: [],
-                nextMarketId: 1
             };
 
-            // ── Caches for follows, bookmarks, shares (Supabase sets) ──
+            // ── Caches for follows, bookmarks, shares (Supabase) ──
             let followingSet = new Set();
             let bookmarksSet = new Set();
             let sharesSet = new Set();
 
             // ── DOM refs ──
             const content = document.getElementById('user-content');
-            const toastEl = document.getElementById('toast');
 
             // ───────────────────────────────────────────────────────────────
             // HELPERS
@@ -2530,7 +2527,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MEDIA HELPERS (supports both new `media` array and old `mediaUrl`)
+            // MEDIA HELPERS
             // ───────────────────────────────────────────────────────────────
             function isYouTubeUrl(url) {
                 if (!url) return false;
@@ -2556,7 +2553,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD MEDIA HTML — FULL WIDTH, NO BORDER RADIUS
+            // BUILD MEDIA HTML
             // ───────────────────────────────────────────────────────────────
             function buildMediaHTML(p, postIndex) {
                 const mediaItems = getMediaItems(p);
@@ -2604,7 +2601,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // CAROUSEL (multiple images)
+            // CAROUSEL
             // ───────────────────────────────────────────────────────────────
             function buildCarousel(mediaItems, postIndex) {
                 const items = mediaItems.filter(m => m.url).slice(0, 5);
@@ -2778,7 +2775,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // VIDEO AUTO-PLAY (scoped)
+            // VIDEO AUTO-PLAY
             // ───────────────────────────────────────────────────────────────
             let videoObserver = null;
             let currentlyPlayingVideo = null;
@@ -2847,8 +2844,6 @@
 
                 videoElements.forEach(vid => videoObserver.observe(vid));
             }
-
-            function pauseHomepageVideos() { pauseAllVideos(); }
 
             // ───────────────────────────────────────────────────────────────
             // FOLLOW, BOOKMARK, SHARE – Supabase
@@ -2946,7 +2941,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // POSTS, COMMENTS, LIKES – Supabase via PostsAPI
+            // POSTS — via PostsAPI (Supabase)
             // ───────────────────────────────────────────────────────────────
 
             async function reloadPosts() {
@@ -2980,7 +2975,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // REACTIONS (toggle like) – Supabase
+            // REACTIONS – Supabase
             // ───────────────────────────────────────────────────────────────
 
             async function toggleReaction(postId) {
@@ -3045,7 +3040,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD FOLLOW BUTTON
+            // FOLLOW BUTTON
             // ───────────────────────────────────────────────────────────────
 
             function buildFollowButton(authorId, authorName) {
@@ -3071,7 +3066,7 @@
             };
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD ACTIONS ROW — FIXED: handles p.comments as number
+            // ACTIONS ROW — FIXED: p.comments as number
             // ───────────────────────────────────────────────────────────────
             function buildActionsRow(p) {
                 const bm = isBookmarked(p.id),
@@ -3087,7 +3082,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD POST HTML – using post.profile (single source of truth)
+            // BUILD POST HTML
             // ───────────────────────────────────────────────────────────────
             function buildPostHTML(p, index) {
                 const profile = p.profile || {};
@@ -3100,7 +3095,6 @@
                 const da = author.name;
                 const aa = author.avatar;
                 const verifiedStatus = author.verified_status;
-                const isVerified = author.verified;
 
                 const hd = p.description && p.description.trim().length > 0;
                 const pt = (p.content || '').substring(0, 250);
@@ -3110,7 +3104,6 @@
                     '';
                 const mh = buildMediaHTML(p, index);
                 const followBtn = buildFollowButton(p.user_id, da);
-
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
 
                 return `<article class="feed-post" data-post-id="${p.id}" data-author-id="${author.id}">
@@ -3139,7 +3132,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // STATE & FEED RENDER (updated to use profile data in filtering)
+            // STATE & FEED RENDER
             // ───────────────────────────────────────────────────────────────
             let uiPage = 'home',
                 currentCategoryFilter = '',
@@ -3203,7 +3196,6 @@
                     p.sort((a, b) => {
                         const score = p => {
                             const ah = (Date.now() - new Date(p.timestamp || p.date)) / 36e5;
-                            // FIX: p.comments might be a number, not an array
                             const commentCount = Array.isArray(p.comments) ? p.comments.filter(c => c
                                 .approved !== false).length : (p.comments || 0);
                             const eg = (p.views || 0) + ((p.reactions.like || 0) * 2) + (commentCount *
@@ -3498,7 +3490,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // COMMENTS – Supabase (updated to use comment.profile)
+            // COMMENTS – Supabase
             // ───────────────────────────────────────────────────────────────
 
             function getAllDescendants(pid, comments) { const r = [];
@@ -3550,7 +3542,6 @@
                 const username = author.name;
                 const avatar = author.avatar;
                 const verifiedStatus = author.verified_status;
-                const isVerified = author.verified;
 
                 const ds = getAllDescendants(c.id, allComments),
                     hr = ds.length > 0,
@@ -3606,7 +3597,6 @@
                 const username = author.name;
                 const avatar = author.avatar;
                 const verifiedStatus = author.verified_status;
-                const isVerified = author.verified;
 
                 const lc = parseInt(localStorage.getItem('comment-like-' + r.id) || '0'),
                     isL = lc > 0;
@@ -3639,7 +3629,6 @@
               </div>`;
             }
 
-            // ── Add comment (Supabase) ──
             async function addComment(postId, parentId, message) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
@@ -3649,7 +3638,6 @@
                             try {
                                 const comment = await window.PostsAPI.addComment(postId, parentId,
                                 message);
-                                // FIX 4: ensure p.comments is an array before pushing
                                 if (!Array.isArray(p.comments)) p.comments = [];
                                 p.comments.push(comment);
                                 p.commentCount = (p.commentCount || 0) + 1;
@@ -3877,7 +3865,6 @@
                 const aa = author.avatar;
                 const da = author.name;
                 const verifiedStatus = author.verified_status;
-                const isVerified = author.verified;
                 const mh = buildMediaHTML(post, 'single');
                 const bm = isBookmarked(post.id);
                 const comments = Array.isArray(post.comments) ? post.comments.filter(c => c.approved !== false) : [],
@@ -4042,7 +4029,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // EXPLORE GRID (updated to use profile data)
+            // EXPLORE GRID
             // ───────────────────────────────────────────────────────────────
             function renderExploreGrid() {
                 const co = document.getElementById('user-content');
@@ -4094,7 +4081,6 @@
             }
 
             function buildExploreCards(posts) {
-                const cu = getCurrentUser();
                 return posts.map(post => {
                     const profile = post.profile || {};
                     const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : {
@@ -4148,7 +4134,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MARKET – Supabase
+            // MARKET
             // ───────────────────────────────────────────────────────────────
 
             const MARKET_CATEGORIES = [
