@@ -23,7 +23,7 @@
 
   // ── Map a raw post row (with profile) to a clean client object ──
   function mapPost(row, userLikes = new Set(), myRepost = null) {
-    const profile = row.profiles || {};
+    const profile = row.profiles || null;  // CHANGED: explicitly null if missing
 
     // Normalize media array
     let media = row.media;
@@ -62,8 +62,8 @@
       myRepost: !!myRepost,
       myRepostText: myRepost ? (myRepost.comment || '') : '',
       myRepostTime: myRepost ? myRepost.created_at : null,
-      // Profile data (single source of truth)
-      profile: {
+      // Profile data (single source of truth) – now returns null if profile missing
+      profile: profile ? {
         id: profile.id,
         display_name: profile.display_name || 'Anonymous',
         username: profile.username || '',
@@ -71,7 +71,7 @@
         verified: profile.verified || false,
         verified_status: profile.verified_status || 'none',
         is_private: profile.is_private || false,
-      },
+      } : null,
     };
   }
 
