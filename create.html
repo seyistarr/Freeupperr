@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -381,6 +382,14 @@
             min-height: 100px;
             line-height: 1.6;
         }
+        select.form-inp {
+            appearance: auto;
+            cursor: pointer;
+        }
+        select.form-inp option {
+            background: var(--bg2);
+            color: var(--text);
+        }
 
         .char-c {
             font-size: 11px;
@@ -470,6 +479,7 @@
             transform: none;
         }
 
+        /* Category selector (button style for post) */
         .category-selector {
             width: 100%;
             padding: 12px 16px;
@@ -498,6 +508,22 @@
             stroke-width: 2;
             stroke-linecap: round;
             stroke-linejoin: round;
+        }
+
+        /* ── new: category select dropdowns for marketplace ── */
+        .category-row {
+            display: flex;
+            gap: 10px;
+        }
+        .category-row .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        .category-row .form-inp {
+            padding: 12px 14px;
+        }
+        .category-row .form-lbl {
+            font-size: 11px;
         }
 
         .modal-overlay {
@@ -1134,6 +1160,32 @@
         .side-nav::-webkit-scrollbar {
             width: 0;
         }
+
+        /* ── loading spinner for categories ── */
+        .cat-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px 0;
+            gap: 10px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .cat-loading .spinner-sm {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--brd2);
+            border-top-color: var(--p);
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+            flex-shrink: 0;
+        }
+        .cat-empty {
+            padding: 12px 0;
+            color: var(--muted2);
+            font-size: 13px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -1218,7 +1270,7 @@
                             <input class="form-inp" id="postDescription" type="text" placeholder="Brief description...">
                         </div>
 
-                        <!-- Category -->
+                        <!-- Category (post) – still uses predefined list via modal -->
                         <div class="form-group">
                             <label class="form-lbl">Category</label>
                             <button class="category-selector" onclick="openCategoryModal('post')">
@@ -1262,7 +1314,7 @@
                     </div>
                 </div>
 
-                <!-- Panel: Sell Item -->
+                <!-- Panel: Sell Item – DATABASE-DRIVEN CATEGORIES -->
                 <div class="panel" id="panel-sell">
                     <div id="sell-form">
                         <!-- Item Name -->
@@ -1280,15 +1332,23 @@
                             </div>
                         </div>
 
-                        <!-- Category -->
-                        <div class="form-group">
-                            <label class="form-lbl">Category</label>
-                            <button class="category-selector" onclick="openCategoryModal('market')">
-                                <span id="marketCategoryDisplay" class="placeholder">Select a category</span>
-                                <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                            </button>
-                            <input type="hidden" id="itemCategory" value="">
+                        <!-- ── CATEGORY & SUBCATEGORY (database-driven) ── -->
+                        <div class="category-row">
+                            <div class="form-group">
+                                <label class="form-lbl">Category</label>
+                                <select class="form-inp" id="itemCategorySelect" onchange="onCategoryChange(this.value)">
+                                    <option value="">Loading…</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-lbl">Subcategory</label>
+                                <select class="form-inp" id="itemSubcategorySelect" disabled>
+                                    <option value="">Select category first</option>
+                                </select>
+                            </div>
                         </div>
+                        <input type="hidden" id="itemCategoryId" value="">
+                        <input type="hidden" id="itemSubcategoryId" value="">
 
                         <!-- Condition -->
                         <div class="form-group">
@@ -1376,7 +1436,7 @@
     </div>
 
     <!-- ══════════════════════════════════════════
-         CATEGORY MODAL
+         CATEGORY MODAL (for posts only)
     ══════════════════════════════════════════ -->
     <div class="modal-overlay" id="categoryModal" onclick="if(event.target===this)closeCategoryModal()">
         <div class="modal-sheet" onclick="event.stopPropagation()">
@@ -1420,27 +1480,12 @@
         const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload';
         const CLOUDINARY_MARKET_UPLOAD_PRESET = 'market_upload';
 
+        // Predefined categories for posts (unchanged – not database-driven)
         const PREDEFINED_CATEGORIES = [
             "Technology", "Education", "Campus gist", "News & Updates",
             "Entertainment", "Movies", "Lifestyle", "Business & Finance",
             "Opinion / Thoughts", "Health & Fitness", "Travel & Culture", "Gaming",
             "Memes", "Science", "Fashion", "Music"
-        ];
-
-        const MARKET_CATEGORIES = [
-            "Home & Garden", "Entertainment", "Clothing & Accessories",
-            "Family", "Health & Beauty", "Electronics", "Hobbies",
-            "Classified", "Vehicle", "Home for Sales", "Service",
-            "Tools", "Furniture", "Garden Appliance", "Household",
-            "Books, Movies & Music", "Video Games", "Jewelry & Accessories",
-            "Bags & Luggage", "Men's Clothing & Shoes", "Women's Clothing & Shoes",
-            "Toys & Games", "Baby & Kids", "Pet Supplies", "Mobile Phones",
-            "Electronics & Computers", "Sports", "Musical Instruments",
-            "Arts & Crafts", "Antiques & Collectibles", "Auto Parts",
-            "Bicycles", "Garage Sale", "Miscellaneous", "Cars & Trucks",
-            "Motorcycles", "Powersports", "RVs & Campers", "Boats",
-            "Commercial & Industrial", "Trailers", "Other", "Home sales",
-            "Rental", "Repairs", "Maintenance", "Others"
         ];
 
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -1451,12 +1496,17 @@
         let marketLat = null;
         let marketLng = null;
         let selectedPostCategory = '';
-        let selectedMarketCategory = '';
         let selectedCondition = 'New';
         let lastUploadTime = 0;
         let categoryModalMode = 'post';
         let fullscreenImages = [];
         let fullscreenIndex = 0;
+
+        // ── Database-driven category state ──
+        let dbCategories = []; // [{ id, name, sort_order, active }]
+        let dbSubcategories = []; // [{ id, category_id, name, sort_order, active }]
+        let selectedCategoryId = '';
+        let selectedSubcategoryId = '';
 
         // ─── No localStorage – all data goes to Supabase ───
 
@@ -1484,23 +1534,23 @@
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
             el.classList.add('active');
             document.getElementById('panel-' + tab).classList.add('active');
+            // Reload categories if switching to sell panel
+            if (tab === 'sell') loadCategories();
         }
 
         // ══════════════════════════════════════════
-        // CATEGORY MODAL
+        // CATEGORY MODAL (for posts – static list)
         // ══════════════════════════════════════════
         function openCategoryModal(mode) {
             categoryModalMode = mode;
             const grid = document.getElementById('categoryModalGrid');
             const title = document.getElementById('categoryModalTitle');
+            const selected = selectedPostCategory;
 
-            const categories = mode === 'post' ? PREDEFINED_CATEGORIES : MARKET_CATEGORIES;
-            const selected = mode === 'post' ? selectedPostCategory : selectedMarketCategory;
+            title.textContent = 'Select Category';
 
-            title.textContent = mode === 'post' ? 'Select Category' : 'Select Market Category';
-
-            grid.innerHTML = categories.map(cat =>
-                `<div class="modal-category-item ${selected === cat ? 'active' : ''}" onclick="selectCategory('${cat.replace(/'/g, "\\'")}')">${cat}</div>`
+            grid.innerHTML = PREDEFINED_CATEGORIES.map(cat =>
+                `<div class="modal-category-item ${selected === cat ? 'active' : ''}" onclick="selectPostCategory('${cat.replace(/'/g, "\\'")}')">${cat}</div>`
             ).join('');
 
             document.getElementById('categoryModal').classList.add('open');
@@ -1510,18 +1560,11 @@
             document.getElementById('categoryModal').classList.remove('open');
         }
 
-        function selectCategory(cat) {
-            if (categoryModalMode === 'post') {
-                selectedPostCategory = cat;
-                document.getElementById('postCategory').value = cat;
-                document.getElementById('postCategoryDisplay').textContent = cat;
-                document.getElementById('postCategoryDisplay').classList.remove('placeholder');
-            } else {
-                selectedMarketCategory = cat;
-                document.getElementById('itemCategory').value = cat;
-                document.getElementById('marketCategoryDisplay').textContent = cat;
-                document.getElementById('marketCategoryDisplay').classList.remove('placeholder');
-            }
+        function selectPostCategory(cat) {
+            selectedPostCategory = cat;
+            document.getElementById('postCategory').value = cat;
+            document.getElementById('postCategoryDisplay').textContent = cat;
+            document.getElementById('postCategoryDisplay').classList.remove('placeholder');
             closeCategoryModal();
             document.querySelectorAll('.modal-category-item').forEach(el => {
                 el.classList.toggle('active', el.textContent === cat);
@@ -1588,7 +1631,7 @@
                 status.style.color = 'var(--danger)';
                 return;
             }
-            status.textContent = 'Detecting location...';
+            status.textContent = 'Detecting location…';
             status.style.color = 'var(--muted)';
 
             navigator.geolocation.getCurrentPosition(
@@ -1695,7 +1738,7 @@
                 document.getElementById('postMediaUrl').value = '';
                 document.getElementById('postMediaType').value = '';
                 document.getElementById('postPublicId').value = '';
-                input.placeholder = 'Paste image or YouTube link...';
+                input.placeholder = 'Paste image or YouTube link…';
                 return;
             }
 
@@ -1834,7 +1877,7 @@
             input.value = '';
             input.style.color = '';
             input.style.fontWeight = '';
-            input.placeholder = 'Paste image or YouTube link...';
+            input.placeholder = 'Paste image or YouTube link…';
             document.getElementById('postImageGrid').innerHTML = '';
             document.getElementById('postFileInput').value = '';
             showToast('Media removed', 'o');
@@ -2055,7 +2098,143 @@
         }
 
         // ══════════════════════════════════════════
-        // SUBMIT POST – using PostsAPI.createPost (no author fields)
+        // DATABASE-DRIVEN CATEGORIES (marketplace)
+        // ══════════════════════════════════════════
+
+        async function loadCategories() {
+            const sel = document.getElementById('itemCategorySelect');
+            // Show loading state
+            sel.innerHTML = '<option value="">Loading…</option>';
+            sel.disabled = true;
+
+            try {
+                const { data, error } = await window.sb
+                    .from('market_categories')
+                    .select('*')
+                    .eq('active', true)
+                    .order('sort_order', { ascending: true });
+
+                if (error) throw error;
+
+                dbCategories = data || [];
+
+                sel.innerHTML = '<option value="">Select a category</option>';
+                dbCategories.forEach(cat => {
+                    const opt = document.createElement('option');
+                    opt.value = cat.id;
+                    opt.textContent = cat.name;
+                    sel.appendChild(opt);
+                });
+
+                sel.disabled = false;
+
+                // If there's a previously selected category, re-select it
+                if (selectedCategoryId) {
+                    sel.value = selectedCategoryId;
+                    onCategoryChange(selectedCategoryId);
+                }
+
+                // If no categories exist, show a message
+                if (dbCategories.length === 0) {
+                    sel.innerHTML = '<option value="">No categories available</option>';
+                    sel.disabled = true;
+                    document.getElementById('itemSubcategorySelect').innerHTML =
+                        '<option value="">No subcategories</option>';
+                    document.getElementById('itemSubcategorySelect').disabled = true;
+                }
+
+            } catch (err) {
+                console.error('Failed to load categories:', err);
+                sel.innerHTML = '<option value="">Error loading categories</option>';
+                sel.disabled = true;
+                showToast('Could not load categories. Please refresh.', 'r');
+            }
+        }
+
+        async function loadSubcategories(categoryId) {
+            const sel = document.getElementById('itemSubcategorySelect');
+            sel.innerHTML = '<option value="">Loading…</option>';
+            sel.disabled = true;
+
+            if (!categoryId) {
+                sel.innerHTML = '<option value="">Select a category first</option>';
+                sel.disabled = true;
+                selectedSubcategoryId = '';
+                document.getElementById('itemSubcategoryId').value = '';
+                return;
+            }
+
+            try {
+                const { data, error } = await window.sb
+                    .from('market_subcategories')
+                    .select('*')
+                    .eq('category_id', categoryId)
+                    .eq('active', true)
+                    .order('sort_order', { ascending: true });
+
+                if (error) throw error;
+
+                dbSubcategories = data || [];
+
+                sel.innerHTML = '<option value="">Select a subcategory</option>';
+                dbSubcategories.forEach(sub => {
+                    const opt = document.createElement('option');
+                    opt.value = sub.id;
+                    opt.textContent = sub.name;
+                    sel.appendChild(opt);
+                });
+
+                sel.disabled = (dbSubcategories.length === 0);
+
+                if (dbSubcategories.length === 0) {
+                    sel.innerHTML = '<option value="">No subcategories</option>';
+                }
+
+                // Re-select previously selected subcategory if it exists
+                if (selectedSubcategoryId) {
+                    sel.value = selectedSubcategoryId;
+                }
+
+                // Update hidden fields
+                document.getElementById('itemCategoryId').value = categoryId;
+
+            } catch (err) {
+                console.error('Failed to load subcategories:', err);
+                sel.innerHTML = '<option value="">Error loading subcategories</option>';
+                sel.disabled = true;
+                showToast('Could not load subcategories. Please refresh.', 'r');
+            }
+        }
+
+        function onCategoryChange(categoryId) {
+            selectedCategoryId = categoryId;
+            // Clear subcategory selection
+            selectedSubcategoryId = '';
+            document.getElementById('itemSubcategoryId').value = '';
+            loadSubcategories(categoryId);
+        }
+
+        // Called when subcategory dropdown changes
+        document.addEventListener('DOMContentLoaded', function() {
+            const subSel = document.getElementById('itemSubcategorySelect');
+            if (subSel) {
+                subSel.addEventListener('change', function() {
+                    selectedSubcategoryId = this.value;
+                    document.getElementById('itemSubcategoryId').value = this.value;
+                });
+            }
+
+            // Also update hidden fields when category changes via dropdown
+            const catSel = document.getElementById('itemCategorySelect');
+            if (catSel) {
+                catSel.addEventListener('change', function() {
+                    document.getElementById('itemCategoryId').value = this.value;
+                });
+            }
+        });
+
+        // ══════════════════════════════════════════
+        // SUBMIT POST – using PostsAPI.createPost
         // ══════════════════════════════════════════
         function submitPost() {
             console.log('🔍 submitPost called');
@@ -2095,10 +2274,9 @@
 
             const btn = document.querySelector('.btn-primary[onclick="submitPost()"]');
             const originalText = btn.textContent;
-            btn.textContent = 'Publishing...';
+            btn.textContent = 'Publishing…';
             btn.disabled = true;
 
-            // Build the media array (if media exists)
             let media = [];
             if (mediaUrl) {
                 media = [{
@@ -2110,7 +2288,6 @@
 
             console.log('📦 Building media array:', media);
 
-            // Call PostsAPI.createPost – no author fields; posts.js will join profiles
             PostsAPI.createPost({
                     title: title,
                     description: description,
@@ -2118,14 +2295,12 @@
                     category: category || 'General',
                     tags: postTags.slice(),
                     media: media,
-                    // Also pass old fields for backward compatibility
                     mediaUrl: mediaUrl,
                     mediaType: mediaType
                 })
                 .then(function(result) {
                     console.log('✅ Post created successfully:', result);
 
-                    // Reset form
                     document.getElementById('postTitle').value = '';
                     document.getElementById('postContent').value = '';
                     document.getElementById('postDescription').value = '';
@@ -2139,7 +2314,7 @@
                     input.value = '';
                     input.style.color = '';
                     input.style.fontWeight = '';
-                    input.placeholder = 'Paste image or YouTube link...';
+                    input.placeholder = 'Paste image or YouTube link…';
                     document.getElementById('postImageGrid').innerHTML = '';
                     postTags = [];
                     renderPostTags();
@@ -2158,7 +2333,7 @@
         }
 
         // ══════════════════════════════════════════
-        // SUBMIT ITEM – direct Supabase insert (uses profiles for seller info)
+        // SUBMIT ITEM – uses category_id & subcategory_id
         // ══════════════════════════════════════════
         function submitItem() {
             console.log('🔍 submitItem called');
@@ -2176,11 +2351,14 @@
             var priceInput = document.getElementById('itemPrice');
             var price = priceInput.value.replace(/[^0-9,]/g, '').replace(/,/g, '');
             const description = document.getElementById('itemDescription').value.trim();
-            const category = document.getElementById('itemCategory').value;
             const location = document.getElementById('itemLocation').value.trim();
             const condition = document.getElementById('itemCondition').value;
             const lat = document.getElementById('itemLat').value;
             const lng = document.getElementById('itemLng').value;
+
+            // Get category and subcategory IDs from hidden fields
+            const categoryId = document.getElementById('itemCategoryId').value;
+            const subcategoryId = document.getElementById('itemSubcategoryId').value;
 
             if (!title || !price) {
                 showToast('Item name and price are required', 'o');
@@ -2190,12 +2368,15 @@
                 showToast('Enter a valid price', 'o');
                 return;
             }
+            if (!categoryId) {
+                showToast('Please select a category', 'o');
+                return;
+            }
             if (marketImages.some(function(i) { return i.uploading; })) {
                 showToast('Please wait for images to finish uploading', 'o');
                 return;
             }
 
-            // Build images array of objects with url and public_id
             var imageObjects = marketImages.map(function(img) {
                 return {
                     url: img.url,
@@ -2205,17 +2386,18 @@
 
             var btn = document.querySelector('.btn-primary[onclick="submitItem()"]');
             var originalText = btn.textContent;
-            btn.textContent = 'Listing...';
+            btn.textContent = 'Listing…';
             btn.disabled = true;
 
-            // Direct Supabase insert – seller_name and seller_avatar come from the user's profile
+            // Insert with category_id and subcategory_id (foreign keys)
             window.sb
-                .from('market_items')
+                .from('market_listings')
                 .insert({
                     seller_id: user.id,
                     title: title,
                     price: parseFloat(price),
-                    category: category || 'General',
+                    category_id: categoryId,
+                    subcategory_id: subcategoryId || null,
                     location: location || 'Campus',
                     lat: lat ? parseFloat(lat) : null,
                     lng: lng ? parseFloat(lng) : null,
@@ -2235,9 +2417,6 @@
                     document.getElementById('itemTitle').value = '';
                     document.getElementById('itemPrice').value = '';
                     document.getElementById('itemDescription').value = '';
-                    document.getElementById('itemCategory').value = '';
-                    document.getElementById('marketCategoryDisplay').textContent = 'Select a category';
-                    document.getElementById('marketCategoryDisplay').classList.add('placeholder');
                     document.getElementById('itemLocation').value = '';
                     document.getElementById('itemLat').value = '';
                     document.getElementById('itemLng').value = '';
@@ -2249,11 +2428,23 @@
                     marketImages = [];
                     renderMarketImages();
                     fullscreenImages = [];
-                    selectedMarketCategory = '';
                     document.querySelectorAll('.condition-opt').forEach(function(c) { c.classList.remove('active'); });
                     document.querySelector('.condition-opt[data-condition="New"]').classList.add('active');
                     selectedCondition = 'New';
                     document.getElementById('itemCondition').value = 'New';
+
+                    // Reset category dropdowns
+                    selectedCategoryId = '';
+                    selectedSubcategoryId = '';
+                    document.getElementById('itemCategoryId').value = '';
+                    document.getElementById('itemSubcategoryId').value = '';
+                    const catSel = document.getElementById('itemCategorySelect');
+                    if (catSel) catSel.value = '';
+                    const subSel = document.getElementById('itemSubcategorySelect');
+                    if (subSel) {
+                        subSel.innerHTML = '<option value="">Select a category first</option>';
+                        subSel.disabled = true;
+                    }
 
                     showToast('Item listed! 🛍️', 'g');
                     btn.textContent = originalText;
@@ -2310,10 +2501,7 @@
         function init() {
             updateNavAvatar();
 
-            // Set active state for bottom nav – highlight the raised Create button
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            // No nav-item is active on create page; the raised button stands out
-
             document.querySelectorAll('.side-btn').forEach(el => el.classList.remove('active'));
             document.querySelector('.side-btn[href="create.html"]')?.classList.add('active');
 
@@ -2336,7 +2524,16 @@
                 document.documentElement.setAttribute('data-theme', e.detail.theme);
             });
 
-            console.log('✅ create.html initialized');
+            // Load categories for the sell panel if it's the active panel
+            const activePanel = document.querySelector('.panel.active');
+            if (activePanel && activePanel.id === 'panel-sell') {
+                loadCategories();
+            } else {
+                // Pre-load categories in the background so they're ready
+                setTimeout(loadCategories, 500);
+            }
+
+            console.log('✅ create.html initialized (database-driven categories)');
             console.log('📦 PostsAPI available:', !!window.PostsAPI);
         }
 
