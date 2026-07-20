@@ -774,8 +774,8 @@
             background: #111;
             cursor: pointer;
             aspect-ratio: 1 / 1;
-            opacity: 0;
-            transform: scale(.97);
+            opacity: 1;           /* visible by default */
+            transform: scale(1);
             transition: opacity .35s ease, transform .35s ease;
         }
         .explore-card.loaded {
@@ -855,6 +855,7 @@
             border-radius: 20px;
             letter-spacing: .04em;
             text-transform: uppercase;
+            display: none;       /* hidden — category still stored & filterable */
         }
         .explore-card-video-badge {
             position: absolute;
@@ -3218,7 +3219,6 @@
                       <span data-author-badge-wrapper>${badgeHtml}</span>
                       <span class="text-xs" style="color:var(--muted);">· ${formatRelativeTime(p.timestamp || p.date)}</span>
                       ${followBtn}
-                      <span class="text-xs text-primary font-semibold uppercase tracking-wide cursor-pointer hover:underline ml-auto flex-shrink-0">${escapeHtml(p.category||'General')}</span>
                     </div>
                     <h3 class="font-heading font-bold text-base mt-0.5 cursor-pointer" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;overflow-wrap:anywhere;color:var(--text);">${escapeHtml(p.title)}</h3>
                     ${hd?`<p class="text-sm mt-1 leading-relaxed" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(p.description)}</p>`:''}
@@ -3474,12 +3474,6 @@
                         if (p && p.user_id) navigateToProfile(p.user_id);
                         return;
                     }
-                    if (t.closest('.text-primary.uppercase')) {
-                        e.stopPropagation();
-                        const p = allPosts.find(p => p.id === pid);
-                        if (p) filterCategory(p.category);
-                        return;
-                    }
                     if (t.closest('[data-full-img]')) {
                         const c = t.closest('[data-full-img]');
                         e.stopPropagation();
@@ -3537,13 +3531,6 @@
                 });
                 showToast(nb ? 'Saved' : 'Removed from saved');
             }
-
-            function filterCategory(c) { currentCategoryFilter = c;
-                searchQuery = '';
-                feedPage = 1;
-                uiPage = 'home';
-                currentSortMethod = 'trending';
-                renderUI(); }
 
             // ───────────────────────────────────────────────────────────────
             // SHARE MODAL
@@ -4010,9 +3997,9 @@
               </div>`;
             }
 
-            // ─── FIX: only load comments if not an array ───
+            // ─── FIX: use pauseAllVideos, and set fullscreen header to title ───
             async function openExplorePost(id, returnPage, focusComment) {
-                pauseHomepageVideos();
+                pauseAllVideos();
                 const fs = document.getElementById('explore-fullscreen'),
                     fc = document.getElementById('explore-fullscreen-content');
                 if (!fs || !fc) return;
@@ -4039,7 +4026,7 @@
                     }
                 }
                 const catNameEl = document.getElementById('explore-category-name');
-                if (catNameEl) catNameEl.textContent = post ? (post.category || 'Post') : 'Post';
+                if (catNameEl) catNameEl.textContent = post ? (post.title || 'Post') : 'Post';
                 fc.innerHTML = buildSinglePostHTML(post);
                 requestAnimationFrame(() => {
                     initPlayers(fc);
@@ -4190,7 +4177,7 @@
                 return h;
             }
 
-            // ─── FIX: remove click-blocking yt-tap overlay ───
+            // ─── FIX: remove category badge, fix video thumbnails ───
             function buildExploreCards(posts) {
                 return posts.map(post => {
                     const author = window.getAuthorFromProfile(post.profile);
@@ -4206,19 +4193,18 @@
                             if (isVideo && isYouTubeUrl(url)) {
                                 const ytId = extractYouTubeId(url);
                                 if (ytId) {
-                                    // No yt-tap overlay, iframe pointer-events: none
                                     mh =
                                         `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;position:relative;background:#000;"><div class="yt-wrap" style="padding-bottom:56.25%;height:0;position:relative;width:100%;"><iframe style="pointer-events:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;" src="https://www.youtube.com/embed/${ytId}?autoplay=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0" allow="autoplay; encrypted-media"></iframe></div></div>`;
                                 } else {
                                     mh =
-                                        `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;"><video src="${url}" muted playsinline preload="metadata" class="explore-card-thumb" style="pointer-events:none;object-fit:cover;width:100%;height:100%;"></video></div>`;
+                                        `<video src="${url}" muted playsinline preload="metadata" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
                                 }
                             } else if (isVideo) {
                                 mh =
-                                    `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;"><video src="${url}" muted playsinline preload="metadata" class="explore-card-thumb" style="pointer-events:none;object-fit:cover;width:100%;height:100%;"></video></div>`;
+                                    `<video src="${url}" muted playsinline preload="metadata" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
                             } else {
                                 mh =
-                                    `<img src="${url}" class="explore-card-thumb" loading="lazy" alt="" onload="this.closest('.explore-card').classList.add('loaded')" onerror="this.closest('.explore-card').classList.add('loaded');this.outerHTML='<div class=\\'explore-card-no-media\\'><div class=\\'explore-card-no-media-text\\'>${escapeHtml(post.title).replace(/'/g,"\\'")}</div></div>'">`;
+                                    `<img src="${url}" class="explore-card-thumb" loading="lazy" alt="" onload="this.closest('.explore-card').classList.add('loaded')" onerror="this.closest('.explore-card').classList.add('loaded');this.outerHTML='<div class=\\'explore-card-no-media loaded\\'><div class=\\'explore-card-no-media-text\\'>${escapeHtml(post.title).replace(/'/g,"\\'")}</div></div>'">`;
                             }
                         } else {
                             mh =
@@ -4236,7 +4222,8 @@
                         `<div class="explore-card-avatar" style="display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#9CA3AF;">${au.charAt(0).toUpperCase()}</div>`;
                     const nl = !post.mediaUrl && mediaItems.length === 0;
                     const cc = nl ? 'explore-card loaded' : 'explore-card';
-                    return `<div class="${cc}" data-post-id="${post.id}" ${mediaItems.length > 0 && mediaItems[0].type === 'video' ? 'data-video-card="true"' : ''}>${mh}<div class="explore-card-category">${escapeHtml(post.category||'General')}</div>${vb}<div class="explore-card-overlay"><div class="explore-card-title">${escapeHtml(post.title)}</div><div class="explore-card-meta">${ah}<span class="explore-card-author">${escapeHtml(au)}</span><span class="explore-card-views">${svgEye()}${formatCount(post.views||0)}</span></div></div></div>`;
+                    // category badge removed – .explore-card-category is now display:none in CSS
+                    return `<div class="${cc}" data-post-id="${post.id}" ${mediaItems.length > 0 && mediaItems[0].type === 'video' ? 'data-video-card="true"' : ''}>${mh}${vb}<div class="explore-card-overlay"><div class="explore-card-title">${escapeHtml(post.title)}</div><div class="explore-card-meta">${ah}<span class="explore-card-author">${escapeHtml(au)}</span><span class="explore-card-views">${svgEye()}${formatCount(post.views||0)}</span></div></div></div>`;
                 }).join('');
             }
 
