@@ -42,6 +42,7 @@
     </script>
     <script src="listings.js">
     </script>
+    <script src="mentions.js"></script>
 
     <style>
         /* ===== CSS VARIABLES ===== */
@@ -1402,7 +1403,7 @@
             padding: 16px;
         }
 
-        /* ─── SHARE MODAL (with Report) ─── */
+        /* ─── SHARE MODAL (with Report & Delete) ─── */
         #share-modal {
             position: fixed;
             inset: 0;
@@ -1513,7 +1514,37 @@
             background: linear-gradient(135deg, #F59E0B, #FBBF24);
         }
 
-        /* ─── REPORT BUTTON (in share sheet) ─── */
+        /* ─── DELETE & REPORT BUTTONS (share sheet) ─── */
+        #share-modal .share-sheet .share-delete-btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 14px;
+            border: none;
+            background: rgba(220, 38, 38, .1);
+            color: #DC2626;
+            font-weight: 800;
+            font-size: .9rem;
+            cursor: pointer;
+            transition: .15s;
+            margin-top: 6px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        #share-modal .share-sheet .share-delete-btn:hover {
+            background: rgba(220, 38, 38, .18);
+        }
+        #share-modal .share-sheet .share-delete-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
         #share-modal .share-sheet .share-report-btn {
             width: 100%;
             padding: 12px;
@@ -2072,7 +2103,7 @@
         <img id="lightbox-img" src="" alt="full size preview" loading="lazy" />
     </div>
 
-    <!-- ===== SHARE MODAL (with Report) ===== -->
+    <!-- ===== SHARE MODAL (with Report & Delete) ===== -->
     <div id="share-modal">
         <div class="share-sheet">
             <h3>Share post</h3>
@@ -2095,6 +2126,11 @@
                     <span>More options</span>
                 </button>
             </div>
+            <!-- DELETE BUTTON (owner only) -->
+            <button class="share-delete-btn" id="share-delete-btn" style="display:none;">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Delete post
+            </button>
             <!-- REPORT BUTTON added here -->
             <button class="share-report-btn" id="share-report-btn">
                 <svg viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
@@ -2776,6 +2812,7 @@
 
             let videoObserver = null;
             let currentlyPlayingVideo = null;
+            let exploreVideoObserver = null;
 
             function pauseAllVideos() {
                 document.querySelectorAll('video').forEach(vid => {
@@ -2842,6 +2879,29 @@
                 }, { threshold: 0.75, rootMargin: '0px 0px -20px 0px' });
 
                 videoElements.forEach(vid => videoObserver.observe(vid));
+            }
+
+            // ───────────────────────────────────────────────────────────────
+            // EXPLORE GRID VIDEO AUTOPLAY
+            // ───────────────────────────────────────────────────────────────
+
+            function setupExploreVideoAutoplay(container) {
+                if (exploreVideoObserver) exploreVideoObserver.disconnect();
+                const videoEls = container.querySelectorAll('video.explore-card-thumb');
+                if (!videoEls.length) return;
+
+                exploreVideoObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        const vid = entry.target;
+                        if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+                            vid.play().catch(() => {});
+                        } else {
+                            vid.pause();
+                        }
+                    });
+                }, { threshold: [0, 0.6, 1] });
+
+                videoEls.forEach(vid => exploreVideoObserver.observe(vid));
             }
 
             // ───────────────────────────────────────────────────────────────
@@ -3194,13 +3254,13 @@
                     dotsHTML = `<div class="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full z-10">`;
                     images.forEach((_, idx) => {
                         dotsHTML +=
-                            `<button onclick="event.stopPropagation(); changeMarketImage(${item.id}, ${idx}, this)" class="h-1.5 rounded-full transition-all ${idx === activeIdx ? 'bg-white w-3' : 'bg-white/50 w-1.5'}"></button>`;
+                            `<button onclick="event.stopPropagation(); changeMarketImage('${item.id}', ${idx}, this)" class="h-1.5 rounded-full transition-all ${idx === activeIdx ? 'bg-white w-3' : 'bg-white/50 w-1.5'}"></button>`;
                     });
                     dotsHTML += `</div>`;
                 }
 
                 return `
-                    <div onclick="openProductModal(${item.id})" class="group cursor-pointer product-card">
+                    <div onclick="openProductModal('${item.id}')" class="group cursor-pointer product-card">
                         <div class="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 mb-2">
                             <img id="market-card-img-${item.id}" src="${images[activeIdx]}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
                             ${dotsHTML}
@@ -3556,6 +3616,31 @@
             }
 
             // ───────────────────────────────────────────────────────────────
+            // DELETE POST (via share modal)
+            // ───────────────────────────────────────────────────────────────
+
+            function deletePostFromShare(postId) {
+                if (!postId) { showToast('No post selected'); return; }
+                if (!confirm('Delete this post permanently?')) return;
+                if (!window.PostsAPI || typeof window.PostsAPI.deletePost !== 'function') {
+                    showToast('Delete is unavailable right now', 'r');
+                    return;
+                }
+                window.PostsAPI.deletePost(postId)
+                    .then(() => {
+                        allPosts = allPosts.filter(p => p.id !== postId);
+                        appData.posts = appData.posts.filter(p => p.id !== postId);
+                        document.querySelectorAll(`article[data-post-id="${postId}"]`).forEach(el => el.remove());
+                        showToast('Post deleted');
+                        closeShareModal();
+                        if (uiPage === 'single-post-explore' && currentPostId === postId) {
+                            closeExploreFullscreen();
+                        }
+                    })
+                    .catch(err => showToast(err.message || 'Failed to delete post', 'r'));
+            }
+
+            // ───────────────────────────────────────────────────────────────
             // TAGS MODAL
             // ───────────────────────────────────────────────────────────────
 
@@ -3608,6 +3693,10 @@
                 const followBtn = buildFollowButton(p.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
 
+                // Render content with mentions
+                const renderedContent = window.Mentions ? window.Mentions.renderMentions(p.content, p.mentions || []) : linkifyContent(p.content);
+                const renderedPreview = window.Mentions ? window.Mentions.renderMentions(pt, p.mentions || []) : linkifyContent(pt);
+
                 return `<article class="feed-post" data-post-id="${p.id}" data-author-id="${author.id}">
                         <div class="flex items-start gap-3" style="padding:0 16px;">
                           <img data-author-avatar src="${aa}" class="user-mini-avatar" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;cursor:pointer;flex-shrink:0;">
@@ -3621,8 +3710,8 @@
                             <h3 class="font-heading font-bold text-base mt-0.5 cursor-pointer" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;overflow-wrap:anywhere;color:var(--text);">${escapeHtml(p.title)}</h3>
                             ${hd?`<p class="text-sm mt-1 leading-relaxed" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(p.description)}</p>`:''}
                             <div class="mt-1" id="post-content-${p.id}">
-                              <div class="content-preview preview-text-${p.id}">${linkifyContent(pt)}</div>
-                              ${isLong?`<div class="content-text full-text-${p.id} hidden">${linkifyContent(p.content)}</div><button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm">Show more</button>`:`<div class="content-text full-text-${p.id}">${linkifyContent(p.content)}</div>`}
+                              <div class="content-preview preview-text-${p.id}">${renderedPreview}</div>
+                              ${isLong?`<div class="content-text full-text-${p.id} hidden">${renderedContent}</div><button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm">Show more</button>`:`<div class="content-text full-text-${p.id}">${renderedContent}</div>`}
                             </div>
                             ${mh}
                             ${th}
@@ -3903,7 +3992,7 @@
                 renderUI(); }
 
             // ───────────────────────────────────────────────────────────────
-            // SHARE MODAL (with Report)
+            // SHARE MODAL (with Report & Delete)
             // ───────────────────────────────────────────────────────────────
 
             let sharePostId = null;
@@ -3911,6 +4000,14 @@
             function openShareModal(postId) {
                 sharePostId = postId;
                 const modal = document.getElementById('share-modal');
+                // Show/hide delete and report buttons based on ownership
+                const post = allPosts.find(p => p.id === postId);
+                const cu = getCurrentUser();
+                const isOwner = post && cu && cu.isLoggedIn && post.user_id === cu.id;
+                const deleteBtn = document.getElementById('share-delete-btn');
+                const reportBtn = document.getElementById('share-report-btn');
+                if (deleteBtn) deleteBtn.style.display = isOwner ? 'flex' : 'none';
+                if (reportBtn) reportBtn.style.display = isOwner ? 'none' : 'flex';
                 modal.classList.add('open');
                 document.body.style.overflow = 'hidden';
             }
@@ -3979,6 +4076,17 @@
                 const dc = comments.filter(c => c.parentId === pid); for (const c of dc) { r.push(c);
                     r.push(...getAllDescendants(c.id, comments)); } return r; }
 
+            function findTopAncestorId(commentId, comments) {
+                let current = comments.find(c => c.id === commentId);
+                if (!current) return commentId;
+                while (current.parentId) {
+                    const parent = comments.find(c => c.id === current.parentId);
+                    if (!parent) break;
+                    current = parent;
+                }
+                return current.id;
+            }
+
             function getCommentsVisible() { const r = localStorage.getItem(CVK); return r ? JSON.parse(r) : {}; }
 
             function getVisibleComments(postId) { return getCommentsVisible()[postId] || INITIAL_COMMENT_DISPLAY; }
@@ -4043,12 +4151,13 @@
                     username.charAt(0).toUpperCase();
                 const avatarClass = avatar ? 'comment-avatar has-image' : 'comment-avatar';
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
+                const renderedMsg = window.Mentions ? window.Mentions.renderMentions(c.message, c.mentions || []) : escapeHtml(c.message);
 
                 return `<div class="comment-item" data-comment-id="${c.id}">
                         <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
                         <div class="comment-body">
                           <div class="comment-username">${escapeHtml(username)} ${badgeHtml}</div>
-                          <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${escapeHtml(c.message)}</div>
+                          <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${renderedMsg}</div>
                           ${il?`<button class="comment-show-more">Show more</button>`:''}
                           <div class="comment-meta">
                             <span class="comment-time">${formatRelativeTime(c.time)}</span>
@@ -4080,12 +4189,13 @@
                     username.charAt(0).toUpperCase();
                 const avatarClass = avatar ? 'reply-avatar-dot has-image' : 'reply-avatar-dot';
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
+                const renderedMsg = window.Mentions ? window.Mentions.renderMentions(r.message, r.mentions || []) : escapeHtml(r.message);
 
                 return `<div class="reply-item" data-comment-id="${r.id}">
                         <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
                         <div class="reply-body">
                           <div class="reply-username">${escapeHtml(username)} ${badgeHtml}</div>
-                          <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${escapeHtml(r.message)}</div>
+                          <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${renderedMsg}</div>
                           ${il?`<button class="comment-show-more">Show more</button>`:''}
                           <div class="reply-meta">
                             <span class="reply-time">${formatRelativeTime(r.time)}</span>
@@ -4099,18 +4209,28 @@
                       </div>`;
             }
 
-            async function addComment(postId, parentId, message) {
+            async function addComment(postId, parentId, message, mentions = []) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
                 if (window.AuthUser && window.AuthUser.requireAuth) {
                     return new Promise((resolve, reject) => {
                         window.AuthUser.requireAuth(async () => {
                             try {
-                                const comment = await window.PostsAPI.addComment(postId, parentId,
-                                message);
+                                const comment = await window.PostsAPI.addComment(postId, parentId, message, mentions);
                                 if (!Array.isArray(p.comments)) p.comments = [];
                                 p.comments.push(comment);
                                 p.commentCount = (p.commentCount || 0) + 1;
+                                // Notify mentioned users
+                                const user = getCurrentUser();
+                                if (comment.id && mentions.length > 0 && window.Mentions) {
+                                    window.Mentions.notifyMentionedUsers(
+                                        'comment',
+                                        comment.id,
+                                        mentions,
+                                        user.id,
+                                        postId
+                                    );
+                                }
                                 resolve(comment);
                             } catch (err) {
                                 showToast(err.message, 'r');
@@ -4124,6 +4244,7 @@
                         id: 'temp-' + Date.now(),
                         profile: { display_name: cu.displayName, avatar_url: cu.avatar },
                         message,
+                        mentions: mentions || [],
                         time: new Date().toISOString(),
                         approved: true,
                         parentId: parentId || null
@@ -4274,15 +4395,26 @@
 
             async function submitCommentFromBar() {
                 const ta = document.getElementById('global-comment-textarea');
-                const m = ta.value.trim();
-                if (!m) return showToast('Reply cannot be empty.');
+                const message = ta.value.trim();
+                if (!message) return showToast('Reply cannot be empty.');
+                const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = replyTarget ? replyTarget.commentId : null;
                 ta.value = '';
                 ta.style.height = '40px';
                 replyTarget = null;
                 updateReplyContextUI();
                 try {
-                    await addComment(currentPostId, pi, m);
+                    await addComment(currentPostId, pi, message, mentions);
+                    if (pi) {
+                        const p = appData.posts.find(x => x.id === currentPostId);
+                        const ac = p && Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false) : [];
+                        const topId = findTopAncestorId(pi, ac);
+                        const ds = getAllDescendants(topId, ac);
+                        expandedThreads.set(topId, ds.length);
+                    }
+                    if (document.getElementById('comments-list')) {
+                        refreshCommentsList(currentPostId, 'comments-list');
+                    }
                     updateCommentCount(currentPostId);
                     showToast(pi ? 'Reply posted' : 'Reply posted');
                 } catch (err) {
@@ -4292,15 +4424,23 @@
 
             async function submitExploreComment() {
                 const ta = document.getElementById('explore-comment-textarea');
-                const m = ta.value.trim();
-                if (!m) return showToast('Reply cannot be empty.');
+                const message = ta.value.trim();
+                if (!message) return showToast('Reply cannot be empty.');
+                const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = exploreReplyTarget ? exploreReplyTarget.commentId : null;
                 ta.value = '';
                 ta.style.height = '40px';
                 exploreReplyTarget = null;
                 updateExploreReplyContextUI();
                 try {
-                    await addComment(currentPostId, pi, m);
+                    await addComment(currentPostId, pi, message, mentions);
+                    if (pi) {
+                        const p = appData.posts.find(x => x.id === currentPostId);
+                        const ac = p && Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false) : [];
+                        const topId = findTopAncestorId(pi, ac);
+                        const ds = getAllDescendants(topId, ac);
+                        expandedThreads.set(topId, ds.length);
+                    }
                     refreshCommentsList(currentPostId, 'comments-list');
                     updateCommentCount(currentPostId);
                     showToast(pi ? 'Reply posted' : 'Reply posted');
@@ -4335,14 +4475,17 @@
                     vc = getVisibleComments(post.id);
                 const followBtn = buildFollowButton(post.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
+                const renderedContent = window.Mentions ? window.Mentions.renderMentions(post.content, post.mentions || []) : linkifyContent(post.content);
 
                 return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
                         <article>
                           <div class="flex items-center gap-2 mb-2">
                             <img data-author-avatar src="${aa}" class="w-10 h-10 rounded-full object-cover cursor-pointer" style="flex-shrink:0;">
                             <div>
-                              <div data-author-name class="font-bold text-sm cursor-pointer hover:underline" style="color:var(--text);">${escapeHtml(da)}</div>
-                              <span data-author-badge-wrapper>${badgeHtml}</span>
+                              <div class="flex items-center gap-1.5 flex-wrap">
+                                <span data-author-name class="font-bold text-sm cursor-pointer hover:underline" style="color:var(--text);">${escapeHtml(da)}</span>
+                                <span data-author-badge-wrapper>${badgeHtml}</span>
+                              </div>
                               <div class="text-xs flex items-center gap-1" style="color:var(--muted);">${svgClock()} ${formatRelativeTime(post.timestamp || post.date)}</div>
                               ${followBtn}
                             </div>
@@ -4350,7 +4493,7 @@
                           <h1 class="font-heading font-extrabold mt-1 mb-1" style="font-size:clamp(1.25rem,4vw,1.7rem);word-break:break-word;overflow-wrap:anywhere;line-height:1.3;color:var(--text);">${escapeHtml(post.title)}</h1>
                           ${mh}
                           ${post.description?`<p class="text-sm leading-relaxed mt-2 mb-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
-                          <div class="content-text mt-1">${linkifyContent(post.content)}</div>
+                          <div class="content-text mt-1">${renderedContent}</div>
                         </article>
                         <hr class="my-4" style="border-color:var(--brd);">
                         <div class="post-actions-row" style="max-width:100%;justify-content:space-between;" data-post-reactions="${post.id}">
@@ -4369,12 +4512,17 @@
 
             async function openExplorePost(id, returnPage, focusComment) {
                 pauseAllVideos();
+                if (exploreVideoObserver) { exploreVideoObserver.disconnect(); exploreVideoObserver = null; }
                 const fs = document.getElementById('explore-fullscreen'),
                     fc = document.getElementById('explore-fullscreen-content');
                 if (!fs || !fc) return;
+                const originPage = returnPage || uiPage || 'home';
+                window._fullscreenReturnPage = originPage;
+                if (originPage === 'home') tabScrollPositions.home = window.scrollY;
+                else if (originPage === 'explore') tabScrollPositions.explore = window.scrollY;
+                else if (originPage === 'market') tabScrollPositions.market = window.scrollY;
                 currentPostId = id;
                 uiPage = 'single-post-explore';
-                window._fullscreenReturnPage = returnPage || uiPage || 'home';
                 exploreReplyTarget = null;
                 expandedThreads.clear();
                 const post = allPosts.find(p => p.id === id);
@@ -4450,7 +4598,6 @@
                 const returnPage = window._fullscreenReturnPage || 'home';
                 uiPage = returnPage;
                 refreshTabStates();
-                // Re-render the content to restore the explore grid or home feed
                 renderUI();
                 setTimeout(() => {
                     const fc = document.getElementById('explore-fullscreen-content');
@@ -4536,7 +4683,7 @@
                             if (pid) openExplorePost(pid, 'explore'); });
                     });
                     setTimeout(() => {
-                        initPlayers(gc);
+                        setupExploreVideoAutoplay(gc);
                     }, 300);
                 }, 300);
                 document.getElementById('explore-filter-inline-btn')?.addEventListener('click',
@@ -4569,11 +4716,11 @@
                                         `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;position:relative;background:#000;"><div class="yt-wrap" style="padding-bottom:56.25%;height:0;position:relative;width:100%;"><iframe style="pointer-events:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;" src="https://www.youtube.com/embed/${ytId}?autoplay=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0" allow="autoplay; encrypted-media"></iframe></div></div>`;
                                 } else {
                                     mh =
-                                        `<video src="${url}" muted playsinline preload="metadata" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
+                                        `<video src="${url}" muted playsinline loop preload="metadata" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
                                 }
                             } else if (isVideo) {
                                 mh =
-                                    `<video src="${url}" muted playsinline preload="metadata" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
+                                    `<video src="${url}" muted playsinline loop preload="metadata" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
                             } else {
                                 mh =
                                     `<img src="${url}" class="explore-card-thumb" loading="lazy" alt="" onload="this.closest('.explore-card').classList.add('loaded')" onerror="this.closest('.explore-card').classList.add('loaded');this.outerHTML='<div class=\\'explore-card-no-media loaded\\'><div class=\\'explore-card-no-media-text\\'>${escapeHtml(post.title).replace(/'/g,"\\'")}</div></div>'">`;
@@ -4607,6 +4754,7 @@
                 if (uiPage === 'home') tabScrollPositions.home = scrollY;
                 else if (uiPage === 'explore') tabScrollPositions.explore = scrollY;
                 else if (uiPage === 'market') tabScrollPositions.market = scrollY;
+                if (exploreVideoObserver) { exploreVideoObserver.disconnect(); exploreVideoObserver = null; }
                 currentCategoryFilter = '';
                 searchQuery = '';
                 feedPage = 1;
@@ -4965,6 +5113,16 @@
                 await reloadData();
                 setupRealtime();
 
+                // Init mentions
+                const globalComment = document.getElementById('global-comment-textarea');
+                if (globalComment && window.Mentions) {
+                    window.Mentions.initMentions(globalComment);
+                }
+                const exploreComment = document.getElementById('explore-comment-textarea');
+                if (exploreComment && window.Mentions) {
+                    window.Mentions.initMentions(exploreComment);
+                }
+
                 document.getElementById('topMsgBtn').addEventListener('click', () => {
                     window.location.href = 'chat.html';
                 });
@@ -5047,6 +5205,11 @@
                     } else {
                         showToast('No post selected to report');
                     }
+                });
+
+                // Delete button in share modal
+                document.getElementById('share-delete-btn').addEventListener('click', () => {
+                    deletePostFromShare(sharePostId);
                 });
 
                 document.addEventListener('keydown', e => {
@@ -5176,8 +5339,9 @@
             window.changeMarketImage = changeMarketImage;
             window.triggerToast = triggerToast;
 
-            // Expose report handler
+            // Expose report/delete handlers
             window.reportPostFromShare = reportPostFromShare;
+            window.deletePostFromShare = deletePostFromShare;
 
             if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
             else init();
