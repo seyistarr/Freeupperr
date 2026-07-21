@@ -689,36 +689,6 @@
             transform: none;
         }
 
-        .category-selector {
-            width: 100%;
-            padding: 12px 16px;
-            border-radius: 12px;
-            border: 1.5px solid var(--brd);
-            background: var(--inp);
-            color: var(--text);
-            font-size: 14px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            transition: border-color .15s;
-        }
-        .category-selector:hover {
-            border-color: var(--pbrd);
-        }
-        .category-selector .placeholder {
-            color: var(--muted2);
-        }
-        .category-selector svg {
-            width: 16px;
-            height: 16px;
-            stroke: var(--muted);
-            fill: none;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
         .category-row {
             display: flex;
             gap: 10px;
@@ -1363,7 +1333,7 @@
                     </button>
                 </div>
 
-                <!-- Panel: Create Post -->
+                <!-- Panel: Create Post (no category) -->
                 <div class="panel active" id="panel-post">
                     <div id="post-form">
                         <!-- Title -->
@@ -1387,19 +1357,9 @@
                             <input class="form-inp" id="postDescription" type="text" placeholder="Brief description...">
                         </div>
 
-                        <!-- Category (post) – uses predefined list via modal -->
+                        <!-- Tags (max 5) -->
                         <div class="form-group">
-                            <label class="form-lbl">Category</label>
-                            <button class="category-selector" onclick="openCategoryModal('post')">
-                                <span id="postCategoryDisplay" class="placeholder">Select a category</span>
-                                <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                            </button>
-                            <input type="hidden" id="postCategory" value="">
-                        </div>
-
-                        <!-- Tags -->
-                        <div class="form-group">
-                            <label class="form-lbl">Tags <span style="font-weight:400;color:var(--muted2);">(max 3)</span></label>
+                            <label class="form-lbl">Tags <span style="font-weight:400;color:var(--muted2);">(max 5)</span></label>
                             <div class="tag-pills" id="postTags"></div>
                             <div class="tag-input-row">
                                 <input class="form-inp" id="postTagInput" type="text" placeholder="Add a tag..." maxlength="20" onkeydown="if(event.key==='Enter'){event.preventDefault();addPostTag();}">
@@ -1449,7 +1409,7 @@
                             </div>
                         </div>
 
-                        <!-- ── CATEGORY & SUBCATEGORY (DB-driven) with modern pickers ── -->
+                        <!-- ── CATEGORY & SUBCATEGORY with modern pickers ── -->
                         <div class="category-row">
                             <div class="form-group">
                                 <label class="form-lbl">Category <span style="color:var(--danger);">*</span></label>
@@ -1562,24 +1522,6 @@
     </div>
 
     <!-- ══════════════════════════════════════════
-         CATEGORY MODAL (for posts – static list)
-    ══════════════════════════════════════════ -->
-    <div class="modal-overlay" id="categoryModal" onclick="if(event.target===this)closeCategoryModal()">
-        <div class="modal-sheet" onclick="event.stopPropagation()">
-            <div class="modal-handle"></div>
-            <div class="modal-header">
-                <span class="modal-title" id="categoryModalTitle">Select Category</span>
-                <button class="modal-close" onclick="closeCategoryModal()">
-                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="modal-category-grid" id="categoryModalGrid"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════
          PICKER MODAL (for category/subcategory – scrollable)
     ══════════════════════════════════════════ -->
     <div class="picker-modal-overlay" id="pickerModal" onclick="if(event.target===this)closePickerModal()">
@@ -1625,14 +1567,6 @@
         const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload';
         const CLOUDINARY_MARKET_UPLOAD_PRESET = 'market_upload';
 
-        // Predefined categories for posts (separate from marketplace)
-        const PREDEFINED_CATEGORIES = [
-            "Technology", "Education", "Campus gist", "News & Updates",
-            "Entertainment", "Movies", "Lifestyle", "Business & Finance",
-            "Opinion / Thoughts", "Health & Fitness", "Travel & Culture", "Gaming",
-            "Memes", "Science", "Fashion", "Music"
-        ];
-
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
         const MAX_VIDEO_SIZE = 15 * 1024 * 1024;
 
@@ -1640,10 +1574,8 @@
         let marketImages = [];
         let marketLat = null;
         let marketLng = null;
-        let selectedPostCategory = '';
         let selectedCondition = 'New';
         let lastUploadTime = 0;
-        let categoryModalMode = 'post';
         let fullscreenImages = [];
         let fullscreenIndex = 0;
 
@@ -1692,46 +1624,13 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // CATEGORY MODAL (for posts – static list)
-        // ──────────────────────────────────────────────────────────────
-        function openCategoryModal(mode) {
-            categoryModalMode = mode;
-            const grid = document.getElementById('categoryModalGrid');
-            const title = document.getElementById('categoryModalTitle');
-            const selected = selectedPostCategory;
-
-            title.textContent = 'Select Category';
-
-            grid.innerHTML = PREDEFINED_CATEGORIES.map(cat =>
-                `<div class="modal-category-item ${selected === cat ? 'active' : ''}" onclick="selectPostCategory('${cat.replace(/'/g, "\\'")}')">${cat}</div>`
-            ).join('');
-
-            document.getElementById('categoryModal').classList.add('open');
-        }
-
-        function closeCategoryModal() {
-            document.getElementById('categoryModal').classList.remove('open');
-        }
-
-        function selectPostCategory(cat) {
-            selectedPostCategory = cat;
-            document.getElementById('postCategory').value = cat;
-            document.getElementById('postCategoryDisplay').textContent = cat;
-            document.getElementById('postCategoryDisplay').classList.remove('placeholder');
-            closeCategoryModal();
-            document.querySelectorAll('.modal-category-item').forEach(el => {
-                el.classList.toggle('active', el.textContent === cat);
-            });
-        }
-
-        // ──────────────────────────────────────────────────────────────
-        // POST TAGS
+        // POST TAGS (max 5)
         // ──────────────────────────────────────────────────────────────
         function addPostTag() {
             const input = document.getElementById('postTagInput');
             const tag = input.value.trim();
             if (!tag) return;
-            if (postTags.length >= 3) { showToast('Max 3 tags allowed', 'o'); return; }
+            if (postTags.length >= 5) { showToast('Max 5 tags allowed', 'o'); return; }
             if (postTags.includes(tag)) { showToast('Tag already added', 'o'); return; }
             postTags.push(tag);
             input.value = '';
@@ -2429,7 +2328,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT POST – with Mentions + Notifications (content optional)
+        // SUBMIT POST – with Mentions + Notifications (content optional, no category)
         // ──────────────────────────────────────────────────────────────
         async function submitPost() {
             console.log('[DEBUG] submitPost called');
@@ -2451,18 +2350,17 @@
             const title = document.getElementById('postTitle').value.trim();
             const content = document.getElementById('postContent').value.trim(); // optional
             const description = document.getElementById('postDescription').value.trim();
-            const category = document.getElementById('postCategory').value;
             const mediaUrl = document.getElementById('postMediaUrl').value;
             const mediaType = document.getElementById('postMediaType').value;
             const publicId = document.getElementById('postPublicId').value;
 
-            // Only title is required now
+            // Only title is required
             if (!title) {
                 showToast('Please enter a title', 'o');
                 return;
             }
-            if (postTags.length > 3) {
-                showToast('Max 3 tags allowed', 'o');
+            if (postTags.length > 5) {
+                showToast('Max 5 tags allowed', 'o');
                 return;
             }
 
@@ -2492,8 +2390,8 @@
                 const result = await PostsAPI.createPost({
                     title,
                     description,
-                    content: content || '', // can be empty
-                    category: category || 'General',
+                    content: content || '',
+                    // category removed – API may handle default or ignore
                     tags: postTags.slice(),
                     media: media,
                     mediaUrl: mediaUrl,
@@ -2524,9 +2422,6 @@
                 document.getElementById('postTitle').value = '';
                 document.getElementById('postContent').value = '';
                 document.getElementById('postDescription').value = '';
-                document.getElementById('postCategory').value = '';
-                document.getElementById('postCategoryDisplay').textContent = 'Select a category';
-                document.getElementById('postCategoryDisplay').classList.add('placeholder');
                 document.getElementById('postMediaUrl').value = '';
                 document.getElementById('postMediaType').value = '';
                 document.getElementById('postPublicId').value = '';
@@ -2538,7 +2433,6 @@
                 document.getElementById('postImageGrid').innerHTML = '';
                 postTags = [];
                 renderPostTags();
-                selectedPostCategory = '';
 
                 showToast('Post published! 🎉', 'g');
                 btn.textContent = originalText;
@@ -2762,7 +2656,7 @@
                 setTimeout(loadCategories, 500);
             }
 
-            console.log('[DEBUG] create.html initialised (modern pickers + optional content)');
+            console.log('[DEBUG] create.html initialised (category removed, tags max 5)');
         }
 
         if (document.readyState === 'loading') {
