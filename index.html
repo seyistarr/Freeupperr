@@ -6,6 +6,20 @@
     <meta name="theme-color" content="#7C3AED" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <!-- ===== OPEN GRAPH / SOCIAL SHARING ===== -->
+    <meta property="og:title" content="FreeUpper — Express Freely. Connect Globally." />
+    <meta property="og:description" content="Share your thoughts, discover new ideas, and connect with a global community on FreeUpper." />
+    <meta property="og:image" content="https://freeupper.vercel.app/images/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://freeupper.vercel.app/" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://freeupper.vercel.app/images/og-image.png" />
+    <!-- ===== END OG ===== -->
+
     <title>FreeUpper — Home</title>
     <link rel="icon" type="image/png" href="freeupper.png" />
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
@@ -30,13 +44,11 @@
             }
         };
     </script>
-    <!-- Fonts with preconnect and trimmed weights -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="global.css" />
 
-    <!-- Deferred external scripts -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="global.js" defer></script>
     <script src="auth.js" defer></script>
@@ -51,6 +63,7 @@
             --safe-top: env(safe-area-inset-top, 0px);
             --gold: #FFD700;
             --heart-red: #DC2626;
+            --plyr-color-main: #A78BFA;
             --bg: #ffffff;
             --bg2: #f9fafb;
             --bg3: #ffffff;
@@ -450,6 +463,11 @@
         .feed-post:last-child {
             border-bottom: 1px solid var(--brd);
         }
+        .feed-post.is-repost {
+            border-top: 2px solid transparent;
+            border-image: linear-gradient(90deg, #7C3AED, #A855F7) 1;
+            border-radius: 14px 14px 0 0;
+        }
         .content-text {
             white-space: pre-wrap;
             line-height: 1.5;
@@ -478,6 +496,40 @@
         .feed-post .post-body {
             padding: 0 16px;
             max-width: 100%;
+        }
+
+        /* ─── REPOST BANNER ─── */
+        .repost-banner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 16px 8px;
+            font-size: .78rem;
+            font-weight: 600;
+            color: #8B5CF6;
+        }
+        .repost-banner .repost-icon-badge {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(124, 58, 237, .12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .repost-banner .repost-icon-badge svg {
+            width: 12px;
+            height: 12px;
+            stroke: #7C3AED;
+            fill: none;
+            stroke-width: 2.4;
+            stroke-linecap: round;
+        }
+        .repost-banner .repost-author {
+            color: var(--text);
+            font-weight: 700;
+            cursor: pointer;
         }
 
         /* ─── FULL-WIDTH MEDIA ─── */
@@ -623,7 +675,7 @@
         }
         .ig-video-wrap .yt-progress-fill {
             height: 100%;
-            background: #fff;
+            background: #A78BFA;
             border-radius: 0 2px 2px 0;
             transition: width .1s linear;
             pointer-events: none;
@@ -907,7 +959,7 @@
             animation: shimmer 1.4s infinite;
         }
 
-        /* ─── MARKETPLACE ─── */
+        /* ─── MARKETPLACE (NEW UI/UX) ─── */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -1403,7 +1455,86 @@
             padding: 16px;
         }
 
-        /* ─── SHARE MODAL (with Report & Delete) ─── */
+        /* ─── MARKET IMAGE FULLSCREEN ─── */
+        #market-image-fullscreen {
+            position: fixed;
+            inset: 0;
+            z-index: 150;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s;
+        }
+        #market-image-fullscreen .mif-close {
+            position: absolute;
+            top: calc(12px + var(--safe-top));
+            right: 16px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .12);
+            border: none;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 10;
+            backdrop-filter: blur(8px);
+        }
+        #market-image-fullscreen .mif-track {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            touch-action: none;
+            will-change: transform;
+        }
+        #market-image-fullscreen .mif-track .mif-slide {
+            flex: 0 0 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+        #market-image-fullscreen .mif-track .mif-slide img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        #market-image-fullscreen .mif-dots {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px 0 20px;
+        }
+        #market-image-fullscreen .mif-dots span {
+            height: 6px;
+            border-radius: 3px;
+            transition: .2s;
+            background: rgba(255, 255, 255, .35);
+        }
+        #market-image-fullscreen .mif-dots span.active {
+            width: 18px;
+            background: #fff;
+        }
+        #market-image-fullscreen .mif-counter {
+            position: absolute;
+            top: calc(12px + var(--safe-top));
+            left: 16px;
+            color: rgba(255, 255, 255, .7);
+            font-size: .75rem;
+            font-weight: 600;
+            z-index: 10;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, .6);
+        }
+
+        /* ─── SHARE MODAL ─── */
         #share-modal {
             position: fixed;
             inset: 0;
@@ -1456,7 +1587,7 @@
         }
         #share-modal .share-sheet .share-options {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-columns: 1fr 1fr;
             gap: 12px;
             margin-bottom: 18px;
         }
@@ -1480,7 +1611,8 @@
             box-shadow: 0 8px 20px rgba(124, 58, 237, .15);
             border-color: #7C3AED;
         }
-        #share-modal .share-sheet .share-option.share-more {
+        #share-modal .share-sheet .share-option.share-native {
+            grid-column: span 2;
             flex-direction: row;
             justify-content: center;
             padding: 12px;
@@ -1501,8 +1633,11 @@
             fill: none;
             stroke-width: 2;
         }
-        #share-modal .share-sheet .share-profile .share-icon-circle {
+        #share-modal .share-sheet .share-repost .share-icon-circle {
             background: linear-gradient(135deg, #7C3AED, #A855F7);
+        }
+        #share-modal .share-sheet .share-repost.reposted .share-icon-circle {
+            background: linear-gradient(135deg, #16A34A, #22C55E);
         }
         #share-modal .share-sheet .share-copy .share-icon-circle {
             background: linear-gradient(135deg, #3B82F6, #60A5FA);
@@ -1510,11 +1645,6 @@
         #share-modal .share-sheet .share-native .share-icon-circle {
             background: linear-gradient(135deg, #10B981, #34D399);
         }
-        #share-modal .share-sheet .share-more .share-icon-circle {
-            background: linear-gradient(135deg, #F59E0B, #FBBF24);
-        }
-
-        /* ─── DELETE & REPORT BUTTONS (share sheet) ─── */
         #share-modal .share-sheet .share-delete-btn {
             width: 100%;
             padding: 12px;
@@ -1544,7 +1674,6 @@
             stroke-linecap: round;
             stroke-linejoin: round;
         }
-
         #share-modal .share-sheet .share-report-btn {
             width: 100%;
             padding: 12px;
@@ -1574,7 +1703,6 @@
             stroke-linecap: round;
             stroke-linejoin: round;
         }
-
         #share-modal .share-sheet .share-close-btn {
             width: 100%;
             padding: 12px;
@@ -1774,10 +1902,14 @@
         }
         .post-actions-row .reaction-count,
         .post-actions-row .comment-count,
-        .post-actions-row .share-count {
+        .post-actions-row .share-count,
+        .post-actions-row .bookmark-count {
             font-weight: 600;
             font-variant-numeric: tabular-nums;
             font-size: .85rem;
+        }
+        .post-actions-row .bookmark-count {
+            margin-left: 2px;
         }
         .post-actions-row .views-count span {
             font-weight: 500;
@@ -2004,6 +2136,11 @@
             padding: 40px 20px;
             color: var(--muted);
         }
+
+        /* ─── MARKETPLACE TOAST (floating) ─── */
+        .market-toast {
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
     </style>
 </head>
 <body>
@@ -2062,7 +2199,7 @@
         </div>
     </div>
 
-    <!-- ===== FILTER BACKDROP & DRAWER ===== -->
+    <!-- ===== FILTER BACKDROP & DRAWER (for home feed categories) ===== -->
     <div id="filter-backdrop" class="fixed inset-0 z-[90] bg-black bg-opacity-0 pointer-events-none transition-all duration-300"></div>
     <div id="filter-drawer" class="fixed bottom-0 left-0 right-0 z-[95] bg-white rounded-t-2xl shadow-2xl transform translate-y-full transition-transform duration-300 ease-out max-h-[75vh] overflow-hidden flex flex-col" style="padding-bottom:var(--safe-bottom);">
         <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b" style="border-color:var(--brd);">
@@ -2094,7 +2231,7 @@
         <div class="spinner"></div><span class="text-xs font-medium" style="color:var(--muted);">Refreshing feed...</span>
     </div>
 
-    <!-- ===== TOAST ===== -->
+    <!-- ===== TOAST (general) ===== -->
     <div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-full shadow-lg text-sm font-medium opacity-0 pointer-events-none transition-all duration-300" style="background:var(--bg3);color:var(--text);border:1px solid var(--brd2);"></div>
 
     <!-- ===== LIGHTBOX ===== -->
@@ -2103,15 +2240,25 @@
         <img id="lightbox-img" src="" alt="full size preview" loading="lazy" />
     </div>
 
-    <!-- ===== SHARE MODAL (with Report & Delete) ===== -->
+    <!-- ===== MARKET IMAGE FULLSCREEN ===== -->
+    <div id="market-image-fullscreen">
+        <div class="mif-counter" id="mif-counter"></div>
+        <button class="mif-close" id="mif-close-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div class="mif-track" id="mif-track"></div>
+        <div class="mif-dots" id="mif-dots"></div>
+    </div>
+
+    <!-- ===== SHARE MODAL ===== -->
     <div id="share-modal">
         <div class="share-sheet">
             <h3>Share post</h3>
             <p class="share-sub">Choose how you'd like to share this</p>
             <div class="share-options">
-                <button class="share-option share-profile" data-share="profile">
-                    <span class="share-icon-circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5.34 18.18A8 8 0 0 1 12 14a8 8 0 0 1 6.66 4.18"/><circle cx="12" cy="12" r="10"/></svg></span>
-                    <span>Profile</span>
+                <button class="share-option share-repost" data-share="repost">
+                    <span class="share-icon-circle"><svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>
+                    <span id="repost-label">Repost</span>
                 </button>
                 <button class="share-option share-copy" data-share="copy">
                     <span class="share-icon-circle"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
@@ -2119,19 +2266,13 @@
                 </button>
                 <button class="share-option share-native" data-share="native">
                     <span class="share-icon-circle"><svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span>
-                    <span>Share via</span>
-                </button>
-                <button class="share-option share-more" data-share="more" style="grid-column:span 3;">
-                    <span class="share-icon-circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></span>
-                    <span>More options</span>
+                    <span>Share via device</span>
                 </button>
             </div>
-            <!-- DELETE BUTTON (owner only) -->
             <button class="share-delete-btn" id="share-delete-btn" style="display:none;">
                 <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 Delete post
             </button>
-            <!-- REPORT BUTTON added here -->
             <button class="share-report-btn" id="share-report-btn">
                 <svg viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
                 Report this post
@@ -2175,7 +2316,7 @@
 
     <!-- ===== MARKETPLACE MODALS ===== -->
 
-    <!-- See All Modal (full-screen, matches first snippet) -->
+    <!-- See All Modal -->
     <div id="seeAllModal" class="fixed inset-0 bg-white z-50 hidden flex-col overflow-y-auto" style="z-index:100;">
         <div class="sticky top-0 bg-white/90 backdrop-blur-md px-4 py-3 border-b border-gray-100 flex items-center justify-between z-10">
             <button onclick="closeSeeAllModal()" class="p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200">
@@ -2189,9 +2330,9 @@
         </div>
     </div>
 
-    <!-- Product Detail Modal (full-screen, matches first snippet) -->
-    <div id="productModal" class="fixed inset-0 bg-white z-50 hidden flex-col overflow-y-auto" style="z-index:101;">
-        <div class="sticky top-0 bg-white/90 backdrop-blur-md px-4 py-3 border-b border-gray-100 flex items-center justify-between z-10">
+    <!-- Product Detail Modal (new UI) -->
+    <div id="productModal" class="fixed inset-0 bg-white z-40 hidden flex-col overflow-y-auto" style="z-index:101;">
+        <div class="sticky top-0 bg-white/90 backdrop-blur-md px-4 py-3 border-b border-gray-100 flex items-center justify-between z-20">
             <button onclick="closeProductModal()" class="p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
@@ -2200,11 +2341,34 @@
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
             </button>
         </div>
+
         <div class="max-w-2xl mx-auto w-full p-4 sm:p-6 space-y-6">
-            <div class="relative aspect-square w-full rounded-2xl overflow-hidden bg-gray-100 shadow-sm">
-                <img id="modalImage" src="" alt="Product Image" class="w-full h-full object-cover">
+            
+            <!-- SWIPEABLE CAROUSEL CONTAINER -->
+            <div class="relative aspect-square w-full rounded-3xl overflow-hidden bg-gray-900 shadow-md group touch-pan-y cursor-zoom-in" id="modalCarouselTrack" onclick="openFullscreenLightbox()">
+                
+                <!-- SLIDES WRAPPER -->
+                <div id="modalSlidesContainer" class="flex w-full h-full transition-transform duration-300 ease-out"></div>
+
+                <div class="absolute top-3 left-3 bg-black/50 backdrop-blur-md text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10 flex items-center gap-1 border border-white/10 pointer-events-none">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path></svg>
+                    <span>Tap to expand</span>
+                </div>
+
+                <div id="modalImageBadge" class="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1 rounded-full z-10 border border-white/10 pointer-events-none">
+                    1 / 1
+                </div>
+
+                <button id="prevSlideBtn" onclick="event.stopPropagation(); prevModalSlide();" class="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200 z-10 hover:bg-black/60">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
+                </button>
+                <button id="nextSlideBtn" onclick="event.stopPropagation(); nextModalSlide();" class="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200 z-10 hover:bg-black/60">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+
                 <div id="modalDots" class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full z-10"></div>
             </div>
+
             <div class="flex items-center justify-between">
                 <div>
                     <h1 id="modalTitle" class="text-2xl font-black text-gray-900"></h1>
@@ -2215,6 +2379,7 @@
                 </div>
                 <div id="modalPrice" class="text-2xl font-black text-brand-600"></div>
             </div>
+
             <div class="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-100">
                 <div class="flex items-center gap-3">
                     <img id="modalSellerImg" class="w-12 h-12 rounded-full object-cover" src="" alt="Seller">
@@ -2225,21 +2390,54 @@
                 </div>
                 <button onclick="openSellerProfile()" class="px-4 py-2 bg-brand-50 text-brand-600 font-bold rounded-xl text-xs hover:bg-brand-100">View Profile</button>
             </div>
+
             <div>
                 <h3 class="font-bold text-gray-900 text-sm mb-2">Description</h3>
-                <p id="modalDesc" class="text-gray-600 text-sm leading-relaxed"></p>
+                <p id="modalDesc" class="text-gray-600 text-sm leading-relaxed">High quality verified listing on FreeUpper platform.</p>
             </div>
+
             <div class="flex items-center gap-3 pt-2">
                 <button onclick="triggerToast('In-App DM Coming Soon 🚀', 'Reach the seller instantly via WhatsApp!')" class="flex-1 py-4 bg-brand-600 text-white font-bold rounded-xl shadow-lg shadow-brand-500/30 hover:bg-brand-700 transition flex items-center justify-center gap-2 text-sm">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                     <span>Chat in DM</span>
                 </button>
+
                 <a id="whatsappBtn" href="#" target="_blank" class="py-4 px-5 bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition flex items-center justify-center gap-2 text-sm">
                     <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
                     <span>WhatsApp</span>
                 </a>
             </div>
         </div>
+    </div>
+
+    <!-- Immersive Lightbox -->
+    <div id="fullscreenLightbox" class="fixed inset-0 bg-black/95 z-50 hidden flex-col justify-between items-center select-none touch-none">
+        <div class="w-full px-4 py-4 flex items-center justify-between text-white z-20 bg-gradient-to-b from-black/80 to-transparent">
+            <div class="flex items-center gap-2">
+                <span id="lightboxBadge" class="text-xs font-bold bg-white/20 px-3 py-1 rounded-full backdrop-blur-md">1 / 1</span>
+                <span class="text-[10px] text-gray-400 hidden sm:inline">Double-tap or pinch to zoom</span>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button onclick="resetZoom()" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition">Reset Zoom</button>
+                <button onclick="closeFullscreenLightbox()" class="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="relative w-full h-full flex items-center justify-center overflow-hidden" id="lightboxTrack">
+            <div id="lightboxSlidesContainer" class="flex w-full h-full transition-transform duration-300 ease-out"></div>
+
+            <button id="lightboxPrevBtn" onclick="prevLightboxSlide()" class="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/30 backdrop-blur-md transition z-20">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            <button id="lightboxNextBtn" onclick="nextLightboxSlide()" class="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/30 backdrop-blur-md transition z-20">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+        </div>
+
+        <div id="lightboxDots" class="pb-6 flex items-center gap-2 z-20"></div>
     </div>
 
     <!-- Filter Modal (Market) -->
@@ -2339,6 +2537,11 @@
             let lastScrollY = 0,
                 bottomNavHidden = false;
 
+            // Shuffle / refresh state
+            let _feedShuffleSeed = 0;
+            let _shuffleExploreOnce = false;
+            let _shuffleMarketOnce = false;
+
             // Marketplace state
             let marketCategories = [];
             let marketSubcategories = [];
@@ -2348,10 +2551,35 @@
             let maxPriceFilter = null;
             let currentProductId = null;
             let currentImageIndexMap = {};
-            let marketDataLoaded = false; // NEW: cache flag
+            let marketDataLoaded = false;
+
+            // Market card swipe
+            let _marketAutoSwipeTimers = {};
 
             // Tags modal
             let tagsModalData = null;
+
+            // Scroll lock
+            let _lockedScrollY = 0;
+
+            // Video autoplay safety
+            let _scrollSafetyTimer = null;
+
+            // Market image fullscreen
+            let mifState = { productId: null, images: [], index: 0, startX: 0, startY: 0, dragY: 0, dragging: false };
+
+            // Lightbox zoom state
+            let currentZoomScale = 1;
+            let initialPinchDistance = 0;
+            let lastTapTime = 0;
+
+            // Modal carousel state
+            let modalActiveSlideIndex = 0;
+            let lightboxActiveIndex = 0;
+            let currentActiveProduct = null;
+
+            let touchStartX = 0;
+            let touchEndX = 0;
 
             const content = document.getElementById('user-content');
 
@@ -2409,6 +2637,56 @@
                 year: 'numeric' });
             }
 
+            function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) |
+                    0; } return Math.abs(h); }
+
+            function shuffleArray(arr) {
+                const a = [...arr];
+                for (let i = a.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [a[i], a[j]] = [a[j], a[i]];
+                }
+                return a;
+            }
+
+            function copyTextToClipboard(text) {
+                if (navigator.clipboard && window.isSecureContext) {
+                    return navigator.clipboard.writeText(text);
+                }
+                return new Promise((resolve, reject) => {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    try {
+                        document.execCommand('copy') ? resolve() : reject();
+                    } catch (e) { reject(e); }
+                    document.body.removeChild(ta);
+                });
+            }
+
+            // ─── SCROLL LOCK ──────────────────────────────────────────────
+            function lockBodyScroll() {
+                _lockedScrollY = window.scrollY;
+                document.body.style.position = 'fixed';
+                document.body.style.top = `-${_lockedScrollY}px`;
+                document.body.style.left = '0';
+                document.body.style.right = '0';
+                document.body.style.width = '100%';
+            }
+
+            function unlockBodyScroll() {
+                document.body.style.position = '';
+                document.body.style.top = '';
+                document.body.style.left = '';
+                document.body.style.right = '';
+                document.body.style.width = '';
+                window.scrollTo(0, _lockedScrollY);
+            }
+
             // ─── ICONS ─────────────────────────────────────────────────────
             function svgClock() { return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'; }
 
@@ -2428,8 +2706,6 @@
 
             function svgFilter() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>'; }
 
-            function svgLocation() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>'; }
-
             function svgHeart(reacted) {
                 return reacted ?
                     '<svg class="heart-icon" viewBox="0 0 24 24" fill="#DC2626" stroke="#DC2626" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>' :
@@ -2438,8 +2714,12 @@
 
             function bookmarkIcon(filled) { const color = filled ? 'var(--gold)' : 'none'; return `<svg width="19" height="19" viewBox="0 0 24 24" fill="${color}" stroke="var(--gold)" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`; }
 
+            function bookmarkIconWithCount(id, filled, count) {
+                return `<span class="bookmark-badge ${filled?'bookmarked':''}" data-bookmark="${id}">${bookmarkIcon(filled)}<span class="bookmark-count">${formatCount(count||0)}</span></span>`;
+            }
+
             // ───────────────────────────────────────────────────────────────
-            // YOUTUBE PLAYER (reused)
+            // YOUTUBE PLAYER
             // ───────────────────────────────────────────────────────────────
 
             let ytState = {};
@@ -2808,16 +3088,35 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // VIDEO AUTO-PLAY
+            // VIDEO AUTO-PLAY (fixed)
             // ───────────────────────────────────────────────────────────────
 
             let videoObserver = null;
             let currentlyPlayingVideo = null;
             let exploreVideoObserver = null;
 
+            function _pauseVideoEl(vid) {
+                if (!vid) return;
+                if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
+                vid.dataset.shouldPlay = '0';
+                if (currentlyPlayingVideo === vid) currentlyPlayingVideo = null;
+            }
+
+            function _playVideoEl(vid) {
+                if (!vid) return;
+                vid.dataset.shouldPlay = '1';
+                const attemptPlay = () => {
+                    if (vid.dataset.shouldPlay !== '1') return;
+                    if (vid.plyr) { vid.plyr.play().catch(() => {}); } else { vid.play().catch(() => {}); }
+                };
+                attemptPlay();
+                currentlyPlayingVideo = vid;
+            }
+
             function pauseAllVideos() {
                 document.querySelectorAll('video').forEach(vid => {
                     if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
+                    vid.dataset.shouldPlay = '0';
                 });
                 document.querySelectorAll('iframe').forEach(iframe => {
                     if (iframe.src && iframe.src.includes('youtube.com/embed')) {
@@ -2835,56 +3134,41 @@
             function setupVideoAutoplay(scope) {
                 if (videoObserver) videoObserver.disconnect();
                 const searchRoot = scope || document;
-                const videoElements = searchRoot.querySelectorAll('.ig-video-wrap video, .video-container video, .media-carousel-slide video');
+                const selector = '.ig-video-wrap video, .video-container video, .media-carousel-slide video';
+                const videoElements = searchRoot.querySelectorAll(selector);
 
                 videoObserver = new IntersectionObserver((entries) => {
-                    let visibleVideo = null;
-                    for (const entry of entries) {
-                        if (entry.isIntersecting && entry.intersectionRatio >= 0.75) {
-                            visibleVideo = entry.target;
-                            break;
-                        }
-                    }
-
-                    searchRoot.querySelectorAll('.ig-video-wrap video, .video-container video, .media-carousel-slide video')
-                        .forEach(vid => {
-                            if (vid === visibleVideo) return;
-                            if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
-                            if (currentlyPlayingVideo === vid) currentlyPlayingVideo = null;
-                        });
-
-                    searchRoot.querySelectorAll('.ig-video-wrap iframe, .media-carousel-slide iframe').forEach(
-                        iframe => {
-                            const idx = iframe.id.replace('yt-', '');
-                            if (ytState[idx] && ytState[idx].playing) {
-                                ytPostMessage(idx, 'pauseVideo');
-                                ytState[idx].playing = false;
-                                _showYtPauseIcon(idx, false);
-                                if (currentlyPlayingVideo === idx) currentlyPlayingVideo = null;
-                            }
-                        });
-
-                    if (visibleVideo) {
-                        if (visibleVideo.plyr) {
-                            if (currentlyPlayingVideo !== visibleVideo) {
-                                visibleVideo.plyr.play().catch(() => {});
-                                currentlyPlayingVideo = visibleVideo;
-                            }
+                    entries.forEach(entry => {
+                        const vid = entry.target;
+                        const isVisible = entry.isIntersecting && entry.intersectionRatio >= 0.75;
+                        if (isVisible) {
+                            searchRoot.querySelectorAll(selector).forEach(other => {
+                                if (other !== vid) _pauseVideoEl(other);
+                            });
+                            if (currentlyPlayingVideo !== vid) _playVideoEl(vid);
                         } else {
-                            if (currentlyPlayingVideo !== visibleVideo) {
-                                visibleVideo.play().catch(() => {});
-                                currentlyPlayingVideo = visibleVideo;
-                            }
+                            _pauseVideoEl(vid);
                         }
+                    });
+
+                    const anyVisible = Array.from(entries).some(e => e.isIntersecting && e.intersectionRatio >=
+                        0.75);
+                    if (!anyVisible) {
+                        searchRoot.querySelectorAll('.ig-video-wrap iframe, .media-carousel-slide iframe')
+                            .forEach(iframe => {
+                                const idx = iframe.id.replace('yt-', '');
+                                if (ytState[idx] && ytState[idx].playing) {
+                                    ytPostMessage(idx, 'pauseVideo');
+                                    ytState[idx].playing = false;
+                                    _showYtPauseIcon(idx, false);
+                                    if (currentlyPlayingVideo === idx) currentlyPlayingVideo = null;
+                                }
+                            });
                     }
-                }, { threshold: 0.75, rootMargin: '0px 0px -20px 0px' });
+                }, { threshold: [0, 0.75, 1], rootMargin: '0px 0px -10% 0px' });
 
                 videoElements.forEach(vid => videoObserver.observe(vid));
             }
-
-            // ───────────────────────────────────────────────────────────────
-            // EXPLORE GRID VIDEO AUTOPLAY
-            // ───────────────────────────────────────────────────────────────
 
             function setupExploreVideoAutoplay(container) {
                 if (exploreVideoObserver) exploreVideoObserver.disconnect();
@@ -3016,18 +3300,34 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // POSTS
+            // POSTS (with repost feed support)
             // ───────────────────────────────────────────────────────────────
 
             async function reloadPosts() {
                 try {
-                    const posts = await window.PostsAPI.loadAllPosts();
+                    const feed = await window.PostsAPI.loadFeedWithReposts();
+                    // Home feed excludes video reposts — those only surface on video.html
+                    const filtered = feed.filter(entry => {
+                        if (entry.feedType !== 'repost') return true;
+                        return entry.post.mediaType !== 'video';
+                    });
+                    const posts = filtered.map(entry => {
+                        const p = entry.post;
+                        if (entry.feedType === 'repost') {
+                            p._repostMeta = { reposter: entry.reposter, comment: entry.repostComment,
+                                sortTime: entry.sortTime };
+                        } else {
+                            delete p._repostMeta;
+                        }
+                        return p;
+                    });
                     allPosts = posts;
                     appData.posts = posts;
                     appData.userReactions = {};
                     posts.forEach(p => {
                         p.reactions = { like: p.likes || 0 };
                         p.shareCount = p.shareCount || 0;
+                        p.bookmarkCount = p.bookmarkCount || 0;
                         if (p.likedByMe) appData.userReactions[p.id + '-like'] = true;
                     });
                     return posts;
@@ -3088,6 +3388,8 @@
                         } else {
                             images = [];
                         }
+                        const verifiedStatus = item.profiles ? (item.profiles.verified_status || (item
+                            .profiles.verified ? 'verified' : 'none')) : 'none';
                         return {
                             id: item.id,
                             title: item.title,
@@ -3100,6 +3402,7 @@
                                 'Unknown',
                             sellerImg: item.profiles ? (item.profiles.avatar_url || '') : '',
                             sellerId: item.seller_id,
+                            sellerVerified: verifiedStatus,
                             images: images,
                             location: item.location || 'Nigeria',
                             featured: item.featured || false,
@@ -3118,7 +3421,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MARKETPLACE RENDER
+            // MARKETPLACE RENDER (NEW UI/UX)
             // ───────────────────────────────────────────────────────────────
 
             function renderMarketCategoryBars() {
@@ -3204,6 +3507,8 @@
                 if (maxPriceFilter !== null && !isNaN(maxPriceFilter) && maxPriceFilter > 0) {
                     filtered = filtered.filter(p => p.price <= maxPriceFilter);
                 }
+                if (_shuffleMarketOnce) { filtered = shuffleArray(filtered);
+                    _shuffleMarketOnce = false; }
                 renderMarketProducts(filtered);
             }
 
@@ -3215,6 +3520,10 @@
                 const newlySection = document.getElementById('newlySection');
 
                 if (!featuredGrid || !newlyGrid) return;
+
+                // Clear old auto-swipe timers
+                Object.values(_marketAutoSwipeTimers).forEach(clearInterval);
+                _marketAutoSwipeTimers = {};
 
                 featuredGrid.innerHTML = '';
                 newlyGrid.innerHTML = '';
@@ -3241,6 +3550,9 @@
                 newItems.forEach(item => {
                     newlyGrid.innerHTML += createMarketCardHTML(item);
                 });
+
+                // Initialize card swipe + auto-swipe
+                initMarketCardSwipe(document.getElementById('user-content'));
             }
 
             function createMarketCardHTML(item) {
@@ -3260,24 +3572,31 @@
                     dotsHTML += `</div>`;
                 }
 
+                // Seller chip with verified badge
+                let sellerChip = `<div class="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full text-xs">`;
+                sellerChip +=
+                    `<img src="${item.sellerImg}" class="w-4 h-4 rounded-full object-cover" alt="${item.seller}" onerror="this.style.display='none'">`;
+                sellerChip += `<span class="font-medium">${item.seller}</span>`;
+                if (window.getVerifiedBadgeHTML) {
+                    sellerChip += window.getVerifiedBadgeHTML(item.sellerVerified);
+                }
+                sellerChip += `</div>`;
+
                 return `
-                    <div onclick="openProductModal('${item.id}')" class="group cursor-pointer product-card">
-                        <div class="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 mb-2">
-                            <img id="market-card-img-${item.id}" src="${images[activeIdx]}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-                            ${dotsHTML}
-                            <button onclick="event.stopPropagation(); toggleFavorite(this)" class="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-black/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/40 transition">
-                                <svg class="w-4 h-4 heart-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
-                                </svg>
-                            </button>
-                            <div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-white">
-                                <div class="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full text-xs">
-                                    <img src="${item.sellerImg}" class="w-4 h-4 rounded-full object-cover" alt="${item.seller}" onerror="this.style.display='none'">
-                                    <span class="font-medium">${item.seller}</span>
-                                </div>
-                                <span class="font-extrabold text-sm sm:text-base">${item.priceFormatted}</span>
-                            </div>
+                    <div class="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 mb-2 market-swipe-zone" data-product-id="${item.id}" data-image-count="${images.length}">
+                        <img id="market-card-img-${item.id}" src="${images[activeIdx]}" alt="${item.title}" class="w-full h-full object-cover transition duration-300" onclick="event.stopPropagation(); openImageFullscreen('${item.id}', ${activeIdx})">
+                        ${dotsHTML}
+                        <button onclick="event.stopPropagation(); toggleFavorite(this)" class="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-black/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/40 transition">
+                            <svg class="w-4 h-4 heart-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                            </svg>
+                        </button>
+                        <div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-white">
+                            ${sellerChip}
+                            <span class="font-extrabold text-sm sm:text-base">${item.priceFormatted}</span>
                         </div>
+                    </div>
+                    <div onclick="openProductModal('${item.id}')" class="group cursor-pointer product-card">
                         <h3 class="font-bold text-gray-900 text-sm truncate">${item.title}</h3>
                         <div class="flex items-center gap-1.5 text-[11px] text-gray-500 mt-0.5">
                             <span class="font-semibold text-brand-600">${item.category}</span>
@@ -3288,13 +3607,66 @@
                 `;
             }
 
+            // ─── MARKET CARD SWIPE + AUTO-SWIPE ──────────────────────────
+
+            function initMarketCardSwipe(container) {
+                if (!container) return;
+                container.querySelectorAll('.market-swipe-zone').forEach(zone => {
+                    if (zone._swipeInit) return;
+                    zone._swipeInit = true;
+                    const productId = zone.dataset.productId;
+                    const count = parseInt(zone.dataset.imageCount, 10) || 1;
+                    if (count <= 1) return;
+
+                    let startX = 0,
+                        dragging = false;
+                    zone.addEventListener('touchstart', e => { startX = e.touches[0].clientX;
+                        dragging = true;
+                        resetAutoSwipe(productId, count); }, { passive: true });
+                    zone.addEventListener('touchend', e => {
+                        if (!dragging) return;
+                        dragging = false;
+                        const diff = startX - e.changedTouches[0].clientX;
+                        if (Math.abs(diff) > 30) {
+                            const cur = currentImageIndexMap[productId] || 0;
+                            const next = diff > 0 ? (cur + 1) % count : (cur - 1 + count) % count;
+                            const dot = zone.querySelector(`button[onclick*="'${productId}', ${next}"]`);
+                            changeMarketImage(productId, next, dot || zone.querySelector('button'));
+                        }
+                        resetAutoSwipe(productId, count);
+                    }, { passive: true });
+
+                    resetAutoSwipe(productId, count);
+                });
+            }
+
+            function resetAutoSwipe(productId, count) {
+                clearInterval(_marketAutoSwipeTimers[productId]);
+                _marketAutoSwipeTimers[productId] = setInterval(() => {
+                    const cur = currentImageIndexMap[productId] || 0;
+                    const next = (cur + 1) % count;
+                    const imgEl = document.getElementById(`market-card-img-${productId}`);
+                    const product = marketListings.find(p => p.id === productId);
+                    if (!imgEl || !product || !product.images[next]) return;
+                    currentImageIndexMap[productId] = next;
+                    imgEl.src = product.images[next];
+                    const parent = imgEl.parentElement.querySelector('.absolute.bottom-10');
+                    if (parent) {
+                        parent.querySelectorAll('button').forEach((dot, idx) => {
+                            dot.className = idx === next ? 'h-1.5 rounded-full transition-all bg-white w-3' :
+                                'h-1.5 rounded-full transition-all bg-white/50 w-1.5';
+                        });
+                    }
+                }, 4000);
+            }
+
             function changeMarketImage(productId, imageIdx, btnEl) {
                 currentImageIndexMap[productId] = imageIdx;
                 const product = marketListings.find(p => p.id === productId);
                 if (!product || !product.images || !product.images[imageIdx]) return;
                 const imgEl = document.getElementById(`market-card-img-${productId}`);
                 if (imgEl) imgEl.src = product.images[imageIdx];
-                const parent = btnEl.parentElement;
+                const parent = btnEl ? btnEl.parentElement : null;
                 if (parent) {
                     const dots = parent.querySelectorAll('button');
                     dots.forEach((dot, idx) => {
@@ -3304,19 +3676,111 @@
                 }
             }
 
+            // ─── MARKET IMAGE FULLSCREEN VIEWER ──────────────────────────
+
+            function openImageFullscreen(productId, startIndex) {
+                const product = marketListings.find(p => p.id === productId);
+                if (!product || !product.images || !product.images.length) return;
+                mifState = { productId, images: product.images, index: startIndex || 0, startX: 0, startY: 0,
+                    dragY: 0, dragging: false };
+                renderMifTrack();
+                const overlay = document.getElementById('market-image-fullscreen');
+                overlay.style.opacity = '1';
+                overlay.style.pointerEvents = 'auto';
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeImageFullscreen() {
+                const overlay = document.getElementById('market-image-fullscreen');
+                overlay.style.opacity = '0';
+                overlay.style.pointerEvents = 'none';
+                document.body.style.overflow = '';
+            }
+
+            function renderMifTrack() {
+                const track = document.getElementById('mif-track');
+                const dots = document.getElementById('mif-dots');
+                const counter = document.getElementById('mif-counter');
+                track.style.transform = `translateX(-${mifState.index * 100}%)`;
+                track.style.transition = 'transform .3s cubic-bezier(.25,.46,.45,.94)';
+                track.innerHTML = mifState.images.map((url, i) =>
+                    `<div class="mif-slide" data-idx="${i}"><img src="${url}" draggable="false"></div>`
+                ).join('');
+                counter.textContent = mifState.images.length > 1 ? `${mifState.index + 1} / ${mifState.images.length}` :
+                    '';
+                dots.innerHTML = mifState.images.length > 1 ? mifState.images.map((_, i) =>
+                    `<span class="${i === mifState.index ? 'active' : ''}"></span>`
+                ).join('') : '';
+            }
+
+            function setupMifGestures() {
+                const overlay = document.getElementById('market-image-fullscreen');
+                const track = document.getElementById('mif-track');
+                document.getElementById('mif-close-btn').addEventListener('click', closeImageFullscreen);
+
+                track.addEventListener('touchstart', e => {
+                    mifState.startX = e.touches[0].clientX;
+                    mifState.startY = e.touches[0].clientY;
+                    mifState.dragging = true;
+                    track.style.transition = 'none';
+                }, { passive: true });
+
+                track.addEventListener('touchmove', e => {
+                    if (!mifState.dragging) return;
+                    const dx = e.touches[0].clientX - mifState.startX;
+                    const dy = e.touches[0].clientY - mifState.startY;
+                    if (Math.abs(dy) > Math.abs(dx)) {
+                        mifState.dragY = dy;
+                        overlay.style.opacity = String(Math.max(0.4, 1 - Math.abs(dy) / 400));
+                        track.style.transform = `translate(0, ${dy}px) translateX(-${mifState.index * 100}%)`;
+                    } else {
+                        track.style.transform = `translateX(calc(-${mifState.index * 100}% + ${dx}px))`;
+                    }
+                }, { passive: true });
+
+                track.addEventListener('touchend', e => {
+                    if (!mifState.dragging) return;
+                    mifState.dragging = false;
+                    const dx = e.changedTouches[0].clientX - mifState.startX;
+                    const dy = mifState.dragY;
+                    mifState.dragY = 0;
+                    if (Math.abs(dy) > 120) { closeImageFullscreen(); return; }
+                    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+                        if (dx < 0 && mifState.index < mifState.images.length - 1) mifState.index++;
+                        else if (dx > 0 && mifState.index > 0) mifState.index--;
+                    }
+                    renderMifTrack();
+                    overlay.style.opacity = '1';
+                }, { passive: true });
+            }
+
+            function openImageFullscreenFromModal() {
+                if (!currentProductId) return;
+                openImageFullscreen(currentProductId, 0);
+            }
+            window.openImageFullscreen = openImageFullscreen;
+            window.closeImageFullscreen = closeImageFullscreen;
+            window.openImageFullscreenFromModal = openImageFullscreenFromModal;
+
+            // ─── MARKET MODAL HELPERS ─────────────────────────────────────
+
             function openProductModal(id) {
                 const product = marketListings.find(p => p.id === id);
                 if (!product) return;
+                currentActiveProduct = product;
                 currentProductId = id;
-                const images = (product.images && Array.isArray(product.images) && product.images.length > 0) ? product
-                    .images : [''];
+                modalActiveSlideIndex = 0;
 
-                document.getElementById('modalImage').src = images[0] || '';
                 document.getElementById('modalTitle').textContent = product.title;
                 document.getElementById('modalPrice').textContent = product.priceFormatted;
                 document.getElementById('modalCategoryBadge').textContent = product.category;
                 document.getElementById('modalSubcategoryBadge').textContent = product.subcategory;
-                document.getElementById('modalSellerName').textContent = product.seller;
+                if (window.getVerifiedBadgeHTML) {
+                    document.getElementById('modalSellerName').innerHTML =
+                        `${escapeHtml(product.seller)} ${window.getVerifiedBadgeHTML(product.sellerVerified)}`;
+                } else {
+                    document.getElementById('modalSellerName').textContent = product.seller;
+                }
                 document.getElementById('modalSellerImg').src = product.sellerImg || '';
                 document.getElementById('modalLocationText').textContent = product.location + ' • Active Today';
                 document.getElementById('modalDesc').textContent = product.description || 'No description provided.';
@@ -3333,17 +3797,7 @@
                     document.getElementById('whatsappBtn').style.display = 'none';
                 }
 
-                const modalDots = document.getElementById('modalDots');
-                modalDots.innerHTML = '';
-                if (images.length > 1) {
-                    modalDots.classList.remove('hidden');
-                    images.forEach((img) => {
-                        modalDots.innerHTML +=
-                            `<button onclick="document.getElementById('modalImage').src='${img}'" class="w-2 h-2 rounded-full bg-white/60 hover:bg-white transition"></button>`;
-                    });
-                } else {
-                    modalDots.classList.add('hidden');
-                }
+                renderModalCarousel();
 
                 document.getElementById('productModal').classList.remove('hidden');
                 document.getElementById('productModal').classList.add('flex');
@@ -3356,56 +3810,274 @@
                 document.body.classList.remove('market-fullscreen-open');
             }
 
-            function shareCurrentProduct() {
-                const product = marketListings.find(p => p.id === currentProductId);
-                if (!product) return;
-                const url = `${window.location.origin}${window.location.pathname}?product=${product.id}`;
-                const shareData = {
-                    title: product.title,
-                    text: `Check out ${product.title} (${product.priceFormatted}) on FreeUpper!`,
-                    url: url,
-                };
-                if (navigator.share) {
-                    navigator.share(shareData).catch(() => {});
+            function renderModalCarousel() {
+                if (!currentActiveProduct) return;
+                const images = currentActiveProduct.images || [];
+
+                const slidesContainer = document.getElementById('modalSlidesContainer');
+                const dotsContainer = document.getElementById('modalDots');
+                const badge = document.getElementById('modalImageBadge');
+                const prevBtn = document.getElementById('prevSlideBtn');
+                const nextBtn = document.getElementById('nextSlideBtn');
+
+                slidesContainer.innerHTML = '';
+                dotsContainer.innerHTML = '';
+
+                images.forEach((img) => {
+                    slidesContainer.innerHTML += `
+                        <div class="w-full h-full flex-none shrink-0 flex items-center justify-center bg-gray-900 overflow-hidden">
+                            <img src="${img}" class="w-full h-full object-cover select-none pointer-events-none" alt="Product Slide">
+                        </div>
+                    `;
+                });
+
+                if (images.length > 1) {
+                    dotsContainer.parentElement.classList.remove('hidden');
+                    badge.classList.remove('hidden');
+                    prevBtn.classList.remove('hidden');
+                    nextBtn.classList.remove('hidden');
+
+                    images.forEach((_, idx) => {
+                        dotsContainer.innerHTML += `
+                            <button onclick="event.stopPropagation(); goToModalSlide(${idx})" class="h-1.5 rounded-full transition-all ${idx === modalActiveSlideIndex ? 'bg-white w-3' : 'bg-white/40 w-1.5'}"></button>
+                        `;
+                    });
                 } else {
-                    navigator.clipboard.writeText(url);
+                    dotsContainer.parentElement.classList.add('hidden');
+                    badge.classList.add('hidden');
+                    prevBtn.classList.add('hidden');
+                    nextBtn.classList.add('hidden');
+                }
+
+                updateModalSlidePosition();
+            }
+
+            function updateModalSlidePosition() {
+                if (!currentActiveProduct) return;
+                const images = currentActiveProduct.images || [];
+                const container = document.getElementById('modalSlidesContainer');
+                const badge = document.getElementById('modalImageBadge');
+                
+                container.style.transform = `translateX(-${modalActiveSlideIndex * 100}%)`;
+                badge.textContent = `${modalActiveSlideIndex + 1} / ${images.length}`;
+
+                const dots = document.getElementById('modalDots').querySelectorAll('button');
+                dots.forEach((dot, idx) => {
+                    dot.className = idx === modalActiveSlideIndex ? 'h-1.5 rounded-full transition-all bg-white w-3' : 'h-1.5 rounded-full transition-all bg-white/40 w-1.5';
+                });
+            }
+
+            function nextModalSlide() {
+                if (!currentActiveProduct) return;
+                const images = currentActiveProduct.images || [];
+                modalActiveSlideIndex = (modalActiveSlideIndex + 1) % images.length;
+                updateModalSlidePosition();
+            }
+
+            function prevModalSlide() {
+                if (!currentActiveProduct) return;
+                const images = currentActiveProduct.images || [];
+                modalActiveSlideIndex = (modalActiveSlideIndex - 1 + images.length) % images.length;
+                updateModalSlidePosition();
+            }
+
+            function goToModalSlide(idx) {
+                modalActiveSlideIndex = idx;
+                updateModalSlidePosition();
+            }
+
+            function openFullscreenLightbox() {
+                if (!currentActiveProduct) return;
+                lightboxActiveIndex = modalActiveSlideIndex;
+                renderLightbox();
+                document.getElementById('fullscreenLightbox').classList.remove('hidden');
+                document.getElementById('fullscreenLightbox').classList.add('flex');
+                lockBodyScroll();
+            }
+
+            function closeFullscreenLightbox() {
+                resetZoom();
+                document.getElementById('fullscreenLightbox').classList.add('hidden');
+                document.getElementById('fullscreenLightbox').classList.remove('flex');
+                unlockBodyScroll();
+            }
+
+            function renderLightbox() {
+                if (!currentActiveProduct) return;
+                const images = currentActiveProduct.images || [];
+
+                const container = document.getElementById('lightboxSlidesContainer');
+                const dotsContainer = document.getElementById('lightboxDots');
+                const prevBtn = document.getElementById('lightboxPrevBtn');
+                const nextBtn = document.getElementById('lightboxNextBtn');
+
+                container.innerHTML = '';
+                dotsContainer.innerHTML = '';
+
+                images.forEach((img, idx) => {
+                    container.innerHTML += `
+                        <div class="w-full h-full flex-none shrink-0 flex items-center justify-center p-2">
+                            <img id="lightbox-img-${idx}" src="${img}" class="max-w-full max-h-full object-contain rounded-xl select-none transition-transform duration-200 cursor-zoom-in" alt="Full Image View">
+                        </div>
+                    `;
+                });
+
+                if (images.length > 1) {
+                    prevBtn.classList.remove('hidden');
+                    nextBtn.classList.remove('hidden');
+                    dotsContainer.classList.remove('hidden');
+
+                    images.forEach((_, idx) => {
+                        dotsContainer.innerHTML += `
+                            <button onclick="goToLightboxSlide(${idx})" class="h-2 rounded-full transition-all ${idx === lightboxActiveIndex ? 'bg-white w-4' : 'bg-white/30 w-2'}"></button>
+                        `;
+                    });
+                } else {
+                    prevBtn.classList.add('hidden');
+                    nextBtn.classList.add('hidden');
+                    dotsContainer.classList.add('hidden');
+                }
+
+                updateLightboxPosition();
+            }
+
+            function updateLightboxPosition() {
+                if (!currentActiveProduct) return;
+                resetZoom();
+                const images = currentActiveProduct.images || [];
+                const container = document.getElementById('lightboxSlidesContainer');
+                const badge = document.getElementById('lightboxBadge');
+
+                container.style.transform = `translateX(-${lightboxActiveIndex * 100}%)`;
+                badge.textContent = `${lightboxActiveIndex + 1} / ${images.length}`;
+
+                const dots = document.getElementById('lightboxDots').querySelectorAll('button');
+                dots.forEach((dot, idx) => {
+                    dot.className = idx === lightboxActiveIndex ? 'h-2 rounded-full transition-all bg-white w-4' : 'h-2 rounded-full transition-all bg-white/30 w-2';
+                });
+
+                modalActiveSlideIndex = lightboxActiveIndex;
+                updateModalSlidePosition();
+            }
+
+            function nextLightboxSlide() {
+                if (!currentActiveProduct) return;
+                const images = currentActiveProduct.images || [];
+                lightboxActiveIndex = (lightboxActiveIndex + 1) % images.length;
+                updateLightboxPosition();
+            }
+
+            function prevLightboxSlide() {
+                if (!currentActiveProduct) return;
+                const images = currentActiveProduct.images || [];
+                lightboxActiveIndex = (lightboxActiveIndex - 1 + images.length) % images.length;
+                updateLightboxPosition();
+            }
+
+            function goToLightboxSlide(idx) {
+                lightboxActiveIndex = idx;
+                updateLightboxPosition();
+            }
+
+            /* PINCH & DOUBLE-TAP ZOOM CONTROLLER FOR LIGHTBOX */
+            function applyImageZoom(scale) {
+                currentZoomScale = Math.min(Math.max(1, scale), 3.5);
+                const activeImg = document.getElementById(`lightbox-img-${lightboxActiveIndex}`);
+                if (activeImg) {
+                    activeImg.style.transform = `scale(${currentZoomScale})`;
+                }
+            }
+
+            function resetZoom() {
+                currentZoomScale = 1;
+                const activeImg = document.getElementById(`lightbox-img-${lightboxActiveIndex}`);
+                if (activeImg) {
+                    activeImg.style.transform = `scale(1)`;
+                }
+            }
+
+            const lightboxTrack = document.getElementById('lightboxTrack');
+            
+            lightboxTrack.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 2) {
+                    initialPinchDistance = Math.hypot(
+                        e.touches[0].pageX - e.touches[1].pageX,
+                        e.touches[0].pageY - e.touches[1].pageY
+                    );
+                } else if (e.touches.length === 1) {
+                    touchStartX = e.changedTouches[0].screenX;
+                    
+                    // Double tap handling
+                    const now = new Date().getTime();
+                    if (now - lastTapTime < 300) {
+                        if (currentZoomScale > 1) resetZoom();
+                        else applyImageZoom(2.2);
+                    }
+                    lastTapTime = now;
+                }
+            }, { passive: true });
+
+            lightboxTrack.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 2) {
+                    const currentDist = Math.hypot(
+                        e.touches[0].pageX - e.touches[1].pageX,
+                        e.touches[0].pageY - e.touches[1].pageY
+                    );
+                    const zoomFactor = currentDist / initialPinchDistance;
+                    applyImageZoom(currentZoomScale * zoomFactor);
+                    initialPinchDistance = currentDist;
+                }
+            }, { passive: true });
+
+            lightboxTrack.addEventListener('touchend', (e) => {
+                if (e.changedTouches.length === 1 && currentZoomScale === 1) {
+                    touchEndX = e.changedTouches[0].screenX;
+                    if (touchStartX - touchEndX > 40) nextLightboxSlide();
+                    else if (touchEndX - touchStartX > 40) prevLightboxSlide();
+                }
+            }, { passive: true });
+
+            // MODAL CAROUSEL SWIPE HANDLERS
+            const carouselTrack = document.getElementById('modalCarouselTrack');
+            carouselTrack.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
+            carouselTrack.addEventListener('touchend', (e) => {
+                touchEndX = e.changedTouches[0].screenX;
+                if (touchStartX - touchEndX > 40) nextModalSlide();
+                else if (touchEndX - touchStartX > 40) prevModalSlide();
+            }, { passive: true });
+
+            function shareCurrentProduct() {
+                if (!currentActiveProduct) return;
+
+                const shareData = {
+                    title: currentActiveProduct.title,
+                    text: `Check out ${currentActiveProduct.title} (${currentActiveProduct.priceFormatted}) on FreeUpper!`,
+                    url: window.location.href,
+                };
+
+                if (navigator.share) {
+                    navigator.share(shareData)
+                        .then(() => triggerToast('Link Shared 🎉', 'Product shared successfully!'))
+                        .catch(() => {});
+                } else {
+                    copyTextToClipboard(window.location.href);
                     triggerToast('Link Copied 🔗', 'Product URL copied to clipboard!');
                 }
             }
 
             function openSellerProfile() {
-                const product = marketListings.find(p => p.id === currentProductId);
-                if (product && product.sellerId) {
-                    window.location.href = `profile.html?uid=${product.sellerId}`;
+                if (!currentActiveProduct) return;
+                const sellerId = currentActiveProduct.sellerId;
+                if (sellerId) {
+                    window.location.href = `profile.html?uid=${sellerId}`;
                 } else {
                     triggerToast('Profile not found', 'Seller information unavailable.');
                 }
             }
 
-            function openFilterModal() {
-                document.getElementById('filterModal').classList.remove('hidden');
-            }
-
-            function closeFilterModal() {
-                document.getElementById('filterModal').classList.add('hidden');
-            }
-
-            function applyFilters() {
-                const val = parseFloat(document.getElementById('filterMaxPrice').value);
-                maxPriceFilter = (!isNaN(val) && val > 0) ? val : null;
-                applyMarketFiltersAndRender();
-                closeFilterModal();
-                if (maxPriceFilter) {
-                    triggerToast('Filter Applied 🎯', `Showing items priced up to ₦${maxPriceFilter.toLocaleString()}`);
-                }
-            }
-
-            function resetFilters() {
-                document.getElementById('filterMaxPrice').value = '';
-                maxPriceFilter = null;
-                applyMarketFiltersAndRender();
-                closeFilterModal();
-            }
+            function openFilterModal() { document.getElementById('filterModal').classList.remove('hidden'); }
+            function closeFilterModal() { document.getElementById('filterModal').classList.add('hidden'); }
+            function closeSeeAllModal() { document.getElementById('seeAllModal').classList.add('hidden'); document.getElementById('seeAllModal').classList.remove('flex'); }
 
             function openSeeAllModal(title, isFeatured) {
                 document.getElementById('seeAllTitle').textContent = title;
@@ -3417,26 +4089,6 @@
                 });
                 document.getElementById('seeAllModal').classList.remove('hidden');
                 document.getElementById('seeAllModal').classList.add('flex');
-            }
-
-            function closeSeeAllModal() {
-                document.getElementById('seeAllModal').classList.add('hidden');
-                document.getElementById('seeAllModal').classList.remove('flex');
-            }
-
-            function handleMarketSearch(query) {
-                const clean = query.toLowerCase().trim();
-                if (!clean) {
-                    applyMarketFiltersAndRender();
-                    return;
-                }
-                const filtered = marketListings.filter(p =>
-                    p.title.toLowerCase().includes(clean) ||
-                    p.category.toLowerCase().includes(clean) ||
-                    p.subcategory.toLowerCase().includes(clean) ||
-                    p.seller.toLowerCase().includes(clean)
-                );
-                renderMarketProducts(filtered);
             }
 
             function triggerToast(title, sub) {
@@ -3465,8 +4117,40 @@
                 }
             }
 
+            function applyFilters() {
+                const val = parseFloat(document.getElementById('filterMaxPrice').value);
+                maxPriceFilter = (!isNaN(val) && val > 0) ? val : null;
+                applyMarketFiltersAndRender();
+                closeFilterModal();
+                if (maxPriceFilter) {
+                    triggerToast('Filter Applied 🎯', `Showing items priced up to ₦${maxPriceFilter.toLocaleString()}`);
+                }
+            }
+
+            function resetFilters() {
+                document.getElementById('filterMaxPrice').value = '';
+                maxPriceFilter = null;
+                applyMarketFiltersAndRender();
+                closeFilterModal();
+            }
+
+            function handleMarketSearch(query) {
+                const clean = query.toLowerCase().trim();
+                if (!clean) {
+                    applyMarketFiltersAndRender();
+                    return;
+                }
+                const filtered = marketListings.filter(p =>
+                    p.title.toLowerCase().includes(clean) ||
+                    p.category.toLowerCase().includes(clean) ||
+                    p.subcategory.toLowerCase().includes(clean) ||
+                    p.seller.toLowerCase().includes(clean)
+                );
+                renderMarketProducts(filtered);
+            }
+
             // ───────────────────────────────────────────────────────────────
-            // REACTIONS
+            // REACTIONS (post feed)
             // ───────────────────────────────────────────────────────────────
 
             async function toggleReaction(postId) {
@@ -3565,7 +4249,7 @@
             };
 
             // ───────────────────────────────────────────────────────────────
-            // ACTIONS ROW (no 3-dot menu)
+            // ACTIONS ROW (post feed)
             // ───────────────────────────────────────────────────────────────
 
             function buildActionsRow(p) {
@@ -3577,13 +4261,13 @@
                         <span class="comment-btn">${svgComment()}<span class="comment-count">${formatCount(cc)}</span></span>
                         ${buildReactionButton(p.id)}
                         <span class="views-count">${svgEye()}<span>${formatCount(p.views||0)}</span></span>
-                        <span class="bookmark-badge ${bm?'bookmarked':''}" data-bookmark="${p.id}">${bookmarkIcon(bm)}</span>
+                        ${bookmarkIconWithCount(p.id, bm, p.bookmarkCount)}
                         <span class="share-btn ${shared?'shared':''}" data-share-post="${p.id}">${svgShare()}<span class="share-count">${formatCount(p.shareCount||0)}</span></span>
                     </div>`;
             }
 
             // ───────────────────────────────────────────────────────────────
-            // REPORT POST (via share modal)
+            // REPORT POST
             // ───────────────────────────────────────────────────────────────
 
             function reportPostFromShare(postId) {
@@ -3618,7 +4302,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // DELETE POST (via share modal)
+            // DELETE POST
             // ───────────────────────────────────────────────────────────────
 
             function deletePostFromShare(postId) {
@@ -3674,7 +4358,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD POST HTML (no 3-dot menu)
+            // BUILD POST HTML (with repost banner)
             // ───────────────────────────────────────────────────────────────
 
             function buildPostHTML(p, index) {
@@ -3682,6 +4366,13 @@
                 const da = author.name;
                 const aa = author.avatar;
                 const verifiedStatus = author.verified_status;
+
+                // Repost banner if this is a repost
+                const repostBanner = p._repostMeta ? `
+                    <div class="repost-banner" data-user-id="${p._repostMeta.reposter.id}">
+                        <span class="repost-icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>
+                        <span class="repost-author">${escapeHtml(p._repostMeta.reposter.display_name || p._repostMeta.reposter.username)}</span> reposted
+                    </div>` : '';
 
                 const hd = p.description && p.description.trim().length > 0;
                 const pt = (p.content || '').substring(0, 250);
@@ -3695,11 +4386,13 @@
                 const followBtn = buildFollowButton(p.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
 
-                // Render content with mentions
                 const renderedContent = window.Mentions ? window.Mentions.renderMentions(p.content, p.mentions || []) : linkifyContent(p.content);
                 const renderedPreview = window.Mentions ? window.Mentions.renderMentions(pt, p.mentions || []) : linkifyContent(pt);
 
-                return `<article class="feed-post" data-post-id="${p.id}" data-author-id="${author.id}">
+                const isRepostClass = p._repostMeta ? 'is-repost' : '';
+
+                return `<article class="feed-post ${isRepostClass}" data-post-id="${p.id}" data-author-id="${author.id}">
+                        ${repostBanner}
                         <div class="flex items-start gap-3" style="padding:0 16px;">
                           <img data-author-avatar src="${aa}" class="user-mini-avatar" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;cursor:pointer;flex-shrink:0;">
                           <div style="min-width:0;flex:1;">
@@ -3729,6 +4422,8 @@
             // FEED / EXPLORE RENDER
             // ───────────────────────────────────────────────────────────────
 
+            function getUserCategories() { const r = localStorage.getItem(UCK); return r ? JSON.parse(r) : []; }
+
             function getFilteredSortedPosts() {
                 const currentUser = getCurrentUser();
                 let p = [...allPosts];
@@ -3747,6 +4442,8 @@
                 if (currentSortMethod === 'trending') p.sort((a, b) => (b.views || 0) - (a.views || 0));
                 else if (currentSortMethod === 'foryou') {
                     const uc = getUserCategories();
+                    const jitter = new Map(p.map(post => [post.id, ((hashStr(post.id + _feedShuffleSeed) % 1000) /
+                        1000) * 0.25]));
                     p.sort((a, b) => {
                         const score = p => {
                             const ah = (Date.now() - new Date(p.timestamp || p.date)) / 36e5;
@@ -3754,7 +4451,7 @@
                                 .approved !== false).length : (p.comments || 0);
                             const eg = (p.views || 0) + ((p.reactions.like || 0) * 2) + (commentCount *
                             2);
-                            return eg / Math.pow(ah + 2, 1.5);
+                            return (eg / Math.pow(ah + 2, 1.5)) * (1 + (jitter.get(p.id) || 0));
                         };
                         return (score(b) * (uc.includes(b.category) ? 1.4 : 1)) - (score(a) * (uc
                             .includes(a.category) ? 1.4 : 1));
@@ -3762,8 +4459,6 @@
                 } else p.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
                 return p;
             }
-
-            function getUserCategories() { const r = localStorage.getItem(UCK); return r ? JSON.parse(r) : []; }
 
             function renderFeedContainer() {
                 const ps = getFilteredSortedPosts(),
@@ -3972,16 +4667,20 @@
 
             async function toggleBookmarkUI(article) {
                 const pid = article.dataset.postId;
+                const post = appData.posts.find(p => p.id === pid);
                 const nb = await toggleBookmark(pid);
-                article.querySelectorAll('.bookmark-badge').forEach(el => {
+                if (post) post.bookmarkCount = Math.max(0, (post.bookmarkCount || 0) + (nb ? 1 : -1));
+                document.querySelectorAll(`[data-bookmark="${pid}"]`).forEach(el => {
                     el.classList.toggle('bookmarked', nb);
-                    el.innerHTML = bookmarkIcon(nb);
+                    el.innerHTML = bookmarkIcon(nb) +
+                        `<span class="bookmark-count">${formatCount(post?post.bookmarkCount:0)}</span>`;
                     el.classList.add('bookmark-breathe');
                     setTimeout(() => el.classList.remove('bookmark-breathe'), 400);
                 });
                 document.querySelectorAll(`#single-bookmark-${pid}`).forEach(el => {
                     el.classList.toggle('bookmarked', nb);
-                    el.innerHTML = bookmarkIcon(nb);
+                    el.innerHTML = bookmarkIcon(nb) +
+                        `<span class="bookmark-count">${formatCount(post?post.bookmarkCount:0)}</span>`;
                 });
                 showToast(nb ? 'Saved' : 'Removed from saved');
             }
@@ -3994,7 +4693,7 @@
                 renderUI(); }
 
             // ───────────────────────────────────────────────────────────────
-            // SHARE MODAL (with Report & Delete)
+            // SHARE MODAL
             // ───────────────────────────────────────────────────────────────
 
             let sharePostId = null;
@@ -4002,12 +4701,22 @@
             function openShareModal(postId) {
                 sharePostId = postId;
                 const modal = document.getElementById('share-modal');
-                // Show/hide delete and report buttons based on ownership
                 const post = allPosts.find(p => p.id === postId);
                 const cu = getCurrentUser();
                 const isOwner = post && cu && cu.isLoggedIn && post.user_id === cu.id;
                 const deleteBtn = document.getElementById('share-delete-btn');
                 const reportBtn = document.getElementById('share-report-btn');
+
+                // Update repost label
+                const repostBtn = modal.querySelector('.share-repost');
+                if (post && post.myRepost) {
+                    repostBtn.classList.add('reposted');
+                    document.getElementById('repost-label').textContent = 'Reposted';
+                } else {
+                    repostBtn.classList.remove('reposted');
+                    document.getElementById('repost-label').textContent = 'Repost';
+                }
+
                 if (deleteBtn) deleteBtn.style.display = isOwner ? 'flex' : 'none';
                 if (reportBtn) reportBtn.style.display = isOwner ? 'none' : 'flex';
                 modal.classList.add('open');
@@ -4027,51 +4736,51 @@
                 const url = `${window.location.origin}${window.location.pathname}?post=${sharePostId}`;
                 const title = post.title || 'FreeUpper post';
 
-                toggleShare(sharePostId).then(shared => {
-                    post.shareCount = Math.max(0, (post.shareCount || 0) + (shared ? 1 : -1));
-                    document.querySelectorAll(
-                            `article[data-post-id="${sharePostId}"] .share-btn, #single-share-btn[data-share-post="${sharePostId}"]`
-                            )
-                        .forEach(el => {
-                            el.classList.toggle('shared', shared);
-                            const cnt = el.querySelector('.share-count');
-                            if (cnt) cnt.textContent = formatCount(post.shareCount);
-                        });
-                    if (action === 'profile') {
-                        showToast('Shared to your profile! ✨');
-                        closeShareModal();
-                    } else if (action === 'copy') {
-                        navigator.clipboard.writeText(url).then(() => {
-                            showToast('Link copied to clipboard 📋');
-                            closeShareModal();
-                        }).catch(() => {
-                            showToast('Could not copy link');
-                            closeShareModal();
-                        });
-                    } else if (action === 'native') {
-                        if (navigator.share) {
-                            navigator.share({ title: title, text: title, url: url }).catch(() => {});
-                        } else {
-                            navigator.clipboard.writeText(url).then(() => {
-                                showToast('Link copied to clipboard 📋');
+                if (action === 'repost') {
+                    if (window.AuthUser && window.AuthUser.requireAuth) {
+                        window.AuthUser.requireAuth(async () => {
+                            try {
+                                const { reposted, count } = await window.PostsAPI.toggleRepostAPI(sharePostId,
+                                '');
+                                post.myRepost = reposted;
+                                post.repostCount = count;
+                                document.querySelectorAll(`.share-repost`).forEach(el => {
+                                    el.classList.toggle('reposted', reposted);
+                                    const lbl = el.querySelector('#repost-label');
+                                    if (lbl) lbl.textContent = reposted ? 'Reposted' : 'Repost';
+                                });
+                                showToast(reposted ? 'Reposted to your followers ✨' : 'Repost removed');
                                 closeShareModal();
-                            });
-                        }
-                        closeShareModal();
-                    } else if (action === 'more') {
-                        navigator.clipboard.writeText(url).then(() => {
-                            showToast('Link copied to clipboard 📋');
-                            closeShareModal();
-                        }).catch(() => {
-                            showToast('Could not copy link');
-                            closeShareModal();
+                            } catch (err) { showToast(err.message, 'r'); }
                         });
+                    } else { showToast('Please sign in to repost', 'o'); }
+                    return;
+                }
+
+                if (action === 'copy') {
+                    copyTextToClipboard(url).then(() => {
+                        showToast('Link copied to clipboard 📋');
+                        closeShareModal();
+                    }).catch(() => {
+                        showToast('Could not copy link — long-press the URL bar instead');
+                        closeShareModal();
+                    });
+                    return;
+                }
+
+                if (action === 'native') {
+                    if (navigator.share) {
+                        navigator.share({ title, text: title, url }).catch(() => {});
+                    } else {
+                        copyTextToClipboard(url).then(() => showToast('Link copied to clipboard 📋'));
                     }
-                });
+                    closeShareModal();
+                    return;
+                }
             }
 
             // ───────────────────────────────────────────────────────────────
-            // COMMENTS
+            // COMMENTS (post feed)
             // ───────────────────────────────────────────────────────────────
 
             function getAllDescendants(pid, comments) { const r = [];
@@ -4222,7 +4931,6 @@
                                 if (!Array.isArray(p.comments)) p.comments = [];
                                 p.comments.push(comment);
                                 p.commentCount = (p.commentCount || 0) + 1;
-                                // Notify mentioned users
                                 const user = getCurrentUser();
                                 if (comment.id && mentions.length > 0 && window.Mentions) {
                                     window.Mentions.notifyMentionedUsers(
@@ -4321,10 +5029,10 @@
                     const t = e.target;
                     if (t.closest('.comment-reply-btn') || t.closest('.reply-reply-btn')) {
                         const btn = t.closest('.comment-reply-btn') || t.closest('.reply-reply-btn');
-                        const ci = parseInt(btn.closest('[data-comment-id]')?.dataset.commentId);
+                        const ci = btn.closest('[data-comment-id]')?.dataset.commentId;
                         const un = btn.closest('[data-comment-id]')?.querySelector(
                             '.comment-username,.reply-username')?.textContent;
-                        if (ci && un) replyToComment(ci, un);
+                        if (ci && un) replyToComment(ci, un.trim());
                         return;
                     }
                     if (t.closest('.comment-like-btn') || t.closest('.reply-like-btn')) {
@@ -4338,12 +5046,10 @@
                         if (ci) toggleCommentExpand(btn, ci);
                         return;
                     }
-                    if (t.closest('.expand-replies-btn')) { const ci = parseInt(t.closest(
-                            '.expand-replies-btn').dataset.commentId); if (ci) expandReplies(ci,
-                        postId); return; }
-                    if (t.closest('.collapse-replies-btn')) { const ci = parseInt(t.closest(
-                            '.collapse-replies-btn').dataset.commentId); if (ci) collapseReplies(ci,
-                        postId); return; }
+                    if (t.closest('.expand-replies-btn')) { const ci = t.closest('.expand-replies-btn')
+                            .dataset.commentId; if (ci) expandReplies(ci, postId); return; }
+                    if (t.closest('.collapse-replies-btn')) { const ci = t.closest('.collapse-replies-btn')
+                            .dataset.commentId; if (ci) collapseReplies(ci, postId); return; }
                     if (t.closest('.load-more-comments-btn')) { loadMoreComments(postId); return; }
                     if (t.closest('.comment-avatar') || t.closest('.reply-avatar-dot')) {
                         const el = t.closest('.comment-avatar') || t.closest('.reply-avatar-dot');
@@ -4462,7 +5168,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // EXPLORE FULLSCREEN
+            // EXPLORE FULLSCREEN (fast paint)
             // ───────────────────────────────────────────────────────────────
 
             function buildSinglePostHTML(post) {
@@ -4502,7 +5208,7 @@
                           <span class="comment-btn">${svgComment()}<span class="comment-count" id="comments-count-${post.id}">${formatCount(comments.length)}</span></span>
                           ${buildReactionButton(post.id)}
                           <span class="views-count">${svgEye()}<span>${formatCount(post.views||0)}</span></span>
-                          <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}</span>
+                          <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}<span class="bookmark-count">${formatCount(post.bookmarkCount||0)}</span></span>
                           <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}</span>
                         </div>
                         <div class="mt-5">
@@ -4514,7 +5220,12 @@
 
             async function openExplorePost(id, returnPage, focusComment) {
                 pauseAllVideos();
-                if (exploreVideoObserver) { exploreVideoObserver.disconnect(); exploreVideoObserver = null; }
+                if (exploreVideoObserver) { exploreVideoObserver.disconnect();
+                    exploreVideoObserver = null; }
+                if (videoObserver) { videoObserver.disconnect();
+                    videoObserver = null; }
+                lockBodyScroll();
+
                 const fs = document.getElementById('explore-fullscreen'),
                     fc = document.getElementById('explore-fullscreen-content');
                 if (!fs || !fc) return;
@@ -4527,26 +5238,25 @@
                 uiPage = 'single-post-explore';
                 exploreReplyTarget = null;
                 expandedThreads.clear();
+
                 const post = allPosts.find(p => p.id === id);
-                if (post) {
-                    if (window.PostsAPI && window.PostsAPI.incrementView) {
-                        window.PostsAPI.incrementView(id);
-                    }
-                    post.views = (post.views || 0) + 1;
-                    if (!Array.isArray(post.comments)) {
-                        if (window.PostsAPI && window.PostsAPI.loadComments) {
-                            try {
-                                post.comments = await window.PostsAPI.loadComments(id);
-                            } catch (err) {
-                                console.error('Failed to load comments:', err);
-                                post.comments = [];
-                            }
-                        }
-                    }
-                }
                 const catNameEl = document.getElementById('explore-category-name');
                 if (catNameEl) catNameEl.textContent = post ? (post.title || 'Post') : 'Post';
+
+                // Paint immediately with whatever comments we already have (or none)
+                if (post && !Array.isArray(post.comments)) post.comments = [];
                 fc.innerHTML = buildSinglePostHTML(post);
+
+                // Open the sheet right away — don't wait on network
+                fs.classList.add('open');
+                document.body.classList.add('explore-open');
+                fs.scrollTop = 0;
+
+                // Set up event delegation immediately
+                setupExploreEventDelegation(fc, id);
+                setupCommentListDelegation(fc, id);
+
+                // Initialize players after paint
                 requestAnimationFrame(() => {
                     initPlayers(fc);
                     setTimeout(() => {
@@ -4572,16 +5282,29 @@
                         }
                     }, 400);
                 });
-                fs.classList.add('open');
-                document.body.classList.add('explore-open');
-                document.body.style.overflow = 'hidden';
-                fs.scrollTop = 0;
+
                 setCommentBarVisible(false);
                 const eb = document.getElementById('explore-comment-bar');
                 if (eb) eb.style.display = 'block';
                 updateExploreReplyContextUI();
-                setupExploreEventDelegation(fc, id);
-                setupCommentListDelegation(fc, id);
+
+                // Load comments asynchronously
+                if (post) {
+                    if (window.PostsAPI && window.PostsAPI.incrementView) window.PostsAPI.incrementView(id);
+                    post.views = (post.views || 0) + 1;
+                    if (window.PostsAPI && window.PostsAPI.loadComments) {
+                        const cl = document.getElementById('comments-list');
+                        if (cl) cl.innerHTML = commentSkeletons(3);
+                        window.PostsAPI.loadComments(id).then(comments => {
+                            post.comments = comments;
+                            if (uiPage === 'single-post-explore' && currentPostId === id) {
+                                refreshCommentsList(id, 'comments-list');
+                                updateCommentCount(id);
+                            }
+                        }).catch(err => console.error('Failed to load comments:', err));
+                    }
+                }
+
                 if (focusComment) {
                     const ta = document.getElementById('explore-comment-textarea');
                     if (ta) setTimeout(() => ta.focus(), 300);
@@ -4595,7 +5318,7 @@
                 if (eb) eb.style.display = 'none';
                 fs.classList.remove('open');
                 document.body.classList.remove('explore-open');
-                document.body.style.overflow = '';
+                unlockBodyScroll();
                 currentPostId = null;
                 const returnPage = window._fullscreenReturnPage || 'home';
                 uiPage = returnPage;
@@ -4604,7 +5327,8 @@
                 setTimeout(() => {
                     const fc = document.getElementById('explore-fullscreen-content');
                     if (fc) fc.innerHTML = '';
-                    setupVideoAutoplay(document);
+                    const co = document.getElementById('feed-container');
+                    setupVideoAutoplay(co || document);
                 }, 400);
             }
 
@@ -4623,12 +5347,15 @@
                         const btn = t.closest('.bookmark-badge');
                         toggleBookmark(postId).then(nb => {
                             btn.classList.toggle('bookmarked', nb);
-                            btn.innerHTML = bookmarkIcon(nb);
+                            btn.innerHTML = bookmarkIcon(nb) +
+                                `<span class="bookmark-count">${formatCount(post?post.bookmarkCount:0)}</span>`;
                             btn.classList.add('bookmark-breathe');
                             setTimeout(() => btn.classList.remove('bookmark-breathe'), 400);
                             document.querySelectorAll(`article[data-post-id="${postId}"] .bookmark-badge`)
                                 .forEach(el => { el.classList.toggle('bookmarked', nb);
-                                    el.innerHTML = bookmarkIcon(nb); });
+                                    el.innerHTML = bookmarkIcon(nb) +
+                                        `<span class="bookmark-count">${formatCount(post?post.bookmarkCount:0)}</span>`;
+                                });
                             showToast(nb ? 'Saved' : 'Removed from saved');
                         });
                         return;
@@ -4664,12 +5391,13 @@
                 co.innerHTML = `<div class="max-w-2xl mx-auto px-3 py-3">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:0 6px;">
                           <h2 class="font-heading font-extrabold text-lg" style="color:var(--text);">Explore</h2>
-                          <button class="subtitle-filter-btn ${currentCategoryFilter?'active':''}" id="explore-filter-inline-btn">${svgFilter()} ${currentCategoryFilter||'Filter'}</button>
                         </div>
                         <div class="explore-grid" id="explore-grid-content">${exploreSkeletonGrid()}</div>
                       </div>`;
 
                 if (currentCategoryFilter) p = p.filter(post => post.category === currentCategoryFilter);
+                if (_shuffleExploreOnce) { p = shuffleArray(p);
+                    _shuffleExploreOnce = false; }
 
                 requestAnimationFrame(() => {
                     const gc = document.getElementById('explore-grid-content');
@@ -4688,8 +5416,6 @@
                         setupExploreVideoAutoplay(gc);
                     }, 300);
                 });
-                document.getElementById('explore-filter-inline-btn')?.addEventListener('click',
-                openFilterDrawer);
             }
 
             function exploreSkeletonGrid() {
@@ -4756,7 +5482,8 @@
                 if (uiPage === 'home') tabScrollPositions.home = scrollY;
                 else if (uiPage === 'explore') tabScrollPositions.explore = scrollY;
                 else if (uiPage === 'market') tabScrollPositions.market = scrollY;
-                if (exploreVideoObserver) { exploreVideoObserver.disconnect(); exploreVideoObserver = null; }
+                if (exploreVideoObserver) { exploreVideoObserver.disconnect();
+                    exploreVideoObserver = null; }
                 currentCategoryFilter = '';
                 searchQuery = '';
                 feedPage = 1;
@@ -4766,7 +5493,7 @@
                 renderUI();
             }
 
-            // ─── RENDER MARKET VIEW ────────────────────────────────
+            // ─── RENDER MARKET VIEW (NEW UI/UX) ──────────────────────────
             function renderMarketView() {
                 return `
                         <div class="market-main-content">
@@ -5014,9 +5741,46 @@
                         document.getElementById('refresh-spinner').classList.remove('hidden');
                         setTimeout(() => document.getElementById('refresh-spinner').classList
                             .add('hidden'), 1000);
-                        refreshHome();
+                        refreshCurrentTab();
                     }
                 });
+            }
+
+            // ───────────────────────────────────────────────────────────────
+            // REFRESH / SHUFFLE
+            // ───────────────────────────────────────────────────────────────
+
+            async function refreshHome() {
+                _feedShuffleSeed++;
+                await reloadData();
+                currentCategoryFilter = '';
+                searchQuery = '';
+                currentSortMethod = 'foryou';
+                feedPage = 1;
+                uiPage = 'home';
+                renderUI();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                showToast('Feed refreshed');
+            }
+
+            async function refreshCurrentTab() {
+                if (uiPage === 'explore') {
+                    _shuffleExploreOnce = true;
+                    await reloadData();
+                    renderUI();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    showToast('Explore refreshed');
+                    return;
+                }
+                if (uiPage === 'market') {
+                    _shuffleMarketOnce = true;
+                    marketDataLoaded = false;
+                    renderUI();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    showToast('Marketplace refreshed');
+                    return;
+                }
+                await refreshHome();
             }
 
             // ───────────────────────────────────────────────────────────────
@@ -5044,6 +5808,38 @@
                 }
                 vv.addEventListener('resize', adjust);
                 vv.addEventListener('scroll', adjust);
+            }
+
+            // ───────────────────────────────────────────────────────────────
+            // NAV SCROLL (with video safety)
+            // ───────────────────────────────────────────────────────────────
+
+            function handleNavScroll() {
+                const currentScrollY = window.scrollY;
+                if (currentScrollY > lastScrollY && currentScrollY > 100) {
+                    if (!bottomNavHidden) {
+                        bottomNavHidden = true;
+                        document.getElementById('bottomNav').classList.add('hidden-nav');
+                    }
+                } else if (currentScrollY < lastScrollY) {
+                    if (bottomNavHidden) {
+                        bottomNavHidden = false;
+                        document.getElementById('bottomNav').classList.remove('hidden-nav');
+                    }
+                }
+                lastScrollY = currentScrollY;
+
+                clearTimeout(_scrollSafetyTimer);
+                _scrollSafetyTimer = setTimeout(() => {
+                    if (uiPage === 'single-post-explore') return;
+                    document.querySelectorAll('.ig-video-wrap video, .video-container video, .media-carousel-slide video')
+                        .forEach(vid => {
+                            const rect = vid.getBoundingClientRect();
+                            const visible = rect.top < window.innerHeight * 0.85 && rect.bottom > window
+                                .innerHeight * 0.15;
+                            if (!visible && vid.dataset.shouldPlay === '1') _pauseVideoEl(vid);
+                        });
+                }, 150);
             }
 
             // ───────────────────────────────────────────────────────────────
@@ -5092,22 +5888,6 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // REFRESH HOME
-            // ───────────────────────────────────────────────────────────────
-
-            async function refreshHome() {
-                await reloadData();
-                currentCategoryFilter = '';
-                searchQuery = '';
-                currentSortMethod = 'foryou';
-                feedPage = 1;
-                uiPage = 'home';
-                renderUI();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-                showToast('Feed refreshed');
-            }
-
-            // ───────────────────────────────────────────────────────────────
             // INIT
             // ───────────────────────────────────────────────────────────────
 
@@ -5122,8 +5902,8 @@
                 }
                 await reloadData();
                 setupRealtime();
+                setupMifGestures();
 
-                // Init mentions
                 const globalComment = document.getElementById('global-comment-textarea');
                 if (globalComment && window.Mentions) {
                     window.Mentions.initMentions(globalComment);
@@ -5208,7 +5988,6 @@
                     });
                 });
 
-                // Report button in share modal
                 document.getElementById('share-report-btn').addEventListener('click', () => {
                     if (sharePostId) {
                         reportPostFromShare(sharePostId);
@@ -5217,7 +5996,6 @@
                     }
                 });
 
-                // Delete button in share modal
                 document.getElementById('share-delete-btn').addEventListener('click', () => {
                     deletePostFromShare(sharePostId);
                 });
@@ -5234,11 +6012,9 @@
                         closeSeeAllModal();
                         closeFilterModal();
                         closeTagsModal();
+                        closeImageFullscreen();
+                        closeFullscreenLightbox();
                     }
-                });
-
-                document.addEventListener('click', function(e) {
-                    // No 3-dot menu to close
                 });
 
                 window.addEventListener('scroll', handleNavScroll, { passive: true });
@@ -5312,22 +6088,6 @@
                 setupKeyboardAvoidance();
             }
 
-            function handleNavScroll() {
-                const currentScrollY = window.scrollY;
-                if (currentScrollY > lastScrollY && currentScrollY > 100) {
-                    if (!bottomNavHidden) {
-                        bottomNavHidden = true;
-                        document.getElementById('bottomNav').classList.add('hidden-nav');
-                    }
-                } else if (currentScrollY < lastScrollY) {
-                    if (bottomNavHidden) {
-                        bottomNavHidden = false;
-                        document.getElementById('bottomNav').classList.remove('hidden-nav');
-                    }
-                }
-                lastScrollY = currentScrollY;
-            }
-
             // ─── EXPOSE GLOBALLY ─────────────────────────────────
             window.toggleReaction = toggleReaction;
             window.openExplorePost = openExplorePost;
@@ -5341,6 +6101,7 @@
             window.closeShareModal = closeShareModal;
             window.reloadData = reloadData;
             window.refreshHome = refreshHome;
+            window.refreshCurrentTab = refreshCurrentTab;
             window.openTagsModal = openTagsModal;
             window.closeTagsModal = closeTagsModal;
 
@@ -5361,9 +6122,19 @@
             window.changeMarketImage = changeMarketImage;
             window.triggerToast = triggerToast;
 
-            // Expose report/delete handlers
             window.reportPostFromShare = reportPostFromShare;
             window.deletePostFromShare = deletePostFromShare;
+
+            // Lightbox functions
+            window.openFullscreenLightbox = openFullscreenLightbox;
+            window.closeFullscreenLightbox = closeFullscreenLightbox;
+            window.nextLightboxSlide = nextLightboxSlide;
+            window.prevLightboxSlide = prevLightboxSlide;
+            window.goToLightboxSlide = goToLightboxSlide;
+            window.resetZoom = resetZoom;
+            window.nextModalSlide = nextModalSlide;
+            window.prevModalSlide = prevModalSlide;
+            window.goToModalSlide = goToModalSlide;
 
             if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
             else init();
