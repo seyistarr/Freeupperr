@@ -8,41 +8,28 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>FreeUpper — Home</title>
     <link rel="icon" type="image/png" href="freeupper.png" />
+
+    <!-- ===== FONTS: trimmed weights + preconnect ===== -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- ===== PLYR ===== -->
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
-    <script src="https://cdn.tailwindcss.com">
-    </script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: { 50: '#f5f3ff', 100: '#ede9fe', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9' },
-                        primary: '#7C3AED',
-                        'primary-light': '#8B5CF6',
-                        'primary-dark': '#6D28D9'
-                    },
-                    fontFamily: { heading: ['Poppins', 'Inter', 'sans-serif'], body: ['Inter', 'Roboto',
-                            'sans-serif'
-                        ] },
-                    borderRadius: { soft: '10px', softer: '14px' },
-                    animation: { spin: 'spin 0.8s linear infinite' }
-                }
-            }
-        };
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+    <!-- ===== TAILWIND COMPILED CSS (replaces CDN) ===== -->
+    <link rel="stylesheet" href="tw-compiled.css" />
+
+    <!-- ===== GLOBAL STYLES ===== -->
     <link rel="stylesheet" href="global.css" />
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
-    </script>
-    <script src="global.js">
-    </script>
-    <script src="auth.js">
-    </script>
-    <script src="posts.js">
-    </script>
-    <script src="listings.js">
-    </script>
-    <script src="mentions.js"></script>
+
+    <!-- ===== SCRIPTS (deferred) ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    <script src="global.js" defer></script>
+    <script src="auth.js" defer></script>
+    <script src="posts.js" defer></script>
+    <script src="listings.js" defer></script>
+    <script src="mentions.js" defer></script>
 
     <style>
         /* ===== CSS VARIABLES ===== */
@@ -2293,7 +2280,7 @@
 
     <script src="https://cdn.plyr.io/3.7.8/plyr.js">
     </script>
-    <script>
+    <script type="module">
         (function() {
             'use strict';
 
@@ -2348,6 +2335,7 @@
             let maxPriceFilter = null;
             let currentProductId = null;
             let currentImageIndexMap = {};
+            let marketDataLoaded = false;
 
             // Tags modal
             let tagsModalData = null;
@@ -2601,7 +2589,7 @@
                             return `
                             <div class="ig-video-wrap">
                               <div class="yt-wrap">
-                                <iframe id="yt-${idx}" src="https://www.youtube.com/embed/${ytId}?autoplay=0&loop=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}" allow="autoplay; encrypted-media" allowfullscreen onload="initYtListener('${idx}')"></iframe>
+                                <iframe id="yt-${idx}" src="https://www.youtube.com/embed/${ytId}?autoplay=0&loop=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}" allow="autoplay; encrypted-media" allowfullscreen loading="lazy" onload="initYtListener('${idx}')"></iframe>
                                 <div class="yt-tap" id="ytTap-${idx}" onclick="toggleYtControls('${idx}')"></div>
                                 <div class="yt-mute-badge" id="ytMuteBadge-${idx}">
                                   <svg id="ytMuteIco-${idx}" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
@@ -2618,7 +2606,7 @@
                           `;
                         } else {
                             return `<div class="ig-video-wrap" data-full-img="${item.url}">
-                            <video src="${item.url}" playsinline webkit-playsinline="true" muted preload="metadata"></video>
+                            <video src="${item.url}" playsinline webkit-playsinline="true" muted preload="none"></video>
                           </div>`;
                         }
                     } else {
@@ -2649,7 +2637,7 @@
                         if (ytId) {
                             contentHtml = `
                             <div class="yt-wrap">
-                              <iframe id="yt-${carouselId}-${idx}" src="https://www.youtube.com/embed/${ytId}?autoplay=0&loop=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}" allow="autoplay; encrypted-media" allowfullscreen onload="initYtListener('${carouselId}-${idx}')"></iframe>
+                              <iframe id="yt-${carouselId}-${idx}" src="https://www.youtube.com/embed/${ytId}?autoplay=0&loop=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}" allow="autoplay; encrypted-media" allowfullscreen loading="lazy" onload="initYtListener('${carouselId}-${idx}')"></iframe>
                               <div class="yt-tap" onclick="toggleYtControls('${carouselId}-${idx}')"></div>
                               <div class="yt-mute-badge" id="ytMuteBadge-${carouselId}-${idx}">
                                 <svg id="ytMuteIco-${carouselId}-${idx}" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
@@ -2664,11 +2652,11 @@
                           `;
                         } else {
                             contentHtml =
-                                `<video src="${item.url}" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;background:#000;"></video>`;
+                                `<video src="${item.url}" muted playsinline preload="none" style="width:100%;height:100%;object-fit:contain;background:#000;"></video>`;
                         }
                     } else if (isVideo) {
                         contentHtml =
-                            `<video src="${item.url}" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;background:#000;"></video>`;
+                            `<video src="${item.url}" muted playsinline preload="none" style="width:100%;height:100%;object-fit:contain;background:#000;"></video>`;
                     } else {
                         contentHtml =
                             `<img src="${item.url}" class="fade-in-image" loading="lazy" onload="this.classList.add('loaded')" style="width:100%;height:100%;object-fit:contain;background:#000;" />`;
@@ -3355,18 +3343,20 @@
                 document.body.classList.remove('market-fullscreen-open');
             }
 
+            // ─── FIXED: shareCurrentProduct builds a real product link ───
             function shareCurrentProduct() {
                 const product = marketListings.find(p => p.id === currentProductId);
                 if (!product) return;
+                const url = `${window.location.origin}${window.location.pathname}?product=${product.id}`;
                 const shareData = {
                     title: product.title,
                     text: `Check out ${product.title} (${product.priceFormatted}) on FreeUpper!`,
-                    url: window.location.href,
+                    url: url,
                 };
                 if (navigator.share) {
                     navigator.share(shareData).catch(() => {});
                 } else {
-                    navigator.clipboard.writeText(window.location.href);
+                    navigator.clipboard.writeText(url);
                     triggerToast('Link Copied 🔗', 'Product URL copied to clipboard!');
                 }
             }
@@ -3848,6 +3838,7 @@
                 }, 300);
             }
 
+            // ─── OPTIMIZED: loadInitialFeed uses requestAnimationFrame ───
             function loadInitialFeed() {
                 feedPage = 1;
                 isLoadingMore = false;
@@ -3855,7 +3846,7 @@
                 const co = document.getElementById('feed-container');
                 if (!co) return;
                 co.innerHTML = renderSkeletons(3);
-                setTimeout(() => {
+                requestAnimationFrame(() => {
                     const ps = getFilteredSortedPosts();
                     co.innerHTML = '';
                     if (ps.length === 0) { co.innerHTML =
@@ -3870,7 +3861,7 @@
                         co.querySelectorAll('article').forEach(a => setupPostEventDelegation(a));
                         window._currentFeedPosts = ps;
                     });
-                }, 150);
+                });
             }
 
             function loadMorePosts() {
@@ -4264,9 +4255,9 @@
                 const ac = Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false) : [],
                     vc = getVisibleComments(postId);
                 cl.innerHTML = commentSkeletons(3);
-                setTimeout(() => {
+                requestAnimationFrame(() => {
                     cl.innerHTML = renderCommentsHTML(ac, postId, vc);
-                }, 200);
+                });
             }
 
             function updateCommentCount(postId) {
@@ -4648,6 +4639,7 @@
             // EXPLORE GRID
             // ───────────────────────────────────────────────────────────────
 
+            // ─── OPTIMIZED: renderExploreGrid uses requestAnimationFrame ───
             function renderExploreGrid() {
                 const co = document.getElementById('user-content');
                 const currentUser = getCurrentUser();
@@ -4669,7 +4661,7 @@
 
                 if (currentCategoryFilter) p = p.filter(post => post.category === currentCategoryFilter);
 
-                setTimeout(() => {
+                requestAnimationFrame(() => {
                     const gc = document.getElementById('explore-grid-content');
                     if (!gc || uiPage !== 'explore') return;
                     if (p.length === 0) {
@@ -4685,7 +4677,7 @@
                     setTimeout(() => {
                         setupExploreVideoAutoplay(gc);
                     }, 300);
-                }, 300);
+                });
                 document.getElementById('explore-filter-inline-btn')?.addEventListener('click',
                 openFilterDrawer);
             }
@@ -4713,7 +4705,7 @@
                                 const ytId = extractYouTubeId(url);
                                 if (ytId) {
                                     mh =
-                                        `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;position:relative;background:#000;"><div class="yt-wrap" style="padding-bottom:56.25%;height:0;position:relative;width:100%;"><iframe style="pointer-events:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;" src="https://www.youtube.com/embed/${ytId}?autoplay=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0" allow="autoplay; encrypted-media"></iframe></div></div>`;
+                                        `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;position:relative;background:#000;"><div class="yt-wrap" style="padding-bottom:56.25%;height:0;position:relative;width:100%;"><iframe style="pointer-events:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;" src="https://www.youtube.com/embed/${ytId}?autoplay=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0" allow="autoplay; encrypted-media" loading="lazy"></iframe></div></div>`;
                                 } else {
                                     mh =
                                         `<video src="${url}" muted playsinline loop preload="metadata" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
@@ -4857,16 +4849,22 @@
                     co.innerHTML = renderMarketView();
                     setCommentBarVisible(false);
                     refreshTabStates();
-                    setTimeout(async () => {
-                        await loadMarketCategories();
-                        await loadMarketListings();
+                    requestAnimationFrame(async () => {
+                        if (!marketDataLoaded) {
+                            const fg = document.getElementById('featuredGrid');
+                            const ng = document.getElementById('newlyGrid');
+                            if (fg) fg.innerHTML = exploreSkeletonGrid();
+                            if (ng) ng.innerHTML = exploreSkeletonGrid();
+                            await Promise.all([loadMarketCategories(), loadMarketListings()]);
+                            marketDataLoaded = true;
+                        }
                         renderMarketCategoryBars();
                         applyMarketFiltersAndRender();
                         const searchInput = document.getElementById('searchInput');
                         if (searchInput) {
                             searchInput.oninput = function(e) { handleMarketSearch(this.value); };
                         }
-                    }, 100);
+                    });
                     setTimeout(() => window.scrollTo(0, tabScrollPositions.market || 0), 80);
                     return;
                 }
@@ -5070,14 +5068,16 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // LOAD DATA
+            // LOAD DATA (parallelized)
             // ───────────────────────────────────────────────────────────────
 
             async function reloadData() {
-                await reloadPosts();
-                await loadFollows();
-                await loadBookmarks();
-                await loadShares();
+                await Promise.all([
+                    reloadPosts(),
+                    loadFollows(),
+                    loadBookmarks(),
+                    loadShares(),
+                ]);
                 return appData;
             }
 
@@ -5277,12 +5277,25 @@
 
                 const urlParams = new URLSearchParams(window.location.search);
                 const postIdParam = urlParams.get('post');
+                const productIdParam = urlParams.get('product');
+
                 if (postIdParam) {
                     const id = postIdParam;
                     if (allPosts.some(p => p.id === id)) {
                         setTimeout(() => { openExplorePost(id, 'home');
                             history.replaceState({}, '', window.location.pathname); }, 400);
                     }
+                } else if (productIdParam) {
+                    uiPage = 'market';
+                    renderUI();
+                    setTimeout(async () => {
+                        if (!marketDataLoaded) {
+                            await Promise.all([loadMarketCategories(), loadMarketListings()]);
+                            marketDataLoaded = true;
+                        }
+                        openProductModal(productIdParam);
+                        history.replaceState({}, '', window.location.pathname);
+                    }, 500);
                 }
 
                 renderUI();
