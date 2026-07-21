@@ -51,13 +51,14 @@
       mediaType: row.media_type || (media.length ? media[0].type : 'image'),
       category: row.category || 'General',
       tags: row.tags || [],
-      mentions: row.mentions || [],               // ← ADDED: mentions for posts
+      mentions: row.mentions || [],
       timestamp: row.created_at || new Date().toISOString(),
       views: row.views || 0,
       comments: row.comment_count || 0,
       likes: row.like_count || 0,
       likedByMe: userLikes.has(row.id),
       repostCount: row.repost_count || 0,
+      bookmarkCount: row.bookmark_count || 0,   // ← FIX: added bookmark count
       myRepost: !!myRepost,
       myRepostText: myRepost ? (myRepost.comment || '') : '',
       myRepostTime: myRepost ? myRepost.created_at : null,
@@ -171,12 +172,12 @@
       likeCount: row.like_count || 0,
       likedByMe: likedIds.has(row.id),
       profile: row.profiles || {},
-      mentions: row.mentions || [],               // ← ADDED: mentions for comments
+      mentions: row.mentions || [],
     }));
   }
 
   // ── ADD COMMENT ──────────────────────────────────────────────────
-  async function addComment(postId, parentId, message, mentions = []) {  // ← ADDED mentions param
+  async function addComment(postId, parentId, message, mentions = []) {
     const userId = await _getUserId();
 
     const { data, error } = await sb
@@ -186,7 +187,7 @@
         user_id: userId,
         parent_id: parentId || null,
         message: message,
-        mentions: mentions || [],                 // ← ADDED: store mentions
+        mentions: mentions || [],
       })
       .select(`
         *,
@@ -213,7 +214,7 @@
       likeCount: 0,
       likedByMe: false,
       profile: data.profiles || {},
-      mentions: data.mentions || [],             // ← ADDED: return mentions
+      mentions: data.mentions || [],
     };
   }
 
@@ -231,7 +232,7 @@
       media: fields.media || [],
       media_url: fields.mediaUrl || null,
       media_type: fields.mediaType || null,
-      mentions: fields.mentions || [],           // ← ADDED: store mentions
+      mentions: fields.mentions || [],
     };
 
     if (fields.media && fields.media.length > 0) {
@@ -262,7 +263,6 @@
 
   // ── TOGGLE POST LIKE ────────────────────────────────────────────
   async function toggleLike(postId) {
-    // RPC uses auth.uid() internally – no need to pass user ID
     const { data, error } = await sb.rpc('toggle_post_like', { p_post_id: postId });
     if (error) throw error;
     return { liked: data[0].liked, count: data[0].new_count };
@@ -277,7 +277,6 @@
 
   // ── TOGGLE REPOST (with optional comment) ──────────────────────
   async function toggleRepostAPI(postId, comment = '') {
-    // RPC uses auth.uid()
     const { data, error } = await sb.rpc('toggle_repost', {
       p_post_id: postId,
       p_comment: comment || '',
@@ -293,7 +292,6 @@
 
   // ── DELETE POST ──────────────────────────────────────────────────
   async function deletePost(postId) {
-    // RPC uses auth.uid() – will check ownership
     const { error } = await sb.rpc('delete_post', { p_post_id: postId });
     if (error) throw error;
   }
@@ -304,7 +302,7 @@
       const sessionId = localStorage.getItem('freeupper_session_id') || null;
       const { error } = await sb.rpc('add_view', {
         p_post_id: postId,
-        p_user_id: null, // RPC may use auth.uid() automatically
+        p_user_id: null,
         p_session_id: sessionId,
       });
       if (error) console.error('incrementView error:', error);
