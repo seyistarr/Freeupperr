@@ -38,16 +38,23 @@
     <!-- ══════════════════════════════════════════
     SCRIPTS (order matters)
     ══════════════════════════════════════════ -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="global.js"></script>
-    <script src="auth.js"></script>
-    <script src="posts.js"></script>
-    <script src="listings.js"></script>
-    <script src="https://vjs.zencdn.net/8.6.1/video.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+    </script>
+    <script src="global.js">
+    </script>
+    <script src="auth.js">
+    </script>
+    <script src="posts.js">
+    </script>
+    <script src="listings.js">
+    </script>
+    <script src="mentions.js">
+    </script>
+    <script src="https://vjs.zencdn.net/8.6.1/video.min.js">
+    </script>
 
     <style>
         /* ── all existing styles from original create.html (unchanged) ── */
-        /* (I'm keeping the full CSS from the original for consistency) */
         *,
         *::before,
         *::after {
@@ -1182,6 +1189,63 @@
             font-size: 13px;
             text-align: center;
         }
+
+        /* ── mention highlight styling ── */
+        .mention-highlight {
+            background: var(--pdim);
+            color: var(--pl);
+            border-radius: 4px;
+            padding: 0 2px;
+            font-weight: 600;
+        }
+        .mention-suggestions {
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            border-radius: 12px;
+            max-height: 180px;
+            overflow-y: auto;
+            position: absolute;
+            z-index: 60;
+            width: 100%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+            display: none;
+            padding: 6px 0;
+        }
+        .mention-suggestions .suggestion-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background .1s;
+            font-size: 14px;
+        }
+        .mention-suggestions .suggestion-item:hover,
+        .mention-suggestions .suggestion-item.active {
+            background: var(--pdim);
+        }
+        .mention-suggestions .suggestion-item img {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: var(--bg4);
+        }
+        .mention-suggestions .suggestion-item .s-name {
+            font-weight: 600;
+        }
+        .mention-suggestions .suggestion-item .s-handle {
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .mention-suggestions .suggestion-item .s-badge {
+            font-size: 10px;
+            background: var(--pdim);
+            color: var(--pl);
+            padding: 2px 8px;
+            border-radius: 100px;
+            margin-left: auto;
+        }
     </style>
 </head>
 <body>
@@ -1253,10 +1317,11 @@
                             <span class="char-c" id="postTitleCount">0 / 100</span>
                         </div>
 
-                        <!-- Content -->
-                        <div class="form-group">
+                        <!-- Content (with mention support) -->
+                        <div class="form-group" style="position:relative;">
                             <label class="form-lbl">Content</label>
-                            <textarea class="form-inp" id="postContent" placeholder="Write your post content..." rows="6"></textarea>
+                            <textarea class="form-inp" id="postContent" placeholder="Write your post content... Use @ to mention someone" rows="6"></textarea>
+                            <div class="mention-suggestions" id="mentionSuggestions"></div>
                             <span class="char-c" id="postContentCount">0 characters</span>
                         </div>
 
@@ -1372,7 +1437,7 @@
                             <input type="hidden" id="itemLng" value="">
                         </div>
 
-                        <!-- ─── WHATSAPP NUMBER (NEW) ─── -->
+                        <!-- ─── WHATSAPP NUMBER ─── -->
                         <div class="form-group">
                             <label class="form-lbl">WhatsApp Number <span style="font-weight:400;color:var(--muted2);">(optional)</span></label>
                             <input class="form-inp" id="itemWhatsApp" type="tel" placeholder="e.g. 2348012345678" maxlength="15">
@@ -1535,6 +1600,16 @@
             el.classList.add('active');
             document.getElementById('panel-' + tab).classList.add('active');
             if (tab === 'sell') loadCategories();
+
+            // Re-init mention on post panel when switching back
+            if (tab === 'post') {
+                setTimeout(function() {
+                    const textarea = document.getElementById('postContent');
+                    if (textarea && window.Mentions) {
+                        window.Mentions.initMentions(textarea);
+                    }
+                }, 200);
+            }
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -1727,7 +1802,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // POST MEDIA (with debug logs)
+        // POST MEDIA
         // ──────────────────────────────────────────────────────────────
         function previewPostMedia() {
             const input = document.getElementById('postMediaUrlInput');
@@ -2005,7 +2080,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // FULLSCREEN VIEWER (unchanged)
+        // FULLSCREEN VIEWER
         // ──────────────────────────────────────────────────────────────
         function openFullscreen(index) {
             const uploaded = marketImages.filter(i => i.isUploaded);
@@ -2229,9 +2304,9 @@
         });
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT POST – uses PostsAPI.createPost with proper media
+        // SUBMIT POST – with Mentions + Notifications
         // ──────────────────────────────────────────────────────────────
-        function submitPost() {
+        async function submitPost() {
             console.log('[DEBUG] submitPost called');
 
             if (!window.PostsAPI || typeof window.PostsAPI.createPost !== 'function') {
@@ -2265,6 +2340,16 @@
                 return;
             }
 
+            // ── EXTRACT MENTIONS ──
+            const textarea = document.getElementById('postContent');
+            let mentions = [];
+            if (window.Mentions && typeof window.Mentions.extractMentions === 'function') {
+                mentions = window.Mentions.extractMentions(textarea);
+                console.log('[DEBUG] Extracted mentions:', mentions);
+            } else {
+                console.warn('[DEBUG] Mentions.extractMentions not available');
+            }
+
             const btn = document.querySelector('.btn-primary[onclick="submitPost()"]');
             const originalText = btn.textContent;
             btn.textContent = 'Publishing...';
@@ -2280,9 +2365,10 @@
             }
 
             console.log('[DEBUG] Submitting post with media:', media);
-            console.log('[DEBUG] Post data:', { title, description, content, category, tags: postTags, media });
+            console.log('[DEBUG] Post data:', { title, description, content, category, tags: postTags, media, mentions });
 
-            PostsAPI.createPost({
+            try {
+                const result = await PostsAPI.createPost({
                     title,
                     description,
                     content,
@@ -2290,41 +2376,67 @@
                     tags: postTags.slice(),
                     media: media,
                     mediaUrl: mediaUrl,
-                    mediaType: mediaType
-                })
-                .then(function(result) {
-                    console.log('[DEBUG] Post created successfully:', result);
-                    document.getElementById('postTitle').value = '';
-                    document.getElementById('postContent').value = '';
-                    document.getElementById('postDescription').value = '';
-                    document.getElementById('postCategory').value = '';
-                    document.getElementById('postCategoryDisplay').textContent = 'Select a category';
-                    document.getElementById('postCategoryDisplay').classList.add('placeholder');
-                    document.getElementById('postMediaUrl').value = '';
-                    document.getElementById('postMediaType').value = '';
-                    document.getElementById('postPublicId').value = '';
-                    var input = document.getElementById('postMediaUrlInput');
-                    input.value = '';
-                    input.style.color = '';
-                    input.style.fontWeight = '';
-                    input.placeholder = 'Paste image or YouTube link...';
-                    document.getElementById('postImageGrid').innerHTML = '';
-                    postTags = [];
-                    renderPostTags();
-                    selectedPostCategory = '';
-                    showToast('Post published! 🎉', 'g');
-                    btn.textContent = originalText;
-                    btn.disabled = false;
-                    setTimeout(() => {
-                        window.location.href = 'index.html?refresh=' + Date.now();
-                    }, 500);
-                })
-                .catch(function(err) {
-                    console.error('[DEBUG] Error creating post:', err);
-                    showToast(err.message || 'Failed to publish post. Please try again.', 'r');
-                    btn.textContent = originalText;
-                    btn.disabled = false;
+                    mediaType: mediaType,
+                    mentions: mentions // ← pass mentions to API
                 });
+
+                console.log('[DEBUG] Post created successfully:', result);
+
+                // ── NOTIFY MENTIONED USERS ──
+                if (result.id && mentions.length > 0) {
+                    if (window.Mentions && typeof window.Mentions.notifyMentionedUsers === 'function') {
+                        try {
+                            await window.Mentions.notifyMentionedUsers(
+                                'post', // target type
+                                result.id, // the new post ID
+                                mentions, // array of usernames
+                                user.id, // sender ID
+                                null // no parent (for posts)
+                            );
+                            console.log('[DEBUG] Mention notifications sent for', mentions.length, 'users');
+                        } catch (notifyErr) {
+                            console.error('[DEBUG] Failed to send mention notifications:', notifyErr);
+                            // Don't fail the post creation if notifications fail
+                        }
+                    } else {
+                        console.warn('[DEBUG] Mentions.notifyMentionedUsers not available');
+                    }
+                }
+
+                // ── RESET FORM ──
+                document.getElementById('postTitle').value = '';
+                document.getElementById('postContent').value = '';
+                document.getElementById('postDescription').value = '';
+                document.getElementById('postCategory').value = '';
+                document.getElementById('postCategoryDisplay').textContent = 'Select a category';
+                document.getElementById('postCategoryDisplay').classList.add('placeholder');
+                document.getElementById('postMediaUrl').value = '';
+                document.getElementById('postMediaType').value = '';
+                document.getElementById('postPublicId').value = '';
+                const input = document.getElementById('postMediaUrlInput');
+                input.value = '';
+                input.style.color = '';
+                input.style.fontWeight = '';
+                input.placeholder = 'Paste image or YouTube link...';
+                document.getElementById('postImageGrid').innerHTML = '';
+                postTags = [];
+                renderPostTags();
+                selectedPostCategory = '';
+
+                showToast('Post published! 🎉', 'g');
+                btn.textContent = originalText;
+                btn.disabled = false;
+
+                setTimeout(() => {
+                    window.location.href = 'index.html?refresh=' + Date.now();
+                }, 500);
+
+            } catch (err) {
+                console.error('[DEBUG] Error creating post:', err);
+                showToast(err.message || 'Failed to publish post. Please try again.', 'r');
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -2357,7 +2469,7 @@
             const lng = document.getElementById('itemLng').value;
             const categoryId = document.getElementById('itemCategoryId').value;
             const subcategoryId = document.getElementById('itemSubcategoryId').value;
-            const whatsapp = document.getElementById('itemWhatsApp').value.trim(); // ← NEW
+            const whatsapp = document.getElementById('itemWhatsApp').value.trim();
 
             if (!title || !price) {
                 showToast('Item name and price are required', 'o');
@@ -2403,7 +2515,7 @@
                     images: imageObjects,
                     description: description || '',
                     condition: condition || 'New',
-                    whatsapp: whatsapp || null // ← NEW
+                    whatsapp: whatsapp || null
                 })
                 .then(function(result) {
                     console.log('[DEBUG] Item listed successfully:', result);
@@ -2414,7 +2526,7 @@
                     document.getElementById('itemLat').value = '';
                     document.getElementById('itemLng').value = '';
                     document.getElementById('locationStatus').textContent = '';
-                    document.getElementById('itemWhatsApp').value = ''; // ← NEW
+                    document.getElementById('itemWhatsApp').value = '';
                     var input = document.getElementById('marketImageUrlInput');
                     input.value = '';
                     input.style.color = '';
@@ -2519,6 +2631,21 @@
                 document.documentElement.setAttribute('data-theme', e.detail.theme);
             });
 
+            // ── INITIALISE MENTIONS ON POST CONTENT ──
+            const postContent = document.getElementById('postContent');
+            if (postContent) {
+                if (window.Mentions && typeof window.Mentions.initMentions === 'function') {
+                    window.Mentions.initMentions(postContent, {
+                        onMentionInsert: function(mentionData) {
+                            console.log('[DEBUG] Mention inserted:', mentionData);
+                        }
+                    });
+                    console.log('[DEBUG] Mentions initialised on post content');
+                } else {
+                    console.warn('[DEBUG] Mentions.initMentions not available');
+                }
+            }
+
             const activePanel = document.querySelector('.panel.active');
             if (activePanel && activePanel.id === 'panel-sell') {
                 loadCategories();
@@ -2526,10 +2653,11 @@
                 setTimeout(loadCategories, 500);
             }
 
-            console.log('[DEBUG] create.html initialized (with WhatsApp)');
+            console.log('[DEBUG] create.html initialised (with Mentions + Notifications)');
             console.log('[DEBUG] PostsAPI:', !!window.PostsAPI);
             console.log('[DEBUG] ListingsAPI:', !!window.ListingsAPI);
             console.log('[DEBUG] CategoryAPI:', !!window.CategoryAPI);
+            console.log('[DEBUG] Mentions:', !!window.Mentions);
         }
 
         if (document.readyState === 'loading') {
