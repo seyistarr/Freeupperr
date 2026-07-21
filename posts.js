@@ -51,6 +51,7 @@
       mediaType: row.media_type || (media.length ? media[0].type : 'image'),
       category: row.category || 'General',
       tags: row.tags || [],
+      mentions: row.mentions || [],               // ← ADDED: mentions for posts
       timestamp: row.created_at || new Date().toISOString(),
       views: row.views || 0,
       comments: row.comment_count || 0,
@@ -170,11 +171,12 @@
       likeCount: row.like_count || 0,
       likedByMe: likedIds.has(row.id),
       profile: row.profiles || {},
+      mentions: row.mentions || [],               // ← ADDED: mentions for comments
     }));
   }
 
   // ── ADD COMMENT ──────────────────────────────────────────────────
-  async function addComment(postId, parentId, message) {
+  async function addComment(postId, parentId, message, mentions = []) {  // ← ADDED mentions param
     const userId = await _getUserId();
 
     const { data, error } = await sb
@@ -184,6 +186,7 @@
         user_id: userId,
         parent_id: parentId || null,
         message: message,
+        mentions: mentions || [],                 // ← ADDED: store mentions
       })
       .select(`
         *,
@@ -210,6 +213,7 @@
       likeCount: 0,
       likedByMe: false,
       profile: data.profiles || {},
+      mentions: data.mentions || [],             // ← ADDED: return mentions
     };
   }
 
@@ -227,6 +231,7 @@
       media: fields.media || [],
       media_url: fields.mediaUrl || null,
       media_type: fields.mediaType || null,
+      mentions: fields.mentions || [],           // ← ADDED: store mentions
     };
 
     if (fields.media && fields.media.length > 0) {
