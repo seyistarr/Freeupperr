@@ -54,7 +54,7 @@
     </script>
 
     <style>
-        /* ── all existing styles from original create.html (unchanged) ── */
+        /* ── all existing styles from original create.html ── */
         *,
         *::before,
         *::after {
@@ -383,27 +383,224 @@
             min-height: 100px;
             line-height: 1.6;
         }
-        select.form-inp {
-            appearance: auto;
-            cursor: pointer;
-            background: var(--inp);
-            color: var(--text);
-            border: 1.5px solid var(--brd);
-            border-radius: 12px;
+
+        /* ── Modern Picker Button (replaces select) ── */
+        .picker-btn {
+            width: 100%;
             padding: 12px 16px;
+            border-radius: 12px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
             font-size: 14px;
+            color: var(--text);
             outline: none;
             transition: border-color .15s, background .3s, color .3s;
-            width: 100%;
+            font-family: inherit;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            text-align: left;
+            -webkit-appearance: none;
+            appearance: none;
         }
-        select.form-inp:focus {
+        .picker-btn:focus {
             border-color: var(--p);
         }
-        select.form-inp option {
-            background: var(--bg2);
+        .picker-btn .placeholder {
+            color: var(--muted2);
+        }
+        .picker-btn .arrow {
+            flex-shrink: 0;
+            margin-left: 8px;
+            transition: transform .25s;
+        }
+        .picker-btn .arrow svg {
+            width: 16px;
+            height: 16px;
+            stroke: var(--muted);
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            display: block;
+        }
+        .picker-btn .selected-label {
+            font-weight: 500;
             color: var(--text);
         }
+        .picker-btn:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
+        .picker-btn .badge-pill {
+            font-size: 10px;
+            background: var(--pdim);
+            color: var(--pl);
+            padding: 2px 10px;
+            border-radius: 100px;
+            font-weight: 700;
+            margin-left: 8px;
+        }
 
+        /* ── Picker Modal ── */
+        .picker-modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(0, 0, 0, .7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .3s;
+        }
+        .picker-modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .picker-sheet {
+            width: 100%;
+            max-width: 560px;
+            max-height: 75vh;
+            background: var(--bg3);
+            border-radius: 24px 24px 0 0;
+            border-top: 1px solid var(--brd2);
+            transform: translateY(60px);
+            transition: transform .34s cubic-bezier(.32, 1, .64, 1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .picker-modal-overlay.open .picker-sheet {
+            transform: translateY(0);
+        }
+        .picker-handle {
+            width: 40px;
+            height: 4px;
+            border-radius: 100px;
+            background: var(--brd2);
+            margin: 14px auto 0;
+            flex-shrink: 0;
+        }
+        .picker-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px 12px;
+            border-bottom: 1px solid var(--brd);
+            flex-shrink: 0;
+        }
+        .picker-title {
+            font-size: 17px;
+            font-weight: 800;
+        }
+        .picker-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--inp);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .15s;
+        }
+        .picker-close:hover {
+            background: var(--pdim);
+        }
+        .picker-close svg {
+            width: 15px;
+            height: 15px;
+            stroke: var(--muted);
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+        }
+        .picker-search {
+            padding: 8px 16px 8px;
+            flex-shrink: 0;
+        }
+        .picker-search input {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            font-size: 14px;
+            color: var(--text);
+            outline: none;
+            transition: border-color .15s;
+        }
+        .picker-search input:focus {
+            border-color: var(--p);
+        }
+        .picker-search input::placeholder {
+            color: var(--muted2);
+        }
+        .picker-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 8px 20px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .picker-list::-webkit-scrollbar {
+            width: 0;
+        }
+        .picker-item {
+            padding: 12px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background .1s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .picker-item:hover {
+            background: var(--rowh);
+        }
+        .picker-item.active {
+            background: var(--pdim);
+            color: var(--pl);
+        }
+        .picker-item .check {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid var(--brd2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all .15s;
+        }
+        .picker-item.active .check {
+            border-color: var(--p);
+            background: var(--p);
+        }
+        .picker-item.active .check svg {
+            stroke: #fff;
+            width: 10px;
+            height: 10px;
+            display: block;
+        }
+        .picker-item .check svg {
+            display: none;
+        }
+        .picker-empty {
+            padding: 30px 0;
+            text-align: center;
+            color: var(--muted2);
+            font-size: 14px;
+        }
+
+        /* ── other existing styles ── */
         .char-c {
             font-size: 11px;
             color: var(--muted2);
@@ -529,119 +726,6 @@
         .category-row .form-group {
             flex: 1;
             margin-bottom: 0;
-        }
-
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            background: rgba(0, 0, 0, .7);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity .3s;
-        }
-        .modal-overlay.open {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .modal-sheet {
-            width: 100%;
-            max-width: 560px;
-            max-height: 80vh;
-            background: var(--bg3);
-            border-radius: 24px 24px 0 0;
-            border-top: 1px solid var(--brd2);
-            transform: translateY(60px);
-            transition: transform .34s cubic-bezier(.32, 1, .64, 1);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-        .modal-overlay.open .modal-sheet {
-            transform: translateY(0);
-        }
-        .modal-handle {
-            width: 40px;
-            height: 4px;
-            border-radius: 100px;
-            background: var(--brd2);
-            margin: 14px auto 0;
-            flex-shrink: 0;
-        }
-        .modal-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 20px 12px;
-            border-bottom: 1px solid var(--brd);
-            flex-shrink: 0;
-        }
-        .modal-title {
-            font-size: 17px;
-            font-weight: 800;
-        }
-        .modal-close {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: var(--inp);
-            border: none;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background .15s;
-        }
-        .modal-close:hover {
-            background: var(--pdim);
-        }
-        .modal-close svg {
-            width: 15px;
-            height: 15px;
-            stroke: var(--muted);
-            fill: none;
-            stroke-width: 2.2;
-            stroke-linecap: round;
-        }
-        .modal-body {
-            overflow-y: auto;
-            padding: 12px 16px 24px;
-            flex: 1;
-        }
-        .modal-body::-webkit-scrollbar {
-            width: 0;
-        }
-        .modal-category-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
-        .modal-category-item {
-            padding: 12px;
-            border-radius: 12px;
-            border: 1.5px solid var(--brd);
-            background: var(--inp);
-            text-align: center;
-            cursor: pointer;
-            transition: all .15s;
-            font-weight: 600;
-            color: var(--muted);
-            font-size: 13px;
-        }
-        .modal-category-item:hover {
-            border-color: var(--pbrd);
-            background: var(--pdim);
-            color: var(--pl);
-        }
-        .modal-category-item.active {
-            border-color: var(--p);
-            background: var(--pdim);
-            color: var(--pl);
         }
 
         .upload-row {
@@ -967,9 +1051,7 @@
             margin-top: 4px;
         }
 
-        /* ══════════════════════════════════════════
-           BOTTOM NAV
-        ══════════════════════════════════════════ */
+        /* BOTTOM NAV */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -1165,32 +1247,6 @@
             width: 0;
         }
 
-        .cat-loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 16px 0;
-            gap: 10px;
-            color: var(--muted);
-            font-size: 13px;
-        }
-        .cat-loading .spinner-sm {
-            width: 18px;
-            height: 18px;
-            border: 2px solid var(--brd2);
-            border-top-color: var(--p);
-            border-radius: 50%;
-            animation: spin .8s linear infinite;
-            flex-shrink: 0;
-        }
-        .cat-empty {
-            padding: 12px 0;
-            color: var(--muted2);
-            font-size: 13px;
-            text-align: center;
-        }
-
-        /* ── mention highlight styling ── */
         .mention-highlight {
             background: var(--pdim);
             color: var(--pl);
@@ -1312,14 +1368,14 @@
                     <div id="post-form">
                         <!-- Title -->
                         <div class="form-group">
-                            <label class="form-lbl">Title</label>
+                            <label class="form-lbl">Title <span style="color:var(--danger);">*</span></label>
                             <input class="form-inp" id="postTitle" type="text" placeholder="What's on your mind?" maxlength="100">
                             <span class="char-c" id="postTitleCount">0 / 100</span>
                         </div>
 
-                        <!-- Content (with mention support) -->
+                        <!-- Content (optional) -->
                         <div class="form-group" style="position:relative;">
-                            <label class="form-lbl">Content</label>
+                            <label class="form-lbl">Content <span style="font-weight:400;color:var(--muted2);">(optional)</span></label>
                             <textarea class="form-inp" id="postContent" placeholder="Write your post content... Use @ to mention someone" rows="6"></textarea>
                             <div class="mention-suggestions" id="mentionSuggestions"></div>
                             <span class="char-c" id="postContentCount">0 characters</span>
@@ -1380,36 +1436,38 @@
                     <div id="sell-form">
                         <!-- Item Name -->
                         <div class="form-group">
-                            <label class="form-lbl">Item Name</label>
+                            <label class="form-lbl">Item Name <span style="color:var(--danger);">*</span></label>
                             <input class="form-inp" id="itemTitle" type="text" placeholder="What are you selling?" maxlength="80">
                         </div>
 
                         <!-- Price -->
                         <div class="form-group">
-                            <label class="form-lbl">Price (₦)</label>
+                            <label class="form-lbl">Price (₦) <span style="color:var(--danger);">*</span></label>
                             <div class="price-wrap">
                                 <span class="currency">₦</span>
                                 <input class="form-inp" id="itemPrice" type="text" inputmode="numeric" placeholder="5000" maxlength="12" oninput="formatPrice(this)">
                             </div>
                         </div>
 
-                        <!-- ── CATEGORY & SUBCATEGORY (DB-driven) ── -->
+                        <!-- ── CATEGORY & SUBCATEGORY (DB-driven) with modern pickers ── -->
                         <div class="category-row">
                             <div class="form-group">
-                                <label class="form-lbl">Category</label>
-                                <select class="form-inp" id="itemCategorySelect" onchange="onCategoryChange(this.value)">
-                                    <option value="">Loading categories...</option>
-                                </select>
+                                <label class="form-lbl">Category <span style="color:var(--danger);">*</span></label>
+                                <button class="picker-btn" id="categoryPickerBtn" onclick="openPickerModal('category')">
+                                    <span class="placeholder">Select category</span>
+                                    <span class="arrow"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+                                </button>
+                                <input type="hidden" id="itemCategoryId" value="">
                             </div>
                             <div class="form-group">
                                 <label class="form-lbl">Subcategory</label>
-                                <select class="form-inp" id="itemSubcategorySelect" disabled>
-                                    <option value="">Select a category first</option>
-                                </select>
+                                <button class="picker-btn" id="subcategoryPickerBtn" onclick="openPickerModal('subcategory')" disabled>
+                                    <span class="placeholder">Select category first</span>
+                                    <span class="arrow"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+                                </button>
+                                <input type="hidden" id="itemSubcategoryId" value="">
                             </div>
                         </div>
-                        <input type="hidden" id="itemCategoryId" value="">
-                        <input type="hidden" id="itemSubcategoryId" value="">
 
                         <!-- Condition -->
                         <div class="form-group">
@@ -1437,7 +1495,7 @@
                             <input type="hidden" id="itemLng" value="">
                         </div>
 
-                        <!-- ─── WHATSAPP NUMBER ─── -->
+                        <!-- WhatsApp -->
                         <div class="form-group">
                             <label class="form-lbl">WhatsApp Number <span style="font-weight:400;color:var(--muted2);">(optional)</span></label>
                             <input class="form-inp" id="itemWhatsApp" type="tel" placeholder="e.g. 2348012345678" maxlength="15">
@@ -1504,7 +1562,7 @@
     </div>
 
     <!-- ══════════════════════════════════════════
-         CATEGORY MODAL (for posts)
+         CATEGORY MODAL (for posts – static list)
     ══════════════════════════════════════════ -->
     <div class="modal-overlay" id="categoryModal" onclick="if(event.target===this)closeCategoryModal()">
         <div class="modal-sheet" onclick="event.stopPropagation()">
@@ -1517,6 +1575,27 @@
             </div>
             <div class="modal-body">
                 <div class="modal-category-grid" id="categoryModalGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         PICKER MODAL (for category/subcategory – scrollable)
+    ══════════════════════════════════════════ -->
+    <div class="picker-modal-overlay" id="pickerModal" onclick="if(event.target===this)closePickerModal()">
+        <div class="picker-sheet" onclick="event.stopPropagation()">
+            <div class="picker-handle"></div>
+            <div class="picker-header">
+                <span class="picker-title" id="pickerModalTitle">Select</span>
+                <button class="picker-close" onclick="closePickerModal()">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="picker-search">
+                <input type="text" id="pickerSearchInput" placeholder="Search..." oninput="filterPickerItems()">
+            </div>
+            <div class="picker-list" id="pickerList">
+                <div class="picker-empty">Loading...</div>
             </div>
         </div>
     </div>
@@ -1540,7 +1619,7 @@
     PAGE LOGIC – using PostsAPI & ListingsAPI
     ══════════════════════════════════════════ -->
     <script>
-        // ── CONFIG ──
+        // ── CONFIG (your original Cloudinary settings) ──
         const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
         const CLOUDINARY_IMAGE_UPLOAD_PRESET = 'image_upload';
         const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload';
@@ -1574,6 +1653,8 @@
         let selectedCategoryId = '';
         let selectedSubcategoryId = '';
         let categoriesLoaded = false;
+        let pickerMode = 'category'; // 'category' or 'subcategory'
+        let pickerData = [];
 
         // ──────────────────────────────────────────────────────────────
         // TOAST
@@ -1600,8 +1681,6 @@
             el.classList.add('active');
             document.getElementById('panel-' + tab).classList.add('active');
             if (tab === 'sell') loadCategories();
-
-            // Re-init mention on post panel when switching back
             if (tab === 'post') {
                 setTimeout(function() {
                     const textarea = document.getElementById('postContent');
@@ -1789,7 +1868,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // GET CURRENT USER (for UI only – APIs handle auth)
+        // GET CURRENT USER
         // ──────────────────────────────────────────────────────────────
         function getCurrentUser() {
             if (window.AuthUser && typeof window.AuthUser.getCurrentUser === 'function') {
@@ -2175,10 +2254,6 @@
 
         async function loadCategories() {
             if (categoriesLoaded) return;
-            const sel = document.getElementById('itemCategorySelect');
-            sel.innerHTML = '<option value="">Loading...</option>';
-            sel.disabled = true;
-
             try {
                 if (!window.CategoryAPI || typeof window.CategoryAPI.loadCategories !== 'function') {
                     console.warn('[DEBUG] CategoryAPI not loaded, trying fallback...');
@@ -2192,48 +2267,28 @@
                 } else {
                     dbCategories = await window.CategoryAPI.loadCategories();
                 }
-
-                sel.innerHTML = '<option value="">Select a category</option>';
-                dbCategories.forEach(cat => {
-                    const opt = document.createElement('option');
-                    opt.value = cat.id;
-                    opt.textContent = cat.name;
-                    sel.appendChild(opt);
-                });
-
-                sel.disabled = false;
                 categoriesLoaded = true;
 
-                if (dbCategories.length === 0) {
-                    sel.innerHTML = '<option value="">No categories available</option>';
-                    sel.disabled = true;
-                }
+                // Enable category picker
+                document.getElementById('categoryPickerBtn').disabled = false;
 
                 if (selectedCategoryId) {
-                    sel.value = selectedCategoryId;
-                    onCategoryChange(selectedCategoryId);
+                    updateCategoryPickerDisplay(selectedCategoryId);
                 }
-
                 console.log('[DEBUG] Categories loaded:', dbCategories.length);
-
             } catch (err) {
                 console.error('[DEBUG] Failed to load categories:', err);
-                sel.innerHTML = '<option value="">Error loading categories</option>';
-                sel.disabled = true;
                 showToast('Could not load categories. Please refresh.', 'r');
             }
         }
 
         async function loadSubcategories(categoryId) {
-            const sel = document.getElementById('itemSubcategorySelect');
-            sel.innerHTML = '<option value="">Loading...</option>';
-            sel.disabled = true;
-
             if (!categoryId) {
-                sel.innerHTML = '<option value="">Select a category first</option>';
-                sel.disabled = true;
-                selectedSubcategoryId = '';
+                document.getElementById('subcategoryPickerBtn').disabled = true;
+                document.getElementById('subcategoryPickerBtn').querySelector('.placeholder').textContent =
+                'Select category first';
                 document.getElementById('itemSubcategoryId').value = '';
+                selectedSubcategoryId = '';
                 return;
             }
 
@@ -2252,59 +2307,129 @@
                     dbSubcategories = await window.CategoryAPI.loadSubcategories(categoryId);
                 }
 
-                sel.innerHTML = '<option value="">Select a subcategory</option>';
-                dbSubcategories.forEach(sub => {
-                    const opt = document.createElement('option');
-                    opt.value = sub.id;
-                    opt.textContent = sub.name;
-                    sel.appendChild(opt);
-                });
-
-                sel.disabled = (dbSubcategories.length === 0);
+                const subBtn = document.getElementById('subcategoryPickerBtn');
                 if (dbSubcategories.length === 0) {
-                    sel.innerHTML = '<option value="">No subcategories</option>';
+                    subBtn.disabled = true;
+                    subBtn.querySelector('.placeholder').textContent = 'No subcategories';
+                    document.getElementById('itemSubcategoryId').value = '';
+                    selectedSubcategoryId = '';
+                } else {
+                    subBtn.disabled = false;
+                    subBtn.querySelector('.placeholder').textContent = 'Select subcategory';
+                    if (selectedSubcategoryId) {
+                        updateSubcategoryPickerDisplay(selectedSubcategoryId);
+                    }
                 }
-
-                if (selectedSubcategoryId) {
-                    sel.value = selectedSubcategoryId;
-                }
-
-                document.getElementById('itemCategoryId').value = categoryId;
                 console.log('[DEBUG] Subcategories loaded:', dbSubcategories.length);
-
             } catch (err) {
                 console.error('[DEBUG] Failed to load subcategories:', err);
-                sel.innerHTML = '<option value="">Error loading subcategories</option>';
-                sel.disabled = true;
-                showToast('Could not load subcategories. Please refresh.', 'r');
+                showToast('Could not load subcategories.', 'r');
             }
         }
 
-        function onCategoryChange(categoryId) {
-            selectedCategoryId = categoryId;
-            selectedSubcategoryId = '';
-            document.getElementById('itemSubcategoryId').value = '';
-            loadSubcategories(categoryId);
+        // ── Picker Modal Functions ──
+
+        function openPickerModal(mode) {
+            pickerMode = mode;
+            const modal = document.getElementById('pickerModal');
+            const title = document.getElementById('pickerModalTitle');
+            const list = document.getElementById('pickerList');
+            const search = document.getElementById('pickerSearchInput');
+
+            if (mode === 'category') {
+                title.textContent = 'Select Category';
+                pickerData = dbCategories.map(c => ({ id: c.id, name: c.name }));
+            } else {
+                title.textContent = 'Select Subcategory';
+                if (!selectedCategoryId) {
+                    showToast('Please select a category first', 'o');
+                    return;
+                }
+                pickerData = dbSubcategories.map(s => ({ id: s.id, name: s.name }));
+                if (pickerData.length === 0) {
+                    showToast('No subcategories available', 'o');
+                    return;
+                }
+            }
+
+            // Reset search
+            search.value = '';
+            renderPickerItems(pickerData);
+            modal.classList.add('open');
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const subSel = document.getElementById('itemSubcategorySelect');
-            if (subSel) {
-                subSel.addEventListener('change', function() {
-                    selectedSubcategoryId = this.value;
-                    document.getElementById('itemSubcategoryId').value = this.value;
-                });
+        function closePickerModal() {
+            document.getElementById('pickerModal').classList.remove('open');
+        }
+
+        function renderPickerItems(data) {
+            const list = document.getElementById('pickerList');
+            if (!data || data.length === 0) {
+                list.innerHTML = `<div class="picker-empty">No options available</div>`;
+                return;
             }
-            const catSel = document.getElementById('itemCategorySelect');
-            if (catSel) {
-                catSel.addEventListener('change', function() {
-                    document.getElementById('itemCategoryId').value = this.value;
-                });
+
+            const selectedId = pickerMode === 'category' ? selectedCategoryId : selectedSubcategoryId;
+
+            list.innerHTML = data.map(item => `
+                    <div class="picker-item ${item.id === selectedId ? 'active' : ''}" onclick="selectPickerItem('${item.id}')">
+                        <span>${item.name}</span>
+                        <span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>
+                    </div>
+                `).join('');
+        }
+
+        function filterPickerItems() {
+            const query = document.getElementById('pickerSearchInput').value.toLowerCase();
+            const filtered = pickerData.filter(item => item.name.toLowerCase().includes(query));
+            renderPickerItems(filtered);
+        }
+
+        function selectPickerItem(id) {
+            if (pickerMode === 'category') {
+                selectedCategoryId = id;
+                const cat = dbCategories.find(c => c.id === id);
+                if (cat) {
+                    document.getElementById('categoryPickerBtn').querySelector('.placeholder').textContent = cat.name;
+                    document.getElementById('itemCategoryId').value = id;
+                    // Load subcategories
+                    selectedSubcategoryId = '';
+                    document.getElementById('subcategoryPickerBtn').querySelector('.placeholder').textContent =
+                        'Select subcategory';
+                    document.getElementById('itemSubcategoryId').value = '';
+                    loadSubcategories(id);
+                }
+            } else {
+                selectedSubcategoryId = id;
+                const sub = dbSubcategories.find(s => s.id === id);
+                if (sub) {
+                    document.getElementById('subcategoryPickerBtn').querySelector('.placeholder').textContent = sub.name;
+                    document.getElementById('itemSubcategoryId').value = id;
+                }
             }
-        });
+            closePickerModal();
+            // Update active state in list
+            renderPickerItems(pickerData);
+        }
+
+        function updateCategoryPickerDisplay(categoryId) {
+            const cat = dbCategories.find(c => c.id === categoryId);
+            if (cat) {
+                document.getElementById('categoryPickerBtn').querySelector('.placeholder').textContent = cat.name;
+                document.getElementById('itemCategoryId').value = categoryId;
+            }
+        }
+
+        function updateSubcategoryPickerDisplay(subcategoryId) {
+            const sub = dbSubcategories.find(s => s.id === subcategoryId);
+            if (sub) {
+                document.getElementById('subcategoryPickerBtn').querySelector('.placeholder').textContent = sub.name;
+                document.getElementById('itemSubcategoryId').value = subcategoryId;
+            }
+        }
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT POST – with Mentions + Notifications
+        // SUBMIT POST – with Mentions + Notifications (content optional)
         // ──────────────────────────────────────────────────────────────
         async function submitPost() {
             console.log('[DEBUG] submitPost called');
@@ -2324,15 +2449,16 @@
             }
 
             const title = document.getElementById('postTitle').value.trim();
-            const content = document.getElementById('postContent').value.trim();
+            const content = document.getElementById('postContent').value.trim(); // optional
             const description = document.getElementById('postDescription').value.trim();
             const category = document.getElementById('postCategory').value;
             const mediaUrl = document.getElementById('postMediaUrl').value;
             const mediaType = document.getElementById('postMediaType').value;
             const publicId = document.getElementById('postPublicId').value;
 
-            if (!title || !content) {
-                showToast('Please fill in both title and content', 'o');
+            // Only title is required now
+            if (!title) {
+                showToast('Please enter a title', 'o');
                 return;
             }
             if (postTags.length > 3) {
@@ -2340,14 +2466,12 @@
                 return;
             }
 
-            // ── EXTRACT MENTIONS ──
+            // Extract mentions
             const textarea = document.getElementById('postContent');
             let mentions = [];
             if (window.Mentions && typeof window.Mentions.extractMentions === 'function') {
                 mentions = window.Mentions.extractMentions(textarea);
                 console.log('[DEBUG] Extracted mentions:', mentions);
-            } else {
-                console.warn('[DEBUG] Mentions.extractMentions not available');
             }
 
             const btn = document.querySelector('.btn-primary[onclick="submitPost()"]');
@@ -2364,46 +2488,39 @@
                 }];
             }
 
-            console.log('[DEBUG] Submitting post with media:', media);
-            console.log('[DEBUG] Post data:', { title, description, content, category, tags: postTags, media, mentions });
-
             try {
                 const result = await PostsAPI.createPost({
                     title,
                     description,
-                    content,
+                    content: content || '', // can be empty
                     category: category || 'General',
                     tags: postTags.slice(),
                     media: media,
                     mediaUrl: mediaUrl,
                     mediaType: mediaType,
-                    mentions: mentions // ← pass mentions to API
+                    mentions: mentions
                 });
 
                 console.log('[DEBUG] Post created successfully:', result);
 
-                // ── NOTIFY MENTIONED USERS ──
                 if (result.id && mentions.length > 0) {
                     if (window.Mentions && typeof window.Mentions.notifyMentionedUsers === 'function') {
                         try {
                             await window.Mentions.notifyMentionedUsers(
-                                'post', // target type
-                                result.id, // the new post ID
-                                mentions, // array of usernames
-                                user.id, // sender ID
-                                null // no parent (for posts)
+                                'post',
+                                result.id,
+                                mentions,
+                                user.id,
+                                null
                             );
                             console.log('[DEBUG] Mention notifications sent for', mentions.length, 'users');
                         } catch (notifyErr) {
                             console.error('[DEBUG] Failed to send mention notifications:', notifyErr);
-                            // Don't fail the post creation if notifications fail
                         }
-                    } else {
-                        console.warn('[DEBUG] Mentions.notifyMentionedUsers not available');
                     }
                 }
 
-                // ── RESET FORM ──
+                // Reset form
                 document.getElementById('postTitle').value = '';
                 document.getElementById('postContent').value = '';
                 document.getElementById('postDescription').value = '';
@@ -2440,7 +2557,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT ITEM – uses ListingsAPI.createListing with WhatsApp
+        // SUBMIT ITEM – uses ListingsAPI.createListing
         // ──────────────────────────────────────────────────────────────
         function submitItem() {
             console.log('[DEBUG] submitItem called');
@@ -2495,10 +2612,6 @@
                 };
             });
 
-            console.log('[DEBUG] Submitting listing with images:', imageObjects);
-            console.log('[DEBUG] Listing data:', { title, price, categoryId, subcategoryId, location, description,
-                condition, images: imageObjects, whatsapp });
-
             var btn = document.querySelector('.btn-primary[onclick="submitItem()"]');
             var originalText = btn.textContent;
             btn.textContent = 'Listing...';
@@ -2519,6 +2632,7 @@
                 })
                 .then(function(result) {
                     console.log('[DEBUG] Item listed successfully:', result);
+                    // Reset form
                     document.getElementById('itemTitle').value = '';
                     document.getElementById('itemPrice').value = '';
                     document.getElementById('itemDescription').value = '';
@@ -2543,14 +2657,14 @@
                     selectedSubcategoryId = '';
                     document.getElementById('itemCategoryId').value = '';
                     document.getElementById('itemSubcategoryId').value = '';
-                    const catSel = document.getElementById('itemCategorySelect');
-                    if (catSel) catSel.value = '';
-                    const subSel = document.getElementById('itemSubcategorySelect');
-                    if (subSel) {
-                        subSel.innerHTML = '<option value="">Select a category first</option>';
-                        subSel.disabled = true;
-                    }
+                    document.getElementById('categoryPickerBtn').querySelector('.placeholder').textContent =
+                        'Select category';
+                    document.getElementById('subcategoryPickerBtn').querySelector('.placeholder').textContent =
+                        'Select category first';
+                    document.getElementById('subcategoryPickerBtn').disabled = true;
                     categoriesLoaded = false;
+                    dbCategories = [];
+                    dbSubcategories = [];
                     loadCategories();
 
                     showToast('Item listed! 🛍️', 'g');
@@ -2631,21 +2745,16 @@
                 document.documentElement.setAttribute('data-theme', e.detail.theme);
             });
 
-            // ── INITIALISE MENTIONS ON POST CONTENT ──
+            // Init mentions on post content
             const postContent = document.getElementById('postContent');
             if (postContent) {
                 if (window.Mentions && typeof window.Mentions.initMentions === 'function') {
-                    window.Mentions.initMentions(postContent, {
-                        onMentionInsert: function(mentionData) {
-                            console.log('[DEBUG] Mention inserted:', mentionData);
-                        }
-                    });
+                    window.Mentions.initMentions(postContent);
                     console.log('[DEBUG] Mentions initialised on post content');
-                } else {
-                    console.warn('[DEBUG] Mentions.initMentions not available');
                 }
             }
 
+            // Load categories for sell panel
             const activePanel = document.querySelector('.panel.active');
             if (activePanel && activePanel.id === 'panel-sell') {
                 loadCategories();
@@ -2653,11 +2762,7 @@
                 setTimeout(loadCategories, 500);
             }
 
-            console.log('[DEBUG] create.html initialised (with Mentions + Notifications)');
-            console.log('[DEBUG] PostsAPI:', !!window.PostsAPI);
-            console.log('[DEBUG] ListingsAPI:', !!window.ListingsAPI);
-            console.log('[DEBUG] CategoryAPI:', !!window.CategoryAPI);
-            console.log('[DEBUG] Mentions:', !!window.Mentions);
+            console.log('[DEBUG] create.html initialised (modern pickers + optional content)');
         }
 
         if (document.readyState === 'loading') {
