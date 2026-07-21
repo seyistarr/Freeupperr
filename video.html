@@ -2705,11 +2705,9 @@
         function renderCaptionWithMentionsAndTags(text, mentions) {
             if (!text) return '';
             let html = escapeHtml(text);
-            // Apply mention rendering first (if mentions.js is loaded)
             if (window.Mentions && typeof window.Mentions.renderMentions === 'function') {
                 html = window.Mentions.renderMentions(html, mentions || []);
             }
-            // Then apply hashtag styling
             html = hashify(html);
             return html;
         }
@@ -2826,7 +2824,6 @@
                     const ytId = isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] ||
                         post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null;
 
-                    // ─── FIX: use post.content instead of post.description ───
                     const contentParts = [];
                     if (post.title) contentParts.push(post.title);
                     if (post.content) contentParts.push(post.content);
@@ -2849,10 +2846,11 @@
                         likes: post.likes || 0,
                         comments: post.comments || 0,
                         reposts: post.repostCount || 0,
-                        bookmarks: 0,
-                        shares: 0,
+                        // ─── FIX: real bookmark/share counts ───
+                        bookmarks: post.bookmarkCount || 0,
+                        shares: post.shareCount || 0,
                         liked: post.likedByMe || false,
-                        saved: false,
+                        saved: isBookmarked(post.id),
                         following: false,
                         authorId: post.user_id,
                         postData: post,
@@ -2915,9 +2913,10 @@
             }
         }
 
-        // ─── FOLLOW STATE ─────────────────────────────────────────
+        // ─── FOLLOW / BOOKMARK STATE ────────────────────────────────
 
         let followingSet = new Set();
+        let bookmarksSet = new Set();
 
         async function loadFollows() {
             const user = getCurrentUser();
@@ -2928,26 +2927,17 @@
             } catch (e) { console.warn('loadFollows error:', e); }
         }
 
-        function isFollowing(userId) { return followingSet.has(userId); }
-
-        async function toggleFollowUser(userId) {
+        async function loadBookmarks() {
             const user = getCurrentUser();
-            if (!user || !user.isLoggedIn) { showToast('Please sign in to follow'); return false; }
-            const currently = isFollowing(userId);
+            if (!user || !user.isLoggedIn) { bookmarksSet = new Set(); return; }
             try {
-                if (currently) {
-                    await window.sb.from('follows').delete().eq('follower_id', user.id).eq('following_id', userId);
-                    followingSet.delete(userId);
-                } else {
-                    await window.sb.from('follows').insert({ follower_id: user.id, following_id: userId });
-                    followingSet.add(userId);
-                }
-                return !currently;
-            } catch (err) {
-                showToast(err.message, 'r');
-                return currently;
-            }
+                const { data, error } = await window.sb.from('bookmarks').select('post_id').eq('user_id', user.id);
+                if (!error) bookmarksSet = new Set(data.map(b => b.post_id));
+            } catch (e) { console.warn('loadBookmarks error:', e); }
         }
+
+        function isFollowing(userId) { return followingSet.has(userId); }
+        function isBookmarked(postId) { return bookmarksSet.has(postId); }
 
         // ─── BUILD FEED ────────────────────────────────────────────
 
@@ -3199,6 +3189,12 @@
             const v = videoPosts[idx];
             if (!v) return;
             currentPostId = v.id;
+
+            // ─── FIX: record view ───
+            if (window.PostsAPI && window.PostsAPI.incrementView) {
+                window.PostsAPI.incrementView(v.id);
+            }
+
             ytState[idx] = { muted: true, playing: true };
 
             if (v.isYouTube) {
@@ -3449,15 +3445,41 @@
             }
         }
 
-        function toggleSave(idx) {
+        // ─── FIX: persistent save ────────────────────────────────
+
+        async function toggleSave(idx) {
             const v = videoPosts[idx];
-            v.saved = !v.saved;
-            v.bookmarks += v.saved ? 1 : -1;
+            const user = getCurrentUser();
+            if (!user || !user.isLoggedIn) { showToast('Please sign in to save', 'o'); return; }
+
+            const wasSaved = v.saved;
+            const prevCount = v.bookmarks;
+            v.saved = !wasSaved;
+            v.bookmarks = prevCount + (v.saved ? 1 : -1);
+            updateSaveUI(idx, v);
+
+            try {
+                if (wasSaved) {
+                    await window.sb.from('bookmarks').delete().eq('user_id', user.id).eq('post_id', v.id);
+                    bookmarksSet.delete(v.id);
+                } else {
+                    await window.sb.from('bookmarks').insert({ user_id: user.id, post_id: v.id });
+                    bookmarksSet.add(v.id);
+                }
+                showToast(v.saved ? 'Saved to Bookmarks ✓' : 'Removed from Bookmarks');
+            } catch (err) {
+                v.saved = wasSaved;
+                v.bookmarks = prevCount;
+                updateSaveUI(idx, v);
+                showToast(err.message || 'Save failed', 'r');
+            }
+        }
+
+        function updateSaveUI(idx, v) {
             const btn = document.getElementById('saveBtn-' + idx);
             const lbl = document.getElementById('saveCount-' + idx);
             if (btn) btn.classList.toggle('saved', v.saved);
             if (lbl) lbl.textContent = fmtNum(v.bookmarks);
-            showToast(v.saved ? 'Saved to Bookmarks ✓' : 'Removed from Bookmarks');
         }
 
         async function toggleFollowUserAndUpdate(userId, idx) {
@@ -3478,6 +3500,25 @@
             const v = videoPosts[idx];
             if (!v.authorId || v.isOwn) return showToast("You can't follow yourself");
             toggleFollowUserAndUpdate(v.authorId, idx);
+        }
+
+        async function toggleFollowUser(userId) {
+            const user = getCurrentUser();
+            if (!user || !user.isLoggedIn) { showToast('Please sign in to follow'); return false; }
+            const currently = isFollowing(userId);
+            try {
+                if (currently) {
+                    await window.sb.from('follows').delete().eq('follower_id', user.id).eq('following_id', userId);
+                    followingSet.delete(userId);
+                } else {
+                    await window.sb.from('follows').insert({ follower_id: user.id, following_id: userId });
+                    followingSet.add(userId);
+                }
+                return !currently;
+            } catch (err) {
+                showToast(err.message, 'r');
+                return currently;
+            }
         }
 
         function toggleFollowFromMore(idx) {
@@ -3617,7 +3658,6 @@
             const post = videoPosts.find(p => p.id === postId);
             const isCreator = post && comment.userId === post.authorId;
 
-            // Render comment text with mentions + hashtags
             const commentTextHtml = renderCaptionWithMentionsAndTags(comment.message, comment.mentions || []);
 
             let repliesHtml = '';
@@ -3894,12 +3934,10 @@
             const message = input.value.trim();
             if (!message) return showToast('Comment cannot be empty.', 'o');
 
-            // Extract mentions from the comment input
             let mentions = [];
             if (window.Mentions && typeof window.Mentions.extractMentions === 'function') {
                 mentions = window.Mentions.extractMentions(input);
             } else {
-                // Fallback: extract @username from the message
                 const atRegex = /@(\w+)/g;
                 const matches = message.matchAll(atRegex);
                 const usernames = [];
@@ -4264,7 +4302,8 @@
             }
             updateNavAvatar();
 
-            await loadFollows();
+            // ─── FIX: load follows and bookmarks together ───
+            await Promise.all([loadFollows(), loadBookmarks()]);
 
             const fresh = await loadVideoPosts();
             videoPosts = fresh;
@@ -4305,7 +4344,7 @@
                 }
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · Supabase + Mentions integrated ✓');
+            console.log('Freeupper Video Feed · Supabase + Mentions + Bookmarks + Views ✓');
         }
 
         if (document.readyState === 'loading') {
