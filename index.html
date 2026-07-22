@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- ===== STATUS BAR COLOR (will be updated by global.js) ===== -->
     <meta name="theme-color" id="theme-color-meta" content="#f9fafb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -60,6 +61,21 @@
     <script src="posts.js" defer></script>
     <script src="listings.js" defer></script>
     <script src="mentions.js" defer></script>
+
+    <!-- ===== PRE‑PAINT THEME READ (fixes flash) ===== -->
+    <script>
+        (function() {
+            const saved = localStorage.getItem('freeupper_theme');
+            if (saved) {
+                document.documentElement.setAttribute('data-theme', saved);
+            }
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            const meta = document.getElementById('theme-color-meta');
+            if (meta) {
+                meta.content = isDark ? '#1a1a1a' : '#f9fafb';
+            }
+        })();
+    </script>
 
     <style>
         /* ===== CSS VARIABLES ===== */
@@ -1965,27 +1981,7 @@
             padding: 40px 20px;
             color: var(--muted);
         }
-
-        /* ─── PRE-PAINT THEME META (will be overridden by JS) ─── */
-        #theme-color-meta {
-            content: '#f9fafb';
-        }
     </style>
-
-    <!-- ─── PRE‑PAINT THEME READ (fixes flash on settings.html) ─── -->
-    <script>
-        (function() {
-            const saved = localStorage.getItem('freeupper_theme');
-            if (saved) {
-                document.documentElement.setAttribute('data-theme', saved);
-            }
-            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-            const meta = document.getElementById('theme-color-meta');
-            if (meta) {
-                meta.content = isDark ? '#1a1a1a' : '#f9fafb';
-            }
-        })();
-    </script>
 </head>
 <body>
 
@@ -2186,10 +2182,10 @@
         </div>
 
         <div class="max-w-2xl mx-auto w-full p-4 sm:p-6 space-y-6">
-            
+
             <!-- SWIPEABLE CAROUSEL CONTAINER -->
             <div class="relative aspect-square w-full rounded-3xl overflow-hidden bg-gray-900 shadow-md group touch-pan-y cursor-zoom-in" id="modalCarouselTrack" onclick="openFullscreenLightbox()">
-                
+
                 <!-- SLIDES WRAPPER -->
                 <div id="modalSlidesContainer" class="flex w-full h-full transition-transform duration-300 ease-out"></div>
 
@@ -2260,7 +2256,7 @@
                 <span id="lightboxBadge" class="text-xs font-bold bg-white/20 px-3 py-1 rounded-full backdrop-blur-md">1 / 1</span>
                 <span class="text-[10px] text-gray-400 hidden sm:inline">Double-tap or pinch to zoom</span>
             </div>
-            
+
             <div class="flex items-center gap-2">
                 <button onclick="resetZoom()" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition">Reset Zoom</button>
                 <button onclick="closeFullscreenLightbox()" class="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition">
@@ -2552,7 +2548,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // YOUTUBE PLAYER (unchanged)
+            // YOUTUBE PLAYER
             // ───────────────────────────────────────────────────────────────
 
             let ytState = {};
@@ -2746,7 +2742,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // CAROUSEL (unchanged)
+            // CAROUSEL
             // ───────────────────────────────────────────────────────────────
 
             function buildCarousel(mediaItems, postIndex) {
@@ -2921,7 +2917,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // VIDEO AUTO-PLAY (fixed)
+            // VIDEO AUTO-PLAY
             // ───────────────────────────────────────────────────────────────
 
             let videoObserver = null;
@@ -3158,7 +3154,7 @@
                     return posts;
                 } catch (err) {
                     console.error('Failed to load posts:', err);
-                    showToast('Failed to load feed', 'r');
+                    window.showToast('Failed to load feed. Please try again.', 'r');
                     return [];
                 }
             }
@@ -3345,10 +3341,7 @@
 
             window.closeRepostQuoteModal = closeRepostQuoteModal;
 
-            // ───────────────────────────────────────────────────────────────
-            // TRIGGER REPOST FROM FEED (spin → sheet)
-            // ───────────────────────────────────────────────────────────────
-
+            // ─── TRIGGER REPOST FROM FEED (spin → sheet) ─────────────────
             function triggerRepostFromFeed(btn, postId) {
                 btn.classList.add('spinning');
                 btn.style.pointerEvents = 'none';
@@ -3360,7 +3353,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // MARKET (unchanged)
+            // MARKETPLACE – using ListingsAPI + CategoryAPI
             // ───────────────────────────────────────────────────────────────
 
             async function loadMarketCategories() {
@@ -3725,7 +3718,7 @@
                 const images = currentActiveProduct.images || [];
                 const container = document.getElementById('modalSlidesContainer');
                 const badge = document.getElementById('modalImageBadge');
-                
+
                 container.style.transform = `translateX(-${modalActiveSlideIndex * 100}%)`;
                 badge.textContent = `${modalActiveSlideIndex + 1} / ${images.length}`;
 
@@ -3864,7 +3857,7 @@
             }
 
             const lightboxTrack = document.getElementById('lightboxTrack');
-            
+
             lightboxTrack.addEventListener('touchstart', (e) => {
                 if (e.touches.length === 2) {
                     initialPinchDistance = Math.hypot(
@@ -4452,8 +4445,6 @@
                 });
             }
 
-            // ─── POST EVENT DELEGATION ──────────────────────────────────
-
             function setupPostEventDelegation(article) {
                 article.addEventListener('click', function(e) {
                     const t = e.target,
@@ -4473,7 +4464,6 @@
                         openShareModal(postId);
                         return;
                     }
-                    // Repost badge tap
                     if (t.closest('[data-repost-btn]')) {
                         e.stopPropagation();
                         const btn = t.closest('[data-repost-btn]');
@@ -4502,7 +4492,6 @@
                         const tag = t.textContent.replace('#', '').trim();
                         if (tag) openTagsModal(tag);
                         return; }
-                    // Repost banner clicks
                     if (t.closest('[data-repost-avatar]')) {
                         e.stopPropagation();
                         const uid = t.closest('[data-repost-avatar]').dataset.userId;
@@ -4590,7 +4579,6 @@
                 const deleteBtn = document.getElementById('share-delete-btn');
                 const reportBtn = document.getElementById('share-report-btn');
 
-                // Update repost label based on feed context
                 const ctx = post ? getFeedContext(post.id) : null;
                 const reposted = ctx && ctx.repost && ctx.repost.items && ctx.repost.items.some(r => r.user.id === cu.id);
                 const repostBtn = modal.querySelector('.share-repost');
@@ -4660,7 +4648,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // COMMENTS (post feed) – unchanged but kept
+            // COMMENTS (post feed)
             // ───────────────────────────────────────────────────────────────
 
             function getAllDescendants(pid, comments) { const r = [];
@@ -5879,11 +5867,9 @@
                     deletePostFromShare(sharePostId);
                 });
 
-                // Repost quote modal close on overlay click
                 document.getElementById('repostQuoteOverlay').addEventListener('click', (e) => {
                     if (e.target === e.currentTarget) closeRepostQuoteModal();
                 });
-                // Close tags modal on overlay click
                 document.getElementById('tagsModal').addEventListener('click', function(e) {
                     if (e.target === this) closeTagsModal();
                 });
@@ -5971,6 +5957,11 @@
                         openProductModal(productIdParam);
                         history.replaceState({}, '', window.location.pathname);
                     }, 500);
+                }
+
+                // ─── Sync theme-color meta on load ──────────────────────
+                if (window.syncThemeColorMeta) {
+                    window.syncThemeColorMeta();
                 }
 
                 renderUI();
