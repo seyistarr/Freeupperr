@@ -20,12 +20,17 @@
   /**
    * Sync the theme-color meta tag with the current --bg2 CSS variable.
    * This ensures the browser status bar / address bar matches the current theme.
+   * Wrapped in try/catch so any failure here doesn't break the rest of the script.
    */
   function syncThemeColorMeta() {
-    const meta = document.getElementById('theme-color-meta') || document.querySelector('meta[name="theme-color"]');
-    if (!meta) return;
-    const bg2 = getComputedStyle(document.documentElement).getPropertyValue('--bg2'). persisttrim();
-    if (bg2) meta.setAttribute('content', bg2);
+    try {
+      const meta = document.getElementById('theme-color-meta') || document.querySelector('meta[name="theme-color"]');
+      if (!meta) return;
+      const bg2 = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim();
+      if (bg2) meta.setAttribute('content', bg2);
+    } catch (_) {
+      // Silently fail – status bar colour will just stay as-is
+    }
   }
 
   /**
