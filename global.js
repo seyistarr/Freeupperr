@@ -17,14 +17,39 @@
   // ─── THEME ────────────────────────────────────────────────────
   let currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
 
+  /**
+   * Sync the theme-color meta tag with the current --bg2 CSS variable.
+   * This ensures the browser status bar / address bar matches the current theme.
+   */
+  function syncThemeColorMeta() {
+    const meta = document.getElementById('theme-color-meta') || document.querySelector('meta[name="theme-color"]');
+    if (!meta) return;
+    const bg2 = getComputedStyle(document.documentElement).getPropertyValue('--bg2'). persisttrim();
+    if (bg2) meta.setAttribute('content', bg2);
+  }
+
+  /**
+   * Apply a theme by setting data-theme on the root, to localStorage,
+   * update the status bar color, and dispatch events.
+   * @param {string} theme - 'dark' or 'light'
+   */
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     currentTheme = theme;
     localStorage.setItem(THEME_KEY, theme);
+    // Wait a tick so the new --bg2 value from the [data-theme] CSS block is live before reading it
+    requestAnimationFrame(syncThemeColorMeta);
     document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme } }));
     updateThemeButton();
   }
 
+  // Expose applyTheme globally (used by settings.html toggle)
+  window.applyTheme = applyTheme;
+  window.syncThemeColorMeta = syncThemeColorMeta;
+
+  /**
+   * Toggle between dark and light themes.
+   */
   window.toggleTheme = function() {
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     applyTheme(newTheme);
@@ -50,11 +75,15 @@
   // Init theme
   (function initTheme() {
     applyTheme(currentTheme);
+    // Synchronous call to set the status bar on first paint (no flash)
+    syncThemeColorMeta();
+
     window.addEventListener('storage', function(e) {
       if (e.key === THEME_KEY && e.newValue && e.newValue !== currentTheme) {
         applyTheme(e.newValue);
       }
     });
+
     document.addEventListener('themeChanged', function(e) {
       if (e.detail && e.detail.theme) {
         currentTheme = e.detail.theme;
