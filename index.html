@@ -282,38 +282,78 @@
             max-width: 100%;
         }
 
-        /* ─── REPOST BANNER ─── */
+        /* ─── REPOST BANNER (home feed) ─── */
         .repost-banner {
             display: flex;
             align-items: center;
-            gap: 8px;
+            flex-wrap: wrap;
+            gap: 6px;
             padding: 0 16px 8px;
             font-size: .78rem;
             font-weight: 600;
             color: #8B5CF6;
         }
-        .repost-banner .repost-icon-badge {
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background: rgba(124, 58, 237, .12);
+        .repost-banner .repost-avatar-zone {
             display: flex;
-            align-items: center;
-            justify-content: center;
             flex-shrink: 0;
+            cursor: pointer;
         }
-        .repost-banner .repost-icon-badge svg {
-            width: 12px;
-            height: 12px;
-            stroke: #7C3AED;
-            fill: none;
-            stroke-width: 2.4;
-            stroke-linecap: round;
+        .repost-banner .repost-stack-avatar {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--bg2);
+            margin-left: -6px;
+        }
+        .repost-banner .repost-stack-avatar:first-child {
+            margin-left: 0;
         }
         .repost-banner .repost-author {
             color: var(--text);
             font-weight: 700;
             cursor: pointer;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .repost-banner .repost-tag-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #7C3AED;
+            color: #fff;
+            font-size: .65rem;
+            font-weight: 700;
+            padding: 2px 10px;
+            border-radius: 20px;
+            flex-shrink: 0;
+            cursor: pointer;
+            letter-spacing: 0.02em;
+            transition: transform 0.15s ease;
+        }
+        .repost-banner .repost-tag-pill:active {
+            transform: scale(0.95);
+        }
+        .repost-banner .repost-tag-pill svg {
+            width: 12px;
+            height: 12px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
+        .repost-banner .repost-quote {
+            width: 100%;
+            margin-top: 2px;
+            font-size: .82rem;
+            color: var(--muted);
+            padding: 4px 8px 4px 12px;
+            border-left: 2px solid #7C3AED;
+            background: var(--bg4);
+            border-radius: 4px 8px 8px 4px;
         }
 
         /* ─── FULL-WIDTH MEDIA ─── */
@@ -1480,7 +1520,8 @@
             .post-actions-row .reaction-btn,
             .post-actions-row .views-count,
             .post-actions-row .bookmark-badge,
-            .post-actions-row .share-btn {
+            .post-actions-row .share-btn,
+            .post-actions-row .repost-count-badge {
                 padding: 4px 4px;
                 font-size: .7rem;
             }
@@ -1499,6 +1540,12 @@
                 margin-left: 0;
                 margin-right: 0;
                 border-radius: 0 !important;
+            }
+            .repost-banner .repost-author {
+                font-size: .7rem;
+            }
+            .repost-banner .repost-quote {
+                font-size: .75rem;
             }
         }
 
@@ -1560,7 +1607,8 @@
         .post-actions-row .reaction-btn,
         .post-actions-row .views-count,
         .post-actions-row .bookmark-badge,
-        .post-actions-row .share-btn {
+        .post-actions-row .share-btn,
+        .post-actions-row .repost-count-badge {
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -1608,7 +1656,8 @@
         .post-actions-row .reaction-count,
         .post-actions-row .comment-count,
         .post-actions-row .share-count,
-        .post-actions-row .bookmark-count {
+        .post-actions-row .bookmark-count,
+        .post-actions-row .repost-count-num {
             font-weight: 600;
             font-variant-numeric: tabular-nums;
             font-size: .85rem;
@@ -2363,8 +2412,12 @@
                 return `<span class="bookmark-badge ${filled?'bookmarked':''}" data-bookmark="${id}">${bookmarkIcon(filled)}<span class="bookmark-count">${formatCount(count||0)}</span></span>`;
             }
 
+            function repostCountBadge(count) {
+                return `<span class="repost-count-badge">🔁<span class="repost-count-num">${formatCount(count||0)}</span></span>`;
+            }
+
             // ───────────────────────────────────────────────────────────────
-            // YOUTUBE PLAYER
+            // YOUTUBE PLAYER (unchanged)
             // ───────────────────────────────────────────────────────────────
 
             let ytState = {};
@@ -2558,7 +2611,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // CAROUSEL
+            // CAROUSEL (unchanged)
             // ───────────────────────────────────────────────────────────────
 
             function buildCarousel(mediaItems, postIndex) {
@@ -2945,27 +2998,19 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // POSTS (with repost feed support)
+            // POSTS – using feedContextMap (no _repostMeta)
             // ───────────────────────────────────────────────────────────────
 
             async function reloadPosts() {
                 try {
-                    const feed = await window.PostsAPI.loadFeedWithReposts();
-                    // Home feed excludes video reposts — those only surface on video.html
-                    const filtered = feed.filter(entry => {
+                    const feedItems = await window.PostsAPI.loadFeedWithReposts();
+                    // Home feed excludes video reposts
+                    const filtered = feedItems.filter(entry => {
                         if (entry.feedType !== 'repost') return true;
                         return entry.post.mediaType !== 'video';
                     });
-                    const posts = filtered.map(entry => {
-                        const p = entry.post;
-                        if (entry.feedType === 'repost') {
-                            p._repostMeta = { reposter: entry.reposter, comment: entry.repostComment,
-                                sortTime: entry.sortTime };
-                        } else {
-                            delete p._repostMeta;
-                        }
-                        return p;
-                    });
+                    // Posts are canonical – no mutation
+                    const posts = filtered.map(entry => entry.post);
                     allPosts = posts;
                     appData.posts = posts;
                     appData.userReactions = {};
@@ -2983,8 +3028,74 @@
                 }
             }
 
+            // ─── Get feed context for a post ──────────────────────────────
+            function getFeedContext(postId) {
+                return window.PostsAPI.getFeedContext(postId) || null;
+            }
+
+            // ─── Repost banner builder (home feed) ──────────────────────
+            function buildRepostBanner(p) {
+                const ctx = getFeedContext(p.id);
+                if (!ctx || !ctx.repost || ctx.repost.items.length === 0) return '';
+
+                const rs = ctx.repost.items;
+                const firstUser = rs[0].user;
+
+                // Stack avatars (max 3, overlap -6px)
+                const avatarsHtml = rs.slice(0, 3).map(r =>
+                    `<img src="${r.user.avatar_url || ''}" class="repost-stack-avatar" alt="${escapeHtml(r.user.display_name)}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${r.user.display_name}'">`
+                ).join('');
+
+                let label;
+                if (rs.length === 1) label = escapeHtml(firstUser.display_name || firstUser.username);
+                else if (rs.length === 2) label = `${escapeHtml(rs[0].user.display_name)} and ${escapeHtml(rs[1].user.display_name)}`;
+                else label = `${escapeHtml(rs[0].user.display_name)} +${rs.length - 1} others`;
+
+                const quoteHtml = (rs.length === 1 && rs[0].comment && rs[0].comment.trim())
+                    ? `<div class="repost-quote">${escapeHtml(rs[0].comment)}</div>` : '';
+
+                return `
+                    <div class="repost-banner" data-post-id="${p.id}">
+                        <span class="repost-avatar-zone" data-repost-avatar data-user-id="${firstUser.id}">${avatarsHtml}</span>
+                        <span class="repost-author" data-repost-name data-post-id="${p.id}">${label}</span>
+                        <span class="repost-tag-pill" data-repost-tag data-post-id="${p.id}">
+                            <svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                            Reposted
+                        </span>
+                        ${quoteHtml}
+                    </div>
+                `;
+            }
+
+            // ─── Reposters sheet ──────────────────────────────────────────
+            function openRepostersSheet(postId) {
+                const ctx = getFeedContext(postId);
+                if (!ctx || !ctx.repost) return;
+                const items = ctx.repost.items;
+                const sheet = document.getElementById('tagsModal');
+                const body = document.getElementById('tagsBody');
+                document.getElementById('tagsModalTitle').textContent = 'Reposted by';
+                body.innerHTML = items.map(r => `
+                    <div class="tag-result" onclick="window.location.href='profile.html?uid=${r.user.id}'">
+                        <div class="tag-title" style="display:flex;align-items:center;gap:8px;">
+                            <img src="${r.user.avatar_url || ''}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${r.user.display_name}'">
+                            ${escapeHtml(r.user.display_name || r.user.username)}
+                            ${r.comment ? `<span style="font-size:12px;color:var(--muted);font-weight:400;">${escapeHtml(r.comment)}</span>` : ''}
+                        </div>
+                        <div class="tag-post-title" style="font-size:11px;color:var(--muted2);">${formatRelativeTime(r.time)}</div>
+                    </div>
+                `).join('');
+                sheet.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeRepostersSheet() {
+                document.getElementById('tagsModal').classList.remove('open');
+                document.body.style.overflow = '';
+            }
+
             // ───────────────────────────────────────────────────────────────
-            // MARKET – using ListingsAPI + CategoryAPI
+            // MARKET (unchanged, but we keep the code)
             // ───────────────────────────────────────────────────────────────
 
             async function loadMarketCategories() {
@@ -3064,10 +3175,6 @@
                     marketListings = [];
                 }
             }
-
-            // ───────────────────────────────────────────────────────────────
-            // MARKETPLACE RENDER (NEW UI/UX)
-            // ───────────────────────────────────────────────────────────────
 
             function renderMarketCategoryBars() {
                 const mainBar = document.getElementById('mainCategoriesBar');
@@ -3193,7 +3300,6 @@
                 });
             }
 
-            // ─── MARKET CARD HTML (FIXED) ─────────────────────────────────
             function createMarketCardHTML(item) {
                 if (!(item.id in currentImageIndexMap)) {
                     currentImageIndexMap[item.id] = 0;
@@ -3245,7 +3351,6 @@
                 `;
             }
 
-            // ─── CHANGE MARKET IMAGE (dots) ──────────────────────────────
             function changeMarketImage(productId, imageIdx, btnEl) {
                 currentImageIndexMap[productId] = imageIdx;
                 const product = marketListings.find(p => p.id === productId);
@@ -3261,8 +3366,6 @@
                     });
                 }
             }
-
-            // ─── MARKET MODAL HELPERS ─────────────────────────────────────
 
             function openProductModal(id) {
                 const product = marketListings.find(p => p.id === id);
@@ -3479,7 +3582,6 @@
                 updateLightboxPosition();
             }
 
-            /* PINCH & DOUBLE-TAP ZOOM CONTROLLER FOR LIGHTBOX */
             function applyImageZoom(scale) {
                 currentZoomScale = Math.min(Math.max(1, scale), 3.5);
                 const activeImg = document.getElementById(`lightbox-img-${lightboxActiveIndex}`);
@@ -3506,8 +3608,6 @@
                     );
                 } else if (e.touches.length === 1) {
                     touchStartX = e.changedTouches[0].screenX;
-                    
-                    // Double tap handling
                     const now = new Date().getTime();
                     if (now - lastTapTime < 300) {
                         if (currentZoomScale > 1) resetZoom();
@@ -3537,7 +3637,6 @@
                 }
             }, { passive: true });
 
-            // MODAL CAROUSEL SWIPE HANDLERS
             const carouselTrack = document.getElementById('modalCarouselTrack');
             carouselTrack.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
             carouselTrack.addEventListener('touchend', (e) => {
@@ -3763,6 +3862,7 @@
                         <span class="views-count">${svgEye()}<span>${formatCount(p.views||0)}</span></span>
                         ${bookmarkIconWithCount(p.id, bm, p.bookmarkCount)}
                         <span class="share-btn ${shared?'shared':''}" data-share-post="${p.id}">${svgShare()}<span class="share-count">${formatCount(p.shareCount||0)}</span></span>
+                        ${repostCountBadge(p.repostCount)}
                     </div>`;
             }
 
@@ -3858,7 +3958,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // BUILD POST HTML (with repost banner)
+            // BUILD POST HTML (using feed context)
             // ───────────────────────────────────────────────────────────────
 
             function buildPostHTML(p, index) {
@@ -3867,12 +3967,8 @@
                 const aa = author.avatar;
                 const verifiedStatus = author.verified_status;
 
-                // Repost banner if this is a repost
-                const repostBanner = p._repostMeta ? `
-                    <div class="repost-banner" data-user-id="${p._repostMeta.reposter.id}">
-                        <span class="repost-icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>
-                        <span class="repost-author">${escapeHtml(p._repostMeta.reposter.display_name || p._repostMeta.reposter.username)}</span> reposted
-                    </div>` : '';
+                // Repost banner from feedContextMap
+                const repostBanner = buildRepostBanner(p);
 
                 const hd = p.description && p.description.trim().length > 0;
                 const pt = (p.content || '').substring(0, 250);
@@ -3889,7 +3985,7 @@
                 const renderedContent = window.Mentions ? window.Mentions.renderMentions(p.content, p.mentions || []) : linkifyContent(p.content);
                 const renderedPreview = window.Mentions ? window.Mentions.renderMentions(pt, p.mentions || []) : linkifyContent(pt);
 
-                const isRepostClass = p._repostMeta ? 'is-repost' : '';
+                const isRepostClass = repostBanner ? 'is-repost' : '';
 
                 return `<article class="feed-post ${isRepostClass}" data-post-id="${p.id}" data-author-id="${author.id}">
                         ${repostBanner}
@@ -4092,6 +4188,8 @@
                 });
             }
 
+            // ─── POST EVENT DELEGATION ──────────────────────────────────
+
             function setupPostEventDelegation(article) {
                 article.addEventListener('click', function(e) {
                     const t = e.target,
@@ -4133,6 +4231,20 @@
                         const tag = t.textContent.replace('#', '').trim();
                         if (tag) openTagsModal(tag);
                         return; }
+                    // Repost banner clicks
+                    if (t.closest('[data-repost-avatar]')) {
+                        e.stopPropagation();
+                        const uid = t.closest('[data-repost-avatar]').dataset.userId;
+                        if (uid) navigateToProfile(uid);
+                        return;
+                    }
+                    if (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')) {
+                        e.stopPropagation();
+                        const pid2 = (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')).dataset
+                            .postId;
+                        if (pid2) openRepostersSheet(pid2);
+                        return;
+                    }
                     const now = Date.now(),
                         gap = now - lastDoubleTapTime;
                     if (gap < 300 && gap > 0) {
@@ -4207,9 +4319,11 @@
                 const deleteBtn = document.getElementById('share-delete-btn');
                 const reportBtn = document.getElementById('share-report-btn');
 
-                // Update repost label
+                // Update repost label based on feed context
+                const ctx = post ? getFeedContext(post.id) : null;
+                const reposted = ctx && ctx.repost && ctx.repost.items && ctx.repost.items.some(r => r.user.id === cu.id);
                 const repostBtn = modal.querySelector('.share-repost');
-                if (post && post.myRepost) {
+                if (reposted) {
                     repostBtn.classList.add('reposted');
                     document.getElementById('repost-label').textContent = 'Reposted';
                 } else {
@@ -4242,14 +4356,18 @@
                             try {
                                 const { reposted, count } = await window.PostsAPI.toggleRepostAPI(sharePostId,
                                 '');
-                                post.myRepost = reposted;
                                 post.repostCount = count;
+                                // Refresh context and feed
+                                window.PostsAPI.clearFeedContext();
+                                await reloadPosts();
+                                // Update UI
                                 document.querySelectorAll(`.share-repost`).forEach(el => {
                                     el.classList.toggle('reposted', reposted);
                                     const lbl = el.querySelector('#repost-label');
                                     if (lbl) lbl.textContent = reposted ? 'Reposted' : 'Repost';
                                 });
                                 showToast(reposted ? 'Reposted to your followers ✨' : 'Repost removed');
+                                renderUI();
                                 closeShareModal();
                             } catch (err) { showToast(err.message, 'r'); }
                         });
@@ -4280,7 +4398,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // COMMENTS (post feed)
+            // COMMENTS (post feed) – unchanged but kept
             // ───────────────────────────────────────────────────────────────
 
             function getAllDescendants(pid, comments) { const r = [];
@@ -4710,6 +4828,7 @@
                           <span class="views-count">${svgEye()}<span>${formatCount(post.views||0)}</span></span>
                           <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}<span class="bookmark-count">${formatCount(post.bookmarkCount||0)}</span></span>
                           <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}</span>
+                          ${repostCountBadge(post.repostCount)}
                         </div>
                         <div class="mt-5">
                           <h3 class="font-heading font-bold text-base mb-3" style="color:var(--text);">Replies</h3>
@@ -4743,20 +4862,16 @@
                 const catNameEl = document.getElementById('explore-category-name');
                 if (catNameEl) catNameEl.textContent = post ? (post.title || 'Post') : 'Post';
 
-                // Paint immediately with whatever comments we already have (or none)
                 if (post && !Array.isArray(post.comments)) post.comments = [];
                 fc.innerHTML = buildSinglePostHTML(post);
 
-                // Open the sheet right away — don't wait on network
                 fs.classList.add('open');
                 document.body.classList.add('explore-open');
                 fs.scrollTop = 0;
 
-                // Set up event delegation immediately
                 setupExploreEventDelegation(fc, id);
                 setupCommentListDelegation(fc, id);
 
-                // Initialize players after paint
                 requestAnimationFrame(() => {
                     initPlayers(fc);
                     setTimeout(() => {
@@ -4788,7 +4903,6 @@
                 if (eb) eb.style.display = 'block';
                 updateExploreReplyContextUI();
 
-                // Load comments asynchronously
                 if (post) {
                     if (window.PostsAPI && window.PostsAPI.incrementView) window.PostsAPI.incrementView(id);
                     post.views = (post.views || 0) + 1;
@@ -4993,7 +5107,6 @@
                 renderUI();
             }
 
-            // ─── RENDER MARKET VIEW (NEW UI/UX) ──────────────────────────
             function renderMarketView() {
                 return `
                         <div class="market-main-content">
@@ -5512,6 +5625,7 @@
                         closeFilterModal();
                         closeTagsModal();
                         closeFullscreenLightbox();
+                        closeRepostersSheet();
                     }
                 });
 
@@ -5602,6 +5716,7 @@
             window.refreshCurrentTab = refreshCurrentTab;
             window.openTagsModal = openTagsModal;
             window.closeTagsModal = closeTagsModal;
+            window.closeRepostersSheet = closeRepostersSheet;
 
             window.selectMarketCategory = selectMarketCategory;
             window.selectMarketSubcategory = selectMarketSubcategory;
@@ -5623,7 +5738,6 @@
             window.reportPostFromShare = reportPostFromShare;
             window.deletePostFromShare = deletePostFromShare;
 
-            // Lightbox functions
             window.openFullscreenLightbox = openFullscreenLightbox;
             window.closeFullscreenLightbox = closeFullscreenLightbox;
             window.nextLightboxSlide = nextLightboxSlide;
