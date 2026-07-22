@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#7C3AED" />
+    <meta name="theme-color" id="theme-color-meta" content="#f9fafb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
@@ -62,7 +62,7 @@
     <script src="mentions.js" defer></script>
 
     <style>
-        /* ===== CSS VARIABLES (unchanged) ===== */
+        /* ===== CSS VARIABLES ===== */
         :root {
             --safe-bottom: env(safe-area-inset-bottom, 0px);
             --safe-top: env(safe-area-inset-top, 0px);
@@ -352,7 +352,7 @@
             border-radius: 4px 8px 8px 4px;
         }
 
-        /* ─── FULL-WIDTH MEDIA (unchanged) ─── */
+        /* ─── FULL-WIDTH MEDIA ─── */
         .ig-media-container {
             width: calc(100% + 32px);
             margin-left: -16px;
@@ -518,7 +518,7 @@
             transform: translate(50%, -50%) scale(1);
         }
 
-        /* ─── CAROUSEL (unchanged) ─── */
+        /* ─── CAROUSEL ─── */
         .media-carousel {
             width: calc(100% + 32px);
             margin-left: -16px;
@@ -779,7 +779,7 @@
             animation: shimmer 1.4s infinite;
         }
 
-        /* ─── MARKETPLACE (unchanged) ─── */
+        /* ─── MARKETPLACE ─── */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -1733,6 +1733,15 @@
             font-weight: 500;
         }
 
+        /* ─── REPOST BADGE HOVER / ACTIVE ─── */
+        .post-actions-row .repost-count-badge:hover {
+            background: rgba(124, 58, 237, .08);
+            color: #7C3AED;
+        }
+        .post-actions-row .repost-count-badge.reposted {
+            color: #16A34A;
+        }
+
         /* ─── TAB PILLS ─── */
         .tab-pill {
             padding: 14px 16px;
@@ -1956,7 +1965,27 @@
             padding: 40px 20px;
             color: var(--muted);
         }
+
+        /* ─── PRE-PAINT THEME META (will be overridden by JS) ─── */
+        #theme-color-meta {
+            content: '#f9fafb';
+        }
     </style>
+
+    <!-- ─── PRE‑PAINT THEME READ (fixes flash on settings.html) ─── -->
+    <script>
+        (function() {
+            const saved = localStorage.getItem('freeupper_theme');
+            if (saved) {
+                document.documentElement.setAttribute('data-theme', saved);
+            }
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            const meta = document.getElementById('theme-color-meta');
+            if (meta) {
+                meta.content = isDark ? '#1a1a1a' : '#f9fafb';
+            }
+        })();
+    </script>
 </head>
 <body>
 
@@ -2038,7 +2067,6 @@
             <h3>Share post</h3>
             <p class="share-sub">Choose how you'd like to share this</p>
             <div class="share-options">
-                <!-- Repost button (with Remix Icon + spin) -->
                 <button class="share-option share-repost" data-share="repost" id="shareRepostBtn">
                     <span class="share-icon-circle"><i class="ri-repeat-2-line repost-icon" style="font-size:24px;color:#fff;"></i></span>
                     <span id="repost-label">Repost</span>
@@ -2511,8 +2539,16 @@
                 return `<span class="bookmark-badge ${filled?'bookmarked':''}" data-bookmark="${id}">${bookmarkIcon(filled)}<span class="bookmark-count">${formatCount(count||0)}</span></span>`;
             }
 
-            function repostCountBadge(count) {
-                return `<span class="repost-count-badge"><i class="ri-repeat-2-line" style="font-size:14px;"></i><span class="repost-count-num">${formatCount(count||0)}</span></span>`;
+            // ─── REPOST BADGE (state‑aware, tappable) ────────────────────
+            function repostCountBadge(post) {
+                const ctx = window.PostsAPI.getFeedContext ? window.PostsAPI.getFeedContext(post.id) : null;
+                const cu = getCurrentUser();
+                const reposted = !!(ctx && ctx.repost && ctx.repost.items && ctx.repost.items.some(r => r.user.id === cu
+                    .id));
+                return `<span class="repost-count-badge repost-btn ${reposted?'reposted':''}" data-repost-btn="${post.id}">
+                        <i class="ri-repeat-2-line repost-icon" style="font-size:14px;"></i>
+                        <span class="repost-count-num">${formatCount(post.repostCount||0)}</span>
+                    </span>`;
             }
 
             // ───────────────────────────────────────────────────────────────
@@ -3209,7 +3245,7 @@
 
                 input.value = mine ? (mine.comment || '') : '';
                 updateRepostCharCount();
-                title.textContent = mine ? 'Your repost' : 'Repost';
+                title.textContent = mine ? 'Edit your note' : 'Repost';
                 removeBtn.style.display = mine ? 'block' : 'none';
 
                 if (post) {
@@ -3239,7 +3275,7 @@
                 const input = document.getElementById('repostQuoteInput');
                 document.getElementById('repostCharCount').textContent = `${input.value.length}/280`;
                 const editing = document.getElementById('repostRemoveBtn').style.display === 'block';
-                document.getElementById('repostSubmitBtn').textContent = editing ? 'Update Quote' : (input.value
+                document.getElementById('repostSubmitBtn').textContent = editing ? 'Save' : (input.value
                     .trim() ? 'Quote & Repost' : 'Repost');
             }
 
@@ -3259,6 +3295,10 @@
                     'o'); return; }
 
                 window.AuthUser.requireAuth(async () => {
+                    const submitBtn = document.getElementById('repostSubmitBtn');
+                    const prevText = submitBtn.textContent;
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Reposting...';
                     try {
                         const result = (editing && window.PostsAPI.updateRepostComment) ?
                             await window.PostsAPI.updateRepostComment(repostQuoteTargetId, quote) :
@@ -3267,9 +3307,14 @@
                         if (post && typeof result.count === 'number') post.repostCount = result.count;
                         await reloadPosts();
                         renderUI();
-                        showToast('Reposted to your followers ✨');
+                        showToast('✓ Reposted successfully');
                         closeRepostQuoteModal();
-                    } catch (err) { showToast(err.message, 'r'); }
+                    } catch (err) {
+                        showToast(err.message, 'r');
+                    } finally {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = prevText;
+                    }
                 });
             });
 
@@ -3277,6 +3322,10 @@
                 if (!repostQuoteTargetId) return;
                 if (!(window.AuthUser && window.AuthUser.requireAuth)) return;
                 window.AuthUser.requireAuth(async () => {
+                    const removeBtn = document.getElementById('repostRemoveBtn');
+                    const prevText = removeBtn.textContent;
+                    removeBtn.disabled = true;
+                    removeBtn.textContent = 'Removing...';
                     try {
                         const { count } = await window.PostsAPI.toggleRepostAPI(repostQuoteTargetId, '');
                         const post = allPosts.find(p => p.id === repostQuoteTargetId);
@@ -3285,11 +3334,30 @@
                         renderUI();
                         showToast('Repost removed');
                         closeRepostQuoteModal();
-                    } catch (err) { showToast(err.message, 'r'); }
+                    } catch (err) {
+                        showToast(err.message, 'r');
+                    } finally {
+                        removeBtn.disabled = false;
+                        removeBtn.textContent = prevText;
+                    }
                 });
             });
 
             window.closeRepostQuoteModal = closeRepostQuoteModal;
+
+            // ───────────────────────────────────────────────────────────────
+            // TRIGGER REPOST FROM FEED (spin → sheet)
+            // ───────────────────────────────────────────────────────────────
+
+            function triggerRepostFromFeed(btn, postId) {
+                btn.classList.add('spinning');
+                btn.style.pointerEvents = 'none';
+                btn.addEventListener('animationend', () => {
+                    btn.classList.remove('spinning');
+                    btn.style.pointerEvents = '';
+                    openRepostQuoteSheet(postId);
+                }, { once: true });
+            }
 
             // ───────────────────────────────────────────────────────────────
             // MARKET (unchanged)
@@ -4059,7 +4127,7 @@
                         <span class="views-count">${svgEye()}<span>${formatCount(p.views||0)}</span></span>
                         ${bookmarkIconWithCount(p.id, bm, p.bookmarkCount)}
                         <span class="share-btn ${shared?'shared':''}" data-share-post="${p.id}">${svgShare()}<span class="share-count">${formatCount(p.shareCount||0)}</span></span>
-                        ${repostCountBadge(p.repostCount)}
+                        ${repostCountBadge(p)}
                     </div>`;
             }
 
@@ -4403,6 +4471,13 @@
                         btn.classList.add('share-bounce');
                         setTimeout(() => btn.classList.remove('share-bounce'), 450);
                         openShareModal(postId);
+                        return;
+                    }
+                    // Repost badge tap
+                    if (t.closest('[data-repost-btn]')) {
+                        e.stopPropagation();
+                        const btn = t.closest('[data-repost-btn]');
+                        triggerRepostFromFeed(btn, btn.dataset.repostBtn);
                         return;
                     }
                     if (t.closest('.comment-btn')) { e.stopPropagation();
@@ -5015,7 +5090,7 @@
                           <span class="views-count">${svgEye()}<span>${formatCount(post.views||0)}</span></span>
                           <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}<span class="bookmark-count">${formatCount(post.bookmarkCount||0)}</span></span>
                           <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}</span>
-                          ${repostCountBadge(post.repostCount)}
+                          ${repostCountBadge(post)}
                         </div>
                         <div class="mt-5">
                           <h3 class="font-heading font-bold text-base mb-3" style="color:var(--text);">Replies</h3>
@@ -5162,6 +5237,11 @@
                         return;
                     }
                     if (t.closest('.reaction-btn')) { toggleReaction(postId); return; }
+                    if (t.closest('[data-repost-btn]')) {
+                        const btn = t.closest('[data-repost-btn]');
+                        triggerRepostFromFeed(btn, btn.dataset.repostBtn);
+                        return;
+                    }
                     if (t.closest('[data-full-img]')) { const c = t.closest('[data-full-img]');
                         openLightbox(c.dataset.fullImg); return; }
                     if (t.closest('[data-extlink]')) { openInAppWebView(decodeURIComponent(t.closest(
