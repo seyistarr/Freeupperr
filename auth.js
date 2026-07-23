@@ -1,5 +1,6 @@
 /* ============================================================
    FreeUpper — auth.js (revised)
+   with session location registration
    ============================================================ */
 (function () {
   'use strict';
@@ -231,6 +232,18 @@
     }
   }
 
+  // ─── REGISTER SESSION LOCATION (new) ──────────────────────
+  async function registerSessionLocation() {
+    try {
+      const { error } = await sb.functions.invoke('manage-sessions', {
+        body: { action: 'register' }
+      });
+      if (error) console.warn('registerSessionLocation failed:', error.message);
+    } catch (e) {
+      console.warn('registerSessionLocation exception:', e);
+    }
+  }
+
   // ─── PUBLIC: updateCurrentUser ────────────────────────────
   function updateCurrentUser(partialUpdates) {
     const current = getCurrentUser();
@@ -249,6 +262,9 @@
   sb.auth.onAuthStateChange((_event, session) => {
     if (session) {
       syncSessionToLocal(session);
+      if (_event === 'SIGNED_IN') {
+        registerSessionLocation();
+      }
     } else {
       const guest = defaultGuest();
       localStorage.setItem(USER_KEY, JSON.stringify(guest));
@@ -257,7 +273,11 @@
   });
 
   sb.auth.getSession().then(({ data }) => {
-    if (data.session) syncSessionToLocal(data.session);
+    if (data.session) {
+      syncSessionToLocal(data.session);
+      // backfill / refresh location for already-active sessions
+      registerSessionLocation();
+    }
   });
 
   // ─── AUTH MODAL ──────────────────────────────────────────────
