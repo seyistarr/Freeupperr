@@ -3920,7 +3920,7 @@
                 }
             };
 
-            // ─── ACTIVE SESSIONS ──────────────────────────────
+            // ─── ACTIVE SESSIONS (consolidated with SettingsAPI) ───
             var sessions = [];
             var pendingSessId = null;
 
@@ -3935,24 +3935,13 @@
                 return Math.floor(diff / 86400) + 'd ago';
             }
 
+            // ─── REPLACED loadSessions ─────────────────────────
             async function loadSessions() {
                 try {
-                    var { data, error } = await sb.functions.invoke('manage-sessions', {
-                        body: { action: 'list' }
-                    });
-                    if (error) throw new Error(error.message || 'Failed to load sessions');
+                    var rawSessions = await window.SettingsAPI.listSessions();
+                    var currentSessionId = await window.SettingsAPI.getCurrentSessionId();
 
-                    var { data: sessionData } = await sb.auth.getSession();
-                    var currentSessionId = null;
-                    if (sessionData && sessionData.session) {
-                        try {
-                            var payload = JSON.parse(atob(sessionData.session.access_token.split('.')[1]));
-                            currentSessionId = payload.session_id || null;
-                        } catch (e) { console.warn('Could not decode session_id', e); }
-                    }
-
-                    // ─── UPDATED mapping with location ───
-                    sessions = (data.sessions || []).map(function(s) {
+                    sessions = (rawSessions || []).map(function(s) {
                         var isCurrent = s.id === currentSessionId;
                         var isPhone = /mobile/i.test(s.user_agent || '');
                         var location = s.city ?
@@ -3972,12 +3961,49 @@
                 } catch (err) {
                     console.error('loadSessions error:', err);
                     document.getElementById('sessBody').innerHTML =
-                        '<div style="text-align:center;padding:40px;color:var(--muted)">Failed to load sessions. Please refresh.</div>';
+                        '<div style="text-align:center;padding:40px;color:var(--muted)">Failed to load sessions.<br><span style="font-size:11px;opacity:.7">' +
+                        (err.message || 'Unknown error') + '</span></div>';
                     showToast('Failed to load sessions', 'r');
                 }
             }
 
-            // ─── UPDATED sessCard ──────────────────────────────
+            // ─── REPLACED confirmSessLogout ────────────────────
+            window.confirmSessLogout = async function() {
+                closeMov('sessLogoutDlg');
+                if (!pendingSessId) return;
+                var idToRevoke = pendingSessId;
+                pendingSessId = null;
+                try {
+                    await window.SettingsAPI.revokeSession(idToRevoke);
+                    sessions = sessions.filter(function(s) { return s.id !== idToRevoke; });
+                    renderSessions();
+                    document.getElementById('sessBadge').textContent = sessions.length + ' devices';
+                    showToast('Device logged out', 'g');
+                } catch (err) {
+                    showToast(err.message, 'r');
+                }
+            };
+
+            // ─── REPLACED confirmLogoutAll ──────────────────────
+            window.confirmLogoutAll = async function() {
+                closeMov('sessLogoutAllDlg');
+                try {
+                    var currentSessionId = await window.SettingsAPI.getCurrentSessionId();
+                    if (!currentSessionId) {
+                        showToast('Could not identify current session', 'r');
+                        return;
+                    }
+                    await window.SettingsAPI.revokeOtherSessions(currentSessionId);
+                    sessions = sessions.filter(function(s) { return s.isCurrent; });
+                    renderSessions();
+                    document.getElementById('sessBadge').textContent = sessions.length + ' devices';
+                    showToast('All other devices logged out', 'g');
+                } catch (err) {
+                    showToast(err.message, 'r');
+                }
+            };
+
+            // ─── unchanged renderSessions and sessCard ─────────
             function sessCard(s) {
                 var icon = s.isPhone ? '📱' : '💻';
                 var lastActive = s.isCurrent ? 'Just now' : timeAgoShort(s.lastActive);
@@ -4015,7 +4041,6 @@
                 if (others.length) {
                     html += '<div class="sess-section-hdr">Other Devices</div>' +
                         others.map(function(s) { return sessCard(s); }).join('');
-                    // ─── Updated label ───
                     html +=
                         '<div style="margin:16px 16px 0;"><button onclick="openMov(\'sessLogoutAllDlg\')" class="sess-logout-all"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out All Other Devices</button></div>';
                 } else {
@@ -4028,51 +4053,6 @@
             window.askSessLogout = function(id) {
                 pendingSessId = id;
                 openMov('sessLogoutDlg');
-            };
-
-            window.confirmSessLogout = function() {
-                closeMov('sessLogoutDlg');
-                if (!pendingSessId) return;
-                sb.functions.invoke('manage-sessions', {
-                    body: { action: 'revoke', session_id: pendingSessId }
-                }).then(function({ error }) {
-                    if (error) { showToast(error.message, 'r'); return; }
-                    sessions = sessions.filter(function(s) { return s.id !== pendingSessId; });
-                    renderSessions();
-                    document.getElementById('sessBadge').textContent = sessions.length + ' devices';
-                    showToast('Device logged out', 'g');
-                    pendingSessId = null;
-                }).catch(function(err) { showToast(err.message, 'r');
-                    pendingSessId = null; });
-            };
-
-            window.confirmLogoutAll = function() {
-                closeMov('sessLogoutAllDlg');
-                sb.auth.getSession().then(function({ data }) {
-                    if (data && data.session) {
-                        var currentSessionId = null;
-                        try {
-                            var payload = JSON.parse(atob(data.session.access_token.split('.')[1]));
-                            currentSessionId = payload.session_id || null;
-                        } catch (e) {}
-                        if (currentSessionId) {
-                            sb.functions.invoke('manage-sessions', {
-                                body: { action: 'revoke_others', current_session_id: currentSessionId }
-                            }).then(function({ error }) {
-                                if (error) { showToast(error.message, 'r'); return; }
-                                sessions = sessions.filter(function(s) { return s.isCurrent; });
-                                renderSessions();
-                                document.getElementById('sessBadge').textContent = sessions.length +
-                                    ' devices';
-                                showToast('All other devices logged out', 'g');
-                            }).catch(function(err) { showToast(err.message, 'r'); });
-                        } else {
-                            showToast('Could not identify current session', 'r');
-                        }
-                    } else {
-                        showToast('No session found', 'r');
-                    }
-                });
             };
 
             window.openSessions = function() {
