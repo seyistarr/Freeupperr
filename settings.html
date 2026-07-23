@@ -88,13 +88,13 @@
             --cardsh: 0 2px 16px rgba(0, 0, 0, .1);
         }
 
+        /* ─── REMOVED transition on html, body to prevent blink ─── */
         html,
         body {
             height: 100%;
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
             background: var(--bg);
             color: var(--text);
-            transition: background .3s, color .3s;
             overflow: hidden;
         }
 
@@ -1703,13 +1703,15 @@
         .sess-logout-btn:hover {
             background: rgba(248, 113, 113, .16);
         }
+
+        /* ─── UPDATED .sess-logout-all (purple) ─── */
         .sess-logout-all {
             margin: 16px clamp(12px, 4vw, 20px) 0;
             padding: 14px;
             border-radius: 14px;
-            border: 1.5px solid rgba(248, 113, 113, .3);
-            background: rgba(248, 113, 113, .08);
-            color: var(--danger);
+            border: 1.5px solid var(--pbrd);
+            background: var(--pdim);
+            color: var(--pl);
             font-size: 14px;
             font-weight: 800;
             cursor: pointer;
@@ -1721,17 +1723,18 @@
             gap: 8px;
         }
         .sess-logout-all:hover {
-            background: rgba(248, 113, 113, .16);
+            background: rgba(139, 92, 246, .22);
         }
         .sess-logout-all svg {
             width: 16px;
             height: 16px;
-            stroke: var(--danger);
+            stroke: var(--pl);
             fill: none;
             stroke-width: 2;
             stroke-linecap: round;
             stroke-linejoin: round;
         }
+
         .sess-empty {
             display: flex;
             flex-direction: column;
@@ -2269,11 +2272,9 @@
 
         /* ─── Responsive overrides ─── */
         @media (min-width: 768px) {
-            /* side-nav and bottom-nav handled externally */
             .main { padding-bottom: 24px; }
         }
         @media (min-width: 1024px) {
-            /* side-nav width now in side-nav.css */
             .settings-col { max-width: 680px; }
         }
     </style>
@@ -2524,17 +2525,34 @@
                     <button class="save-btn" id="vfySubmitBtn" onclick="vfySubmit()" disabled style="flex:1">Submit Request</button>
                 </div>
             </div>
+            <!-- ─── Step 2: Pending (updated) ─── -->
             <div class="vfy-step" id="vfyStep2">
                 <div class="vfy-pending-wrap">
-                    <div class="vfy-pending-anim"><div class="vfy-pending-ring"></div><svg viewBox="0 0 24 24" class="vfy-pending-ico"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
-                    <div class="vfy-pending-title">Request Submitted</div>
-                    <div class="vfy-pending-desc">Your verification request is under review. This typically takes <strong>3–5 business days</strong>. We'll notify you of the outcome.</div>
+                    <div class="vfy-pending-anim" style="width:110px;height:110px;background:none;border:none">
+                        <svg width="96" height="96" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" fill="rgba(139,92,246,.08)" stroke="var(--pbrd)" stroke-width="1"/>
+                            <path d="M12 6v6l4 2" stroke="var(--p)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <div class="vfy-pending-title">In Review</div>
+                    <div class="vfy-pending-desc">Thanks for applying! Our team is reviewing your request — check back in a few days, we'll notify you either way.</div>
                     <div class="vfy-meta-row">
                         <div class="vfy-meta"><span>Category</span><strong id="vfyMetaCat">—</strong></div>
                         <div class="vfy-meta"><span>Submitted</span><strong id="vfyMetaDate">—</strong></div>
                         <div class="vfy-meta"><span>Status</span><strong style="color:#f59e0b">In Review</strong></div>
                     </div>
                     <button class="vfy-back-btn" onclick="vfyWithdraw()" style="width:100%;margin-top:8px">Withdraw Request</button>
+                </div>
+            </div>
+            <!-- ─── Step 3: Verified (new) ─── -->
+            <div class="vfy-step" id="vfyStep3">
+                <div class="vfy-pending-wrap">
+                    <div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:linear-gradient(135deg,var(--p),var(--pd));box-shadow:0 12px 40px var(--pglow)">
+                        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <div class="vfy-pending-title">You're Verified!</div>
+                    <div class="vfy-pending-desc">Your account carries the verified badge across FreeUpper. Nothing else to do here.</div>
+                    <button class="vfy-back-btn" onclick="closeFS('verificationModal')" style="width:100%;margin-top:8px">Done</button>
                 </div>
             </div>
         </div>
@@ -3223,7 +3241,7 @@
                 }
             };
 
-            // ─── VERIFICATION ──────────────────────────────────
+            // ─── VERIFICATION (updated openVerification) ──────────────────
             var vfyCat = '';
             var vfyState = 'none';
 
@@ -3291,9 +3309,23 @@
                 }
             })();
 
-            window.openVerification = function() {
+            // ─── UPDATED openVerification ──────────────────────
+            window.openVerification = async function() {
                 openFS('verificationModal');
-                vfyGoStep(0);
+                var status = await window.SettingsAPI.getVerificationStatus();
+                updateVfyStatusCard(status);
+
+                if (status?.status === 'pending') {
+                    document.getElementById('vfyMetaCat').textContent = status.category || '—';
+                    document.getElementById('vfyMetaDate').textContent = status.created_at ?
+                        new Date(status.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) :
+                        '—';
+                    vfyGoStep(2);
+                } else if (status?.status === 'approved') {
+                    vfyGoStep(3);
+                } else {
+                    vfyGoStep(0);
+                }
             };
 
             window.vfyGoStep = function(n) {
@@ -3892,6 +3924,17 @@
             var sessions = [];
             var pendingSessId = null;
 
+            // helper timeAgoShort
+            function timeAgoShort(iso) {
+                if (!iso) return 'Unknown';
+                var diff = (Date.now() - new Date(iso).getTime()) / 1000;
+                if (diff < 60) return 'Just now';
+                if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+                if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+                if (diff < 172800) return 'Yesterday';
+                return Math.floor(diff / 86400) + 'd ago';
+            }
+
             async function loadSessions() {
                 try {
                     var { data, error } = await sb.functions.invoke('manage-sessions', {
@@ -3908,19 +3951,19 @@
                         } catch (e) { console.warn('Could not decode session_id', e); }
                     }
 
+                    // ─── UPDATED mapping with location ───
                     sessions = (data.sessions || []).map(function(s) {
                         var isCurrent = s.id === currentSessionId;
-                        var name = /mobile/i.test(s.user_agent || '') ? 'Mobile Device' : 'Desktop Browser';
                         var isPhone = /mobile/i.test(s.user_agent || '');
+                        var location = s.city ?
+                            (s.city + ', ' + (s.country || '')) :
+                            (s.location || 'Unknown location');
                         return {
                             id: s.id,
                             isCurrent: isCurrent,
-                            name: name,
                             isPhone: isPhone,
-                            loc: s.ip || 'Unknown',
-                            ip: s.ip || 'Unknown',
-                            lastActive: s.updated_at || 'Unknown',
-                            os: s.user_agent || 'Unknown'
+                            location: location,
+                            lastActive: s.updated_at || null
                         };
                     });
 
@@ -3932,6 +3975,24 @@
                         '<div style="text-align:center;padding:40px;color:var(--muted)">Failed to load sessions. Please refresh.</div>';
                     showToast('Failed to load sessions', 'r');
                 }
+            }
+
+            // ─── UPDATED sessCard ──────────────────────────────
+            function sessCard(s) {
+                var icon = s.isPhone ? '📱' : '💻';
+                var lastActive = s.isCurrent ? 'Just now' : timeAgoShort(s.lastActive);
+                return '<div class="sess-card' + (s.isCurrent ? ' current' : '') + '">' +
+                    '<div class="sess-card-top">' +
+                    '<div class="sess-dev-ico" style="font-size:20px;background:var(--pdim);border-color:var(--pbrd)">' + icon + '</div>' +
+                    '<div class="sess-dev-info">' +
+                    '<div class="sess-dev-name">' + s.location +
+                    (s.isCurrent ? ' <span class="sess-curr-badge">Current Session</span>' : '') +
+                    '</div>' +
+                    '<div class="sess-dev-detail">Last Active · ' + lastActive + '</div>' +
+                    '</div></div>' +
+                    (!s.isCurrent ? '<button class="sess-logout-btn" onclick="askSessLogout(\'' + s.id + '\')">Sign Out</button>' :
+                        '') +
+                    '</div>';
             }
 
             function renderSessions() {
@@ -3954,33 +4015,14 @@
                 if (others.length) {
                     html += '<div class="sess-section-hdr">Other Devices</div>' +
                         others.map(function(s) { return sessCard(s); }).join('');
+                    // ─── Updated label ───
                     html +=
-                        '<div style="margin:16px 16px 0;"><button onclick="openMov(\'sessLogoutAllDlg\')" class="sess-logout-all"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log Out of All Other Sessions</button></div>';
+                        '<div style="margin:16px 16px 0;"><button onclick="openMov(\'sessLogoutAllDlg\')" class="sess-logout-all"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out All Other Devices</button></div>';
                 } else {
                     html +=
                         '<div style="text-align:center;padding:40px 20px;color:var(--muted)">You\'re only logged in on this device.</div>';
                 }
                 body.innerHTML = html;
-            }
-
-            function sessCard(s) {
-                var icon = s.isPhone ?
-                    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>' :
-                    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
-                var lastActive = s.lastActive === 'Active now' ? 'Active now' :
-                    s.lastActive && s.lastActive !== 'Unknown' ? new Date(s.lastActive).toLocaleString() : 'Unknown';
-                return '<div class="sess-card' + (s.isCurrent ? ' current' : '') + '">' +
-                    '<div class="sess-card-top"><div class="sess-dev-ico">' + icon +
-                    '</div><div class="sess-dev-info"><div class="sess-dev-name">' + s.name + (s.isCurrent ?
-                        ' <span class="sess-curr-badge">Current</span>' : '') +
-                    '</div><div class="sess-dev-detail">' + (s.os || 'Unknown OS') + '</div></div></div>' +
-                    '<div class="sess-meta"><div class="sess-meta-item"><span class="sess-meta-lbl">IP</span><span class="sess-meta-val">' +
-                    (s.ip || 'Unknown') + '</span></div>' +
-                    '<div class="sess-meta-item"><span class="sess-meta-lbl">Last active</span><span class="sess-meta-val' +
-                    (s.lastActive === 'Active now' ? ' active-now' : '') + '">' + lastActive + '</span></div></div>' +
-                    (!s.isCurrent ? '<button class="sess-logout-btn" onclick="askSessLogout(\'' + s.id +
-                        '\')">Log Out This Device</button>' : '') +
-                    '</div>';
             }
 
             window.askSessLogout = function(id) {
