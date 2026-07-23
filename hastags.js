@@ -58,7 +58,7 @@
    * Convenience: open a post by ID and media type
    * Useful for inline onclick handlers where you don't have the full post object
    * @param {string|number} postId - the post ID
-   * @param {string} mediaType - 'video' or anything else
+   * @param {string} mediaType - 'video' or anything else (default: 'image')
    */
   function openPostById(postId, mediaType) {
     if (!postId) return;
