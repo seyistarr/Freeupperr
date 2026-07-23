@@ -1,5 +1,5 @@
 // ============================================================
-// hashtags.js — shared hashtag routing + rendering
+// hashtags.js — shared hashtag rendering
 // ============================================================
 (function () {
   'use strict';
@@ -16,14 +16,19 @@
   }
 
   /**
-   * Navigate to search.html in Hashtag Mode
-   * Uses canonical ?tag= URL parameter (not ?hashtag=)
+   * Navigate to a hashtag using the central Router.
+   * This is the ONLY public navigation method in this file.
    * @param {string} tag - the hashtag (with or without leading #)
    */
   function goToHashtag(tag) {
     if (!tag) return;
     const clean = tag.replace(/^#/, '');
-    window.location.href = 'search.html?tag=' + encodeURIComponent(clean);
+    if (window.Router && typeof window.Router.openHashtag === 'function') {
+      window.Router.openHashtag(clean);
+    } else {
+      // Fallback (should never happen if router.js loads first)
+      window.location.href = 'search.html?tag=' + encodeURIComponent(clean);
+    }
   }
 
   /**
@@ -40,39 +45,11 @@
     });
   }
 
-  /**
-   * Canonical content opener — routes to the ORIGINAL content page
-   * Videos → video.html?post=ID
-   * Everything else → index.html?post=ID
-   * Prevents opening search duplicates or feed clones
-   * @param {object} post - post object with id, media_type, mediaType
-   */
-  function openPost(post) {
-    if (!post || !post.id) return;
-    const mediaType = post.media_type || post.mediaType;
-    const targetPage = mediaType === 'video' ? 'video.html' : 'index.html';
-    window.location.href = targetPage + '?post=' + post.id;
-  }
-
-  /**
-   * Convenience: open a post by ID and media type
-   * Useful for inline onclick handlers where you don't have the full post object
-   * @param {string|number} postId - the post ID
-   * @param {string} mediaType - 'video' or anything else (default: 'image')
-   */
-  function openPostById(postId, mediaType) {
-    if (!postId) return;
-    const targetPage = mediaType === 'video' ? 'video.html' : 'index.html';
-    window.location.href = targetPage + '?post=' + postId;
-  }
-
   // Expose public API
   window.Hashtags = {
-    goToHashtag,
-    hashifyHtml,
-    openPost,
-    openPostById
+    goToHashtag: goToHashtag,
+    hashifyHtml: hashifyHtml
   };
 
-  console.log('✅ hashtags.js loaded (uses ?tag=, canonical routing)');
+  console.log('✅ hashtags.js loaded (hashtag rendering only, uses Router)');
 })();
