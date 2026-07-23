@@ -19,7 +19,7 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         /* ============================================================
-           PROFILE-SPECIFIC STYLES - all except the duplicate nav rules
+           PROFILE-SPECIFIC STYLES
            ============================================================ */
         *, *::before, *::after {
             box-sizing: border-box;
@@ -100,8 +100,6 @@
             overflow: hidden;
         }
 
-        /* ─── side-nav and bottom-nav styles are now external ─── */
-
         .main {
             flex: 1;
             overflow-y: auto;
@@ -134,6 +132,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            min-width: 0; /* for truncation */
         }
         .header-username {
             font-size: clamp(16px, 4vw, 18px);
@@ -276,6 +275,8 @@
             align-items: center;
             gap: 7px;
             margin-bottom: 5px;
+            max-width: 100%;
+            min-width: 0;
         }
         .display-name {
             font-size: clamp(18px, 5vw, 23px);
@@ -470,6 +471,13 @@
         .panel { display: none; animation: fadeUp .3s ease both; }
         .panel.active { display: block; }
 
+        /* FIXED: grid-2 now correctly 2 columns */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 12px 0;
+        }
         .grid-3 {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -607,12 +615,6 @@
             line-height: 1.4;
         }
 
-        .grid-2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            padding: 12px 0;
-        }
         .market-card {
             position: relative;
             border-radius: 16px;
@@ -781,6 +783,19 @@
         .flex { display: flex; }
         .flex-wrap { flex-wrap: wrap; }
         .items-center { align-items: center; }
+
+        /* Truncation utility */
+        .truncate-1 {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            display: inline-block;
+        }
+        /* Ensure flex parents allow truncation */
+        .header-left, .display-name-row, .u-info, .u-name {
+            min-width: 0;
+        }
 
         /* ─── MODALS (unchanged) ─── */
         .mfs {
@@ -1032,6 +1047,7 @@
             display: flex;
             align-items: center;
             gap: 5px;
+            min-width: 0;
         }
         .mini-badge {
             width: 15px;
@@ -1931,11 +1947,9 @@
 
         /* ─── Responsive overrides ─── */
         @media (min-width: 768px) {
-            /* side-nav and bottom-nav handled externally */
             .main { padding-bottom: 24px; }
         }
         @media (min-width: 1024px) {
-            /* side-nav width now in side-nav.css */
             .profile-col { max-width: 640px; }
         }
     </style>
@@ -1956,7 +1970,7 @@
                 <!-- Header -->
                 <div class="profile-header">
                     <div class="header-left">
-                        <span class="header-username" id="headerUsername"></span>
+                        <span class="header-username truncate-1" id="headerUsername"></span>
                         <span class="verified-badge hidden" id="verifiedBadge">
                             <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
                         </span>
@@ -1965,7 +1979,8 @@
                         <button class="header-btn" id="shareProfileBtn" title="Share Profile">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
                         </button>
-                        <button class="header-btn" onclick="window.location.href='settings.html'" title="Settings">
+                        <!-- Settings icon now owner-only -->
+                        <button class="header-btn fw-owner-only" onclick="window.location.href='settings.html'" title="Settings">
                             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                         </button>
                     </div>
@@ -1981,7 +1996,7 @@
                     </div>
                     <div class="role-tags" id="roleTags"></div>
                     <div class="display-name-row">
-                        <span class="display-name" id="displayName"></span>
+                        <span class="display-name truncate-1" id="displayName"></span>
                         <button class="edit-pen fw-owner-only" onclick="openEditModal()" title="Edit profile">
                             <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
                         </button>
@@ -2147,6 +2162,8 @@
                     <div id="fsVirtualWrap3" style="position:relative;width:100%">
                         <div id="fsVirtualContent3"></div>
                     </div>
+                    <!-- Show more suggestions button -->
+                    <button id="sugShowMoreBtn" onclick="loadMoreSuggestions()" style="margin:14px auto 24px;display:block;padding:10px 22px;border-radius:100px;background:var(--pdim);border:1.5px solid var(--pbrd);color:var(--pl);font-weight:700;font-size:13px;cursor:pointer;">Show more suggestions</button>
                 </div>
             </div>
         </div>
@@ -2478,6 +2495,12 @@
             var pendingPills = [];
             var dobSel = { month: null, day: null, year: null };
             var repostedPostIds = [];
+            // Cached tab data
+            var likedPostIds = [];
+            var bookmarkedPostIds = [];
+            var marketItemsCache = [];
+            // Suggestions offset
+            var _sugOffset = 0;
 
             // Follow modal
             var _fwPageIdx = 0;
@@ -2659,8 +2682,9 @@
                 }
             }
 
+            // ===== FIX: getUserPosts uses user_id =====
             function getUserPosts(userId) {
-                return allPosts.filter(function(p) { return p.authorId === userId; });
+                return allPosts.filter(function(p) { return p.user_id === userId; });
             }
 
             // ─── BUILD GRID POST CARD ──────────────────────────
@@ -2826,9 +2850,21 @@
                         repostedIds = await getUserReposts(targetId);
                     }
                     repostedPostIds = repostedIds;
+                    likedPostIds = likedIds;
+                    bookmarkedPostIds = bookmarkedIds;
                     var marketItems = await getUserMarketItems(targetId);
+                    marketItemsCache = marketItems;
 
-                    updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems);
+                    // Private account fix: check if viewer follows owner
+                    var viewerFollowsOwner = false;
+                    if (!isOwner && user && user.isLoggedIn) {
+                        try {
+                            var rel = await getRelationship(user.id, targetId);
+                            viewerFollowsOwner = rel.iFollowThem;
+                        } catch (e) {}
+                    }
+
+                    updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner);
                 } catch (err) {
                     console.error('Error rendering profile:', err);
                     showToast('Failed to load profile', 'r');
@@ -2846,7 +2882,7 @@
             }
 
             // ─── UPDATE UI ──────────────────────────────────────
-            function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems) {
+            function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner) {
                 var avatarSrc = getAvatar(profile);
                 document.getElementById('profileAvatar').src = avatarSrc;
                 document.getElementById('editAv').src = avatarSrc;
@@ -2885,9 +2921,9 @@
 
                 renderActionRow();
 
-                // Private account handling
+                // ===== Private account fix: allow followers =====
                 var isPrivate = !!profile.is_private;
-                var viewerBlocked = isPrivate && !isOwner;
+                var viewerBlocked = isPrivate && !isOwner && !viewerFollowsOwner;
                 var tabs = ['panel-posts', 'panel-love', 'panel-share', 'panel-star', 'panel-market'];
                 if (viewerBlocked) {
                     tabs.forEach(function(id) {
@@ -2909,9 +2945,22 @@
                     renderTab(activeTab, { userPosts: userPosts, likedIds: likedIds, bookmarkedIds: bookmarkedIds, repostedIds: repostedIds, marketItems: marketItems });
                 }
 
-                // Owner-only elements
+                // ===== Owner-only elements (body class for pencil, etc.) =====
+                document.body.classList.toggle('is-owner', isOwner);
                 document.querySelectorAll('.fw-owner-only').forEach(function(el) {
                     el.style.display = isOwner ? '' : 'none';
+                });
+
+                // ===== Hidden tabs (owner-configured, enforced for non-owners) =====
+                var hiddenTabs = (!isOwner && profile.hidden_tabs) ? profile.hidden_tabs : [];
+                document.querySelectorAll('#tabsBar .tab').forEach(function(tabBtn) {
+                    var key = tabBtn.getAttribute('data-tab');
+                    var isHidden = key !== 'posts' && hiddenTabs.indexOf(key) !== -1;
+                    tabBtn.style.display = isHidden ? 'none' : '';
+                    if (isHidden && tabBtn.classList.contains('active')) {
+                        var postsTab = document.querySelector('#tabsBar .tab[data-tab="posts"]');
+                        if (postsTab) switchTab(postsTab, 'posts');
+                    }
                 });
 
                 document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
@@ -2940,10 +2989,11 @@
                 var container = document.getElementById('panel-' + tab);
                 if (!container) return;
                 var userPosts = data?.userPosts || getUserPosts(targetUserId);
-                var likedIds = data?.likedIds || [];
-                var bookmarkedIds = data?.bookmarkedIds || [];
-                var repostedIds = data?.repostedIds || [];
-                var marketItems = data?.marketItems || [];
+                // Use cached arrays as fallback
+                var likedIds = data?.likedIds || likedPostIds;
+                var bookmarkedIds = data?.bookmarkedIds || bookmarkedPostIds;
+                var repostedIds = data?.repostedIds || repostedPostIds;
+                var marketItems = data?.marketItems || marketItemsCache;
 
                 switch (tab) {
                     case 'posts':
@@ -2965,7 +3015,6 @@
             }
 
             function renderPosts(container, userPosts) {
-                // Sort pinned first, then by date
                 var sorted = userPosts.slice().sort(function(a, b) {
                     if (a.pinned && !b.pinned) return -1;
                     if (!a.pinned && b.pinned) return 1;
@@ -2994,17 +3043,35 @@
                     '</div>';
             }
 
-            // ─── REPOSTS TAB (uses reposts table) ──────────────
-            function renderReposts(container, repostedIds) {
-                var repostedPosts = allPosts.filter(function(p) { return repostedIds.indexOf(p.id) !== -1; });
-                if (!repostedPosts.length) {
+            // ===== FIX: renderReposts async, fetch missing posts =====
+            async function renderReposts(container, repostedIds) {
+                if (!repostedIds.length) {
                     container.innerHTML =
                         '<div class="empty-state"><div class="icon"><i class="ri-repeat-2-line" style="font-size:32px;color:var(--p)"></i></div><h3>No reposts</h3><p>Posts you repost will appear here.</p></div>';
                     return;
                 }
-                repostedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
+                container.innerHTML = '<div class="grid-3" style="min-height:120px"></div>';
+
+                var found = allPosts.filter(function(p) { return repostedIds.indexOf(p.id) !== -1; });
+                var foundIds = new Set(found.map(function(p) { return p.id; }));
+                var missingIds = repostedIds.filter(function(id) { return !foundIds.has(id); });
+
+                if (missingIds.length && window.PostsAPI && window.PostsAPI.loadPostById) {
+                    var fetched = await Promise.all(missingIds.map(function(id) {
+                        return window.PostsAPI.loadPostById(id).catch(function() { return null; });
+                    }));
+                    fetched.forEach(function(p) { if (p) found.push(p); });
+                }
+
+                if (!found.length) {
+                    container.innerHTML =
+                        '<div class="empty-state"><div class="icon"><i class="ri-repeat-2-line" style="font-size:32px;color:var(--p)"></i></div><h3>No reposts</h3><p>Posts you repost will appear here.</p></div>';
+                    return;
+                }
+
+                found.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML = '<div class="grid-3">' +
-                    repostedPosts.map(function(p) { return buildGridPostCard(p, 'remove', 'share'); }).join('') +
+                    found.map(function(p) { return buildGridPostCard(p, 'remove', 'share'); }).join('') +
                     '</div>';
             }
 
@@ -3021,13 +3088,14 @@
                     '</div>';
             }
 
+            // ===== FIX: renderMarket uses grid-2 =====
             function renderMarket(container, marketItems) {
                 if (!marketItems.length) {
                     container.innerHTML =
                         '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div><h3>No listings</h3><p>' + (isOwner ? 'Sell something on Campus Market.' : 'No items listed yet.') + '</p></div>';
                     return;
                 }
-                container.innerHTML = '<div class="grid-3">' +
+                container.innerHTML = '<div class="grid-2">' +
                     marketItems.map(function(item) { return buildMarketCard(item, isOwner); }).join('') +
                     '</div>';
             }
@@ -3242,11 +3310,13 @@
                 } catch (err) { showToast(err.message, 'r'); }
             };
 
+            // ===== FIX: expose openMov/closeMov =====
             function openMov(id) { document.getElementById(id).classList.add('open');
                 document.body.style.overflow = 'hidden'; }
-
             function closeMov(id) { document.getElementById(id).classList.remove('open');
                 document.body.style.overflow = ''; }
+            window.openMov = openMov;
+            window.closeMov = closeMov;
 
             document.querySelectorAll('.mov').forEach(function(m) {
                 m.addEventListener('click', function(e) { if (e.target === this) closeMov(this.id); });
@@ -3736,16 +3806,15 @@
 
                 var current = getCurrentUser();
                 var suggestions = [];
-                if (current && current.isLoggedIn && current.id !== userId) {
-                    var followedIds = new Set([userId]);
-                    following.forEach(function(u) { followedIds.add(u.id); });
-                    var ids = Array.from(followedIds).join(',');
-                    var sugResult = await window.sb
-                        .from('profiles')
-                        .select('id, username, display_name, avatar_url, verified')
-                        .not('id', 'in', '(' + ids + ')')
-                        .limit(10);
-                    if (!sugResult.error) suggestions = sugResult.data;
+                // ===== FIX: use RPC for suggestions =====
+                if (isOwner && current && current.isLoggedIn) {
+                    var sugResult = await window.sb.rpc('get_suggestions', { p_limit: 10, p_offset: 0 });
+                    if (!sugResult.error) {
+                        suggestions = (sugResult.data || []).map(function(u) {
+                            return { id: u.id, username: u.username, display_name: u.display_name, avatar_url: u.avatar_url, verified: u.verified, verified_status: u.verified_status };
+                        });
+                    }
+                    _sugOffset = suggestions.length;
                 }
                 return { followers: followers, following: following, friends: friends, suggestions: suggestions };
             }
@@ -3894,7 +3963,7 @@
                         html += '<div class="u-row u-row-suggestion" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;padding:0 clamp(14px,5vw,24px)">' +
                             '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
                             '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
-                            '<div class="u-name">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-name truncate-1">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + (u.handle || '') + '</div>' +
                             '<div class="u-sugg-src">' + srcLbl + '</div>' +
                             '</div>' +
@@ -3907,7 +3976,7 @@
                         html += '<div class="u-row" data-row-idx="' + i + '" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 clamp(14px,5vw,24px)">' +
                             '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
                             '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
-                            '<div class="u-name">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-name truncate-1">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + (u.handle || '') + '</div>' +
                             '</div>' +
                             actionHtml +
@@ -3947,6 +4016,7 @@
                 return '';
             }
 
+            // ===== FIX: suggestions dismiss with DB and replacement =====
             window._fwTap = function(btn) {
                 if (event) event.stopPropagation();
                 if (btn.classList.contains('pending')) return;
@@ -3988,10 +4058,28 @@
                             document.getElementById('statFollowing').textContent = fmtNum(counts3.following);
                             openFollowModal(_fwCurTab);
                         } else if (action === 'remove') {
+                            // Persist dismissal
+                            var me = getCurrentUser();
+                            if (me) {
+                                await window.sb.from('dismissed_suggestions')
+                                    .upsert({ user_id: me.id, dismissed_user_id: user.id }, { onConflict: 'user_id,dismissed_user_id' });
+                            }
                             _fwList = _fwList.filter(function(u) { return u.id !== user.id; });
+                            followModalData.suggestions = followModalData.suggestions.filter(function(u) { return u.id !== user.id; });
+                            _sugOffset++;
+                            // Fetch replacement
+                            try {
+                                var more = await window.sb.rpc('get_suggestions', { p_limit: 1, p_offset: _sugOffset });
+                                if (!more.error && more.data && more.data.length) {
+                                    var nu = more.data[0];
+                                    var mapped = { id: nu.id, username: nu.username, display_name: nu.display_name, avatar_url: nu.avatar_url, verified: nu.verified, verified_status: nu.verified_status };
+                                    followModalData.suggestions.push(mapped);
+                                    _fwList.push({ id: mapped.id, displayName: mapped.display_name || mapped.username, handle: '@' + (mapped.username || ''), avatar: mapped.avatar_url || '', verified: mapped.verified || false, isFollowing: false, isMutual: false });
+                                }
+                            } catch (e) {}
                             _fwApplyFilter();
                             _fwRenderVisible();
-                            showToast('Removed suggestion', 'o');
+                            showToast('Suggestion hidden', 'o');
                         } else if (action === 'message') {
                             showToast('Messaging coming soon', 'p');
                         }
@@ -3999,6 +4087,31 @@
                         showToast(err.message, 'r');
                     }
                 });
+            };
+
+            // ===== Load more suggestions =====
+            window.loadMoreSuggestions = async function() {
+                var btn = document.getElementById('sugShowMoreBtn');
+                if (btn) { btn.textContent = 'Loading…'; btn.disabled = true; }
+                _sugOffset += 10;
+                try {
+                    var more = await window.sb.rpc('get_suggestions', { p_limit: 10, p_offset: _sugOffset });
+                    if (!more.error && more.data && more.data.length) {
+                        more.data.forEach(function(nu) {
+                            var mapped = { id: nu.id, username: nu.username, display_name: nu.display_name, avatar_url: nu.avatar_url, verified: nu.verified, verified_status: nu.verified_status };
+                            followModalData.suggestions.push(mapped);
+                            _fwList.push({ id: mapped.id, displayName: mapped.display_name || mapped.username, handle: '@' + (mapped.username || ''), avatar: mapped.avatar_url || '', verified: mapped.verified || false, isFollowing: false, isMutual: false });
+                        });
+                        _fwApplyFilter();
+                        _fwRenderVisible();
+                    } else {
+                        showToast('No more suggestions right now', 'o');
+                    }
+                } catch (e) {
+                    showToast('Failed to load more', 'r');
+                } finally {
+                    if (btn) { btn.textContent = 'Show more suggestions'; btn.disabled = false; }
+                }
             };
 
             window.filterUsersPage = function(pageIdx) {
@@ -4337,6 +4450,11 @@
             window.lockPostAction = lockPostAction;
             window.openBlockConfirm = openBlockConfirm;
             window.confirmBlockUser = confirmBlockUser;
+            window.openMov = openMov;
+            window.closeMov = closeMov;
+            window.loadMoreSuggestions = loadMoreSuggestions;
+            window._fwTap = _fwTap;
+
         })();
     </script>
 </body>
