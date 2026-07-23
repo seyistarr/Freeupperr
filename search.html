@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Search · Freeupper</title>
+    <link rel="icon" type="image/png" href="freeupper.png">
+    <link rel="stylesheet" href="global.css">
+    <link rel="stylesheet" href="bottom-nav.css" />
+    <link rel="stylesheet" href="side-nav.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
+
+    <style>
+        /* ══════════════════════════════════════════
+           SEARCH-SPECIFIC STYLES
+           ══════════════════════════════════════════ */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+        button,
+        input,
+        select,
+        textarea {
+            font-family: inherit;
+        }
+        svg {
+            overflow: visible;
+        }
+
+        :root {
+            --p: #8b5cf6;
+            --pd: #6c3fc5;
+            --pl: #a78bfa;
+            --pdim: rgba(139, 92, 246, .15);
+            --pbrd: rgba(139, 92, 246, .28);
+            --pglow: rgba(108, 63, 197, .45);
+            --danger: #f87171;
+            --warn: #fb923c;
+            --ok: #4ade80;
+            --blue: #60a5fa;
+            --nav-h: 78px;
+        }
+
+        [data-theme="dark"] {
+            --bg: #000;
+            --bg2: #0a0a0a;
+            --bg3: #111;
+            --bg4: #1a1a1a;
+            --bg5: #222;
+            --brd: rgba(255, 255, 255, .07);
+            --brd2: rgba(255, 255, 255, .12);
+            --text: #fff;
+            --muted: rgba(255, 255, 255, .4);
+            --muted2: rgba(255, 255, 255, .22);
+            --inp: rgba(255, 255, 255, .05);
+            --rowh: rgba(255, 255, 255, .04);
+            --navbg: rgba(0, 0, 0, .97);
+            --sidebg: #0a0a0a;
+            --dotbg: rgba(255, 255, 255, .07);
+            --dotc: #fff;
+            --cardsh: 0 2px 16px rgba(0, 0, 0, .5);
+        }
+
+        [data-theme="light"] {
+            --bg: #f2f2f7;
+            --bg2: #fff;
+            --bg3: #fff;
+            --bg4: #e8e8ed;
+            --bg5: #d8d8de;
+            --brd: rgba(0, 0, 0, .08);
+            --brd2: rgba(0, 0, 0, .13);
+            --text: #0d0d0d;
+            --muted: rgba(0, 0, 0, .44);
+            --muted2: rgba(0, 0, 0, .26);
+            --inp: rgba(0, 0, 0, .05);
+            --rowh: rgba(0, 0, 0, .04);
+            --navbg: rgba(242, 242, 247, .97);
+            --sidebg: #fff;
+            --dotbg: rgba(0, 0, 0, .07);
+            --dotc: #0d0d0d;
+            --cardsh: 0 2px 16px rgba(0, 0, 0, .1);
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+        }
+
+        .layout {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .main {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: var(--bg);
+            scroll-behavior: smooth;
+            transition: background .3s;
+            padding-bottom: 80px;
+        }
+        .main::-webkit-scrollbar {
+            width: 0;
+        }
+        .search-col {
+            width: 100%;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px 16px 40px;
+        }
+
+        /* Topbar */
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: clamp(44px, 8vw, 56px) 0 10px;
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            background: var(--bg);
+            transition: background .3s;
+        }
+        .topbar-title {
+            font-size: clamp(18px, 5vw, 22px);
+            font-weight: 800;
+            letter-spacing: -.3px;
+        }
+
+        /* Search bar row (with cancel button) */
+        .search-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .search-bar {
+            flex: 1;
+            position: relative;
+        }
+        .search-bar input {
+            width: 100%;
+            padding: 14px 16px 14px 48px;
+            border-radius: 14px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            color: var(--text);
+            font-size: 15px;
+            outline: none;
+            transition: border-color .15s, background .3s, color .3s;
+            font-family: inherit;
+        }
+        .search-bar input:focus {
+            border-color: var(--p);
+            background: var(--bg2);
+        }
+        .search-bar input::placeholder {
+            color: var(--muted2);
+        }
+        .search-bar .search-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            stroke: var(--muted2);
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+        }
+        .search-bar .clear-btn {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--muted2);
+            display: none;
+            padding: 4px;
+            font-size: 16px;
+        }
+        .search-bar .clear-btn.show {
+            display: block;
+        }
+        .search-bar .clear-btn:hover {
+            color: var(--text);
+        }
+
+        #cancelSearchBtn {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--p);
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 8px 4px;
+            flex-shrink: 0;
+        }
+        #cancelSearchBtn:hover {
+            color: var(--pl);
+        }
+
+        /* Tabs */
+        .search-tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--brd);
+            margin-bottom: 16px;
+            background: var(--bg);
+            transition: background .3s, border-color .3s;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+        .search-tabs::-webkit-scrollbar {
+            display: none;
+        }
+        .search-tab {
+            padding: 10px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            transition: all .15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .search-tab svg {
+            width: 18px;
+            height: 18px;
+            fill: none;
+            stroke: var(--muted2);
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: stroke .15s;
+        }
+        .search-tab.active {
+            color: var(--p);
+            border-bottom-color: var(--p);
+        }
+        .search-tab.active svg {
+            stroke: var(--p);
+        }
+        .search-tab:hover {
+            color: var(--text);
+            background: var(--rowh);
+        }
+
+        /* Hashtag header */
+        #hashtagHeader {
+            display: none;
+            margin-bottom: 12px;
+        }
+        #hashtagHeader .back-btn {
+            background: none;
+            border: none;
+            color: var(--p);
+            font-weight: 700;
+            cursor: pointer;
+            padding: 8px 0;
+            font-size: 14px;
+        }
+        #hashtagHeader h2 {
+            font-size: 22px;
+            font-weight: 800;
+            margin: 4px 0 2px;
+        }
+        #hashtagHeader .count {
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+        #hashtagHeader .sub-tabs {
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid var(--brd);
+            margin-bottom: 8px;
+        }
+        #hashtagHeader .sub-tabs button {
+            padding: 8px 12px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all .15s;
+        }
+        #hashtagHeader .sub-tabs button.active {
+            color: var(--p);
+            border-bottom-color: var(--p);
+        }
+        #hashtagHeader .sub-tabs button:hover {
+            color: var(--text);
+        }
+
+        /* Results container */
+        .results-container {
+            flex: 1;
+            min-height: 200px;
+        }
+
+        /* Square grid for hashtag/photos/videos */
+        .square-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+        }
+        .square-item {
+            position: relative;
+            aspect-ratio: 1/1;
+            overflow: hidden;
+            cursor: pointer;
+            background: var(--bg4);
+        }
+        .square-item img,
+        .square-item video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .square-text-preview {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            text-align: center;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.35;
+            overflow: hidden;
+        }
+        .square-item .video-flag {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            background: rgba(0, 0, 0, .55);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Discovery sections */
+        .discovery-section {
+            margin-bottom: 20px;
+        }
+        .discovery-section h3 {
+            font-size: 14px;
+            font-weight: 800;
+            margin-bottom: 10px;
+            padding: 0 2px;
+        }
+        .hashtag-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 4px;
+            border-bottom: 1px solid var(--brd);
+            cursor: pointer;
+        }
+        .hashtag-row .tag-name {
+            font-weight: 700;
+        }
+        .hashtag-row .tag-count {
+            color: var(--muted);
+            font-size: 12px;
+        }
+        .recent-search-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 4px;
+            cursor: pointer;
+        }
+        .recent-search-row:hover {
+            background: var(--rowh);
+        }
+        .recent-search-row .remove {
+            color: var(--muted2);
+            font-size: 14px;
+        }
+
+        /* Market grid (fallback) */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 12px 0;
+        }
+
+        /* User result row */
+        .user-result {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--brd);
+            cursor: pointer;
+            transition: background .12s;
+            border-radius: 8px;
+        }
+        .user-result:hover {
+            background: var(--rowh);
+        }
+        .user-result .user-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            background: var(--bg4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--muted);
+            overflow: hidden;
+        }
+        .user-result .user-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .user-result .user-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .user-result .user-name {
+            font-size: 15px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .user-result .user-name .verified-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--p), var(--pd));
+            flex-shrink: 0;
+        }
+        .user-result .user-name .verified-badge svg {
+            width: 10px;
+            height: 10px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .user-result .user-handle {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+        .user-result .user-bio {
+            font-size: 12px;
+            color: var(--muted2);
+            margin-top: 2px;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            text-align: center;
+            gap: 12px;
+        }
+        .empty-state .empty-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: var(--pdim);
+            border: 1.5px solid var(--pbrd);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 4px;
+        }
+        .empty-state .empty-icon svg {
+            width: 32px;
+            height: 32px;
+            stroke: var(--p);
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .empty-state h3 {
+            font-size: clamp(16px, 4vw, 18px);
+            font-weight: 800;
+        }
+        .empty-state p {
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.6;
+            max-width: 280px;
+        }
+
+        /* Sounds empty */
+        .sounds-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 80px 20px;
+            text-align: center;
+            gap: 10px;
+        }
+        .sounds-empty h3 {
+            font-weight: 800;
+        }
+        .sounds-empty p {
+            font-size: 13px;
+            color: var(--muted);
+            max-width: 280px;
+            line-height: 1.6;
+        }
+
+        /* Responsive */
+        @media (min-width: 768px) {
+            .main {
+                padding-bottom: 0;
+            }
+        }
+        @media (min-width: 1024px) {
+            .search-col {
+                max-width: 750px;
+            }
+        }
+
+        .main::-webkit-scrollbar {
+            width: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ══ TOAST CONTAINER ══ -->
+    <div id="tw"></div>
+
+    <div class="layout">
+
+        <!-- ════ SIDE NAV ════ -->
+        <side-nav show-chat></side-nav>
+
+        <!-- ════ MAIN ════ -->
+        <div class="main" id="mainScroll">
+            <div class="search-col">
+
+                <!-- Topbar -->
+                <div class="topbar">
+                    <span class="topbar-title">Search</span>
+                    <div style="width:38px;"></div>
+                </div>
+
+                <!-- Search bar + Cancel button -->
+                <div class="search-bar-row">
+                    <div class="search-bar">
+                        <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="searchInput" placeholder="Search FreeUpper..."
+                               oninput="Search.onQueryInput(this.value)"
+                               onfocus="Search.onFocus()">
+                        <button class="clear-btn" id="clearBtn" onclick="Search.clear()">✕</button>
+                    </div>
+                    <button id="cancelSearchBtn" onclick="Search.cancelFocus()">Cancel</button>
+                </div>
+
+                <!-- Tabs (7) -->
+                <div class="search-tabs" id="searchTabs">
+                    <button class="search-tab active" data-tab="top" onclick="Search.switchTab('top')">
+                        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        Top
+                    </button>
+                    <button class="search-tab" data-tab="users" onclick="Search.switchTab('users')">
+                        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        Users
+                    </button>
+                    <button class="search-tab" data-tab="videos" onclick="Search.switchTab('videos')">
+                        <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                        Videos
+                    </button>
+                    <button class="search-tab" data-tab="photos" onclick="Search.switchTab('photos')">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        Photos
+                    </button>
+                    <button class="search-tab" data-tab="market" onclick="Search.switchTab('market')">
+                        <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                        Market
+                    </button>
+                    <button class="search-tab" data-tab="hashtags" onclick="Search.switchTab('hashtags')">
+                        <svg viewBox="0 0 24 24"><path d="M7 2l-3 4m0 0l-3-4m3 4v16M17 2l3 4m0 0l3-4m-3 4v16"/></svg>
+                        Hashtags
+                    </button>
+                    <button class="search-tab" data-tab="sounds" onclick="Search.switchTab('sounds')">
+                        <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                        Sounds
+                    </button>
+                </div>
+
+                <!-- Hashtag detail header (hidden until hashtag mode) -->
+                <div id="hashtagHeader">
+                    <button class="back-btn" onclick="Search.exitHashtagMode()">← Back to Search</button>
+                    <h2 id="hashtagTitle"></h2>
+                    <div class="count" id="hashtagCount"></div>
+                    <div class="sub-tabs">
+                        <button data-sort="top" class="active" onclick="Search.setHashtagSort('top')">Top</button>
+                        <button data-sort="latest" onclick="Search.setHashtagSort('latest')">Latest</button>
+                    </div>
+                </div>
+
+                <!-- Results -->
+                <div class="results-container" id="resultsContainer">
+                    <!-- Will be populated by search.js -->
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ════ BOTTOM NAV ════ -->
+        <bottom-nav></bottom-nav>
+
+    </div>
+
+    <!-- ══ SCRIPTS ══ -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="global.js"></script>
+    <script src="auth.js"></script>
+    <script src="posts.js"></script>
+    <script src="listings.js"></script>
+    <script src="hashtags.js"></script>
+    <script src="bottom-nav.js" defer></script>
+    <script src="side-nav.js" defer></script>
+    <script src="search.js"></script>
+
+</body>
+</html>
