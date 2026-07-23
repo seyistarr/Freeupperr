@@ -11,6 +11,9 @@
     <link rel="stylesheet" href="bottom-nav.css" />
     <link rel="stylesheet" href="side-nav.css" />
 
+    <!-- ===== REMIXICON FOR REPOST/SAVE ICONS ===== -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" />
+
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" async onerror="window.jsQR=null"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
@@ -451,11 +454,17 @@
             stroke-linejoin: round;
             transition: stroke .15s;
         }
+        .tab i {
+            font-size: 21px;
+            color: var(--muted2);
+            transition: color .15s;
+        }
         .tab.active {
             border-bottom-color: var(--p);
             color: var(--p);
         }
         .tab.active svg { stroke: var(--p); }
+        .tab.active i { color: var(--p); }
         .tab:disabled { opacity: .35; cursor: default; }
 
         .panel { display: none; animation: fadeUp .3s ease both; }
@@ -600,7 +609,7 @@
 
         .grid-2 {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 10px;
             padding: 12px 0;
         }
@@ -1942,7 +1951,7 @@
 
         <!-- ════ MAIN ════ -->
         <div class="main" id="mainScroll">
-            <div class="profile-col">
+            <div class="profile-col" id="profileCol">
 
                 <!-- Header -->
                 <div class="profile-header">
@@ -1954,7 +1963,7 @@
                     </div>
                     <div class="header-actions">
                         <button class="header-btn" id="shareProfileBtn" title="Share Profile">
-                            <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
                         </button>
                         <button class="header-btn" onclick="window.location.href='settings.html'" title="Settings">
                             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1968,12 +1977,12 @@
                         <div class="avatar-ring"></div>
                         <div class="avatar-ring-gap"></div>
                         <img class="avatar-img" id="profileAvatar" src="" alt="" onerror="this.style.background='linear-gradient(135deg,#1a1035,#3b1a6b)';this.removeAttribute('src');">
-                        <div class="online-dot"></div>
+                        <div class="online-dot" id="onlineDot" style="display:none"></div>
                     </div>
                     <div class="role-tags" id="roleTags"></div>
                     <div class="display-name-row">
                         <span class="display-name" id="displayName"></span>
-                        <button class="edit-pen fw-owner-only" onclick="openEditModal()" title="Edit profile" style="display:none">
+                        <button class="edit-pen fw-owner-only" onclick="openEditModal()" title="Edit profile">
                             <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
                         </button>
                     </div>
@@ -2005,15 +2014,15 @@
                     </button>
                     <button class="tab" data-tab="love" onclick="switchTab(this, 'love')">
                         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                        <span>Love</span>
+                        <span>Likes</span>
                     </button>
                     <button class="tab" data-tab="share" onclick="switchTab(this, 'share')">
-                        <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                        <span>Share</span>
+                        <i class="ri-repeat-2-line" style="font-size:21px"></i>
+                        <span>Reposts</span>
                     </button>
                     <button class="tab" data-tab="star" onclick="switchTab(this, 'star')">
-                        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                        <span>Star</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                        <span>Saved</span>
                     </button>
                     <button class="tab" data-tab="market" onclick="switchTab(this, 'market')">
                         <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
@@ -2037,6 +2046,7 @@
     </div>
 
     <!-- ═══ MODALS ═══ -->
+
     <!-- Posts Modal -->
     <div class="mco" id="postsModal">
         <div class="mbox" id="postsBox">
@@ -2053,6 +2063,19 @@
                 <div class="mc-lbl">Total Posts</div>
                 <div class="mc-count" id="mcCount">0</div>
                 <div class="mc-desc"><strong id="mcName">User</strong> · <strong id="mcNum">0</strong> posts</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Post Actions Sheet -->
+    <div class="mov center" id="postActionsSheet">
+        <div class="dialog">
+            <div class="dlg-ttl" style="padding-top:22px">Post Options</div>
+            <div class="dlg-btns" style="flex-direction:column;gap:10px">
+                <button class="dlg-cancel" onclick="pinPostAction()">📌 Pin to Top</button>
+                <button class="dlg-cancel" onclick="lockPostAction()">🔒 <span id="lockActionLbl">Lock Comments</span></button>
+                <button class="dlg-danger" style="opacity:1" onclick="deletePost(window._activePostId)">🗑 Delete Post</button>
+                <button class="dlg-cancel" onclick="closeMov('postActionsSheet')">Cancel</button>
             </div>
         </div>
     </div>
@@ -2074,7 +2097,6 @@
             <div class="fs-tab-bar" id="fsTabBar"></div>
         </div>
         <div class="fs-pages-track" id="fsPagesTrack">
-            <!-- Pages – same as original -->
             <div class="fs-page" id="fsPage0">
                 <div class="fs-search" id="fsSearchWrap0"><input type="text" id="fsSearch0" placeholder="Search followers…" oninput="filterUsersPage(0)"></div>
                 <div id="fsLoading0" style="display:none;flex-direction:column;gap:0;overflow:hidden">
@@ -2182,7 +2204,7 @@
         </div>
     </div>
 
-    <!-- NEW: Share/Report Modal for non-owner profiles -->
+    <!-- Share/Report Modal for non-owner profiles -->
     <div class="mfs" id="shareOtherModal">
         <div class="fs-hdr">
             <span class="fs-title">Share Profile</span>
@@ -2217,17 +2239,44 @@
                 </button>
             </div>
 
-            <div style="border-top:1px solid var(--brd);padding-top:12px;">
+            <!-- Block & Report -->
+            <div style="border-top:1px solid var(--brd);padding-top:12px;display:flex;flex-direction:column;">
+                <button onclick="openBlockConfirm()" style="display:flex;align-items:center;gap:14px;padding:14px 8px;border-radius:12px;background:none;border:none;cursor:pointer;width:100%;text-align:left;">
+                    <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--danger);fill:none;stroke-width:2;stroke-linecap:round;"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                    <span style="font-size:15px;font-weight:600;color:var(--danger);">Block @<span id="blockUsernameTarget"></span></span>
+                </button>
                 <button class="more-row danger" onclick="reportUser()" style="display:flex;align-items:center;gap:14px;padding:14px 8px;border-radius:12px;background:none;border:none;cursor:pointer;width:100%;text-align:left;">
-                    <svg class="more-row-ico" viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--danger);fill:none;stroke-width:2;stroke-linecap:round;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                    <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--danger);fill:none;stroke-width:2;stroke-linecap:round;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
                     <span style="font-size:15px;font-weight:600;color:var(--danger);">Report @<span id="reportUsername"></span></span>
                 </button>
             </div>
-            <button class="share-cancel-btn" onclick="closeFS('shareOtherModal')">Cancel</button>
+
+            <!-- Cancel button -->
+            <button onclick="closeFS('shareOtherModal')" style="width:100%;padding:13px;border-radius:14px;border:1.5px solid var(--brd2);background:var(--inp);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--rowh)'" onmouseout="this.style.background='var(--inp)'">Cancel</button>
         </div>
     </div>
 
-    <!-- Edit Modal (unchanged) -->
+    <!-- Block Confirmation Dialog -->
+    <div class="mov center" id="blockConfirmDlg">
+        <div class="dialog">
+            <div class="dlg-ico danger"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
+            <div class="dlg-ttl">Block @<span id="blockUsernameConfirm"></span>?</div>
+            <div class="dlg-desc" style="text-align:left;padding-left:32px;padding-right:32px">
+                They won't be able to:<br>
+                • View your posts<br>
+                • Follow you<br>
+                • Message you<br>
+                • Mention you<br>
+                • Find your profile easily
+            </div>
+            <div class="dlg-btns">
+                <button class="dlg-cancel" onclick="closeMov('blockConfirmDlg')">Cancel</button>
+                <button class="dlg-danger" style="opacity:1" onclick="confirmBlockUser()">Block</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
     <div class="mfs" id="editModal">
         <div class="fs-hdr">
             <span class="fs-title">Edit Profile</span>
@@ -2390,7 +2439,7 @@
         (function() {
             'use strict';
 
-            // ─── HELPERS (same as before) ──────────────────────
+            // ─── HELPERS ──────────────────────────────────────
             function fmtNum(n) {
                 if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
                 if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
@@ -2428,6 +2477,7 @@
             var selGender = '';
             var pendingPills = [];
             var dobSel = { month: null, day: null, year: null };
+            var repostedPostIds = [];
 
             // Follow modal
             var _fwPageIdx = 0;
@@ -2556,7 +2606,7 @@
                 return !currently;
             }
 
-            // ─── FETCH USER LIKES / BOOKMARKS / SHARES ────────
+            // ─── FETCH USER LIKES / BOOKMARKS / REPOSTS ──────
             async function getUserLikes(userId) {
                 var result = await window.sb.from('post_likes').select('post_id').eq('user_id', userId);
                 if (result.error) {
@@ -2575,13 +2625,13 @@
                 return result.data.map(function(b) { return b.post_id; });
             }
 
-            async function getUserShares(userId) {
-                var result = await window.sb.from('shares').select('post_id').eq('user_id', userId);
+            async function getUserReposts(userId) {
+                var result = await window.sb.from('reposts').select('post_id').eq('user_id', userId);
                 if (result.error) {
-                    console.warn('getUserShares error:', result.error);
+                    console.warn('getUserReposts error:', result.error);
                     return [];
                 }
-                return result.data.map(function(s) { return s.post_id; });
+                return result.data.map(function(r) { return r.post_id; });
             }
 
             // ─── FETCH USER MARKET ITEMS ──────────────────────
@@ -2638,7 +2688,7 @@
                 if (actionType === 'delete') {
                     actionBtn = '<button class="delete-btn" onclick="event.stopPropagation();deletePost(' + post.id + ')" title="Delete"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>';
                 } else if (actionType === 'remove') {
-                    var label = sourceTab === 'share' ? 'Unshare' : 'Unsave';
+                    var label = sourceTab === 'share' ? 'Unrepost' : sourceTab === 'star' ? 'Unsave' : 'Remove';
                     actionBtn = '<button class="remove-btn" onclick="event.stopPropagation();removeFromTab(' + post.id + ', \'' + sourceTab + '\')" title="' + label + '"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
                 }
 
@@ -2649,7 +2699,12 @@
 
                 var verifiedBadgeHtml = window.getVerifiedBadgeHTML(author.verified_status);
 
-                return '<div class="grid-card" onclick="window.location.href=\'index.html?post=' + post.id + '\'">' +
+                // Owner tap opens action sheet, others go to post detail
+                var tapAction = isOwner
+                    ? "openPostActionsSheet('" + post.id + "')"
+                    : "window.location.href='index.html?post=" + post.id + "'";
+
+                return '<div class="grid-card" onclick="' + tapAction + '">' +
                     mediaHtml +
                     '<div class="badge">' + escapeHtml(post.category || 'General') + '</div>' +
                     videoBadge +
@@ -2685,7 +2740,11 @@
                     '';
                 var verifiedBadgeHtml = window.getVerifiedBadgeHTML(author.verified_status);
 
-                return '<div class="grid-card" onclick="window.location.href=\'index.html?post=' + post.id + '\'">' +
+                var tapAction = isOwner
+                    ? "openPostActionsSheet('" + post.id + "')"
+                    : "window.location.href='index.html?post=" + post.id + "'";
+
+                return '<div class="grid-card" onclick="' + tapAction + '">' +
                     mediaHtml +
                     '<div class="badge">' + escapeHtml(post.category || 'General') + '</div>' +
                     videoBadge +
@@ -2699,11 +2758,9 @@
             function buildMarketCard(item, isOwner) {
                 var images = item.images || [];
                 var imgUrl = images.length ? images[0].url : '';
-                // Seller info from joined profiles
                 var sellerName = item.profiles ? (item.profiles.display_name || item.profiles.username) : 'Seller';
                 var sellerAvatar = item.profiles ? (item.profiles.avatar_url || '') : '';
                 var categoryName = item.market_categories ? item.market_categories.name : 'General';
-                var subcategoryName = item.market_subcategories ? item.market_subcategories.name : '';
 
                 var deleteBtn = isOwner ?
                     '<button class="delete-btn" onclick="event.stopPropagation();deleteMarketItem(' + item.id + ')" title="Delete"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>' :
@@ -2745,29 +2802,51 @@
                     var profile = await fetchProfile(targetId);
                     targetUser = profile;
 
+                    // Check if blocked
+                    if (!isOwner && window.SettingsAPI) {
+                        try {
+                            var blockedList = await window.SettingsAPI.listBlockedUsers();
+                            if (blockedList.some(function(b) { return b.id === targetId; })) {
+                                renderBlockedState();
+                                return;
+                            }
+                        } catch (e) { /* ignore */ }
+                    }
+
                     var counts = await fetchFollowCounts(targetId);
                     await loadPosts();
                     var userPosts = getUserPosts(targetId);
 
                     var likedIds = [],
                         bookmarkedIds = [],
-                        sharedIds = [];
+                        repostedIds = [];
                     if (isOwner && user && user.isLoggedIn) {
                         likedIds = await getUserLikes(targetId);
                         bookmarkedIds = await getUserBookmarks(targetId);
-                        sharedIds = await getUserShares(targetId);
+                        repostedIds = await getUserReposts(targetId);
                     }
+                    repostedPostIds = repostedIds;
                     var marketItems = await getUserMarketItems(targetId);
 
-                    updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, sharedIds, marketItems);
+                    updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems);
                 } catch (err) {
                     console.error('Error rendering profile:', err);
                     showToast('Failed to load profile', 'r');
                 }
             }
 
+            // ─── BLOCKED STATE ──────────────────────────────────
+            function renderBlockedState() {
+                document.getElementById('profileCol').innerHTML =
+                    '<div class="empty-state" style="padding-top:120px">' +
+                    '<div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>' +
+                    '<h3>Account Blocked</h3>' +
+                    '<p>You have blocked this account. Unblock them from Settings → Blocked Users to view this profile again.</p>' +
+                    '</div>';
+            }
+
             // ─── UPDATE UI ──────────────────────────────────────
-            function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, sharedIds, marketItems) {
+            function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems) {
                 var avatarSrc = getAvatar(profile);
                 document.getElementById('profileAvatar').src = avatarSrc;
                 document.getElementById('editAv').src = avatarSrc;
@@ -2798,6 +2877,12 @@
                 document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
                 document.getElementById('statFollowing').textContent = fmtNum(counts.following);
 
+                // Activity dot
+                document.getElementById('onlineDot').style.display = profile.activity_status ? 'block' : 'none';
+
+                // Block target username
+                document.getElementById('blockUsernameTarget').textContent = profile.username || 'user';
+
                 renderActionRow();
 
                 // Private account handling
@@ -2821,7 +2906,7 @@
                     document.getElementById('statFollowingBox').classList.remove('locked');
                     document.getElementById('statFollowersBox').onclick = function() { openFollowModal('followers'); };
                     document.getElementById('statFollowingBox').onclick = function() { openFollowModal('following'); };
-                    renderTab(activeTab, { userPosts: userPosts, likedIds: likedIds, bookmarkedIds: bookmarkedIds, sharedIds: sharedIds, marketItems: marketItems });
+                    renderTab(activeTab, { userPosts: userPosts, likedIds: likedIds, bookmarkedIds: bookmarkedIds, repostedIds: repostedIds, marketItems: marketItems });
                 }
 
                 // Owner-only elements
@@ -2842,7 +2927,7 @@
                 if (shareBtn) {
                     shareBtn.onclick = function() {
                         if (isOwner) {
-                            openShareModal(); // QR code
+                            openShareModal();
                         } else {
                             openShareOtherModal();
                         }
@@ -2857,7 +2942,7 @@
                 var userPosts = data?.userPosts || getUserPosts(targetUserId);
                 var likedIds = data?.likedIds || [];
                 var bookmarkedIds = data?.bookmarkedIds || [];
-                var sharedIds = data?.sharedIds || [];
+                var repostedIds = data?.repostedIds || [];
                 var marketItems = data?.marketItems || [];
 
                 switch (tab) {
@@ -2868,7 +2953,7 @@
                         renderLove(container, userPosts, likedIds);
                         break;
                     case 'share':
-                        renderShare(container, userPosts, sharedIds);
+                        renderReposts(container, repostedIds);
                         break;
                     case 'star':
                         renderStar(container, userPosts, bookmarkedIds);
@@ -2880,14 +2965,19 @@
             }
 
             function renderPosts(container, userPosts) {
-                if (!userPosts.length) {
+                // Sort pinned first, then by date
+                var sorted = userPosts.slice().sort(function(a, b) {
+                    if (a.pinned && !b.pinned) return -1;
+                    if (!a.pinned && b.pinned) return 1;
+                    return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date);
+                });
+                if (!sorted.length) {
                     container.innerHTML =
                         '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><h3>No posts yet</h3><p>' + (isOwner ? 'Create your first post.' : 'Nothing posted yet.') + '</p></div>';
                     return;
                 }
-                userPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML = '<div class="grid-3">' +
-                    userPosts.map(function(p) { return buildGridPostCard(p, 'delete'); }).join('') +
+                    sorted.map(function(p) { return buildGridPostCard(p, 'delete'); }).join('') +
                     '</div>';
             }
 
@@ -2904,16 +2994,17 @@
                     '</div>';
             }
 
-            function renderShare(container, userPosts, sharedIds) {
-                var sharedPosts = userPosts.filter(function(p) { return sharedIds.indexOf(p.id) !== -1; });
-                if (!sharedPosts.length) {
+            // ─── REPOSTS TAB (uses reposts table) ──────────────
+            function renderReposts(container, repostedIds) {
+                var repostedPosts = allPosts.filter(function(p) { return repostedIds.indexOf(p.id) !== -1; });
+                if (!repostedPosts.length) {
                     container.innerHTML =
-                        '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div><h3>No shared posts</h3><p>Posts you share will appear here.</p></div>';
+                        '<div class="empty-state"><div class="icon"><i class="ri-repeat-2-line" style="font-size:32px;color:var(--p)"></i></div><h3>No reposts</h3><p>Posts you repost will appear here.</p></div>';
                     return;
                 }
-                sharedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
+                repostedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML = '<div class="grid-3">' +
-                    sharedPosts.map(function(p) { return buildGridPostCard(p, 'remove', 'share'); }).join('') +
+                    repostedPosts.map(function(p) { return buildGridPostCard(p, 'remove', 'share'); }).join('') +
                     '</div>';
             }
 
@@ -2921,7 +3012,7 @@
                 var bookmarkedPosts = userPosts.filter(function(p) { return bookmarkedIds.indexOf(p.id) !== -1; });
                 if (!bookmarkedPosts.length) {
                     container.innerHTML =
-                        '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><h3>No bookmarks</h3><p>Star posts you love to find them instantly.</p></div>';
+                        '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div><h3>No saved posts</h3><p>Save posts you love to find them instantly.</p></div>';
                     return;
                 }
                 bookmarkedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
@@ -2936,7 +3027,7 @@
                         '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div><h3>No listings</h3><p>' + (isOwner ? 'Sell something on Campus Market.' : 'No items listed yet.') + '</p></div>';
                     return;
                 }
-                container.innerHTML = '<div class="grid-2">' +
+                container.innerHTML = '<div class="grid-3">' +
                     marketItems.map(function(item) { return buildMarketCard(item, isOwner); }).join('') +
                     '</div>';
             }
@@ -3078,24 +3169,24 @@
                 renderTab(activeTab);
             };
 
-            window.toggleShare = async function(postId) {
+            window.toggleRepost = async function(postId) {
                 var user = getCurrentUser();
-                if (!user || !user.isLoggedIn) { showToast('Please sign in to share', 'o'); return; }
-                var result = await window.sb.from('shares').select('id').eq('user_id', user.id).eq('post_id', postId).maybeSingle();
+                if (!user || !user.isLoggedIn) { showToast('Please sign in to repost', 'o'); return; }
+                var result = await window.sb.from('reposts').select('id').eq('user_id', user.id).eq('post_id', postId).maybeSingle();
                 if (result.error) throw result.error;
                 if (result.data) {
-                    await window.sb.from('shares').delete().eq('id', result.data.id);
-                    showToast('Unshared', 'o');
+                    await window.sb.from('reposts').delete().eq('id', result.data.id);
+                    showToast('Repost removed', 'o');
                 } else {
-                    await window.sb.from('shares').insert({ user_id: user.id, post_id: postId });
-                    showToast('Shared', 'g');
+                    await window.sb.from('reposts').insert({ user_id: user.id, post_id: postId });
+                    showToast('Reposted', 'g');
                 }
                 renderTab(activeTab);
             };
 
             window.removeFromTab = async function(postId, sourceTab) {
                 if (sourceTab === 'love') await toggleReaction(postId);
-                else if (sourceTab === 'share') await toggleShare(postId);
+                else if (sourceTab === 'share') await toggleRepost(postId);
                 else if (sourceTab === 'star') await toggleBookmark(postId);
                 renderTab(activeTab);
             };
@@ -3117,6 +3208,49 @@
                     showToast('Listing deleted', 'r');
                 } catch (err) { showToast(err.message, 'r'); }
             };
+
+            // ─── POST ACTIONS SHEET ────────────────────────────
+            window.openPostActionsSheet = function(postId) {
+                window._activePostId = postId;
+                var post = allPosts.find(function(p) { return p.id === postId; });
+                document.getElementById('lockActionLbl').textContent = (post && post.locked) ? 'Unlock Comments' : 'Lock Comments';
+                openMov('postActionsSheet');
+            };
+
+            window.pinPostAction = async function() {
+                var id = window._activePostId;
+                try {
+                    var post = allPosts.find(function(p) { return p.id === id; });
+                    var newVal = !(post && post.pinned);
+                    await window.sb.from('posts').update({ pinned: newVal }).eq('id', id);
+                    if (post) post.pinned = newVal;
+                    showToast(newVal ? 'Pinned to top' : 'Unpinned', 'g');
+                    closeMov('postActionsSheet');
+                    renderProfile();
+                } catch (err) { showToast(err.message, 'r'); }
+            };
+
+            window.lockPostAction = async function() {
+                var id = window._activePostId;
+                try {
+                    var post = allPosts.find(function(p) { return p.id === id; });
+                    var newVal = !(post && post.locked);
+                    await window.sb.from('posts').update({ locked: newVal }).eq('id', id);
+                    if (post) post.locked = newVal;
+                    showToast(newVal ? 'Comments locked' : 'Comments unlocked', 'g');
+                    closeMov('postActionsSheet');
+                } catch (err) { showToast(err.message, 'r'); }
+            };
+
+            function openMov(id) { document.getElementById(id).classList.add('open');
+                document.body.style.overflow = 'hidden'; }
+
+            function closeMov(id) { document.getElementById(id).classList.remove('open');
+                document.body.style.overflow = ''; }
+
+            document.querySelectorAll('.mov').forEach(function(m) {
+                m.addEventListener('click', function(e) { if (e.target === this) closeMov(this.id); });
+            });
 
             // ─── SHARE / QR (owner) ──────────────────────────
             window.openShareModal = function() {
@@ -3186,6 +3320,7 @@
             function openShareOtherModal() {
                 var username = targetUser?.username || 'user';
                 document.getElementById('reportUsername').textContent = username;
+                document.getElementById('blockUsernameTarget').textContent = username;
                 openFS('shareOtherModal');
             }
 
@@ -3221,14 +3356,31 @@
 
             window.reportUser = function() {
                 closeFS('shareOtherModal');
-                // Simple report – you can extend with a modal for reason.
                 var reason = prompt('Please describe why you are reporting this user:');
                 if (reason && reason.trim().length > 0) {
-                    // Placeholder: you can insert into a `reports` table later.
                     showToast('Report submitted. Thank you for helping keep Freeupper safe.', 'p');
                     console.log('Report user:', targetUserId, 'Reason:', reason);
                 } else {
                     showToast('Report cancelled', 'o');
+                }
+            };
+
+            // ─── BLOCK USER ─────────────────────────────────────
+            window.openBlockConfirm = function() {
+                closeFS('shareOtherModal');
+                var uname = targetUser?.username || 'user';
+                document.getElementById('blockUsernameConfirm').textContent = uname;
+                openMov('blockConfirmDlg');
+            };
+
+            window.confirmBlockUser = async function() {
+                try {
+                    await window.SettingsAPI.blockUser(targetUserId);
+                    closeMov('blockConfirmDlg');
+                    showToast('User blocked', 'g');
+                    renderBlockedState();
+                } catch (err) {
+                    showToast(err.message, 'r');
                 }
             };
 
@@ -3361,10 +3513,9 @@
                 reader.readAsDataURL(file);
             };
 
-            // ─── AVATAR UPLOAD (fixed) ──────────────────────
+            // ─── AVATAR UPLOAD ──────────────────────────────────
             window.handleAvatarTap = function() {
                 if (isOwner) {
-                    // Open the avatar modal
                     var modal = document.getElementById('avatarModal');
                     if (modal) {
                         modal.classList.add('open');
@@ -3601,6 +3752,19 @@
 
             window.openFollowModal = async function(tab) {
                 tab = tab || 'followers';
+
+                // Check hide_follower_count
+                if (!isOwner && targetUser && targetUser.hide_follower_count) {
+                    openFS('followModal');
+                    document.getElementById('fsPagesTrack').innerHTML =
+                        '<div style="display:flex;flex-direction:column;align-items:center;padding:70px 28px;gap:14px;width:100%">' +
+                        '<svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="1" y1="1" x2="23" y2="23" stroke="var(--danger)"/></svg>' +
+                        '<h3 style="font-size:17px;font-weight:800">Followers Hidden</h3>' +
+                        '<p style="font-size:13px;color:var(--muted);text-align:center;max-width:240px">This user has chosen to keep their follower list private.</p>' +
+                        '</div>';
+                    return;
+                }
+
                 if (!followModalData) {
                     try {
                         followModalData = await fetchFollowLists(targetUserId);
@@ -3728,8 +3892,8 @@
                     if (isSugg) {
                         var srcLbl = u.source || 'People you may know';
                         html += '<div class="u-row u-row-suggestion" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;padding:0 clamp(14px,5vw,24px)">' +
-                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
-                            '<div class="u-info">' +
+                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
                             '<div class="u-name">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + (u.handle || '') + '</div>' +
                             '<div class="u-sugg-src">' + srcLbl + '</div>' +
@@ -3741,8 +3905,8 @@
                     } else {
                         var actionHtml = _fwRowAction(u, i);
                         html += '<div class="u-row" data-row-idx="' + i + '" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 clamp(14px,5vw,24px)">' +
-                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
-                            '<div class="u-info">' +
+                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
                             '<div class="u-name">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + (u.handle || '') + '</div>' +
                             '</div>' +
@@ -3784,6 +3948,7 @@
             }
 
             window._fwTap = function(btn) {
+                if (event) event.stopPropagation();
                 if (btn.classList.contains('pending')) return;
                 var action = btn.getAttribute('data-action') || 'toggle-follow';
                 var fidx = parseInt(btn.getAttribute('data-fidx'), 10);
@@ -3869,7 +4034,7 @@
                 }).join('');
             }
 
-            // ─── COUNTRY, DOB, GENDER (unchanged) ──────────────
+            // ─── COUNTRY, DOB, GENDER ──────────────────────────
             var COUNTRIES = [
                 { f: '🇳🇬', n: 'Nigeria', r: 'Africa' },
                 { f: '🇬🇭', n: 'Ghana', r: 'Africa' },
@@ -4069,16 +4234,6 @@
                 closeMov('genderOverlay');
             };
 
-            function openMov(id) { document.getElementById(id).classList.add('open');
-                document.body.style.overflow = 'hidden'; }
-
-            function closeMov(id) { document.getElementById(id).classList.remove('open');
-                document.body.style.overflow = ''; }
-
-            document.querySelectorAll('.mov').forEach(function(m) {
-                m.addEventListener('click', function(e) { if (e.target === this) closeMov(this.id); });
-            });
-
             // ─── TOAST ──────────────────────────────────────────
             function showToast(msg, type) {
                 if (typeof window.showToast === 'function') {
@@ -4167,7 +4322,7 @@
             window.handleFollow = handleFollow;
             window.toggleReaction = toggleReaction;
             window.toggleBookmark = toggleBookmark;
-            window.toggleShare = toggleShare;
+            window.toggleRepost = toggleRepost;
             window.removeFromTab = removeFromTab;
             window.deletePost = deletePost;
             window.deleteMarketItem = deleteMarketItem;
@@ -4177,6 +4332,11 @@
             window.shareProfileOther = shareProfileOther;
             window.reportUser = reportUser;
             window.openShareOtherModal = openShareOtherModal;
+            window.openPostActionsSheet = openPostActionsSheet;
+            window.pinPostAction = pinPostAction;
+            window.lockPostAction = lockPostAction;
+            window.openBlockConfirm = openBlockConfirm;
+            window.confirmBlockUser = confirmBlockUser;
         })();
     </script>
 </body>
