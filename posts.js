@@ -1,5 +1,5 @@
 // =====================================================================
-// posts.js – FreeUpper v1.2 Multi‑Context Feed
+// posts.js – FreeUpper v1.3 Multi‑Context Feed
 // =====================================================================
 //
 // feedContextMap[postId] = {
@@ -155,6 +155,96 @@
     }
 
     return rows.map(row => mapPost(row, likedIds, repostMap.get(row.id)));
+  }
+
+  // ─── NEW: LOAD POSTS BY USER ID ─────────────────────────────────────
+  async function loadPostsByUserId(userId, offset = 0, limit = 200) {
+    const { data: rows, error } = await sb
+      .from('posts')
+      .select(`
+        *,
+        profiles:user_id (
+          id,
+          display_name,
+          username,
+          avatar_url,
+          verified,
+          verified_status,
+          is_private
+        )
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('loadPostsByUserId error:', error);
+      return [];
+    }
+
+    let currentUserId = null;
+    try {
+      const { data: { user } } = await sb.auth.getUser();
+      if (user) currentUserId = user.id;
+    } catch (_) {}
+
+    let likedIds = new Set();
+    let repostMap = new Map();
+
+    if (currentUserId && rows && rows.length > 0) {
+      const postIds = rows.map(r => r.id);
+      const [{ data: likes }, { data: reposts }] = await Promise.all([
+        sb.from('post_likes').select('post_id').eq('user_id', currentUserId).in('post_id', postIds),
+        sb.from('reposts').select('post_id, comment, created_at').eq('user_id', currentUserId).in('post_id', postIds),
+      ]);
+      likedIds = new Set((likes || []).map(l => l.post_id));
+      (reposts || []).forEach(r => repostMap.set(r.post_id, r));
+    }
+
+    return rows.map(row => mapPost(row, likedIds, repostMap.get(row.id)));
+  }
+
+  // ─── NEW: LOAD SINGLE POST BY ID (for repost fallback) ────────────
+  async function loadPostById(postId) {
+    const { data: row, error } = await sb
+      .from('posts')
+      .select(`
+        *,
+        profiles:user_id (
+          id,
+          display_name,
+          username,
+          avatar_url,
+          verified,
+          verified_status,
+          is_private
+        )
+      `)
+      .eq('id', postId)
+      .single();
+
+    if (error || !row) {
+      console.warn('loadPostById: post not found', postId);
+      return null;
+    }
+
+    let userId = null;
+    try {
+      const { data: { user } } = await sb.auth.getUser();
+      if (user) userId = user.id;
+    } catch (_) {}
+
+    let likedIds = new Set();
+    let myRepost = null;
+    if (userId) {
+      const [{ data: likes }, { data: reposts }] = await Promise.all([
+        sb.from('post_likes').select('post_id').eq('user_id', userId).eq('post_id', postId),
+        sb.from('reposts').select('post_id, comment, created_at').eq('user_id', userId).eq('post_id', postId),
+      ]);
+      if (likes && likes.length) likedIds.add(postId);
+      if (reposts && reposts.length) myRepost = reposts[0];
+    }
+    return mapPost(row, likedIds, myRepost);
   }
 
   // ─── LOAD REPOST FEED ITEMS ────────────────────────────────────────
@@ -587,6 +677,10 @@
     loadFeedWithReposts,
     getFeedContext,
     clearFeedContext,
+
+    // Posts by user (NEW)
+    loadPostsByUserId,
+    loadPostById,           // NEW: single post fetch
 
     // Comments
     loadComments,
