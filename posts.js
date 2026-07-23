@@ -1,19 +1,21 @@
 // =====================================================================
-// posts.js – FreeUpper v2.0 – Full Database-Backed Feed
+// posts.js – FreeUpper v2.1 – Full Real‑time Social Feed
 // =====================================================================
 //
-// This module provides a unified API for posts, comments, likes,
-// reposts, bookmarks, and shares. All data is persisted in Supabase.
+// This module provides a unified API for all social interactions.
+// It uses Supabase Realtime to push live updates to all clients.
 //
 // Features:
-//   - Load feed with repost contexts (feedContextMap)
-//   - Create, delete posts
-//   - Add comments (with nested replies via parent_id)
-//   - Toggle post likes, comment likes
-//   - Toggle reposts (with optional comment)
-//   - Increment views
-//   - Load posts by user ID, single post preview
-//   - Realtime subscriptions for reposts
+//   - Feed with repost contexts (feedContextMap)
+//   - CRUD for posts, comments (with nested replies via parent_id)
+//   - Post likes, comment likes (including replies)
+//   - Reposts (with optional comment)
+//   - Bookmarks, Shares
+//   - View counter
+//   - Real‑time subscription for ALL tables (posts, comments, post_likes,
+//     comment_likes, reposts, bookmarks, shares)
+//
+// All counters are denormalised and updated via direct SQL updates.
 // =====================================================================
 
 (function() {
@@ -70,6 +72,7 @@
       likedByMe: userLikes.has(row.id),
       repostCount: row.repost_count || 0,
       bookmarkCount: row.bookmark_count || 0,
+      shareCount: row.share_count || 0,
       myRepost: !!myRepost,
       myRepostText: myRepost ? (myRepost.comment || '') : '',
       myRepostTime: myRepost ? myRepost.created_at : null,
@@ -86,7 +89,7 @@
   }
 
   // ─── FeedContextMap ────────────────────────────────────────────────
-  const feedContextMap = new Map(); // postId -> { repost: {...}, friendsLiked: {...}, ... }
+  const feedContextMap = new Map(); // postId -> { repost: {...}, friendsLiked: {...} }
 
   function getFeedContext(postId) {
     return feedContextMap.get(postId) || null;
@@ -425,7 +428,7 @@
         parent_id: parentId || null,
         message: message,
         mentions: mentions || [],
-        like_count: 0, // default
+        like_count: 0,
       })
       .select(`
         *,
@@ -464,7 +467,6 @@
   async function toggleLike(postId) {
     const userId = await _getUserId();
 
-    // Check if already liked
     const { data: existing } = await sb
       .from('post_likes')
       .select('*')
@@ -474,7 +476,6 @@
 
     let liked = false;
     if (existing) {
-      // Unlike
       await sb
         .from('post_likes')
         .delete()
@@ -482,14 +483,12 @@
         .eq('post_id', postId);
       liked = false;
     } else {
-      // Like
       await sb
         .from('post_likes')
         .insert({ user_id: userId, post_id: postId });
       liked = true;
     }
 
-    // Update like_count on posts
     const { data: post } = await sb
       .from('posts')
       .select('like_count')
@@ -505,11 +504,10 @@
     return { liked, count: newCount };
   }
 
-  // ─── COMMENT LIKES (Nested replies & top-level) ──────────────────
+  // ─── COMMENT LIKES (including nested replies) ─────────────────────
   async function toggleCommentLike(commentId) {
     const userId = await _getUserId();
 
-    // Check if already liked
     const { data: existing } = await sb
       .from('comment_likes')
       .select('*')
@@ -532,7 +530,6 @@
       liked = true;
     }
 
-    // Update like_count on comments
     const { data: comment } = await sb
       .from('comments')
       .select('like_count')
@@ -552,7 +549,6 @@
   async function toggleRepostAPI(postId, comment = '') {
     const userId = await _getUserId();
 
-    // Check if already reposted
     const { data: existing } = await sb
       .from('reposts')
       .select('*')
@@ -562,7 +558,6 @@
 
     let reposted = false;
     if (existing) {
-      // Remove repost
       await sb
         .from('reposts')
         .delete()
@@ -570,14 +565,12 @@
         .eq('post_id', postId);
       reposted = false;
     } else {
-      // Add repost
       await sb
         .from('reposts')
         .insert({ user_id: userId, post_id: postId, comment: comment || '' });
       reposted = true;
     }
 
-    // Update repost_count on posts
     const { data: post } = await sb
       .from('posts')
       .select('repost_count')
@@ -590,9 +583,7 @@
       .update({ repost_count: newCount })
       .eq('id', postId);
 
-    // Clear feed context so next load re-fetches
     clearFeedContext();
-
     return {
       reposted,
       count: newCount,
@@ -628,7 +619,7 @@
     };
   }
 
-  // ─── BOOKMARKS (if you need them) ────────────────────────────────
+  // ─── BOOKMARKS ────────────────────────────────────────────────────
   async function toggleBookmark(postId) {
     const userId = await _getUserId();
 
@@ -669,7 +660,7 @@
     return { bookmarked, count: newCount };
   }
 
-  // ─── SHARES (if you need them) ──────────────────────────────────
+  // ─── SHARES ────────────────────────────────────────────────────────
   async function toggleShare(postId) {
     const userId = await _getUserId();
 
@@ -756,25 +747,6 @@
     };
   }
 
-  // ─── REPORT ────────────────────────────────────────────────────────
-  async function reportPost(postId, reason) {
-    const userId = await _getUserId();
-    const { data, error } = await sb
-      .from('reports')
-      .insert({
-        reporter_id: userId,
-        target_type: 'post',
-        target_id: postId,
-        reason: reason || 'Inappropriate content',
-        status: 'pending',
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  }
-
   // ─── CREATE POST ──────────────────────────────────────────────────
   async function createPost(fields) {
     const userId = await _getUserId();
@@ -823,44 +795,105 @@
     if (error) throw error;
   }
 
-  // ─── REALTIME SUBSCRIPTIONS ──────────────────────────────────────
-  let _realtimeChannel = null;
-  let _realtimeCallbacks = [];
+  // ─── REPORT ────────────────────────────────────────────────────────
+  async function reportPost(postId, reason) {
+    const userId = await _getUserId();
+    const { data, error } = await sb
+      .from('reports')
+      .insert({
+        reporter_id: userId,
+        target_type: 'post',
+        target_id: postId,
+        reason: reason || 'Inappropriate content',
+        status: 'pending',
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  // ─── REAL‑TIME SUBSCRIPTION FOR ALL TABLES ──────────────────────
+  let _allChannel = null;
+  let _allCallbacks = [];
+
+  /**
+   * Subscribe to all tables that affect the feed and interactions.
+   * The callback receives: { table, event, payload, old }
+   */
+  function subscribeToAll(callback) {
+    if (typeof callback === 'function') {
+      _allCallbacks.push(callback);
+    }
+    if (_allChannel) return;
+
+    const tables = ['posts', 'comments', 'post_likes', 'comment_likes', 'reposts', 'bookmarks', 'shares'];
+    _allChannel = sb.channel('freeupper-live');
+
+    tables.forEach(table => {
+      _allChannel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: table },
+        (payload) => {
+          _allCallbacks.forEach(fn => {
+            try {
+              fn({
+                table,
+                event: payload.eventType,
+                payload: payload.new || payload.old,
+                old: payload.old,
+              });
+            } catch (e) {
+              console.warn('Realtime callback error:', e);
+            }
+          });
+        }
+      );
+    });
+
+    _allChannel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ FreeUpper: Live updates active for all tables.');
+      }
+    });
+  }
+
+  // ─── LEGACY SUBSCRIBE (repost‑only, kept for backward compatibility) ──
+  let _repostChannel = null;
+  let _repostCallbacks = [];
 
   function subscribe(callback) {
     if (typeof callback === 'function') {
-      _realtimeCallbacks.push(callback);
+      _repostCallbacks.push(callback);
     }
-    if (_realtimeChannel) return;
+    if (_repostChannel) return;
 
-    _realtimeChannel = sb
+    _repostChannel = sb
       .channel('posts_reposts_changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'reposts'
-        },
+        { event: '*', schema: 'public', table: 'reposts' },
         async () => {
           clearFeedContext();
-          _realtimeCallbacks.forEach(fn => {
+          _repostCallbacks.forEach(fn => {
             try { fn(); } catch (e) { console.warn('Realtime callback error:', e); }
           });
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Subscribed to reposts realtime');
-        }
-      });
+      .subscribe();
   }
 
   function unsubscribe() {
-    if (_realtimeChannel) {
-      sb.removeChannel(_realtimeChannel);
-      _realtimeChannel = null;
-      _realtimeCallbacks = [];
+    if (_repostChannel) {
+      sb.removeChannel(_repostChannel);
+      _repostChannel = null;
+      _repostCallbacks = [];
+    }
+    if (_allChannel) {
+      sb.removeChannel(_allChannel);
+      _allChannel = null;
+      _allCallbacks = [];
     }
   }
 
@@ -871,7 +904,7 @@
     getFeedContext,
     clearFeedContext,
 
-    // Posts by user / single
+    // Posts (by user / single / preview)
     loadPostsByUserId,
     loadPostById,
     loadPostPreview,
@@ -880,13 +913,13 @@
     loadComments,
     addComment,
 
-    // Posts
+    // Post CRUD
     createPost,
     deletePost,
 
-    // Interactions – ALL use the database now
+    // Interactions – all database‑backed
     toggleLike,
-    toggleCommentLike,   // <-- Fully database-backed
+    toggleCommentLike,   // works for any comment (incl. replies)
     toggleRepostAPI,
     updateRepostComment,
     toggleBookmark,
@@ -894,8 +927,9 @@
     incrementView,
     reportPost,
 
-    // Realtime
-    subscribe,
+    // Real‑time
+    subscribe,           // legacy repost‑only
+    subscribeToAll,      // full live sync for all tables
     unsubscribe,
   };
 
