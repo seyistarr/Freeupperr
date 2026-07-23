@@ -47,7 +47,7 @@
     if (updates.country !== undefined) payload.country = updates.country;
     if (updates.dob !== undefined) payload.dob = updates.dob;
     if (updates.avatar !== undefined) payload.avatar_url = updates.avatar;
-    if (updates.tags !== undefined) payload.tags = updates.tags;  // <-- NEW: support tags
+    if (updates.tags !== undefined) payload.tags = updates.tags;  // <-- support tags
 
     var { error } = await sb.from('profiles').update(payload).eq('id', user.id);
     if (error) throw error;
@@ -337,11 +337,24 @@
   }
 
   // ─── ACTIVE SESSIONS (Edge Function) ──────────────────────
+  // Helper to extract the real error message from the Supabase client's error.context
+  async function _extractFunctionError(error, fallback) {
+    // Supabase's client wraps a non-2xx response in error.context (a Response object);
+    // the actual { error: "..." } JSON body we sent back lives there, not in error.message.
+    if (error && error.context && typeof error.context.json === 'function') {
+      try {
+        const body = await error.context.json();
+        if (body && body.error) return body.error;
+      } catch (e) { /* body wasn't JSON or already consumed */ }
+    }
+    return (error && error.message) || fallback;
+  }
+
   async function listSessions() {
     var { data, error } = await sb.functions.invoke('manage-sessions', {
       body: { action: 'list' }
     });
-    if (error) throw new Error(error.message || 'Failed to load sessions');
+    if (error) throw new Error(await _extractFunctionError(error, 'Failed to load sessions'));
     return data.sessions || [];
   }
 
@@ -349,7 +362,7 @@
     var { data, error } = await sb.functions.invoke('manage-sessions', {
       body: { action: 'revoke', session_id: sessionId }
     });
-    if (error) throw new Error(error.message || 'Failed to revoke session');
+    if (error) throw new Error(await _extractFunctionError(error, 'Failed to revoke session'));
     return data;
   }
 
@@ -358,7 +371,7 @@
     var { data, error } = await sb.functions.invoke('manage-sessions', {
       body: { action: 'revoke_others', current_session_id: currentSessionId }
     });
-    if (error) throw new Error(error.message || 'Failed to revoke other sessions');
+    if (error) throw new Error(await _extractFunctionError(error, 'Failed to revoke other sessions'));
     return data;
   }
 
