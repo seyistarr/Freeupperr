@@ -28,7 +28,7 @@
     <meta name="twitter:image" content="https://freeupper.vercel.app/freeupper.png" />
     <meta name="twitter:image:alt" content="Freeupper logo preview" />
     <link rel="stylesheet" href="global.css" />
-    
+
     <!-- ===== SHARED NAV STYLES ===== -->
     <link rel="stylesheet" href="bottom-nav.css" />
     <link rel="stylesheet" href="side-nav.css" />
@@ -41,7 +41,9 @@
     <script src="auth.js"></script>
     <script src="posts.js"></script>
     <script src="listings.js"></script>
+    <script src="router.js"></script>
     <script src="mentions.js"></script>
+    <script src="hashtags.js"></script>
 
     <style>
         /* ── all existing CSS from your original file ── */
@@ -566,9 +568,11 @@
         .v-caption.expanded::-webkit-scrollbar {
             display: none;
         }
-        .v-caption .hashtag {
-            color: var(--accent);
+        .v-caption .hashtag,
+        .v-caption .hashtag-link {
+            color: var(--p);
             font-weight: 700;
+            cursor: pointer;
         }
         .v-caption .mention-link {
             color: var(--accent);
@@ -949,9 +953,11 @@
         .comment-text .mention-link:hover {
             text-decoration: underline;
         }
-        .comment-text .hashtag {
-            color: var(--accent);
+        .comment-text .hashtag,
+        .comment-text .hashtag-link {
+            color: var(--p);
             font-weight: 700;
+            cursor: pointer;
         }
 
         .comment-reply-btn {
@@ -1074,9 +1080,11 @@
         .reply-text .mention-link:hover {
             text-decoration: underline;
         }
-        .reply-text .hashtag {
-            color: var(--accent);
+        .reply-text .hashtag,
+        .reply-text .hashtag-link {
+            color: var(--p);
             font-weight: 700;
+            cursor: pointer;
         }
 
         .reply-meta {
@@ -2264,7 +2272,7 @@
             </div>
             <h3>No Videos Yet</h3>
             <p>Videos you create or share will appear here. Upload your first video now!</p>
-            <button class="create-btn" onclick="window.location.href='create.html'">Create Video</button>
+            <button class="create-btn" onclick="window.Router.openCreate()">Create Video</button>
         </div>
         <!-- pull-to-refresh indicator -->
         <div class="ptr-indicator" id="ptrIndicator"><span class="spinner"></span> Pull to refresh</div>
@@ -2470,7 +2478,7 @@
     <script src="side-nav.js" defer></script>
 
     <!-- ══════════════════════════════════════════════════════
-    MAIN SCRIPT – with new repost architecture
+    MAIN SCRIPT – with new repost architecture and Router
     ══════════════════════════════════════════════════════ -->
     <script>
         'use strict';
@@ -2535,8 +2543,13 @@
             return String(n);
         }
 
+        // ─── Use hashtags.js for hashification ────────────────────
         function hashify(text) {
-            return text.replace(/#(\w+)/g, '<span class="hashtag">#$1</span>');
+            if (window.Hashtags && typeof window.Hashtags.hashifyHtml === 'function') {
+                return window.Hashtags.hashifyHtml(escapeHtml(text));
+            }
+            // Fallback
+            return escapeHtml(text).replace(/#(\w+)/g, '<span class="hashtag-link">#$1</span>');
         }
 
         function escapeHtml(str) {
@@ -2570,16 +2583,22 @@
             return { id: 'guest', isLoggedIn: false, displayName: 'Guest', avatar: '' };
         }
 
+        // ─── NAVIGATION WITH ROUTER ──────────────────────────────────
         function goToProfile(userId) {
             if (!userId) return;
             const user = getCurrentUser();
             if (userId === user.id) {
-                window.location.href = 'profile.html';
+                window.Router.openProfile(userId);
             } else {
-                window.location.href = 'profile.html?uid=' + encodeURIComponent(userId);
+                window.Router.openProfile(userId);
             }
         }
 
+        function goToCreate() {
+            window.Router.openCreate();
+        }
+
+        // ─── MENTIONS & TAGS ─────────────────────────────────────────
         function renderCaptionWithMentionsAndTags(text, mentions) {
             if (!text) return '';
             let html = escapeHtml(text);
@@ -2591,7 +2610,6 @@
         }
 
         // ─── YOUTUBE HELPERS (unchanged) ──────────────────────────
-
         function ytPostMessage(idx, func, args) {
             args = args || [];
             const iframe = document.getElementById('yt-' + idx);
