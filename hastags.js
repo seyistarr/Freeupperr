@@ -68,10 +68,10 @@
 
   // Expose public API
   window.Hashtags = {
-    goToHashtag: goToHashtag,
-    hashifyHtml: hashifyHtml,
-    openPost: openPost,
-    openPostById: openPostById
+    goToHashtag,
+    hashifyHtml,
+    openPost,
+    openPostById
   };
 
   console.log('✅ hashtags.js loaded (uses ?tag=, canonical routing)');
