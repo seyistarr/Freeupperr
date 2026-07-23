@@ -60,7 +60,9 @@
     <script src="auth.js" defer></script>
     <script src="posts.js" defer></script>
     <script src="listings.js" defer></script>
+    <script src="router.js" defer></script>
     <script src="mentions.js" defer></script>
+    <script src="hashtags.js" defer></script>
 
     <!-- ===== PRE‑PAINT THEME READ (fixes flash) ===== -->
     <script>
@@ -2424,11 +2426,19 @@
                 d.textContent = s || '';
                 return d.innerHTML; }
 
-            function linkifyContent(t) {
-                const r = /(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g;
-                return escapeHtml(t).replace(r, u =>
+            // ─── LINKIFY CONTENT WITH HASHTAGS ──────────────────────────
+
+            function linkifyContent(text) {
+                let html = escapeHtml(text);
+                // External links
+                html = html.replace(/(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g, u =>
                     `<a href="javascript:void(0)" class="text-primary underline font-medium break-all" data-extlink="${encodeURIComponent(u)}">${u}</a>`
-                    );
+                );
+                // Hashify hashtags using the shared Hashtags module
+                if (window.Hashtags && typeof window.Hashtags.hashifyHtml === 'function') {
+                    html = window.Hashtags.hashifyHtml(html);
+                }
+                return html;
             }
 
             function formatCount(n) {
@@ -3206,7 +3216,7 @@
                 const body = document.getElementById('tagsBody');
                 document.getElementById('tagsModalTitle').textContent = 'Reposted by';
                 body.innerHTML = items.map(r => `
-                    <div class="tag-result" onclick="window.location.href='profile.html?uid=${r.user.id}'">
+                    <div class="tag-result" onclick="window.Router.openProfile('${r.user.id}')">
                         <div class="tag-title" style="display:flex;align-items:center;gap:8px;">
                             <img src="${r.user.avatar_url || ''}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;">
                             ${escapeHtml(r.user.display_name || r.user.username)}
@@ -3585,7 +3595,7 @@
                 sellerChip += `</div>`;
 
                 return `
-                    <div onclick="openProductModal('${item.id}')" class="group cursor-pointer product-card">
+                    <div onclick="window.Router.openListing('${item.id}')" class="group cursor-pointer product-card">
                         <div class="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 mb-2">
                             <img id="market-card-img-${item.id}" src="${images[activeIdx]}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
                             ${dotsHTML}
@@ -3926,7 +3936,7 @@
                 if (!currentActiveProduct) return;
                 const sellerId = currentActiveProduct.sellerId;
                 if (sellerId) {
-                    window.location.href = `profile.html?uid=${sellerId}`;
+                    window.Router.openProfile(sellerId);
                 } else {
                     triggerToast('Profile not found', 'Seller information unavailable.');
                 }
@@ -4159,9 +4169,7 @@
                 }
             }
 
-            // ───────────────────────────────────────────────────────────────
-            // DELETE POST
-            // ───────────────────────────────────────────────────────────────
+            // ─── DELETE POST ───────────────────────────────────────────────
 
             function deletePostFromShare(postId) {
                 if (!postId) { showToast('No post selected'); return; }
@@ -4184,40 +4192,11 @@
                     .catch(err => showToast(err.message || 'Failed to delete post', 'r'));
             }
 
-            // ───────────────────────────────────────────────────────────────
-            // TAGS MODAL
-            // ───────────────────────────────────────────────────────────────
+            // ─── TAGS MODAL (replaces with Router.openHashtag) ───────────
+            // The old tags modal is now replaced: clicking a hashtag goes to search.html?tag=...
+            // via window.Router.openHashtag. The tags modal is kept for reposters sheet only.
 
-            function openTagsModal(tag) {
-                tagsModalData = tag;
-                const posts = allPosts.filter(p => p.tags && p.tags.includes(tag));
-                const sheet = document.getElementById('tagsModal');
-                const body = document.getElementById('tagsBody');
-                if (!posts.length) {
-                    body.innerHTML = '<div class="tag-empty">No posts found with #' + escapeHtml(tag) + '</div>';
-                } else {
-                    body.innerHTML = posts.map(p => {
-                        const author = p.profile ? p.profile.display_name || 'Anonymous' : 'Anonymous';
-                        return `<div class="tag-result" onclick="window.location.href='index.html?post=${p.id}'">
-                            <div class="tag-title">#${escapeHtml(tag)}</div>
-                            <div class="tag-post-title">${escapeHtml(p.title)} · ${escapeHtml(author)}</div>
-                        </div>`;
-                    }).join('');
-                }
-                document.getElementById('tagsModalTitle').textContent = '#' + tag;
-                lockBodyScroll();
-                sheet.classList.add('open');
-            }
-
-            function closeTagsModal() {
-                document.getElementById('tagsModal').classList.remove('open');
-                unlockBodyScroll();
-                tagsModalData = null;
-            }
-
-            // ───────────────────────────────────────────────────────────────
-            // BUILD POST HTML (using feed context)
-            // ───────────────────────────────────────────────────────────────
+            // ─── BUILD POST HTML (using feed context and hashified content) ─
 
             function buildPostHTML(p, index) {
                 const author = window.getAuthorFromProfile(p.profile);
@@ -4228,19 +4207,21 @@
                 const repostBanner = buildRepostBanner(p);
 
                 const hd = p.description && p.description.trim().length > 0;
-                const pt = (p.content || '').substring(0, 250);
-                const isLong = (p.content || '').length > 250;
+                const rawContent = p.content || '';
+                const pt = rawContent.substring(0, 250);
+                const isLong = rawContent.length > 250;
                 const th = p.tags && p.tags.length > 0 ?
                     `<div class="flex flex-wrap gap-1 mt-2">${p.tags.map(t => 
-                        `<span class="tag-badge" style="display:inline-block;padding:3px 9px;border-radius:20px;font-size:.7rem;font-weight:600;background:rgba(124,58,237,.08);color:#7C3AED;cursor:pointer;" onclick="event.stopPropagation();openTagsModal('${escapeHtml(t)}')">#${escapeHtml(t)}</span>`
+                        `<span class="tag-badge" style="display:inline-block;padding:3px 9px;border-radius:20px;font-size:.7rem;font-weight:600;background:rgba(124,58,237,.08);color:#7C3AED;cursor:pointer;" onclick="event.stopPropagation();window.Router.openHashtag('${escapeHtml(t)}')">#${escapeHtml(t)}</span>`
                     ).join('')}</div>` :
                     '';
                 const mh = buildMediaHTML(p, index);
                 const followBtn = buildFollowButton(p.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
 
-                const renderedContent = window.Mentions ? window.Mentions.renderMentions(p.content, p.mentions || []) : linkifyContent(p.content);
-                const renderedPreview = window.Mentions ? window.Mentions.renderMentions(pt, p.mentions || []) : linkifyContent(pt);
+                // Use linkifyContent which now also hashifies hashtags
+                const renderedContent = linkifyContent(rawContent);
+                const renderedPreview = linkifyContent(pt);
 
                 const isRepostClass = repostBanner ? 'is-repost' : '';
 
@@ -4475,7 +4456,7 @@
                     if (t.closest('.user-mini-avatar') || t.closest('.font-bold.text-sm')) {
                         e.stopPropagation();
                         const p = allPosts.find(p => p.id === pid);
-                        if (p && p.user_id) navigateToProfile(p.user_id);
+                        if (p && p.user_id) window.Router.openProfile(p.user_id);
                         return;
                     }
                     if (t.closest('[data-full-img]')) {
@@ -4488,14 +4469,16 @@
                         openInAppWebView(decodeURIComponent(t.closest('[data-extlink]').dataset
                         .extlink)); return; }
                     if (t.closest('.carousel-arrow') || t.closest('.carousel-dot')) { e.stopPropagation(); return; }
-                    if (t.closest('.tag-badge')) { e.stopPropagation();
+                    if (t.closest('.tag-badge')) {
+                        e.stopPropagation();
                         const tag = t.textContent.replace('#', '').trim();
-                        if (tag) openTagsModal(tag);
-                        return; }
+                        if (tag) window.Router.openHashtag(tag);
+                        return;
+                    }
                     if (t.closest('[data-repost-avatar]')) {
                         e.stopPropagation();
                         const uid = t.closest('[data-repost-avatar]').dataset.userId;
-                        if (uid) navigateToProfile(uid);
+                        if (uid) window.Router.openProfile(uid);
                         return;
                     }
                     if (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')) {
@@ -4730,7 +4713,8 @@
                     username.charAt(0).toUpperCase();
                 const avatarClass = avatar ? 'comment-avatar has-image' : 'comment-avatar';
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
-                const renderedMsg = window.Mentions ? window.Mentions.renderMentions(c.message, c.mentions || []) : escapeHtml(c.message);
+                // Use linkifyContent for comments (hashifies and linkifies)
+                const renderedMsg = linkifyContent(c.message);
 
                 return `<div class="comment-item" data-comment-id="${c.id}">
                         <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
@@ -4768,7 +4752,7 @@
                     username.charAt(0).toUpperCase();
                 const avatarClass = avatar ? 'reply-avatar-dot has-image' : 'reply-avatar-dot';
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
-                const renderedMsg = window.Mentions ? window.Mentions.renderMentions(r.message, r.mentions || []) : escapeHtml(r.message);
+                const renderedMsg = linkifyContent(r.message);
 
                 return `<div class="reply-item" data-comment-id="${r.id}">
                         <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
@@ -5051,7 +5035,7 @@
                     vc = getVisibleComments(post.id);
                 const followBtn = buildFollowButton(post.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
-                const renderedContent = window.Mentions ? window.Mentions.renderMentions(post.content, post.mentions || []) : linkifyContent(post.content);
+                const renderedContent = linkifyContent(post.content);
 
                 return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
                         <article>
@@ -5236,7 +5220,7 @@
                         '[data-extlink]').dataset.extlink)); return; }
                     if (t.closest('.font-bold.text-sm')) {
                         const p = allPosts.find(p => p.id === postId);
-                        if (p && p.user_id) navigateToProfile(p.user_id);
+                        if (p && p.user_id) window.Router.openProfile(p.user_id);
                         return;
                     }
                 });
@@ -5491,15 +5475,13 @@
             }
 
             function navigateToProfile(uid) {
-                const u = getCurrentUser();
-                if (!u.isLoggedIn) { showToast('Sign in to view profiles'); return; }
-                window.location.href = uid === u.id ? 'profile.html' : `profile.html?uid=${uid}`;
+                window.Router.openProfile(uid);
             }
 
             function navigateToProfileByUsername(username) {
                 if (!username || username === 'Guest') return;
                 const found = allPosts.find(p => p.profile && p.profile.username === username);
-                if (found) navigateToProfile(found.user_id);
+                if (found) window.Router.openProfile(found.user_id);
                 else showToast('User not found');
             }
 
@@ -5781,7 +5763,7 @@
                 }
 
                 document.getElementById('topMsgBtn').addEventListener('click', () => {
-                    window.location.href = 'chat.html';
+                    window.Router.openChat();
                 });
 
                 document.getElementById('logo-text').addEventListener('click', refreshHome);
@@ -5983,8 +5965,6 @@
             window.reloadData = reloadData;
             window.refreshHome = refreshHome;
             window.refreshCurrentTab = refreshCurrentTab;
-            window.openTagsModal = openTagsModal;
-            window.closeTagsModal = closeTagsModal;
             window.closeRepostersSheet = closeRepostersSheet;
 
             window.selectMarketCategory = selectMarketCategory;
@@ -6023,7 +6003,7 @@
         })();
     </script>
 
-    <!-- TAGS MODAL -->
+    <!-- TAGS MODAL (reused for reposters) -->
     <div class="tags-modal" id="tagsModal">
         <div class="tags-sheet">
             <div class="tags-header">
