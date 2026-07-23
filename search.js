@@ -182,6 +182,11 @@
   };
 
   // ─── RENDER HELPERS ──────────────────────────────────────
+  function renderSquareGrid(posts) {
+    if (!posts || posts.length === 0) return '';
+    return `<div class="square-grid">${posts.map(squareForPost).join('')}</div>`;
+  }
+
   function squareForPost(p) {
     const mediaType = p.media_type || p.mediaType;
     const mediaUrl = p.media_url || p.mediaUrl;
@@ -217,6 +222,12 @@
     } else if (mediaUrl) {
       mediaHtml = `<div style="width:100%;max-height:70vh;overflow:hidden;margin-top:8px;background:#000;"><img src="${mediaUrl}" style="width:100%;height:100%;object-fit:cover;display:block;"></div>`;
     }
+    // Hashify content
+    let contentHtml = '';
+    if (p.content) {
+      const raw = escapeHtml(p.content);
+      contentHtml = window.Hashtags ? window.Hashtags.hashifyHtml(raw) : raw;
+    }
     return `<article style="border-bottom:1px solid var(--brd);padding:14px 0;cursor:pointer;" onclick="_searchOpenPost('${p.id}','${mediaType||''}')">
       <div style="display:flex;align-items:center;gap:10px;">
         <img src="${author.avatar||''}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;background:var(--bg4);flex-shrink:0;" onerror="this.style.display='none'">
@@ -226,7 +237,7 @@
         </div>
       </div>
       <h3 style="font-size:15px;font-weight:700;margin-top:8px;line-height:1.4;">${escapeHtml(p.title||'')}</h3>
-      ${p.content ? `<p style="font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${escapeHtml(p.content)}</p>` : ''}
+      ${contentHtml ? `<p style="font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${contentHtml}</p>` : ''}
       ${mediaHtml}
       <div style="display:flex;gap:16px;margin-top:10px;font-size:12px;color:var(--muted);">
         <span>👁 ${fmtNum(p.views)}</span><span>❤️ ${fmtNum(p.like_count || p.likes)}</span>
@@ -350,6 +361,13 @@
     loadingMore = false;
   }
 
+  // ─── CACHE HELPERS ──────────────────────────────────────────
+  function cacheCurrentTab(html) {
+    if (!currentQuery && !hashtagMode) return;
+    const key = hashtagMode ? 'hashtags' : currentTab;
+    paging[key].cache = { query: currentQuery || currentHashtag, html: html };
+  }
+
   // ─── DISCOVERY (State 1 / State 2) ─────────────────────────
   async function renderDiscovery() {
     showTabs(false);
@@ -398,7 +416,7 @@
           </div>`;
         }).join('') + `</div></div>`;
     }
-    if (photos.length) html += `<div class="discovery-section"><h3>📷 Trending Photos</h3><div class="square-grid">${photos.map(squareForPost).join('')}</div></div>`;
+    if (photos.length) html += `<div class="discovery-section"><h3>📷 Trending Photos</h3>${renderSquareGrid(photos)}</div>`;
     if (market.length) html += `<div class="discovery-section"><h3>🛍 Trending Marketplace</h3><div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;">${market.map(marketCardHtml).join('')}</div></div>`;
     c.innerHTML = html || emptyState('Nothing to discover yet');
   }
@@ -421,7 +439,6 @@
     let result;
     if (currentTab === 'users') {
       result = await searchAll(q, tabState.offset);
-      // users are already filtered
     } else if (currentTab === 'videos') {
       result = await searchAll(q, tabState.offset);
       result.posts = result.posts.filter(p => (p.media_type||p.mediaType) === 'video');
@@ -430,12 +447,10 @@
       result.posts = result.posts.filter(p => (p.media_type||p.mediaType) === 'image');
     } else if (currentTab === 'market') {
       result = await searchAll(q, tabState.offset);
-      // market already filtered
-    } else if (currentTab === 'hashtags' && !hashtagMode) {
+    } else if (currentTab === 'hashtags') {
       result = await searchAll(q, tabState.offset);
-      // will show only hashtags
     } else {
-      // TOP (or any other)
+      // TOP
       result = await searchAll(q, tabState.offset);
     }
 
@@ -443,12 +458,13 @@
     if (currentTab === 'users') {
       html = result.users.map(userRowHtml).join('');
     } else if (currentTab === 'videos') {
-      html = result.posts.map(squareForPost).join('');
+      html = renderSquareGrid(result.posts);
     } else if (currentTab === 'photos') {
-      html = result.posts.map(squareForPost).join('');
+      html = renderSquareGrid(result.posts);
     } else if (currentTab === 'market') {
       html = result.market.map(m => window.renderListingCard ? window.renderListingCard(m) : marketCardHtml(m)).join('');
-    } else if (currentTab === 'hashtags' && !hashtagMode) {
+      if (html) html = `<div class="grid-2">${html}</div>`;
+    } else if (currentTab === 'hashtags') {
       html = result.hashtags.map(t => `<div class="hashtag-row" onclick="window.Hashtags.goToHashtag('${escapeHtml(t)}')"><span class="tag-name">#${escapeHtml(t)}</span></div>`).join('');
     } else {
       // TOP — mixed
@@ -483,14 +499,15 @@
     let count = 0;
     if (currentTab === 'users') count = result.users.length;
     else if (currentTab === 'market') count = result.market.length;
-    else count = result.posts.length; // for top/videos/photos/hashtags
+    else if (currentTab === 'hashtags') count = result.hashtags.length;
+    else count = result.posts.length; // for top/videos/photos
     tabState.offset += count;
 
     tabState.hasMore = count === PAGE_SIZE;
 
     // Cache the content for this tab
     if (replace) {
-      tabState.cache = { query: q, html: container.innerHTML };
+      cacheCurrentTab(container.innerHTML);
     }
 
     appendSentinel();
@@ -542,7 +559,7 @@
       document.getElementById('hashtagCount').textContent = `${fmtNum(count)} Posts`;
     }
 
-    let html = posts.map(squareForPost).join('');
+    let html = renderSquareGrid(posts);
     if (!html) {
       html = emptyState('No posts yet', `Be the first to post with #${currentHashtag}`);
     }
@@ -558,7 +575,7 @@
 
     // Cache hashtag results
     if (replace) {
-      tabState.cache = { query: currentHashtag, html: container.innerHTML };
+      cacheCurrentTab(container.innerHTML);
     }
 
     appendSentinel();
