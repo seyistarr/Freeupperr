@@ -5,7 +5,19 @@
   'use strict';
 
   /**
+   * Escape HTML entities for safe insertion into DOM
+   * @param {string} str - string to escape
+   * @returns {string} escaped string
+   */
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
+  }
+
+  /**
    * Navigate to search.html in Hashtag Mode
+   * Uses canonical ?tag= URL parameter (not ?hashtag=)
    * @param {string} tag - the hashtag (with or without leading #)
    */
   function goToHashtag(tag) {
@@ -28,18 +40,39 @@
     });
   }
 
-  // Helper to escape for HTML attributes (minimal)
-  function escapeHtml(str) {
-    const d = document.createElement('div');
-    d.textContent = str || '';
-    return d.innerHTML;
+  /**
+   * Canonical content opener — routes to the ORIGINAL content page
+   * Videos → video.html?post=ID
+   * Everything else → index.html?post=ID
+   * Prevents opening search duplicates or feed clones
+   * @param {object} post - post object with id, media_type, mediaType
+   */
+  function openPost(post) {
+    if (!post || !post.id) return;
+    const mediaType = post.media_type || post.mediaType;
+    const targetPage = mediaType === 'video' ? 'video.html' : 'index.html';
+    window.location.href = targetPage + '?post=' + post.id;
+  }
+
+  /**
+   * Convenience: open a post by ID and media type
+   * Useful for inline onclick handlers where you don't have the full post object
+   * @param {string|number} postId - the post ID
+   * @param {string} mediaType - 'video' or anything else
+   */
+  function openPostById(postId, mediaType) {
+    if (!postId) return;
+    const targetPage = mediaType === 'video' ? 'video.html' : 'index.html';
+    window.location.href = targetPage + '?post=' + postId;
   }
 
   // Expose public API
   window.Hashtags = {
     goToHashtag: goToHashtag,
-    hashifyHtml: hashifyHtml
+    hashifyHtml: hashifyHtml,
+    openPost: openPost,
+    openPostById: openPostById
   };
 
-  console.log('✅ hashtags.js loaded (uses ?tag=)');
+  console.log('✅ hashtags.js loaded (uses ?tag=, canonical routing)');
 })();
