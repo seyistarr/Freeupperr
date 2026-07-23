@@ -47,7 +47,13 @@
     if (updates.country !== undefined) payload.country = updates.country;
     if (updates.dob !== undefined) payload.dob = updates.dob;
     if (updates.avatar !== undefined) payload.avatar_url = updates.avatar;
-    if (updates.tags !== undefined) payload.tags = updates.tags;  // <-- support tags
+    if (updates.tags !== undefined) payload.tags = updates.tags;
+    
+    // === NEW FIELDS FOR THE SETTINGS PAGE ===
+    if (updates.showInSuggestions !== undefined) payload.show_in_suggestions = updates.showInSuggestions;
+    if (updates.hiddenTabs !== undefined) payload.hidden_tabs = updates.hiddenTabs;
+    // City is used for suggestions scoring; allow editing if needed
+    if (updates.city !== undefined) payload.city = updates.city;
 
     var { error } = await sb.from('profiles').update(payload).eq('id', user.id);
     if (error) throw error;
@@ -72,16 +78,19 @@
     if (error) throw error;
   }
 
-  // ─── SAVE PROFILE (New function from settings page) ──────
+  // ─── SAVE PROFILE (from settings page) ──────────────────────
   async function saveProfile() {
-    const dn = document.getElementById('eDN').value.trim();
-    const un = document.getElementById('eUN').value.trim();
-    const bio = document.getElementById('eBio').value.trim();
+    // This function is used by the edit profile modal in settings.html.
+    // It collects values from DOM and calls updateFlags.
+    // The DOM elements are expected to be present.
+    const dn = document.getElementById('eDN')?.value?.trim();
+    const un = document.getElementById('eUN')?.value?.trim();
+    const bio = document.getElementById('eBio')?.value?.trim();
 
     const updates = {
       displayName: dn || 'Guest',
       username: un || 'user',
-      bio: bio,
+      bio: bio || '',
       tags: window._pendingPills || [],
       gender: window._selGender || '',
       country: window._selCountry || '',
@@ -91,10 +100,7 @@
     };
 
     try {
-      // Use the existing updateFlags to handle DB update and local cache
       await updateFlags(updates);
-
-      // Additional DOM updates (these are usually handled by the page script)
       if (typeof updateNavAvatar === 'function') updateNavAvatar();
       if (typeof closeFS === 'function') closeFS('editProfileModal');
       if (typeof showToast === 'function') showToast('Profile updated!', 'g');
@@ -409,7 +415,7 @@
     // Profile & flags
     updateFlags: updateFlags,
     changePassword: changePassword,
-    saveProfile: saveProfile,               // <-- NEW
+    saveProfile: saveProfile,
 
     // Verification
     submitVerification: submitVerification,
