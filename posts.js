@@ -1,16 +1,19 @@
 // =====================================================================
-// posts.js – FreeUpper v1.3 Multi‑Context Feed
+// posts.js – FreeUpper v2.0 – Full Database-Backed Feed
 // =====================================================================
 //
-// feedContextMap[postId] = {
-//   repost: { items: [...], latestTime, count },
-//   friendsLiked: { ... },
-//   featured: { ... },
-//   ...
-// }
+// This module provides a unified API for posts, comments, likes,
+// reposts, bookmarks, and shares. All data is persisted in Supabase.
 //
-// All context mutations go through setFeedContext(postId, type, context)
-// Sorting is centralised via getFeedSortTime(post) (private)
+// Features:
+//   - Load feed with repost contexts (feedContextMap)
+//   - Create, delete posts
+//   - Add comments (with nested replies via parent_id)
+//   - Toggle post likes, comment likes
+//   - Toggle reposts (with optional comment)
+//   - Increment views
+//   - Load posts by user ID, single post preview
+//   - Realtime subscriptions for reposts
 // =====================================================================
 
 (function() {
@@ -85,7 +88,6 @@
   // ─── FeedContextMap ────────────────────────────────────────────────
   const feedContextMap = new Map(); // postId -> { repost: {...}, friendsLiked: {...}, ... }
 
-  // Public getter
   function getFeedContext(postId) {
     return feedContextMap.get(postId) || null;
   }
@@ -94,20 +96,15 @@
     feedContextMap.clear();
   }
 
-  // ─── Private helper to set a single context type ──────────────────
   function setFeedContext(postId, type, context) {
     const existing = feedContextMap.get(postId) || {};
     existing[type] = context;
     feedContextMap.set(postId, existing);
   }
 
-  // ─── Private centralised sort-time extraction ────────────────────
   function getFeedSortTime(post) {
     const ctx = getFeedContext(post.id);
-    // Priority: repost -> friendsLiked -> featured -> ... (add as needed)
     if (ctx?.repost) return ctx.repost.latestTime;
-    // Future: if (ctx?.friendsLiked) return ctx.friendsLiked.latestTime;
-    // Future: if (ctx?.featured) return ctx.featured.since;
     return post.timestamp;
   }
 
@@ -157,7 +154,7 @@
     return rows.map(row => mapPost(row, likedIds, repostMap.get(row.id)));
   }
 
-  // ─── NEW: LOAD POSTS BY USER ID ─────────────────────────────────────
+  // ─── LOAD POSTS BY USER ID ──────────────────────────────────────────
   async function loadPostsByUserId(userId, offset = 0, limit = 200) {
     const { data: rows, error } = await sb
       .from('posts')
@@ -204,7 +201,7 @@
     return rows.map(row => mapPost(row, likedIds, repostMap.get(row.id)));
   }
 
-  // ─── NEW: LOAD SINGLE POST BY ID (for repost fallback) ────────────
+  // ─── LOAD SINGLE POST BY ID ─────────────────────────────────────────
   async function loadPostById(postId) {
     const { data: row, error } = await sb
       .from('posts')
@@ -247,7 +244,7 @@
     return mapPost(row, likedIds, myRepost);
   }
 
-  // ─── LOAD REPOST FEED ITEMS ────────────────────────────────────────
+  // ─── LOAD REPOST FEED ITEMS ─────────────────────────────────────────
   async function loadRepostFeedItems(offset = 0, limit = 20) {
     const { data, error } = await sb
       .from('repost_feed_items')
@@ -325,7 +322,6 @@
       });
     });
 
-    // Build feedContextMap using setFeedContext
     feedContextMap.clear();
     const seenPostIds = new Set();
     const feedItems = [];
@@ -336,7 +332,6 @@
       seenPostIds.add(postId);
       const sorted = [...users].sort((a, b) => new Date(b.time) - new Date(a.time));
 
-      // Store repost context
       setFeedContext(postId, 'repost', {
         items: sorted,
         latestTime: sorted[0].time,
@@ -346,21 +341,18 @@
       feedItems.push(originalPost);
     });
 
-    // Add remaining posts
     posts.forEach(p => {
       if (!seenPostIds.has(p.id)) {
         feedItems.push(p);
       }
     });
 
-    // Sort using centralised getFeedSortTime (private)
     feedItems.sort((a, b) => {
       const timeA = getFeedSortTime(a);
       const timeB = getFeedSortTime(b);
       return new Date(timeB) - new Date(timeA);
     });
 
-    // Return feed items as { feedType, sortTime, post }
     return feedItems.map(p => ({
       feedType: feedContextMap.has(p.id) ? 'repost' : 'post',
       sortTime: getFeedSortTime(p),
@@ -433,6 +425,7 @@
         parent_id: parentId || null,
         message: message,
         mentions: mentions || [],
+        like_count: 0, // default
       })
       .select(`
         *,
@@ -449,6 +442,10 @@
 
     if (error) throw error;
 
+    // Increment comment_count on posts
+    await sb.rpc('increment_comment_count', { p_post_id: postId })
+      .catch(err => console.warn('Could not increment comment count:', err));
+
     return {
       id: data.id,
       message: data.message,
@@ -463,79 +460,144 @@
     };
   }
 
-  // ─── POST OPERATIONS ──────────────────────────────────────────────
-  async function createPost(fields) {
+  // ─── POST LIKES (Love reactions) ──────────────────────────────────
+  async function toggleLike(postId) {
     const userId = await _getUserId();
 
-    const payload = {
-      user_id: userId,
-      title: fields.title || '',
-      description: fields.description || '',
-      content: fields.content || '',
-      category: fields.category || 'General',
-      tags: fields.tags || [],
-      media: fields.media || [],
-      media_url: fields.mediaUrl || null,
-      media_type: fields.mediaType || null,
-      mentions: fields.mentions || [],
-    };
+    // Check if already liked
+    const { data: existing } = await sb
+      .from('post_likes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('post_id', postId)
+      .maybeSingle();
 
-    if (fields.media && fields.media.length > 0) {
-      payload.media_url = fields.media[0].url || null;
-      payload.media_type = fields.media[0].type || null;
+    let liked = false;
+    if (existing) {
+      // Unlike
+      await sb
+        .from('post_likes')
+        .delete()
+        .eq('user_id', userId)
+        .eq('post_id', postId);
+      liked = false;
+    } else {
+      // Like
+      await sb
+        .from('post_likes')
+        .insert({ user_id: userId, post_id: postId });
+      liked = true;
     }
 
-    const { data, error } = await sb
+    // Update like_count on posts
+    const { data: post } = await sb
       .from('posts')
-      .insert(payload)
-      .select(`
-        *,
-        profiles:user_id (
-          id,
-          display_name,
-          username,
-          avatar_url,
-          verified,
-          verified_status
-        )
-      `)
+      .select('like_count')
+      .eq('id', postId)
       .single();
 
-    if (error) throw error;
+    const newCount = Math.max(0, (post?.like_count || 0) + (liked ? 1 : -1));
+    await sb
+      .from('posts')
+      .update({ like_count: newCount })
+      .eq('id', postId);
 
-    return mapPost(data, new Set(), null);
+    return { liked, count: newCount };
   }
 
-  async function deletePost(postId) {
-    const { error } = await sb.rpc('delete_post', { p_post_id: postId });
-    if (error) throw error;
-  }
-
-  // ─── LIKES ─────────────────────────────────────────────────────────
-  async function toggleLike(postId) {
-    const { data, error } = await sb.rpc('toggle_post_like', { p_post_id: postId });
-    if (error) throw error;
-    return { liked: data[0].liked, count: data[0].new_count };
-  }
-
+  // ─── COMMENT LIKES (Nested replies & top-level) ──────────────────
   async function toggleCommentLike(commentId) {
-    const { data, error } = await sb.rpc('toggle_comment_like', { p_comment_id: commentId });
-    if (error) throw error;
-    return { liked: data[0].liked, count: data[0].new_count };
+    const userId = await _getUserId();
+
+    // Check if already liked
+    const { data: existing } = await sb
+      .from('comment_likes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('comment_id', commentId)
+      .maybeSingle();
+
+    let liked = false;
+    if (existing) {
+      await sb
+        .from('comment_likes')
+        .delete()
+        .eq('user_id', userId)
+        .eq('comment_id', commentId);
+      liked = false;
+    } else {
+      await sb
+        .from('comment_likes')
+        .insert({ user_id: userId, comment_id: commentId });
+      liked = true;
+    }
+
+    // Update like_count on comments
+    const { data: comment } = await sb
+      .from('comments')
+      .select('like_count')
+      .eq('id', commentId)
+      .single();
+
+    const newCount = Math.max(0, (comment?.like_count || 0) + (liked ? 1 : -1));
+    await sb
+      .from('comments')
+      .update({ like_count: newCount })
+      .eq('id', commentId);
+
+    return { liked, count: newCount };
   }
 
   // ─── REPOSTS ──────────────────────────────────────────────────────
   async function toggleRepostAPI(postId, comment = '') {
-    const { data, error } = await sb.rpc('toggle_repost', {
-      p_post_id: postId,
-      p_comment: comment || '',
-    });
-    if (error) throw error;
+    const userId = await _getUserId();
+
+    // Check if already reposted
+    const { data: existing } = await sb
+      .from('reposts')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('post_id', postId)
+      .maybeSingle();
+
+    let reposted = false;
+    if (existing) {
+      // Remove repost
+      await sb
+        .from('reposts')
+        .delete()
+        .eq('user_id', userId)
+        .eq('post_id', postId);
+      reposted = false;
+    } else {
+      // Add repost
+      await sb
+        .from('reposts')
+        .insert({ user_id: userId, post_id: postId, comment: comment || '' });
+      reposted = true;
+    }
+
+    // Update repost_count on posts
+    const { data: post } = await sb
+      .from('posts')
+      .select('repost_count')
+      .eq('id', postId)
+      .single();
+
+    const newCount = Math.max(0, (post?.repost_count || 0) + (reposted ? 1 : -1));
+    await sb
+      .from('posts')
+      .update({ repost_count: newCount })
+      .eq('id', postId);
+
+    // Clear feed context so next load re-fetches
+    clearFeedContext();
+
     return {
-      reposted: data[0].reposted,
-      count: data[0].new_count,
-      comment: data[0].repost_comment,
-      time: data[0].reposted_at,
+      reposted,
+      count: newCount,
+      comment: comment || '',
+      time: new Date().toISOString(),
     };
   }
 
@@ -557,12 +619,95 @@
       .eq('id', postId)
       .single();
 
+    clearFeedContext();
     return {
       reposted: true,
       count: post?.repost_count || 0,
       comment: data.comment,
       time: data.created_at,
     };
+  }
+
+  // ─── BOOKMARKS (if you need them) ────────────────────────────────
+  async function toggleBookmark(postId) {
+    const userId = await _getUserId();
+
+    const { data: existing } = await sb
+      .from('bookmarks')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('post_id', postId)
+      .maybeSingle();
+
+    let bookmarked = false;
+    if (existing) {
+      await sb
+        .from('bookmarks')
+        .delete()
+        .eq('user_id', userId)
+        .eq('post_id', postId);
+      bookmarked = false;
+    } else {
+      await sb
+        .from('bookmarks')
+        .insert({ user_id: userId, post_id: postId });
+      bookmarked = true;
+    }
+
+    const { data: post } = await sb
+      .from('posts')
+      .select('bookmark_count')
+      .eq('id', postId)
+      .single();
+
+    const newCount = Math.max(0, (post?.bookmark_count || 0) + (bookmarked ? 1 : -1));
+    await sb
+      .from('posts')
+      .update({ bookmark_count: newCount })
+      .eq('id', postId);
+
+    return { bookmarked, count: newCount };
+  }
+
+  // ─── SHARES (if you need them) ──────────────────────────────────
+  async function toggleShare(postId) {
+    const userId = await _getUserId();
+
+    const { data: existing } = await sb
+      .from('shares')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('post_id', postId)
+      .maybeSingle();
+
+    let shared = false;
+    if (existing) {
+      await sb
+        .from('shares')
+        .delete()
+        .eq('user_id', userId)
+        .eq('post_id', postId);
+      shared = false;
+    } else {
+      await sb
+        .from('shares')
+        .insert({ user_id: userId, post_id: postId });
+      shared = true;
+    }
+
+    const { data: post } = await sb
+      .from('posts')
+      .select('share_count')
+      .eq('id', postId)
+      .single();
+
+    const newCount = Math.max(0, (post?.share_count || 0) + (shared ? 1 : -1));
+    await sb
+      .from('posts')
+      .update({ share_count: newCount })
+      .eq('id', postId);
+
+    return { shared, count: newCount };
   }
 
   // ─── VIEWS ─────────────────────────────────────────────────────────
@@ -630,6 +775,54 @@
     return data;
   }
 
+  // ─── CREATE POST ──────────────────────────────────────────────────
+  async function createPost(fields) {
+    const userId = await _getUserId();
+
+    const payload = {
+      user_id: userId,
+      title: fields.title || '',
+      description: fields.description || '',
+      content: fields.content || '',
+      category: fields.category || 'General',
+      tags: fields.tags || [],
+      media: fields.media || [],
+      media_url: fields.mediaUrl || null,
+      media_type: fields.mediaType || null,
+      mentions: fields.mentions || [],
+    };
+
+    if (fields.media && fields.media.length > 0) {
+      payload.media_url = fields.media[0].url || null;
+      payload.media_type = fields.media[0].type || null;
+    }
+
+    const { data, error } = await sb
+      .from('posts')
+      .insert(payload)
+      .select(`
+        *,
+        profiles:user_id (
+          id,
+          display_name,
+          username,
+          avatar_url,
+          verified,
+          verified_status
+        )
+      `)
+      .single();
+
+    if (error) throw error;
+
+    return mapPost(data, new Set(), null);
+  }
+
+  async function deletePost(postId) {
+    const { error } = await sb.rpc('delete_post', { p_post_id: postId });
+    if (error) throw error;
+  }
+
   // ─── REALTIME SUBSCRIPTIONS ──────────────────────────────────────
   let _realtimeChannel = null;
   let _realtimeCallbacks = [];
@@ -678,9 +871,10 @@
     getFeedContext,
     clearFeedContext,
 
-    // Posts by user (NEW)
+    // Posts by user / single
     loadPostsByUserId,
-    loadPostById,           // NEW: single post fetch
+    loadPostById,
+    loadPostPreview,
 
     // Comments
     loadComments,
@@ -690,13 +884,14 @@
     createPost,
     deletePost,
 
-    // Interactions
+    // Interactions – ALL use the database now
     toggleLike,
-    toggleCommentLike,
+    toggleCommentLike,   // <-- Fully database-backed
     toggleRepostAPI,
     updateRepostComment,
+    toggleBookmark,
+    toggleShare,
     incrementView,
-    loadPostPreview,
     reportPost,
 
     // Realtime
