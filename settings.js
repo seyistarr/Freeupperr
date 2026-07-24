@@ -1,6 +1,7 @@
 /* ============================================================
-   FreeUpper — settings.js (updated)
-   Requires auth.js to run first (uses window.sb + window.AuthUser).
+   FreeUpper — settings.js (final)
+   Requires auth.js to run first (window.sb + window.AuthUser).
+   Uses the 'blocks' table and RPC functions: block_user, unblock_user.
    ============================================================ */
 (function () {
   'use strict';
