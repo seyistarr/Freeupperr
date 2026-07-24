@@ -1,6 +1,6 @@
 /* ============================================================
-   FreeUpper — auth.js (revised)
-   with session location registration
+   FreeUpper — auth.js (final)
+   with session location registration & Safari autofill fix
    ============================================================ */
 (function () {
   'use strict';
@@ -285,23 +285,49 @@
   let pendingAction = null;
   let modalInitialized = false;
 
+  // ─── RENDER AUTH FORM (with dynamic autocomplete) ──────────
   function renderAuthForm() {
     document.getElementById('fu-auth-error').textContent = '';
+
+    // Get input elements
+    const nameField = document.getElementById('fu-name-field');
+    const nameInput = document.getElementById('fu-name');
+    const emailInput = document.getElementById('fu-email');
+    const passwordInput = document.getElementById('fu-password');
+
     if (mode === 'signup') {
       document.getElementById('fu-auth-title').textContent = 'Join FreeUpper';
       document.getElementById('fu-auth-sub').textContent = 'Create an account to post, comment, and save favorites.';
-      document.getElementById('fu-name-field').style.display = 'block';
+      nameField.style.display = 'block';
       document.getElementById('fu-submit-btn').textContent = 'Create Account';
       document.getElementById('fu-auth-switch').innerHTML =
         'Already have an account? <button id="fu-switch-btn" type="button">Sign In</button>';
+
+      // Set attributes for sign‑up (new password)
+      nameInput.setAttribute('name', 'name');
+      nameInput.setAttribute('autocomplete', 'name');
+      emailInput.setAttribute('name', 'email');
+      emailInput.setAttribute('autocomplete', 'email');
+      passwordInput.setAttribute('name', 'new-password');
+      passwordInput.setAttribute('autocomplete', 'new-password');
     } else {
       document.getElementById('fu-auth-title').textContent = 'Welcome Back';
       document.getElementById('fu-auth-sub').textContent = 'Sign in to continue to FreeUpper.';
-      document.getElementById('fu-name-field').style.display = 'none';
+      nameField.style.display = 'none';
       document.getElementById('fu-submit-btn').textContent = 'Sign In';
       document.getElementById('fu-auth-switch').innerHTML =
         "Don't have an account? <button id=\"fu-switch-btn\" type=\"button\">Sign Up</button>";
+
+      // Set attributes for sign‑in (current password)
+      nameInput.removeAttribute('name');
+      nameInput.removeAttribute('autocomplete');
+      emailInput.setAttribute('name', 'email');
+      emailInput.setAttribute('autocomplete', 'email');
+      passwordInput.setAttribute('name', 'password');
+      passwordInput.setAttribute('autocomplete', 'current-password');
     }
+
+    // Re‑attach switch listener (it's recreated each time)
     const switchBtn = document.getElementById('fu-switch-btn');
     if (switchBtn) {
       switchBtn.addEventListener('click', () => {
@@ -611,20 +637,17 @@
     if (onProgress) onProgress(100);
 
     // Update avatar_url in profiles table (direct update or RPC)
-    // We'll try the RPC first, fallback to direct update
     try {
       const { data: updatedProfileArr, error: rpcError } = await sb.rpc('update_avatar', {
         p_avatar_url: data.secure_url
       });
       if (rpcError) throw rpcError;
-      // RPC returns an array
       const updatedProfile = updatedProfileArr[0];
       const updated = Object.assign({}, user, { avatar: updatedProfile.avatar_url });
       writeLocalUser(updated);
       return updatedProfile.avatar_url;
     } catch (rpcErr) {
       console.warn('RPC update_avatar failed, trying direct update', rpcErr);
-      // Fallback: direct update
       const { data: updatedProfile, error: updateError } = await sb
         .from('profiles')
         .update({ avatar_url: data.secure_url })
@@ -660,7 +683,7 @@
   // ─── EXPOSE ───────────────────────────────────────────────
   window.AuthUser = {
     getCurrentUser,
-    getAuthenticatedUser,   // new async method
+    getAuthenticatedUser,
     requireAuth,
     uploadAvatar,
     signOut,
