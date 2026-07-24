@@ -1,6 +1,6 @@
 /* ============================================================
-   FreeUpper — auth.js (final)
-   with session location registration & Safari autofill fix
+   FreeUpper — auth.js (production)
+   with Safari autofix, unique usernames, and bulletproof errors
    ============================================================ */
 (function () {
   'use strict';
@@ -24,7 +24,7 @@
   // ─── CHANGE LISTENERS ──────────────────────────────────────
   const changeListeners = [];
 
-  // ─── LOCAL PROFILE MIRROR (only for current user session) ──
+  // ─── LOCAL PROFILE MIRROR ──────────────────────────────────
   function defaultGuest() {
     return {
       id: 'GUEST-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
@@ -78,15 +78,13 @@
     return guest;
   }
 
-  // ─── AUTHENTICATED USER (async, from Supabase) ─────────────
+  // ─── AUTHENTICATED USER (async) ───────────────────────────
   async function getAuthenticatedUser() {
     const { data: { user }, error } = await sb.auth.getUser();
     if (error || !user) {
-      // Not authenticated – return guest
       return getCurrentUser();
     }
 
-    // Fetch profile from DB
     const { data: profile, error: profileError } = await sb
       .from('profiles')
       .select('*')
@@ -95,7 +93,6 @@
 
     if (profileError) {
       console.warn('getAuthenticatedUser: profile fetch failed', profileError);
-      // Still return a minimal user based on auth data
       return {
         id: user.id,
         username: user.user_metadata?.username || '',
@@ -117,7 +114,6 @@
     }
 
     if (!profile) {
-      // Profile missing – create one (rare, but handle gracefully)
       const insertPayload = {
         id: user.id,
         display_name: user.user_metadata?.display_name || user.email.split('@')[0],
@@ -132,13 +128,11 @@
         .single();
       if (insertError) {
         console.error('getAuthenticatedUser: could not create profile', insertError);
-        return getCurrentUser(); // fallback to cached
+        return getCurrentUser();
       }
-      // Use newProfile
       profile = newProfile;
     }
 
-    // Build user object
     const localUser = {
       id: user.id,
       username: profile.username || '',
@@ -148,9 +142,9 @@
       email: user.email,
       isLoggedIn: true,
       verified: profile.verified_status === 'verified' ||
-               profile.verified_status === 'official' ||
-               profile.verified_status === 'staff' ||
-               profile.verified_status === 'business',
+                 profile.verified_status === 'official' ||
+                 profile.verified_status === 'staff' ||
+                 profile.verified_status === 'business',
       verificationStatus: profile.verified_status || 'none',
       isPrivate: profile.is_private || false,
       hideFollowerCount: profile.hide_follower_count || false,
@@ -161,12 +155,11 @@
       dob: profile.dob || null
     };
 
-    // Update cache
     writeLocalUser(localUser);
     return localUser;
   }
 
-  // ─── SYNC SUPABASE SESSION -> LOCAL PROFILE ──────────────
+  // ─── SYNC SESSION ──────────────────────────────────────────
   async function syncSessionToLocal(session) {
     if (!session || !session.user) return;
     const authUser = session.user;
@@ -185,7 +178,6 @@
 
       let finalProfile = profile;
       if (!profile) {
-        // Create profile if missing
         const insertPayload = {
           id: authUser.id,
           display_name: authUser.user_metadata?.display_name || authUser.email.split('@')[0],
@@ -232,7 +224,7 @@
     }
   }
 
-  // ─── REGISTER SESSION LOCATION (new) ──────────────────────
+  // ─── REGISTER SESSION LOCATION ────────────────────────────
   async function registerSessionLocation() {
     try {
       const { error } = await sb.functions.invoke('manage-sessions', {
@@ -275,7 +267,6 @@
   sb.auth.getSession().then(({ data }) => {
     if (data.session) {
       syncSessionToLocal(data.session);
-      // backfill / refresh location for already-active sessions
       registerSessionLocation();
     }
   });
@@ -285,11 +276,40 @@
   let pendingAction = null;
   let modalInitialized = false;
 
-  // ─── RENDER AUTH FORM (with dynamic autocomplete) ──────────
+  // ─── HELPER: extract Supabase error message ────────────────
+  function extractErrorMessage(err) {
+    if (!err) return 'Unknown error.';
+
+    // Supabase often nests errors
+    const candidate =
+      err?.message ||
+      err?.error_description ||
+      err?.error?.message ||
+      err?.error ||
+      err?.msg ||
+      '';
+
+    if (candidate && candidate !== '{}' && candidate !== '') {
+      return candidate;
+    }
+
+    // If it's an object, stringify it (but avoid cyclic)
+    if (typeof err === 'object') {
+      try {
+        const str = JSON.stringify(err, Object.getOwnPropertyNames(err));
+        if (str && str !== '{}' && str !== '') return str;
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    return 'Something went wrong. Please try again.';
+  }
+
+  // ─── RENDER AUTH FORM ──────────────────────────────────────
   function renderAuthForm() {
     document.getElementById('fu-auth-error').textContent = '';
 
-    // Get input elements
     const nameField = document.getElementById('fu-name-field');
     const nameInput = document.getElementById('fu-name');
     const emailInput = document.getElementById('fu-email');
@@ -303,7 +323,7 @@
       document.getElementById('fu-auth-switch').innerHTML =
         'Already have an account? <button id="fu-switch-btn" type="button">Sign In</button>';
 
-      // Set attributes for sign‑up (new password)
+      // Safari autofill hints
       nameInput.setAttribute('name', 'name');
       nameInput.setAttribute('autocomplete', 'name');
       emailInput.setAttribute('name', 'email');
@@ -318,7 +338,6 @@
       document.getElementById('fu-auth-switch').innerHTML =
         "Don't have an account? <button id=\"fu-switch-btn\" type=\"button\">Sign Up</button>";
 
-      // Set attributes for sign‑in (current password)
       nameInput.removeAttribute('name');
       nameInput.removeAttribute('autocomplete');
       emailInput.setAttribute('name', 'email');
@@ -327,7 +346,6 @@
       passwordInput.setAttribute('autocomplete', 'current-password');
     }
 
-    // Re‑attach switch listener (it's recreated each time)
     const switchBtn = document.getElementById('fu-switch-btn');
     if (switchBtn) {
       switchBtn.addEventListener('click', () => {
@@ -536,13 +554,21 @@
 
     try {
       if (mode === 'signup') {
+        // Generate a unique username with random suffix
+        const baseUsername = (name || email.split('@')[0])
+          .toLowerCase()
+          .replace(/\s+/g, '')
+          .replace(/[^a-z0-9]/g, '');
+        const randomSuffix = Math.floor(Math.random() * 10000);
+        const username = baseUsername + randomSuffix;
+
         const result = await sb.auth.signUp({
           email,
           password,
           options: {
             data: {
               display_name: name || email.split('@')[0],
-              username: (name || email.split('@')[0]).toLowerCase().replace(/\s+/g, '')
+              username: username
             }
           }
         });
@@ -560,7 +586,10 @@
         fn();
       }
     } catch (e) {
-      errEl.textContent = e.message || 'Something went wrong.';
+      // Use the improved error extractor
+      const msg = extractErrorMessage(e);
+      errEl.textContent = msg;
+      console.error('Auth error:', e); // always log the raw error to console
     } finally {
       btn.disabled = false;
       btn.textContent = mode === 'signup' ? 'Create Account' : 'Sign In';
@@ -602,7 +631,6 @@
       throw new Error('Image too large (max 5MB)');
     }
 
-    // Upload to Cloudinary
     const url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
     const formData = new FormData();
     formData.append('file', file);
@@ -636,7 +664,6 @@
 
     if (onProgress) onProgress(100);
 
-    // Update avatar_url in profiles table (direct update or RPC)
     try {
       const { data: updatedProfileArr, error: rpcError } = await sb.rpc('update_avatar', {
         p_avatar_url: data.secure_url
@@ -664,7 +691,6 @@
   // ─── SIGN OUT ──────────────────────────────────────────────
   async function signOut() {
     await sb.auth.signOut();
-    // Clear local cache and set guest
     const guest = defaultGuest();
     localStorage.setItem(USER_KEY, JSON.stringify(guest));
     updateAvatarEls(guest.avatar);
@@ -693,7 +719,7 @@
     onChange
   };
 
-  window.getCurrentUser = getCurrentUser; // for backward compatibility
+  window.getCurrentUser = getCurrentUser; // backward compatibility
 
   initAuth();
 
