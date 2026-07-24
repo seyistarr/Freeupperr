@@ -48,7 +48,8 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
+    <!-- Inter: added weight 500 for counts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="global.css" />
 
     <!-- ===== SHARED NAV STYLES ===== -->
@@ -1392,12 +1393,12 @@
             fill: none;
             stroke-width: 2;
         }
-        #share-modal .share-sheet .share-repost .share-icon-circle {
-            background: linear-gradient(135deg, #7C3AED, #A855F7);
+
+        /* ─── Not Interested ─── */
+        #share-modal .share-sheet .share-notinterested .share-icon-circle {
+            background: linear-gradient(135deg, #6B7280, #9CA3AF);
         }
-        #share-modal .share-sheet .share-repost.reposted .share-icon-circle {
-            background: linear-gradient(135deg, #16A34A, #22C55E);
-        }
+
         #share-modal .share-sheet .share-copy .share-icon-circle {
             background: linear-gradient(135deg, #3B82F6, #60A5FA);
         }
@@ -1565,6 +1566,43 @@
             to {
                 transform: rotate(360deg) scale(1);
             }
+        }
+
+        /* ─── BOUNCE ANIMATIONS ─── */
+        @keyframes bounceHeart {
+            0% { transform: scale(1); }
+            30% { transform: scale(1.35); }
+            50% { transform: scale(0.92); }
+            70% { transform: scale(1.12); }
+            100% { transform: scale(1); }
+        }
+        .post-actions-row .reaction-btn.bounce-heart .heart-icon {
+            display: inline-block;
+            animation: bounceHeart .5s cubic-bezier(.17,.89,.32,1.49);
+        }
+
+        @keyframes bookmarkBounce {
+            0% { transform: translateY(0) scale(1); }
+            30% { transform: translateY(-7px) scale(1.2); }
+            50% { transform: translateY(2px) scale(0.9); }
+            70% { transform: translateY(-3px) scale(1.06); }
+            100% { transform: translateY(0) scale(1); }
+        }
+        .post-actions-row .bookmark-badge.bookmark-breathe svg {
+            display: inline-block;
+            animation: bookmarkBounce .5s cubic-bezier(.17,.89,.32,1.49);
+        }
+
+        @keyframes shareBounce {
+            0% { transform: scale(1) rotate(0deg); }
+            35% { transform: scale(1.25) rotate(-12deg); }
+            60% { transform: scale(0.95) rotate(6deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+        .post-actions-row .share-btn.share-bounce svg,
+        #single-share-btn.share-bounce svg {
+            display: inline-block;
+            animation: shareBounce .45s cubic-bezier(.17,.89,.32,1.49);
         }
 
         /* ─── RESPONSIVE TWEAKS ─── */
@@ -1735,20 +1773,26 @@
             height: 18px;
             flex-shrink: 0;
         }
+
+        /* ─── Counts: Inter + muted color ─── */
         .post-actions-row .reaction-count,
         .post-actions-row .comment-count,
         .post-actions-row .share-count,
         .post-actions-row .bookmark-count,
         .post-actions-row .repost-count-num {
-            font-weight: 600;
+            font-family: "Inter", "SF Pro Text", "Segoe UI", "Roboto", "Noto Sans", sans-serif;
+            font-weight: 500;
             font-variant-numeric: tabular-nums;
             font-size: .85rem;
+            color: var(--muted) !important;
         }
         .post-actions-row .bookmark-count {
             margin-left: 2px;
         }
         .post-actions-row .views-count span {
+            font-family: "Inter", "SF Pro Text", "Segoe UI", "Roboto", "Noto Sans", sans-serif;
             font-weight: 500;
+            color: var(--muted);
         }
 
         /* ─── REPOST BADGE HOVER / ACTIVE ─── */
@@ -2059,15 +2103,15 @@
         <img id="lightbox-img" src="" alt="full size preview" loading="lazy" />
     </div>
 
-    <!-- ===== SHARE MODAL ===== -->
+    <!-- ===== SHARE MODAL (repalced Repost with Not Interested) ===== -->
     <div id="share-modal">
         <div class="share-sheet">
             <h3>Share post</h3>
             <p class="share-sub">Choose how you'd like to share this</p>
             <div class="share-options">
-                <button class="share-option share-repost" data-share="repost" id="shareRepostBtn">
-                    <span class="share-icon-circle"><i class="ri-repeat-2-line repost-icon" style="font-size:24px;color:#fff;"></i></span>
-                    <span id="repost-label">Repost</span>
+                <button class="share-option share-notinterested" data-share="notinterested" id="shareNotInterestedBtn">
+                    <span class="share-icon-circle"><svg viewBox="0 0 24 24"><path d="M17.32 4.68A9 9 0 105.32 16.68M4.68 5.32a9 9 0 0012 12"/><line x1="3" y1="3" x2="21" y2="21"/></svg></span>
+                    <span>Not interested</span>
                 </button>
                 <button class="share-option share-copy" data-share="copy">
                     <span class="share-icon-circle"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
@@ -2342,6 +2386,8 @@
             let followerSet = new Set();
             let bookmarksSet = new Set();
             let sharesSet = new Set();
+            // ─── NEW: hidden posts (Not Interested) ───────────────────────
+            let hiddenPostsSet = new Set(JSON.parse(localStorage.getItem('freeupper_hidden_posts') || '[]'));
 
             let uiPage = 'home';
             let currentCategoryFilter = '';
@@ -3150,7 +3196,6 @@
                         if (entry.feedType !== 'repost') return true;
                         return entry.post.mediaType !== 'video';
                     });
-                    // Posts are canonical – no mutation
                     const posts = filtered.map(entry => entry.post);
                     allPosts = posts;
                     appData.posts = posts;
@@ -3568,6 +3613,7 @@
                 });
             }
 
+            // ─── FIXED: market card uses openProductModal ───────────────
             function createMarketCardHTML(item) {
                 if (!(item.id in currentImageIndexMap)) {
                     currentImageIndexMap[item.id] = 0;
@@ -3595,7 +3641,7 @@
                 sellerChip += `</div>`;
 
                 return `
-                    <div onclick="window.Router.openListing('${item.id}')" class="group cursor-pointer product-card">
+                    <div onclick="window.openProductModal('${item.id}')" class="group cursor-pointer product-card">
                         <div class="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 mb-2">
                             <img id="market-card-img-${item.id}" src="${images[activeIdx]}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
                             ${dotsHTML}
@@ -4192,6 +4238,23 @@
                     .catch(err => showToast(err.message || 'Failed to delete post', 'r'));
             }
 
+            // ─── HIDE POST (Not Interested) ──────────────────────────────
+            function hidePostFromFeed(postId) {
+                hiddenPostsSet.add(postId);
+                localStorage.setItem('freeupper_hidden_posts', JSON.stringify(Array.from(hiddenPostsSet)));
+                allPosts = allPosts.filter(p => p.id !== postId);
+                appData.posts = appData.posts.filter(p => p.id !== postId);
+                document.querySelectorAll(`article[data-post-id="${postId}"]`).forEach(el => {
+                    el.style.transition = 'opacity .25s ease, transform .25s ease';
+                    el.style.opacity = '0';
+                    el.style.transform = 'scale(.97)';
+                    setTimeout(() => el.remove(), 250);
+                });
+                if (window._currentFeedPosts) {
+                    window._currentFeedPosts = window._currentFeedPosts.filter(p => p.id !== postId);
+                }
+            }
+
             // ─── TAGS MODAL (replaces with Router.openHashtag) ───────────
             // The old tags modal is now replaced: clicking a hashtag goes to search.html?tag=...
             // via window.Router.openHashtag. The tags modal is kept for reposters sheet only.
@@ -4261,6 +4324,8 @@
             function getFilteredSortedPosts() {
                 const currentUser = getCurrentUser();
                 let p = [...allPosts];
+                // ─── FILTER OUT HIDDEN POSTS ───────────────────────────────
+                p = p.filter(post => !hiddenPostsSet.has(post.id));
                 p = p.filter(post => {
                     if (post.user_id === currentUser.id) return true;
                     const profile = post.profile || {};
@@ -4548,7 +4613,7 @@
                 renderUI(); }
 
             // ───────────────────────────────────────────────────────────────
-            // SHARE MODAL
+            // SHARE MODAL – No repost, now "Not Interested"
             // ───────────────────────────────────────────────────────────────
 
             let sharePostId = null;
@@ -4561,20 +4626,6 @@
                 const isOwner = post && cu && cu.isLoggedIn && post.user_id === cu.id;
                 const deleteBtn = document.getElementById('share-delete-btn');
                 const reportBtn = document.getElementById('share-report-btn');
-
-                const ctx = post ? getFeedContext(post.id) : null;
-                const reposted = ctx && ctx.repost && ctx.repost.items && ctx.repost.items.some(r => r.user.id === cu.id);
-                const repostBtn = modal.querySelector('.share-repost');
-                const icon = repostBtn ? repostBtn.querySelector('.repost-icon') : null;
-                if (reposted) {
-                    repostBtn.classList.add('reposted');
-                    document.getElementById('repost-label').textContent = 'Reposted';
-                    if (icon) icon.className = 'ri-repeat-fill repost-icon';
-                } else {
-                    repostBtn.classList.remove('reposted');
-                    document.getElementById('repost-label').textContent = 'Repost';
-                    if (icon) icon.className = 'ri-repeat-2-line repost-icon';
-                }
 
                 if (deleteBtn) deleteBtn.style.display = isOwner ? 'flex' : 'none';
                 if (reportBtn) reportBtn.style.display = isOwner ? 'none' : 'flex';
@@ -4595,16 +4646,11 @@
                 const url = `${window.location.origin}${window.location.pathname}?post=${sharePostId}`;
                 const title = post.title || 'FreeUpper post';
 
-                if (action === 'repost') {
-                    const btn = document.getElementById('shareRepostBtn');
-                    btn.classList.add('spinning');
-                    btn.style.pointerEvents = 'none';
-                    btn.addEventListener('animationend', () => {
-                        btn.classList.remove('spinning');
-                        btn.style.pointerEvents = '';
-                        closeShareModal();
-                        openRepostQuoteSheet(sharePostId);
-                    }, { once: true });
+                // ─── Not Interested ──────────────────────────────────────
+                if (action === 'notinterested') {
+                    hidePostFromFeed(sharePostId);
+                    closeShareModal();
+                    showToast('Post removed from your feed');
                     return;
                 }
 
@@ -4631,7 +4677,7 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // COMMENTS (post feed)
+            // COMMENTS (post feed) – with database-backed likes
             // ───────────────────────────────────────────────────────────────
 
             function getAllDescendants(pid, comments) { const r = [];
@@ -4705,16 +4751,17 @@
                     rh =
                         `<button type="button" class="view-replies-btn expand-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(ds.length)} repl${ds.length!==1?'ies':'y'}</button>`;
                 }
-                const lc = parseInt(localStorage.getItem('comment-like-' + c.id) || '0'),
-                    isL = lc > 0,
-                    il = c.message.length > 220;
+                const il = c.message.length > 220;
                 const avatarHtml = avatar ?
                     `<img src="${avatar}" alt="">` :
                     username.charAt(0).toUpperCase();
                 const avatarClass = avatar ? 'comment-avatar has-image' : 'comment-avatar';
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
-                // Use linkifyContent for comments (hashifies and linkifies)
                 const renderedMsg = linkifyContent(c.message);
+
+                // ─── likeCount from database, not localStorage ────────────
+                const likeCount = c.likeCount || 0;
+                const isLiked = !!c.likedByMe;
 
                 return `<div class="comment-item" data-comment-id="${c.id}">
                         <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
@@ -4725,9 +4772,9 @@
                           <div class="comment-meta">
                             <span class="comment-time">${formatRelativeTime(c.time)}</span>
                             <button class="comment-reply-btn" data-post-id="${postId}">Reply</button>
-                            <button class="comment-like-btn ${isL?'liked':''}" data-comment-id="${c.id}">
-                              <svg viewBox="0 0 24 24" fill="${isL?'#DC2626':'none'}" stroke="${isL?'#DC2626':'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                              <span class="like-count">${lc>0?lc:''}</span>
+                            <button class="comment-like-btn ${isLiked?'liked':''}" data-comment-id="${c.id}">
+                              <svg viewBox="0 0 24 24" fill="${isLiked?'#DC2626':'none'}" stroke="${isLiked?'#DC2626':'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                              <span class="like-count">${likeCount>0?likeCount:''}</span>
                             </button>
                           </div>
                         </div>
@@ -4740,8 +4787,6 @@
                 const avatar = author.avatar;
                 const verifiedStatus = author.verified_status;
 
-                const lc = parseInt(localStorage.getItem('comment-like-' + r.id) || '0'),
-                    isL = lc > 0;
                 const pc = allComments.find(c => c.id === r.parentId),
                     ru = pc ? (pc.profile ? pc.profile.display_name : '') : '';
                 const mn = (ru && ru !== username) ? `<span style="color:#7C3AED;font-weight:600;">@${escapeHtml(ru)}</span> ` :
@@ -4754,6 +4799,10 @@
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
                 const renderedMsg = linkifyContent(r.message);
 
+                // ─── likeCount from database ──────────────────────────────
+                const likeCount = r.likeCount || 0;
+                const isLiked = !!r.likedByMe;
+
                 return `<div class="reply-item" data-comment-id="${r.id}">
                         <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
                         <div class="reply-body">
@@ -4763,9 +4812,9 @@
                           <div class="reply-meta">
                             <span class="reply-time">${formatRelativeTime(r.time)}</span>
                             <button class="reply-reply-btn" data-post-id="${postId}">Reply</button>
-                            <button class="reply-like-btn ${isL?'liked':''}" data-comment-id="${r.id}">
-                              <svg viewBox="0 0 24 24" fill="${isL?'#DC2626':'none'}" stroke="${isL?'#DC2626':'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                              <span class="like-count">${lc>0?lc:''}</span>
+                            <button class="reply-like-btn ${isLiked?'liked':''}" data-comment-id="${r.id}">
+                              <svg viewBox="0 0 24 24" fill="${isLiked?'#DC2626':'none'}" stroke="${isLiked?'#DC2626':'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                              <span class="like-count">${likeCount>0?likeCount:''}</span>
                             </button>
                           </div>
                         </div>
@@ -4809,7 +4858,9 @@
                         mentions: mentions || [],
                         time: new Date().toISOString(),
                         approved: true,
-                        parentId: parentId || null
+                        parentId: parentId || null,
+                        likeCount: 0,
+                        likedByMe: false,
                     };
                     if (!Array.isArray(p.comments)) p.comments = [];
                     p.comments.push(comment);
@@ -4842,20 +4893,26 @@
                 if (h3) h3.textContent = formatCount(cc);
             }
 
-            function toggleCommentLikeUI(btn) {
-                const isLiked = btn.classList.toggle('liked');
-                const ci = btn.dataset.commentId;
-                if (!ci) return;
-                const key = 'comment-like-' + ci;
-                let count = parseInt(localStorage.getItem(key) || '0');
-                count = isLiked ? count + 1 : Math.max(0, count - 1);
-                if (count === 0) localStorage.removeItem(key);
-                else localStorage.setItem(key, String(count));
-                const svg = btn.querySelector('svg'),
-                    cnt = btn.querySelector('.like-count');
-                if (svg) { svg.setAttribute('fill', isLiked ? '#DC2626' : 'none');
-                    svg.setAttribute('stroke', isLiked ? '#DC2626' : 'currentColor'); }
-                if (cnt) cnt.textContent = count > 0 ? count : '';
+            // ─── NEW: database-backed comment like ──────────────────────
+            async function toggleCommentLikeUI(btn) {
+                const commentId = btn.dataset.commentId;
+                if (!commentId) return;
+
+                const wasLiked = btn.classList.contains('liked');
+                btn.classList.toggle('liked', !wasLiked);
+                const countEl = btn.querySelector('.like-count');
+                let currentCount = parseInt(countEl.textContent || '0');
+                countEl.textContent = wasLiked ? Math.max(0, currentCount - 1) : currentCount + 1;
+
+                try {
+                    const result = await window.PostsAPI.toggleCommentLike(commentId);
+                    btn.classList.toggle('liked', result.liked);
+                    countEl.textContent = result.count > 0 ? result.count : '';
+                } catch (err) {
+                    btn.classList.toggle('liked', wasLiked);
+                    countEl.textContent = wasLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
+                    showToast(err.message, 'r');
+                }
             }
 
             function toggleCommentExpand(btn, commentId) {
@@ -5061,7 +5118,8 @@
                           ${buildReactionButton(post.id)}
                           <span class="views-count">${svgEye()}<span>${formatCount(post.views||0)}</span></span>
                           <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}<span class="bookmark-count">${formatCount(post.bookmarkCount||0)}</span></span>
-                          <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}</span>
+                          <!-- ─── FIXED: share count added ─── -->
+                          <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}<span class="share-count">${formatCount(post.shareCount||0)}</span></span>
                           ${repostCountBadge(post)}
                         </div>
                         <div class="mt-5">
@@ -5227,17 +5285,19 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // EXPLORE GRID
+            // EXPLORE GRID – filter hidden posts
             // ───────────────────────────────────────────────────────────────
 
             function renderExploreGrid() {
                 const co = document.getElementById('user-content');
                 const currentUser = getCurrentUser();
-                let p = [...allPosts].filter(post => {
-                    if (post.user_id === currentUser.id) return true;
-                    const profile = post.profile || {};
-                    return !profile.is_private;
-                });
+                let p = [...allPosts]
+                    .filter(post => !hiddenPostsSet.has(post.id))
+                    .filter(post => {
+                        if (post.user_id === currentUser.id) return true;
+                        const profile = post.profile || {};
+                        return !profile.is_private;
+                    });
                 p.sort((a, b) => ((b.views || 0) + (b.reactions.like || 0)) - ((a.views || 0) + (a.reactions
                     .like || 0)));
 
@@ -5693,10 +5753,11 @@
             }
 
             // ───────────────────────────────────────────────────────────────
-            // REALTIME
+            // REALTIME – full sync with subscribeToAll
             // ───────────────────────────────────────────────────────────────
 
             function setupRealtime() {
+                // ─── LEGACY subscribe (repost-only) ──────────────────────
                 if (window.PostsAPI && window.PostsAPI.subscribe) {
                     window.PostsAPI.subscribe((payload) => {
                         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -5705,6 +5766,19 @@
                                     renderUI();
                                 }
                             });
+                        }
+                    });
+                }
+
+                // ─── NEW: subscribeToAll for full real-time sync ──────────
+                if (window.PostsAPI && window.PostsAPI.subscribeToAll) {
+                    window.PostsAPI.subscribeToAll(async (change) => {
+                        // Simple: reload everything on any change
+                        // This keeps all counters (likes, reposts, shares, bookmarks, views) live
+                        await reloadData();
+                        // Re-render only if we're on home, explore, or single-post view
+                        if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'single-post-explore') {
+                            renderUI();
                         }
                     });
                 }
