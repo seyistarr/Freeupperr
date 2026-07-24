@@ -187,6 +187,78 @@
         [data-theme="light"] .theme-toggle-btn .icon-sun { opacity: 0; transform: rotate(40deg) scale(0.6); }
         [data-theme="light"] .theme-toggle-btn .icon-moon { opacity: 1; transform: rotate(0) scale(1); }
 
+        /* ─── MORE OVERLAY ──────────────────────────────────────────── */
+        .more-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.25s, visibility 0.25s;
+        }
+        .more-overlay.open {
+            visibility: visible;
+            opacity: 1;
+        }
+        .more-sheet {
+            width: 100%;
+            max-width: 480px;
+            background: var(--surface);
+            border-radius: 24px 24px 0 0;
+            padding: 16px 20px calc(30px + env(safe-area-inset-bottom));
+            transform: translateY(40px);
+            transition: transform 0.34s cubic-bezier(0.32, 1, 0.64, 1);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .more-overlay.open .more-sheet {
+            transform: translateY(0);
+        }
+        .more-sheet .handle {
+            width: 40px;
+            height: 4px;
+            border-radius: 100px;
+            background: var(--border2);
+            margin: 0 auto 16px;
+        }
+        .more-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 12px;
+            border-radius: var(--radius-sm);
+            background: none;
+            border: none;
+            width: 100%;
+            color: var(--text);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .more-item:hover {
+            background: var(--surface2);
+        }
+        .more-item svg {
+            width: 22px;
+            height: 22px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            flex-shrink: 0;
+        }
+        .more-item.danger {
+            color: var(--danger);
+            border: 1.5px solid var(--danger);
+            justify-content: center;
+            margin-top: 10px;
+        }
+
         /* ─── CARDS & COMMON ───────────────────────────────────────── */
         .card, .thumb-row, .category-group, .stat-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
         .card:active, .thumb-row:active { transform: scale(0.985); }
@@ -1290,7 +1362,7 @@
                 <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
                 <span>Listings</span>
             </button>
-            <button class="nav-item" data-tab="more">
+            <button class="nav-item" data-tab="more" onclick="window.openMore()">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
                 <span>More</span>
             </button>
@@ -1738,6 +1810,15 @@
                 moreOverlay.classList.remove('open');
             }
 
+            // Expose for inline onclick
+            window.openMore = openMore;
+            window.closeMore = closeMore;
+
+            // Backdrop click
+            moreOverlay.addEventListener('click', function(e) {
+                if (e.target === this) closeMore();
+            });
+
             document.querySelectorAll('.more-item').forEach(item => {
                 item.addEventListener('click', function() {
                     const action = this.dataset.action;
@@ -1768,10 +1849,6 @@
                             break;
                     }
                 });
-            });
-
-            moreOverlay.addEventListener('click', function(e) {
-                if (e.target === this) closeMore();
             });
 
             // ─── NAVIGATION ────────────────────────────────────────────────────
@@ -3299,6 +3376,8 @@
             window.deleteSubcategory = deleteSubcategory;
             window.toggleSubcategoryActive = toggleSubcategoryActive;
             window.moveSubcategory = moveSubcategory;
+            window.openMore = openMore;
+            window.closeMore = closeMore;
 
             // ─── INIT ──────────────────────────────────────────────────────────
             async function init() {
