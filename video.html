@@ -4031,6 +4031,26 @@
 
         // ─── SHARE SHEET ────────────────────────────────────────────
 
+        /**
+         * Record a share for a video post – calls the atomic insert‑only RPC.
+         * Updates the share count in the videoPosts array and the UI.
+         */
+        function recordShareForPost(idx) {
+            const v = videoPosts[idx];
+            if (!v) return;
+            // Don't record if user is not logged in – the RPC will fail anyway, but we catch it.
+            const user = getCurrentUser();
+            if (!user || !user.isLoggedIn) return;
+
+            window.PostsAPI.recordShare(v.id)
+                .then(({ count }) => {
+                    v.shares = count;
+                    const lbl = document.getElementById('shareCount-' + idx);
+                    if (lbl) lbl.textContent = fmtNum(count);
+                })
+                .catch(err => console.warn('recordShare failed:', err));
+        }
+
         function openShare(idx) {
             _shareIdx = idx;
             const v = videoPosts[idx];
@@ -4062,6 +4082,13 @@
             const title = getPostTitle(idx);
             const text = title + ' — ' + url;
             if (navigator.vibrate) navigator.vibrate(8);
+
+            // Record the share for all actual sharing actions (except repost, quote, download)
+            const shareTypes = ['native', 'copy', 'whatsapp', 'twitter', 'telegram', 'facebook', 'instagram'];
+            if (shareTypes.includes(type)) {
+                recordShareForPost(idx);
+            }
+
             switch (type) {
                 case 'native':
                     try { await navigator.share({ title, text: title, url }); } catch (e) { return; }
@@ -4432,6 +4459,7 @@
         window.imgDragStart = imgDragStart;
         window.openRepostersSheet = openRepostersSheet;
         window.showComingSoonUpload = showComingSoonUpload;
+        window.recordShareForPost = recordShareForPost; // exposed for debugging
     </script>
 </body>
 </html>
