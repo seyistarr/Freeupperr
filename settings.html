@@ -2848,23 +2848,18 @@
                     if (error) throw error;
                     if (!data) return;
 
-                    // Private Account
                     var priv = document.getElementById('privToggle');
                     if (priv) priv.checked = !!data.is_private;
 
-                    // Hide Follower Count
                     var hideCount = document.getElementById('hideCountTog');
                     if (hideCount) hideCount.checked = !!data.hide_follower_count;
 
-                    // Activity Status
                     var activity = document.getElementById('activityTog');
                     if (activity) activity.checked = !!data.activity_status;
 
-                    // Show in Suggestions
                     var suggest = document.getElementById('suggestTog');
-                    if (suggest) suggest.checked = data.show_in_suggestions !== false; // default true
+                    if (suggest) suggest.checked = data.show_in_suggestions !== false;
 
-                    // Hidden tabs – update subtitle
                     var hiddenTabs = data.hidden_tabs || [];
                     var sub = document.getElementById('hiddenTabsSub');
                     if (sub) {
@@ -2933,36 +2928,40 @@
             var _hiddenTabs = [];
 
             window.openTabVisibilityModal = function() {
-                // Load current hidden tabs from profile
                 var user = getCurrentUser();
-                if (user) {
-                    // We already have them from init, but we can fetch again for freshness
-                    sb.from('profiles')
-                        .select('hidden_tabs')
-                        .eq('id', user.id)
-                        .single()
-                        .then(function(res) {
-                            if (!res.error && res.data) {
-                                _hiddenTabs = res.data.hidden_tabs || [];
-                                renderTabVisList();
-                            }
-                        }).catch(function() {
-                            _hiddenTabs = [];
-                            renderTabVisList();
-                        });
-                } else {
-                    _hiddenTabs = [];
-                    renderTabVisList();
+                if (!user) {
+                    showToast('Please sign in to manage tabs', 'o');
+                    return;
                 }
-                openFS('tabVisibilityModal');
+                sb.from('profiles')
+                    .select('hidden_tabs')
+                    .eq('id', user.id)
+                    .single()
+                    .then(function(res) {
+                        if (!res.error && res.data) {
+                            _hiddenTabs = res.data.hidden_tabs || [];
+                        } else {
+                            _hiddenTabs = [];
+                        }
+                        renderTabVisList();
+                        openFS('tabVisibilityModal');
+                    })
+                    .catch(function() {
+                        _hiddenTabs = [];
+                        renderTabVisList();
+                        openFS('tabVisibilityModal');
+                    });
             };
 
             function renderTabVisList() {
                 var el = document.getElementById('tabVisList');
-                if (!el) return;
+                if (!el) {
+                    console.error('tabVisList element not found');
+                    return;
+                }
                 el.innerHTML = TAB_DEFS.map(function(t) {
                     var hidden = _hiddenTabs.indexOf(t.key) !== -1;
-                    return '<div class="tab-vis-item" onclick="event.stopPropagation()">' +
+                    return '<div class="tab-vis-item">' +
                         '<div class="r-icon">' + t.icon + '</div>' +
                         '<div class="r-text"><div class="r-title">' + t.label +
                         '</div><div class="r-sub">' + (hidden ? 'Hidden from others' : 'Visible to others') +
@@ -2989,7 +2988,6 @@
                     showToast('Tab visibility updated', 'g');
                 } catch (err) {
                     showToast(err.message, 'r');
-                    // Revert UI
                     renderTabVisList();
                 }
             };
