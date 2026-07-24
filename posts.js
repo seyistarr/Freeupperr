@@ -1,5 +1,5 @@
 // =====================================================================
-// posts.js – FreeUpper v2.1 – Full Real‑time Social Feed
+// posts.js – FreeUpper v2.3 – Fully Atomic Social Feed
 // =====================================================================
 //
 // This module provides a unified API for all social interactions.
@@ -10,12 +10,22 @@
 //   - CRUD for posts, comments (with nested replies via parent_id)
 //   - Post likes, comment likes (including replies)
 //   - Reposts (with optional comment)
-//   - Bookmarks, Shares
+//   - Bookmarks, Shares (insert‑only, never decrements)
 //   - View counter
 //   - Real‑time subscription for ALL tables (posts, comments, post_likes,
 //     comment_likes, reposts, bookmarks, shares)
 //
-// All counters are denormalised and updated via direct SQL updates.
+// All counters are denormalised and updated via **atomic RPC functions**
+// that do the insert/delete and count update in a single database transaction.
+// Unique constraints on junction tables prevent duplicate rows.
+//
+// DEPENDENCIES: The following SQL functions must exist in your Supabase schema:
+//   toggle_post_like(uuid, uuid)
+//   toggle_comment_like(uuid, uuid)
+//   toggle_repost(uuid, uuid, text)
+//   toggle_bookmark(uuid, uuid)
+//   record_share(uuid, uuid)
+//   increment_comment_count(uuid)  – already used in addComment
 // =====================================================================
 
 (function() {
@@ -445,7 +455,7 @@
 
     if (error) throw error;
 
-    // Increment comment_count on posts
+    // Increment comment_count on posts – atomic RPC
     await sb.rpc('increment_comment_count', { p_post_id: postId })
       .catch(err => console.warn('Could not increment comment count:', err));
 
@@ -463,135 +473,51 @@
     };
   }
 
-  // ─── POST LIKES (Love reactions) ──────────────────────────────────
+  // ─── POST LIKES – ATOMIC SINGLE RPC ──────────────────────────────────
   async function toggleLike(postId) {
     const userId = await _getUserId();
-
-    const { data: existing } = await sb
-      .from('post_likes')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('post_id', postId)
-      .maybeSingle();
-
-    let liked = false;
-    if (existing) {
-      await sb
-        .from('post_likes')
-        .delete()
-        .eq('user_id', userId)
-        .eq('post_id', postId);
-      liked = false;
-    } else {
-      await sb
-        .from('post_likes')
-        .insert({ user_id: userId, post_id: postId });
-      liked = true;
-    }
-
-    const { data: post } = await sb
-      .from('posts')
-      .select('like_count')
-      .eq('id', postId)
-      .single();
-
-    const newCount = Math.max(0, (post?.like_count || 0) + (liked ? 1 : -1));
-    await sb
-      .from('posts')
-      .update({ like_count: newCount })
-      .eq('id', postId);
-
-    return { liked, count: newCount };
+    const { data, error } = await sb.rpc('toggle_post_like', {
+      p_post_id: postId,
+      p_user_id: userId,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return { liked: row.liked, count: row.count };
   }
 
-  // ─── COMMENT LIKES (including nested replies) ─────────────────────
+  // ─── COMMENT LIKES – ATOMIC SINGLE RPC ─────────────────────────────
   async function toggleCommentLike(commentId) {
     const userId = await _getUserId();
-
-    const { data: existing } = await sb
-      .from('comment_likes')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('comment_id', commentId)
-      .maybeSingle();
-
-    let liked = false;
-    if (existing) {
-      await sb
-        .from('comment_likes')
-        .delete()
-        .eq('user_id', userId)
-        .eq('comment_id', commentId);
-      liked = false;
-    } else {
-      await sb
-        .from('comment_likes')
-        .insert({ user_id: userId, comment_id: commentId });
-      liked = true;
-    }
-
-    const { data: comment } = await sb
-      .from('comments')
-      .select('like_count')
-      .eq('id', commentId)
-      .single();
-
-    const newCount = Math.max(0, (comment?.like_count || 0) + (liked ? 1 : -1));
-    await sb
-      .from('comments')
-      .update({ like_count: newCount })
-      .eq('id', commentId);
-
-    return { liked, count: newCount };
+    const { data, error } = await sb.rpc('toggle_comment_like', {
+      p_comment_id: commentId,
+      p_user_id: userId,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return { liked: row.liked, count: row.count };
   }
 
-  // ─── REPOSTS ──────────────────────────────────────────────────────
+  // ─── REPOSTS – ATOMIC SINGLE RPC ──────────────────────────────────
   async function toggleRepostAPI(postId, comment = '') {
     const userId = await _getUserId();
-
-    const { data: existing } = await sb
-      .from('reposts')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('post_id', postId)
-      .maybeSingle();
-
-    let reposted = false;
-    if (existing) {
-      await sb
-        .from('reposts')
-        .delete()
-        .eq('user_id', userId)
-        .eq('post_id', postId);
-      reposted = false;
-    } else {
-      await sb
-        .from('reposts')
-        .insert({ user_id: userId, post_id: postId, comment: comment || '' });
-      reposted = true;
-    }
-
-    const { data: post } = await sb
-      .from('posts')
-      .select('repost_count')
-      .eq('id', postId)
-      .single();
-
-    const newCount = Math.max(0, (post?.repost_count || 0) + (reposted ? 1 : -1));
-    await sb
-      .from('posts')
-      .update({ repost_count: newCount })
-      .eq('id', postId);
+    const { data, error } = await sb.rpc('toggle_repost', {
+      p_post_id: postId,
+      p_user_id: userId,
+      p_comment: comment || '',
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
 
     clearFeedContext();
     return {
-      reposted,
-      count: newCount,
-      comment: comment || '',
-      time: new Date().toISOString(),
+      reposted: row.reposted,
+      count: row.count,
+      comment: row.out_comment || '',
+      time: row.out_time,
     };
   }
 
+  // ─── UPDATE REPOST COMMENT (no count change) ──────────────────────
   async function updateRepostComment(postId, comment) {
     const userId = await _getUserId();
     const { data, error } = await sb
@@ -604,6 +530,7 @@
 
     if (error) throw error;
 
+    // We don't change the count, just fetch current for return value
     const { data: post } = await sb
       .from('posts')
       .select('repost_count')
@@ -619,86 +546,28 @@
     };
   }
 
-  // ─── BOOKMARKS ────────────────────────────────────────────────────
+  // ─── BOOKMARKS – ATOMIC SINGLE RPC ──────────────────────────────────
   async function toggleBookmark(postId) {
     const userId = await _getUserId();
-
-    const { data: existing } = await sb
-      .from('bookmarks')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('post_id', postId)
-      .maybeSingle();
-
-    let bookmarked = false;
-    if (existing) {
-      await sb
-        .from('bookmarks')
-        .delete()
-        .eq('user_id', userId)
-        .eq('post_id', postId);
-      bookmarked = false;
-    } else {
-      await sb
-        .from('bookmarks')
-        .insert({ user_id: userId, post_id: postId });
-      bookmarked = true;
-    }
-
-    const { data: post } = await sb
-      .from('posts')
-      .select('bookmark_count')
-      .eq('id', postId)
-      .single();
-
-    const newCount = Math.max(0, (post?.bookmark_count || 0) + (bookmarked ? 1 : -1));
-    await sb
-      .from('posts')
-      .update({ bookmark_count: newCount })
-      .eq('id', postId);
-
-    return { bookmarked, count: newCount };
+    const { data, error } = await sb.rpc('toggle_bookmark', {
+      p_post_id: postId,
+      p_user_id: userId,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return { bookmarked: row.bookmarked, count: row.count };
   }
 
-  // ─── SHARES ────────────────────────────────────────────────────────
-  async function toggleShare(postId) {
+  // ─── SHARES – INSERT‑ONLY (never decrements) ──────────────────────
+  async function recordShare(postId) {
     const userId = await _getUserId();
-
-    const { data: existing } = await sb
-      .from('shares')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('post_id', postId)
-      .maybeSingle();
-
-    let shared = false;
-    if (existing) {
-      await sb
-        .from('shares')
-        .delete()
-        .eq('user_id', userId)
-        .eq('post_id', postId);
-      shared = false;
-    } else {
-      await sb
-        .from('shares')
-        .insert({ user_id: userId, post_id: postId });
-      shared = true;
-    }
-
-    const { data: post } = await sb
-      .from('posts')
-      .select('share_count')
-      .eq('id', postId)
-      .single();
-
-    const newCount = Math.max(0, (post?.share_count || 0) + (shared ? 1 : -1));
-    await sb
-      .from('posts')
-      .update({ share_count: newCount })
-      .eq('id', postId);
-
-    return { shared, count: newCount };
+    const { data, error } = await sb.rpc('record_share', {
+      p_post_id: postId,
+      p_user_id: userId,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return { alreadyShared: row.already_shared, count: row.count };
   }
 
   // ─── VIEWS ─────────────────────────────────────────────────────────
@@ -923,7 +792,7 @@
     toggleRepostAPI,
     updateRepostComment,
     toggleBookmark,
-    toggleShare,
+    recordShare,          // insert‑only (was toggleShare)
     incrementView,
     reportPost,
 
