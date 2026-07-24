@@ -240,6 +240,7 @@
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
+            transition: background 0.15s;
         }
         .more-item:hover {
             background: var(--surface2);
@@ -3274,25 +3275,46 @@
                 }
             };
 
-            // ─── DELETE POST / LISTING ───────────────────────────────────────
+            // ─── FIXED DELETE POST ───────────────────────────────────────────
             window.deletePost = async function(postId) {
                 if (!confirm('Delete this post permanently?')) return;
                 try {
+                    // Fetch the post to get media info – use columns that actually exist
                     const { data: post, error: fetchError } = await sb
                         .from('posts')
-                        .select('image_public_id, video_public_id, image_url, video_url, media_type')
+                        .select('media, media_url, media_type, image_public_id, video_public_id')
                         .eq('id', postId)
                         .single();
                     if (fetchError) throw fetchError;
+
+                    // Delete the post
                     const { data, error } = await sb.from('posts').delete().eq('id', postId).select();
                     if (error) throw error;
                     if (!data?.length) throw new Error('Delete blocked – check RLS.');
+
+                    // Extract any public IDs from the media array or media_url
                     let imagePublicId = post?.image_public_id;
-                    if (!imagePublicId && post?.image_url) imagePublicId = extractPublicIdFromUrl(post.image_url);
-                    if (imagePublicId) await deleteCloudinaryMedia(imagePublicId, post?.media_type || 'image');
                     let videoPublicId = post?.video_public_id;
-                    if (!videoPublicId && post?.video_url) videoPublicId = extractPublicIdFromUrl(post.video_url);
+
+                    // If we have a media array, look for public_id in each item
+                    if (post?.media && Array.isArray(post.media)) {
+                        for (const item of post.media) {
+                            if (item.public_id) {
+                                if (item.type === 'video') videoPublicId = item.public_id;
+                                else imagePublicId = item.public_id;
+                            }
+                        }
+                    }
+
+                    // Fallback: if media_url exists and no public_id found, try to extract from URL
+                    if (!imagePublicId && post?.media_url) {
+                        imagePublicId = extractPublicIdFromUrl(post.media_url);
+                    }
+
+                    // Delete from Cloudinary
+                    if (imagePublicId) await deleteCloudinaryMedia(imagePublicId, 'image');
                     if (videoPublicId) await deleteCloudinaryMedia(videoPublicId, 'video');
+
                     showToast('🗑️ Post deleted', 'o');
                     await loadData();
                 } catch (err) {
@@ -3300,24 +3322,43 @@
                 }
             };
 
+            // ─── FIXED DELETE LISTING ─────────────────────────────────────────
             window.deleteListing = async function(itemId) {
                 if (!confirm('Delete this listing permanently?')) return;
                 try {
+                    // Fetch the listing – use columns that exist
                     const { data: item, error: fetchError } = await sb
                         .from('market_items')
-                        .select('image_public_id, video_public_id, image_url, video_url, media_type')
+                        .select('images, image_url, video_url, media_type, image_public_id, video_public_id')
                         .eq('id', itemId)
                         .single();
                     if (fetchError) throw fetchError;
+
+                    // Delete the listing
                     const { data, error } = await sb.from('market_items').delete().eq('id', itemId).select();
                     if (error) throw error;
                     if (!data?.length) throw new Error('Delete blocked – check RLS.');
+
                     let imagePublicId = item?.image_public_id;
-                    if (!imagePublicId && item?.image_url) imagePublicId = extractPublicIdFromUrl(item.image_url);
-                    if (imagePublicId) await deleteCloudinaryMedia(imagePublicId, item?.media_type || 'image');
                     let videoPublicId = item?.video_public_id;
-                    if (!videoPublicId && item?.video_url) videoPublicId = extractPublicIdFromUrl(item.video_url);
+
+                    // If images is an array, look for public_id in each
+                    if (item?.images && Array.isArray(item.images)) {
+                        for (const img of item.images) {
+                            if (img.public_id) imagePublicId = img.public_id;
+                        }
+                    }
+
+                    if (!imagePublicId && item?.image_url) {
+                        imagePublicId = extractPublicIdFromUrl(item.image_url);
+                    }
+                    if (!videoPublicId && item?.video_url) {
+                        videoPublicId = extractPublicIdFromUrl(item.video_url);
+                    }
+
+                    if (imagePublicId) await deleteCloudinaryMedia(imagePublicId, item?.media_type || 'image');
                     if (videoPublicId) await deleteCloudinaryMedia(videoPublicId, 'video');
+
                     showToast('🗑️ Listing deleted', 'o');
                     await loadData();
                 } catch (err) {
