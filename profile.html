@@ -15,7 +15,7 @@
 
     <style>
         /* ============================================================
-           PROFILE-SPECIFIC STYLES (with square grid cards)
+           PROFILE-SPECIFIC STYLES (with fixes)
            ============================================================ */
         *, *::before, *::after {
             box-sizing: border-box;
@@ -134,6 +134,10 @@
             font-size: clamp(16px, 4vw, 18px);
             font-weight: 800;
             letter-spacing: -.3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 160px;
         }
         .header-actions {
             display: flex;
@@ -278,6 +282,10 @@
             font-size: clamp(18px, 5vw, 23px);
             font-weight: 800;
             letter-spacing: -.4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 220px;
         }
         .edit-pen {
             width: 32px;
@@ -308,13 +316,22 @@
         }
 
         .hero-bio {
-            font-size: clamp(12px, 3vw, 13.5px);
-            color: var(--muted);
+            font-size: clamp(14px, 3.2vw, 15px);
+            color: var(--text);
             text-align: center;
             line-height: 1.6;
-            max-width: 300px;
+            max-width: 340px;
             margin-bottom: 18px;
             white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .hero-bio a {
+            color: var(--p);
+            text-decoration: underline;
+            font-weight: 600;
+        }
+        .hero-bio a:active {
+            opacity: .7;
         }
 
         .action-row {
@@ -1920,6 +1937,12 @@
         .mc-desc strong {
             color: var(--pl);
             font-weight: 800;
+            display: inline-block;
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: bottom;
         }
         .mc-close-row {
             display: flex;
@@ -2405,7 +2428,7 @@
     <script src="auth.js"></script>
     <script src="posts.js"></script>
     <script src="listings.js"></script>
-    <script src="settings.js"></script> <!-- ✅ ADDED: required for block/unblock -->
+    <script src="settings.js"></script>
     <script src="bottom-nav.js" defer></script>
     <script src="side-nav.js" defer></script>
 
@@ -2438,6 +2461,17 @@
                 return isNaN(n) ? 0 : n;
             }
             function formatPrice(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+            // ─── LINKIFY BIO ─────────────────────────────────
+            function linkifyBio(text) {
+                if (!text) return '';
+                var html = escapeHtml(text);
+                // Convert URLs to clickable links
+                html = html.replace(/(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g, function(match) {
+                    return '<a href="' + match + '" target="_blank" rel="noopener noreferrer">' + match + '</a>';
+                });
+                return html;
+            }
 
             // ─── STATE ──────────────────────────────────────────
             var targetUserId = null;
@@ -2743,7 +2777,6 @@
 
                     var counts = await fetchFollowCounts(targetId);
 
-                    // ★★★ FETCH USER POSTS DIRECTLY ★★★
                     var userPosts = await window.PostsAPI.loadPostsByUserId(targetId);
                     _profileUserPosts = userPosts;
 
@@ -2798,7 +2831,8 @@
                 document.getElementById('qrHandle').textContent = '@' + (profile.username || 'user');
 
                 var bioEl = document.getElementById('heroBio');
-                bioEl.textContent = profile.bio || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
+                // Use linkifyBio for clickable links
+                bioEl.innerHTML = linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
 
                 var tags = profile.tags || [];
                 document.getElementById('roleTags').innerHTML = tags.map(function(t) {
