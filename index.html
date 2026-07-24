@@ -4639,6 +4639,7 @@
                 sharePostId = null;
             }
 
+            // ─── FIX #2: Wire share counting into handleShareAction ──────
             function handleShareAction(action) {
                 if (!sharePostId) return;
                 const post = allPosts.find(p => p.id === sharePostId);
@@ -4654,7 +4655,23 @@
                     return;
                 }
 
+                // ─── Record the share (insert‑only) ──────────────────────
+                function recordShareForPost() {
+                    const user = getCurrentUser();
+                    if (!user || !user.isLoggedIn) return;
+                    if (window.PostsAPI && window.PostsAPI.recordShare) {
+                        window.PostsAPI.recordShare(sharePostId).then(({ count }) => {
+                            post.shareCount = count;
+                            document.querySelectorAll(`[data-share-post="${sharePostId}"] .share-count`)
+                                .forEach(el => el.textContent = formatCount(count));
+                            document.querySelectorAll(`#single-share-btn .share-count`)
+                                .forEach(el => el.textContent = formatCount(count));
+                        }).catch(err => console.warn('recordShare failed:', err));
+                    }
+                }
+
                 if (action === 'copy') {
+                    recordShareForPost();
                     copyTextToClipboard(url).then(() => {
                         showToast('Link copied to clipboard 📋');
                         closeShareModal();
@@ -4666,6 +4683,7 @@
                 }
 
                 if (action === 'native') {
+                    recordShareForPost();
                     if (navigator.share) {
                         navigator.share({ title, text: title, url }).catch(() => {});
                     } else {
@@ -5118,7 +5136,6 @@
                           ${buildReactionButton(post.id)}
                           <span class="views-count">${svgEye()}<span>${formatCount(post.views||0)}</span></span>
                           <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}<span class="bookmark-count">${formatCount(post.bookmarkCount||0)}</span></span>
-                          <!-- ─── FIXED: share count added ─── -->
                           <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}<span class="share-count">${formatCount(post.shareCount||0)}</span></span>
                           ${repostCountBadge(post)}
                         </div>
@@ -5238,6 +5255,7 @@
                 }, 400);
             }
 
+            // ─── FIX #1: Bookmark crash in setupExploreEventDelegation ──
             function setupExploreEventDelegation(container, postId) {
                 container.addEventListener('click', function(e) {
                     const t = e.target;
@@ -5251,16 +5269,20 @@
                     }
                     if (t.closest('.bookmark-badge')) {
                         const btn = t.closest('.bookmark-badge');
+                        // ─── FIX: define post before using it ───
+                        const post = allPosts.find(p => p.id === postId);
                         toggleBookmark(postId).then(nb => {
+                            if (post) post.bookmarkCount = Math.max(0, (post.bookmarkCount || 0) + (nb ? 1 : -1));
                             btn.classList.toggle('bookmarked', nb);
                             btn.innerHTML = bookmarkIcon(nb) +
-                                `<span class="bookmark-count">${formatCount(post?post.bookmarkCount:0)}</span>`;
+                                `<span class="bookmark-count">${formatCount(post ? post.bookmarkCount : 0)}</span>`;
                             btn.classList.add('bookmark-breathe');
                             setTimeout(() => btn.classList.remove('bookmark-breathe'), 400);
                             document.querySelectorAll(`article[data-post-id="${postId}"] .bookmark-badge`)
-                                .forEach(el => { el.classList.toggle('bookmarked', nb);
+                                .forEach(el => {
+                                    el.classList.toggle('bookmarked', nb);
                                     el.innerHTML = bookmarkIcon(nb) +
-                                        `<span class="bookmark-count">${formatCount(post?post.bookmarkCount:0)}</span>`;
+                                        `<span class="bookmark-count">${formatCount(post ? post.bookmarkCount : 0)}</span>`;
                                 });
                             showToast(nb ? 'Saved' : 'Removed from saved');
                         });
@@ -5482,6 +5504,7 @@
                     `;
             }
 
+            // ─── FIX #3: single-post-explore branch in renderUI ──────────
             function renderUI() {
                 const co = document.getElementById('user-content');
                 if (!co) return;
@@ -5515,6 +5538,32 @@
                         }
                     });
                     setTimeout(() => window.scrollTo(0, tabScrollPositions.market || 0), 80);
+                    return;
+                }
+
+                // ─── Single-post fullscreen view ────────────────────────
+                if (uiPage === 'single-post-explore') {
+                    // Don't rebuild the whole feed; just refresh the open post's counts/comments
+                    if (currentPostId) {
+                        const post = allPosts.find(p => p.id === currentPostId);
+                        if (post) {
+                            // Update like count
+                            document.querySelectorAll(`[data-post-reactions="${currentPostId}"] .reaction-count`)
+                                .forEach(el => el.textContent = formatCount(post.reactions ? post.reactions.like || 0 : 0));
+                            // Update bookmark count
+                            document.querySelectorAll(`#single-bookmark-${currentPostId} .bookmark-count`)
+                                .forEach(el => el.textContent = formatCount(post.bookmarkCount || 0));
+                            // Update share count
+                            document.querySelectorAll(`#single-share-btn .share-count`)
+                                .forEach(el => el.textContent = formatCount(post.shareCount || 0));
+                            // Update repost count
+                            document.querySelectorAll(`[data-post-id="${currentPostId}"] .repost-count-num`)
+                                .forEach(el => el.textContent = formatCount(post.repostCount || 0));
+                            // Refresh comments
+                            refreshCommentsList(currentPostId, 'comments-list');
+                            updateCommentCount(currentPostId);
+                        }
+                    }
                     return;
                 }
 
