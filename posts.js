@@ -27,10 +27,12 @@
 //   record_share(uuid, uuid)
 //   increment_comment_count(uuid)  – already used in addComment
 //
-// NEW (v2.3.1):
-//   - Added is_hidden field to posts (boolean, default false)
-//     → Used in index.html to let owners hide/unhide posts from their feed.
-//   - Ensure your posts table has this column:
+// NEW in v2.3.1:
+//   - Added `is_hidden` column to posts (boolean, default false)
+//   - Mapped in mapPost() so it's available in all post objects
+//   - Added toggleHidePost() method to update the column
+//   - This supports the "Hide Post" feature in the share modal (owner-only)
+//   - REQUIRED DATABASE MIGRATION:
 //       ALTER TABLE posts ADD COLUMN is_hidden BOOLEAN DEFAULT false;
 // =====================================================================
 
@@ -92,7 +94,7 @@
       myRepost: !!myRepost,
       myRepostText: myRepost ? (myRepost.comment || '') : '',
       myRepostTime: myRepost ? myRepost.created_at : null,
-      // ─── NEW: is_hidden (required for hide/unhide feature) ──────────
+      // ─── NEW: is_hidden (used for hiding posts from feed) ──────────
       is_hidden: row.is_hidden || false,
       profile: profile ? {
         id: profile.id,
@@ -593,6 +595,21 @@
     }
   }
 
+  // ─── TOGGLE HIDE POST ─────────────────────────────────────────────
+  async function toggleHidePost(postId, hidden) {
+    const userId = await _getUserId(); // ensures authenticated
+    const { data, error } = await sb
+      .from('posts')
+      .update({ is_hidden: hidden })
+      .eq('id', postId)
+      .eq('user_id', userId) // security: only owner can toggle
+      .select('is_hidden')
+      .single();
+
+    if (error) throw error;
+    return { is_hidden: data.is_hidden };
+  }
+
   // ─── POST PREVIEW ──────────────────────────────────────────────────
   async function loadPostPreview(postId) {
     const { data, error } = await sb
@@ -639,7 +656,7 @@
       media_url: fields.mediaUrl || null,
       media_type: fields.mediaType || null,
       mentions: fields.mentions || [],
-      // is_hidden defaults to false, no need to set it here
+      // is_hidden defaults to false; no need to set explicitly
     };
 
     if (fields.media && fields.media.length > 0) {
@@ -797,17 +814,20 @@
 
     // Interactions – all database‑backed
     toggleLike,
-    toggleCommentLike,   // works for any comment (incl. replies)
+    toggleCommentLike,
     toggleRepostAPI,
     updateRepostComment,
     toggleBookmark,
-    recordShare,          // insert‑only (was toggleShare)
+    recordShare,
     incrementView,
     reportPost,
 
+    // ─── NEW: hide/unhide post ──────────────────────────────────────
+    toggleHidePost,
+
     // Real‑time
-    subscribe,           // legacy repost‑only
-    subscribeToAll,      // full live sync for all tables
+    subscribe,
+    subscribeToAll,
     unsubscribe,
   };
 
