@@ -89,6 +89,9 @@
             overflow: hidden;
         }
 
+        .stat.locked { pointer-events: none; }
+        .profile-tabs.frozen-tabs { pointer-events: none; opacity: .45; }
+
         .layout {
             display: flex;
             height: 100vh;
@@ -503,7 +506,7 @@
             overflow: hidden;
             background: var(--bg4);
             cursor: pointer;
-            aspect-ratio: 1 / 1; /* SQUARE CARDS */
+            aspect-ratio: 1 / 1;
             transition: transform .18s ease;
             border: 1px solid var(--brd);
         }
@@ -584,36 +587,6 @@
             align-items: center;
             gap: 3px;
             z-index: 2;
-        }
-        .grid-card .delete-btn,
-        .grid-card .remove-btn {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            border: none;
-            color: #fff;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 5;
-            transition: background .15s;
-        }
-        .grid-card .delete-btn { background: rgba(220, 38, 38, .85); }
-        .grid-card .delete-btn:hover { background: rgba(220, 38, 38, 1); }
-        .grid-card .remove-btn { background: rgba(0, 0, 0, .7); }
-        .grid-card .remove-btn:hover { background: rgba(220, 38, 38, .8); }
-        .grid-card .delete-btn svg,
-        .grid-card .remove-btn svg {
-            width: 14px;
-            height: 14px;
-            stroke: currentColor;
-            fill: none;
-            stroke-width: 2.5;
-            stroke-linecap: round;
         }
         .grid-card .no-media {
             width: 100%;
@@ -2100,6 +2073,7 @@
             <div class="dlg-btns" style="flex-direction:column;gap:10px">
                 <button class="dlg-cancel" onclick="pinPostAction()">📌 Pin to Top</button>
                 <button class="dlg-cancel" onclick="lockPostAction()">🔒 <span id="lockActionLbl">Lock Comments</span></button>
+                <button class="dlg-cancel" onclick="hidePostAction()">👁️‍🗨️ <span id="hideActionLbl">Hide Post</span></button>
                 <button class="dlg-danger" style="opacity:1" onclick="deletePost(window._activePostId)">🗑 Delete Post</button>
                 <button class="dlg-cancel" onclick="closeMov('postActionsSheet')">Cancel</button>
             </div>
@@ -2461,12 +2435,12 @@
                 return isNaN(n) ? 0 : n;
             }
             function formatPrice(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+            function truncateName(name, max) { max = max || 14; name = name || ''; return name.length > max ? name.slice(0, max) + '…' : name; }
 
             // ─── LINKIFY BIO ─────────────────────────────────
             function linkifyBio(text) {
                 if (!text) return '';
                 var html = escapeHtml(text);
-                // Convert URLs to clickable links
                 html = html.replace(/(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g, function(match) {
                     return '<a href="' + match + '" target="_blank" rel="noopener noreferrer">' + match + '</a>';
                 });
@@ -2583,6 +2557,14 @@
                 };
             }
 
+            async function didUserBlockMe(targetId, viewerId) {
+                try {
+                    var res = await window.sb.from('blocks').select('blocked_id').eq('blocker_id', targetId).eq('blocked_id', viewerId).maybeSingle();
+                    if (res.error) return false;
+                    return !!res.data;
+                } catch (e) { return false; }
+            }
+
             async function toggleFollow(targetId) {
                 var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
@@ -2632,8 +2614,10 @@
                 }
             }
 
-            // ─── BUILD GRID POST CARD ──────────────────────────
-            function buildGridPostCard(post, actionType, sourceTab) {
+            // ─── BUILD GRID POST CARD (no delete/remove buttons) ───
+            function buildGridPostCard(post, opts) {
+                opts = opts || {};
+                var forceNavigate = !!opts.forceNavigate;
                 var profile = post.profile || {};
                 var author = window.getAuthorFromProfile(profile);
                 var mediaHtml = '';
@@ -2652,30 +2636,26 @@
 
                 var authorName = author.name || 'Anonymous';
                 var authorAvatar = author.avatar || getAvatar(currentUser);
-
-                var actionBtn = '';
-                if (actionType === 'delete') {
-                    actionBtn = '<button class="delete-btn" onclick="event.stopPropagation();deletePost(' + post.id + ')" title="Delete"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>';
-                } else if (actionType === 'remove') {
-                    var label = sourceTab === 'share' ? 'Unrepost' : sourceTab === 'star' ? 'Unsave' : 'Remove';
-                    actionBtn = '<button class="remove-btn" onclick="event.stopPropagation();removeFromTab(' + post.id + ', \'' + sourceTab + '\')" title="' + label + '"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
-                }
-
                 var isVideo = post.mediaType === 'video';
+                var lockPresent = isOwner && post.is_hidden;
+
+                var lockBadge = lockPresent ?
+                    '<div class="video-badge" style="background:rgba(124,58,237,.85)"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Only you</div>' :
+                    '';
                 var videoBadge = isVideo ?
-                    '<div class="video-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>' :
+                    '<div class="video-badge"' + (lockPresent ? ' style="top:32px"' : '') + '><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>' :
                     '';
                 var verifiedBadgeHtml = window.getVerifiedBadgeHTML(author.verified_status);
 
-                var tapAction = isOwner
+                var tapAction = (isOwner && !forceNavigate)
                     ? "openPostActionsSheet('" + post.id + "')"
                     : "window.location.href='index.html?post=" + post.id + "'";
 
                 return '<div class="grid-card" onclick="' + tapAction + '">' +
                     mediaHtml +
                     '<div class="badge">' + escapeHtml(post.category || 'General') + '</div>' +
+                    lockBadge +
                     videoBadge +
-                    actionBtn +
                     '<div class="overlay"><div class="title">' + escapeHtml(post.title) + '</div>' +
                     '<div class="meta"><img src="' + authorAvatar + '" class="avatar" onerror="this.style.display=\'none\'"><span class="name">' + escapeHtml(authorName) + ' ' + verifiedBadgeHtml + '</span></div></div>' +
                     '</div>';
@@ -2705,16 +2685,12 @@
                     '<div class="video-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>' :
                     '';
                 var verifiedBadgeHtml = window.getVerifiedBadgeHTML(author.verified_status);
-
-                var tapAction = isOwner
-                    ? "openPostActionsSheet('" + post.id + "')"
-                    : "window.location.href='index.html?post=" + post.id + "'";
+                var tapAction = "window.location.href='index.html?post=" + post.id + "'";
 
                 return '<div class="grid-card" onclick="' + tapAction + '">' +
                     mediaHtml +
                     '<div class="badge">' + escapeHtml(post.category || 'General') + '</div>' +
                     videoBadge +
-                    '<button class="remove-btn" onclick="event.stopPropagation();removeFromTab(' + post.id + ', \'love\')" title="Unlike"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
                     '<div class="overlay"><div class="title">' + escapeHtml(post.title) + '</div>' +
                     '<div class="meta"><img src="' + authorAvatar + '" class="avatar" onerror="this.style.display=\'none\'"><span class="name">' + escapeHtml(authorName) + ' ' + verifiedBadgeHtml + '</span></div></div>' +
                     '</div>';
@@ -2765,19 +2741,35 @@
                     var profile = await fetchProfile(targetId);
                     targetUser = profile;
 
-                    if (!isOwner && window.SettingsAPI) {
-                        try {
-                            var blockedList = await window.SettingsAPI.listBlockedUsers();
-                            if (blockedList.some(function(b) { return b.id === targetId; })) {
-                                renderBlockedState();
+                    // ─── BLOCK CHECK ──────────────────────────────────────
+                    if (!isOwner) {
+                        var viewerId = user && user.isLoggedIn ? user.id : null;
+                        if (viewerId) {
+                            var iBlockedThem = false;
+                            if (window.SettingsAPI) {
+                                try {
+                                    var blockedList = await window.SettingsAPI.listBlockedUsers();
+                                    iBlockedThem = blockedList.some(function(b) { return b.id === targetId; });
+                                } catch (e) {}
+                            }
+                            if (iBlockedThem) {
+                                renderFrozenBlockedProfile(profile, 'blocked-by-me');
                                 return;
                             }
-                        } catch (e) {}
+                            var theyBlockedMe = await didUserBlockMe(targetId, viewerId);
+                            if (theyBlockedMe) {
+                                renderFrozenBlockedProfile(profile, 'blocked-by-them');
+                                return;
+                            }
+                        }
                     }
 
                     var counts = await fetchFollowCounts(targetId);
 
                     var userPosts = await window.PostsAPI.loadPostsByUserId(targetId);
+                    if (!isOwner) {
+                        userPosts = userPosts.filter(function(p) { return !p.is_hidden; });
+                    }
                     _profileUserPosts = userPosts;
 
                     var likedIds = [],
@@ -2809,13 +2801,43 @@
                 }
             }
 
-            function renderBlockedState() {
-                document.getElementById('profileCol').innerHTML =
-                    '<div class="empty-state" style="padding-top:120px">' +
-                    '<div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>' +
-                    '<h3>Account Blocked</h3>' +
-                    '<p>You have blocked this account. Unblock them from Settings → Blocked Users to view this profile again.</p>' +
-                    '</div>';
+            function renderFrozenBlockedProfile(profile, reason) {
+                var defaultAvatar = 'data:image/svg+xml,' + encodeURIComponent(
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
+                );
+                document.getElementById('profileAvatar').src = defaultAvatar;
+                document.getElementById('displayName').textContent = 'FreeUpper User';
+                document.getElementById('headerUsername').textContent = '@user';
+                document.getElementById('heroBio').textContent = 'This profile is unavailable.';
+                document.getElementById('roleTags').innerHTML = '';
+                document.getElementById('verifiedBadge').classList.add('hidden');
+                document.getElementById('onlineDot').style.display = 'none';
+                document.getElementById('actionRow').innerHTML = '';
+
+                document.getElementById('statPosts').textContent = '—';
+                document.getElementById('statFollowers').textContent = '—';
+                document.getElementById('statFollowing').textContent = '—';
+                ['statPostsBox', 'statFollowersBox', 'statFollowingBox'].forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) { el.onclick = null; el.classList.add('locked'); }
+                });
+
+                document.getElementById('tabsBar').classList.add('frozen-tabs');
+
+                var msg = reason === 'blocked-by-them'
+                    ? { title: "You've been blocked", desc: "This user has blocked you. You can't view their content." }
+                    : { title: "Account blocked", desc: "You've blocked this account. Unblock them from Settings → Blocked Users to view their content." };
+
+                var illustration =
+                    '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>' +
+                    '<h3>' + msg.title + '</h3><p>' + msg.desc + '</p></div>';
+
+                ['panel-posts', 'panel-love', 'panel-share', 'panel-star', 'panel-market'].forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) el.innerHTML = illustration;
+                });
+                var postsPanel = document.getElementById('panel-posts');
+                if (postsPanel) postsPanel.classList.add('active');
             }
 
             function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner) {
@@ -2831,7 +2853,6 @@
                 document.getElementById('qrHandle').textContent = '@' + (profile.username || 'user');
 
                 var bioEl = document.getElementById('heroBio');
-                // Use linkifyBio for clickable links
                 bioEl.innerHTML = linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
 
                 var tags = profile.tags || [];
@@ -2939,7 +2960,7 @@
                     return;
                 }
                 container.innerHTML = '<div class="grid-3">' +
-                    sorted.map(function(p) { return buildGridPostCard(p, 'delete'); }).join('') +
+                    sorted.map(function(p) { return buildGridPostCard(p); }).join('') +
                     '</div>';
             }
 
@@ -2980,7 +3001,7 @@
                 }
                 found.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML = '<div class="grid-3">' +
-                    found.map(function(p) { return buildGridPostCard(p, 'remove', 'share'); }).join('') +
+                    found.map(function(p) { return buildGridPostCard(p, { forceNavigate: true }); }).join('') +
                     '</div>';
             }
 
@@ -2993,7 +3014,7 @@
                 }
                 bookmarkedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML = '<div class="grid-3">' +
-                    bookmarkedPosts.map(function(p) { return buildGridPostCard(p, 'remove', 'star'); }).join('') +
+                    bookmarkedPosts.map(function(p) { return buildGridPostCard(p, { forceNavigate: true }); }).join('') +
                     '</div>';
             }
 
@@ -3126,12 +3147,7 @@
                 renderTab(activeTab);
             };
 
-            window.removeFromTab = async function(postId, sourceTab) {
-                if (sourceTab === 'love') await toggleReaction(postId);
-                else if (sourceTab === 'share') await toggleRepost(postId);
-                else if (sourceTab === 'star') await toggleBookmark(postId);
-                renderTab(activeTab);
-            };
+            // ─── REMOVED: removeFromTab (no longer needed) ───
 
             window.deletePost = async function(postId) {
                 if (!confirm('Delete this post permanently?')) return;
@@ -3154,8 +3170,9 @@
             // ─── POST ACTIONS SHEET ────────────────────────────
             window.openPostActionsSheet = function(postId) {
                 window._activePostId = postId;
-                var post = allPosts.find(function(p) { return p.id === postId; });
+                var post = _profileUserPosts.find(function(p) { return p.id === postId; });
                 document.getElementById('lockActionLbl').textContent = (post && post.locked) ? 'Unlock Comments' : 'Lock Comments';
+                document.getElementById('hideActionLbl').textContent = (post && post.is_hidden) ? 'Unhide Post' : 'Hide Post';
                 openMov('postActionsSheet');
             };
 
@@ -3175,12 +3192,25 @@
             window.lockPostAction = async function() {
                 var id = window._activePostId;
                 try {
-                    var post = allPosts.find(function(p) { return p.id === id; });
+                    var post = _profileUserPosts.find(function(p) { return p.id === id; });
                     var newVal = !(post && post.locked);
                     await window.sb.from('posts').update({ locked: newVal }).eq('id', id);
                     if (post) post.locked = newVal;
                     showToast(newVal ? 'Comments locked' : 'Comments unlocked', 'g');
                     closeMov('postActionsSheet');
+                } catch (err) { showToast(err.message, 'r'); }
+            };
+
+            window.hidePostAction = async function() {
+                var id = window._activePostId;
+                try {
+                    var post = _profileUserPosts.find(function(p) { return p.id === id; });
+                    var newVal = !(post && post.is_hidden);
+                    await window.sb.from('posts').update({ is_hidden: newVal }).eq('id', id);
+                    if (post) post.is_hidden = newVal;
+                    showToast(newVal ? 'Post hidden — only you can see it' : 'Post is visible again', 'g');
+                    closeMov('postActionsSheet');
+                    renderProfile();
                 } catch (err) { showToast(err.message, 'r'); }
             };
 
@@ -3274,13 +3304,44 @@
                 }
             };
 
+            // ─── REPORT USER (fix: insert into reports table) ───
             window.reportUser = function() {
                 closeFS('shareOtherModal');
                 var reason = prompt('Please describe why you are reporting this user:');
-                if (reason && reason.trim().length > 0) {
-                    showToast('Report submitted. Thank you for helping keep Freeupper safe.', 'p');
-                    console.log('Report user:', targetUserId, 'Reason:', reason);
-                } else { showToast('Report cancelled', 'o'); }
+                if (!reason || reason.trim().length === 0) {
+                    showToast('Report cancelled', 'o');
+                    return;
+                }
+
+                var user = getCurrentUser();
+                if (!user || !user.isLoggedIn) {
+                    showToast('Please sign in to report', 'o');
+                    return;
+                }
+
+                window.sb
+                    .from('reports')
+                    .insert({
+                        reporter_id: user.id,
+                        target_type: 'profile',
+                        target_id: targetUserId,
+                        reason: reason.trim(),
+                        status: 'pending',
+                        created_at: new Date().toISOString()
+                    })
+                    .then(function(result) {
+                        if (result.error) {
+                            showToast('Failed to submit report: ' + result.error.message, 'r');
+                            console.error('Report error:', result.error);
+                        } else {
+                            showToast('Report submitted. Thank you for helping keep Freeupper safe.', 'p');
+                            console.log('Report submitted:', result.data);
+                        }
+                    })
+                    .catch(function(err) {
+                        showToast('An error occurred. Please try again.', 'r');
+                        console.error('Report exception:', err);
+                    });
             };
 
             // ─── BLOCK USER ─────────────────────────────────────
@@ -3296,7 +3357,7 @@
                     await window.SettingsAPI.blockUser(targetUserId);
                     closeMov('blockConfirmDlg');
                     showToast('User blocked', 'g');
-                    renderBlockedState();
+                    renderProfile();
                 } catch (err) { showToast(err.message, 'r'); }
             };
 
@@ -3507,12 +3568,12 @@
                 document.body.style.overflow = '';
             };
 
-            // ─── POSTS MODAL ──────────────────────────────────
+            // ─── POSTS MODAL (with truncate) ──────────────────
             window.openPostsModal = function() {
                 var count = _profileUserPosts.length;
                 document.getElementById('mcCount').textContent = count;
                 document.getElementById('mcNum').textContent = count;
-                document.getElementById('mcName').textContent = targetUser?.display_name || 'User';
+                document.getElementById('mcName').textContent = truncateName(targetUser?.display_name || 'User', 14);
                 document.getElementById('postsModal').classList.add('open');
                 document.body.style.overflow = 'hidden';
             };
@@ -4165,6 +4226,10 @@
                 document.getElementById('avatarModal').addEventListener('open', initAvatarGrid);
                 window.addEventListener('popstate', function() { renderProfile(); });
                 setupProfileRealtime();
+
+                document.addEventListener('profileUpdated', function(e) {
+                    followModalData = null;
+                });
             }
 
             if (document.readyState === 'loading') {
@@ -4206,7 +4271,6 @@
             window.toggleReaction = toggleReaction;
             window.toggleBookmark = toggleBookmark;
             window.toggleRepost = toggleRepost;
-            window.removeFromTab = removeFromTab;
             window.deletePost = deletePost;
             window.deleteMarketItem = deleteMarketItem;
             window.handleAvatarTap = handleAvatarTap;
@@ -4218,6 +4282,7 @@
             window.openPostActionsSheet = openPostActionsSheet;
             window.pinPostAction = pinPostAction;
             window.lockPostAction = lockPostAction;
+            window.hidePostAction = hidePostAction;
             window.openBlockConfirm = openBlockConfirm;
             window.confirmBlockUser = confirmBlockUser;
             window.openMov = openMov;
