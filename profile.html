@@ -15,8 +15,8 @@
 
     <style>
         /* ============================================================
-           PROFILE-SPECIFIC STYLES (with fixes)
-           ============================================================ */
+           PROFILE-SPECIFIC STYLES
+        ============================================================ */
         *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
@@ -137,10 +137,7 @@
             font-size: clamp(16px, 4vw, 18px);
             font-weight: 800;
             letter-spacing: -.3px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 160px;
+            /* NOT truncated */
         }
         .header-actions {
             display: flex;
@@ -285,10 +282,7 @@
             font-size: clamp(18px, 5vw, 23px);
             font-weight: 800;
             letter-spacing: -.4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 220px;
+            /* NOT truncated */
         }
         .edit-pen {
             width: 32px;
@@ -487,7 +481,7 @@
         .panel { display: none; animation: fadeUp .3s ease both; }
         .panel.active { display: block; }
 
-        /* ─── FIXED GRID (SQUARE CARDS) ─── */
+        /* ─── 3-COLUMN SQUARE GRID ─── */
         .grid-2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1957,7 +1951,7 @@
                 <!-- Header -->
                 <div class="profile-header">
                     <div class="header-left">
-                        <span class="header-username truncate-1" id="headerUsername"></span>
+                        <span class="header-username" id="headerUsername"></span>
                         <span class="verified-badge hidden" id="verifiedBadge">
                             <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
                         </span>
@@ -1982,7 +1976,7 @@
                     </div>
                     <div class="role-tags" id="roleTags"></div>
                     <div class="display-name-row">
-                        <span class="display-name truncate-1" id="displayName"></span>
+                        <span class="display-name" id="displayName"></span>
                         <button class="edit-pen fw-owner-only" onclick="openEditModal()" title="Edit profile">
                             <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
                         </button>
@@ -2046,7 +2040,7 @@
 
     <!-- === MODALS === -->
 
-    <!-- Posts Modal -->
+    <!-- Posts Modal (Stats) -->
     <div class="mco" id="postsModal">
         <div class="mbox" id="postsBox">
             <div class="m-handle"></div>
@@ -2062,20 +2056,6 @@
                 <div class="mc-lbl">Total Posts</div>
                 <div class="mc-count" id="mcCount">0</div>
                 <div class="mc-desc"><strong id="mcName">User</strong> · <strong id="mcNum">0</strong> posts</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Post Actions Sheet -->
-    <div class="mov center" id="postActionsSheet">
-        <div class="dialog">
-            <div class="dlg-ttl" style="padding-top:22px">Post Options</div>
-            <div class="dlg-btns" style="flex-direction:column;gap:10px">
-                <button class="dlg-cancel" onclick="pinPostAction()">📌 Pin to Top</button>
-                <button class="dlg-cancel" onclick="lockPostAction()">🔒 <span id="lockActionLbl">Lock Comments</span></button>
-                <button class="dlg-cancel" onclick="hidePostAction()">👁️‍🗨️ <span id="hideActionLbl">Hide Post</span></button>
-                <button class="dlg-danger" style="opacity:1" onclick="deletePost(window._activePostId)">🗑 Delete Post</button>
-                <button class="dlg-cancel" onclick="closeMov('postActionsSheet')">Cancel</button>
             </div>
         </div>
     </div>
@@ -2614,7 +2594,7 @@
                 }
             }
 
-            // ─── BUILD GRID POST CARD (no delete/remove buttons) ───
+            // ─── BUILD GRID POST CARD (no owner actions) ───
             function buildGridPostCard(post, opts) {
                 opts = opts || {};
                 var forceNavigate = !!opts.forceNavigate;
@@ -2647,9 +2627,8 @@
                     '';
                 var verifiedBadgeHtml = window.getVerifiedBadgeHTML(author.verified_status);
 
-                var tapAction = (isOwner && !forceNavigate)
-                    ? "openPostActionsSheet('" + post.id + "')"
-                    : "window.location.href='index.html?post=" + post.id + "'";
+                // Always navigate to index.html
+                var tapAction = "window.location.href='index.html?post=" + post.id + "'";
 
                 return '<div class="grid-card" onclick="' + tapAction + '">' +
                     mediaHtml +
@@ -2847,6 +2826,7 @@
                 document.getElementById('qrAvatar').src = avatarSrc;
                 updateNavAvatar();
 
+                // Display name and header username are NOT truncated
                 document.getElementById('displayName').textContent = profile.display_name || 'Guest';
                 document.getElementById('headerUsername').textContent = profile.username || '@user';
                 document.getElementById('qrName').textContent = profile.display_name || 'Guest';
@@ -2901,16 +2881,22 @@
                     el.style.display = isOwner ? '' : 'none';
                 });
 
+                // ─── HIDE ALL POSTS (if enabled) ─────────────────────────
                 var hiddenTabs = (!isOwner && profile.hidden_tabs) ? profile.hidden_tabs : [];
+                var postsForceHidden = !isOwner && !!profile.hide_all_posts;
                 document.querySelectorAll('#tabsBar .tab').forEach(function(tabBtn) {
                     var key = tabBtn.getAttribute('data-tab');
-                    var isHidden = key !== 'posts' && hiddenTabs.indexOf(key) !== -1;
+                    var isHidden = (key === 'posts' ? postsForceHidden : hiddenTabs.indexOf(key) !== -1);
                     tabBtn.style.display = isHidden ? 'none' : '';
                     if (isHidden && tabBtn.classList.contains('active')) {
-                        var postsTab = document.querySelector('#tabsBar .tab[data-tab="posts"]');
-                        if (postsTab) switchTab(postsTab, 'posts');
+                        var fallback = document.querySelector('#tabsBar .tab:not([style*="display: none"])');
+                        if (fallback) switchTab(fallback, fallback.getAttribute('data-tab'));
                     }
                 });
+                if (postsForceHidden) {
+                    var pp = document.getElementById('panel-posts');
+                    if (pp) pp.innerHTML = '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><h3>Posts hidden</h3><p>This user has chosen to hide their posts.</p></div>';
+                }
 
                 document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
                 document.getElementById('fsTabFgCount').textContent = fmtNum(counts.following);
@@ -3147,72 +3133,7 @@
                 renderTab(activeTab);
             };
 
-            // ─── REMOVED: removeFromTab (no longer needed) ───
-
-            window.deletePost = async function(postId) {
-                if (!confirm('Delete this post permanently?')) return;
-                try {
-                    await window.PostsAPI.deletePost(postId);
-                    renderProfile();
-                    showToast('Post deleted', 'r');
-                } catch (err) { showToast(err.message, 'r'); }
-            };
-
-            window.deleteMarketItem = async function(itemId) {
-                if (!confirm('Delete this listing permanently?')) return;
-                try {
-                    await window.ListingsAPI.deleteListing(itemId);
-                    renderProfile();
-                    showToast('Listing deleted', 'r');
-                } catch (err) { showToast(err.message, 'r'); }
-            };
-
-            // ─── POST ACTIONS SHEET ────────────────────────────
-            window.openPostActionsSheet = function(postId) {
-                window._activePostId = postId;
-                var post = _profileUserPosts.find(function(p) { return p.id === postId; });
-                document.getElementById('lockActionLbl').textContent = (post && post.locked) ? 'Unlock Comments' : 'Lock Comments';
-                document.getElementById('hideActionLbl').textContent = (post && post.is_hidden) ? 'Unhide Post' : 'Hide Post';
-                openMov('postActionsSheet');
-            };
-
-            window.pinPostAction = async function() {
-                var id = window._activePostId;
-                try {
-                    var post = allPosts.find(function(p) { return p.id === id; });
-                    var newVal = !(post && post.pinned);
-                    await window.sb.from('posts').update({ pinned: newVal }).eq('id', id);
-                    if (post) post.pinned = newVal;
-                    showToast(newVal ? 'Pinned to top' : 'Unpinned', 'g');
-                    closeMov('postActionsSheet');
-                    renderProfile();
-                } catch (err) { showToast(err.message, 'r'); }
-            };
-
-            window.lockPostAction = async function() {
-                var id = window._activePostId;
-                try {
-                    var post = _profileUserPosts.find(function(p) { return p.id === id; });
-                    var newVal = !(post && post.locked);
-                    await window.sb.from('posts').update({ locked: newVal }).eq('id', id);
-                    if (post) post.locked = newVal;
-                    showToast(newVal ? 'Comments locked' : 'Comments unlocked', 'g');
-                    closeMov('postActionsSheet');
-                } catch (err) { showToast(err.message, 'r'); }
-            };
-
-            window.hidePostAction = async function() {
-                var id = window._activePostId;
-                try {
-                    var post = _profileUserPosts.find(function(p) { return p.id === id; });
-                    var newVal = !(post && post.is_hidden);
-                    await window.sb.from('posts').update({ is_hidden: newVal }).eq('id', id);
-                    if (post) post.is_hidden = newVal;
-                    showToast(newVal ? 'Post hidden — only you can see it' : 'Post is visible again', 'g');
-                    closeMov('postActionsSheet');
-                    renderProfile();
-                } catch (err) { showToast(err.message, 'r'); }
-            };
+            // ─── NO POST ACTIONS (Pin, Lock, Hide, Delete) on profile ───
 
             // ─── MODAL HELPERS ──────────────────────────────────
             function openMov(id) { document.getElementById(id).classList.add('open');
@@ -3304,7 +3225,7 @@
                 }
             };
 
-            // ─── REPORT USER (fix: insert into reports table) ───
+            // ─── REPORT USER (insert into reports table) ───
             window.reportUser = function() {
                 closeFS('shareOtherModal');
                 var reason = prompt('Please describe why you are reporting this user:');
@@ -3573,6 +3494,7 @@
                 var count = _profileUserPosts.length;
                 document.getElementById('mcCount').textContent = count;
                 document.getElementById('mcNum').textContent = count;
+                // TRUNCATE in stats modal
                 document.getElementById('mcName').textContent = truncateName(targetUser?.display_name || 'User', 14);
                 document.getElementById('postsModal').classList.add('open');
                 document.body.style.overflow = 'hidden';
@@ -3817,7 +3739,7 @@
                         html += '<div class="u-row u-row-suggestion" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;padding:0 clamp(14px,5vw,24px)">' +
                             '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
                             '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
-                            '<div class="u-name truncate-1">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-name truncate-1">' + truncateName(u.displayName, 14) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + (u.handle || '') + '</div>' +
                             '<div class="u-sugg-src">' + srcLbl + '</div>' +
                             '</div>' +
@@ -3830,7 +3752,7 @@
                         html += '<div class="u-row" data-row-idx="' + i + '" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 clamp(14px,5vw,24px)">' +
                             '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
                             '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
-                            '<div class="u-name truncate-1">' + (u.displayName || '') + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-name truncate-1">' + truncateName(u.displayName, 14) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + (u.handle || '') + '</div>' +
                             '</div>' +
                             actionHtml +
@@ -4271,18 +4193,13 @@
             window.toggleReaction = toggleReaction;
             window.toggleBookmark = toggleBookmark;
             window.toggleRepost = toggleRepost;
-            window.deletePost = deletePost;
-            window.deleteMarketItem = deleteMarketItem;
+            // No post actions exposed from profile
             window.handleAvatarTap = handleAvatarTap;
             window.openAvatarViewer = openAvatarViewer;
             window.closeAvatarViewer = closeAvatarViewer;
             window.shareProfileOther = shareProfileOther;
             window.reportUser = reportUser;
             window.openShareOtherModal = openShareOtherModal;
-            window.openPostActionsSheet = openPostActionsSheet;
-            window.pinPostAction = pinPostAction;
-            window.lockPostAction = lockPostAction;
-            window.hidePostAction = hidePostAction;
             window.openBlockConfirm = openBlockConfirm;
             window.confirmBlockUser = confirmBlockUser;
             window.openMov = openMov;
