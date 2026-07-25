@@ -26,6 +26,12 @@
 //   toggle_bookmark(uuid, uuid)
 //   record_share(uuid, uuid)
 //   increment_comment_count(uuid)  – already used in addComment
+//
+// NEW (v2.3.1):
+//   - Added is_hidden field to posts (boolean, default false)
+//     → Used in index.html to let owners hide/unhide posts from their feed.
+//   - Ensure your posts table has this column:
+//       ALTER TABLE posts ADD COLUMN is_hidden BOOLEAN DEFAULT false;
 // =====================================================================
 
 (function() {
@@ -86,6 +92,8 @@
       myRepost: !!myRepost,
       myRepostText: myRepost ? (myRepost.comment || '') : '',
       myRepostTime: myRepost ? myRepost.created_at : null,
+      // ─── NEW: is_hidden (required for hide/unhide feature) ──────────
+      is_hidden: row.is_hidden || false,
       profile: profile ? {
         id: profile.id,
         display_name: profile.display_name || 'Anonymous',
@@ -631,6 +639,7 @@
       media_url: fields.mediaUrl || null,
       media_type: fields.mediaType || null,
       mentions: fields.mentions || [],
+      // is_hidden defaults to false, no need to set it here
     };
 
     if (fields.media && fields.media.length > 0) {
