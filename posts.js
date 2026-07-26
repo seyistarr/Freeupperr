@@ -34,6 +34,15 @@
 //   - This supports the "Hide Post" feature in the share modal (owner-only)
 //   - REQUIRED DATABASE MIGRATION:
 //       ALTER TABLE posts ADD COLUMN is_hidden BOOLEAN DEFAULT false;
+//
+// NEW in v2.3.2:
+//   - Added `comments_hidden` column to posts (boolean, default false)
+//   - Mapped in mapPost() as `commentsHidden`
+//   - Added toggleCommentsHidden() method (owner-only)
+//   - Added server‑side safety net in addComment() to block comments
+//     when comments_hidden = true (except for the owner)
+//   - REQUIRED DATABASE MIGRATION:
+//       ALTER TABLE posts ADD COLUMN comments_hidden BOOLEAN DEFAULT false;
 // =====================================================================
 
 (function() {
@@ -96,6 +105,8 @@
       myRepostTime: myRepost ? myRepost.created_at : null,
       // ─── NEW: is_hidden (used for hiding posts from feed) ──────────
       is_hidden: row.is_hidden || false,
+      // ─── NEW: comments_hidden (used for turning off replies) ───────
+      commentsHidden: row.comments_hidden || false,
       profile: profile ? {
         id: profile.id,
         display_name: profile.display_name || 'Anonymous',
@@ -440,6 +451,16 @@
   async function addComment(postId, parentId, message, mentions = []) {
     const userId = await _getUserId();
 
+    // ─── Safety net: reject if comments are turned off (unless owner) ──
+    const { data: postRow, error: postErr } = await sb
+      .from('posts')
+      .select('comments_hidden, user_id')
+      .eq('id', postId)
+      .single();
+    if (!postErr && postRow && postRow.comments_hidden && postRow.user_id !== userId) {
+      throw new Error('Comments are turned off for this post.');
+    }
+
     const { data, error } = await sb
       .from('comments')
       .insert({
@@ -610,6 +631,21 @@
     return { is_hidden: data.is_hidden };
   }
 
+  // ─── TOGGLE COMMENTS HIDDEN (owner-only) ───────────────────────────
+  async function toggleCommentsHidden(postId, hidden) {
+    const userId = await _getUserId(); // ensures authenticated
+    const { data, error } = await sb
+      .from('posts')
+      .update({ comments_hidden: hidden })
+      .eq('id', postId)
+      .eq('user_id', userId) // security: only owner can toggle
+      .select('comments_hidden')
+      .single();
+
+    if (error) throw error;
+    return { commentsHidden: data.comments_hidden };
+  }
+
   // ─── POST PREVIEW ──────────────────────────────────────────────────
   async function loadPostPreview(postId) {
     const { data, error } = await sb
@@ -656,6 +692,7 @@
       media_url: fields.mediaUrl || null,
       media_type: fields.mediaType || null,
       mentions: fields.mentions || [],
+      comments_hidden: !!fields.commentsHidden,
       // is_hidden defaults to false; no need to set explicitly
     };
 
@@ -824,6 +861,9 @@
 
     // ─── NEW: hide/unhide post ──────────────────────────────────────
     toggleHidePost,
+
+    // ─── NEW: turn comments on/off for a post ───────────────────────
+    toggleCommentsHidden,
 
     // Real‑time
     subscribe,
