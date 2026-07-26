@@ -1203,7 +1203,7 @@
 
                         <!-- Media -->
                         <div class="form-group">
-                            <label class="form-lbl">Media <span style="font-weight:400;color:var(--muted2);">(image or video, max 20MB, 2 mins)</span></label>
+                            <label class="form-lbl">Media <span style="font-weight:400;color:var(--muted2);">(image or video, max 100MB, 3 mins)</span></label>
                             <div class="upload-row">
                                 <input class="form-inp" id="postMediaUrlInput" type="text" placeholder="Paste image or YouTube link..." oninput="previewPostMedia()">
                                 <button class="upload-btn" onclick="document.getElementById('postFileInput').click()">
@@ -1394,8 +1394,10 @@
         const CLOUDINARY_MARKET_UPLOAD_PRESET = 'market_upload';
 
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
-        // ─── UPDATED: video limit increased from 15MB → 20MB ───
-        const MAX_VIDEO_SIZE = 20 * 1024 * 1024;
+        // ─── UPDATED: video limit increased to 100 MB ───
+        const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+        // ─── Duration limit: 3 minutes ───
+        const MAX_VIDEO_DURATION_SECONDS = 180;
 
         let postTags = [];
         let marketImages = [];
@@ -1674,16 +1676,17 @@
                 showToast('Image too large (max 5MB)', 'o');
                 return;
             }
-            // ─── UPDATED: video error message now shows 20MB ───
+            // ─── UPDATED: video error message now shows 100MB ───
             if (isVideo && file.size > MAX_VIDEO_SIZE) {
-                showToast('Video too large (max 20MB)', 'o');
+                showToast('Video too large (max 100MB)', 'o');
                 return;
             }
 
             if (isVideo) {
                 const duration = await getVideoDuration(file);
-                if (duration > 120) {
-                    showToast('Video must be 2 mins or less', 'o');
+                // ─── UPDATED: duration limit is now 180 seconds ───
+                if (duration > MAX_VIDEO_DURATION_SECONDS) {
+                    showToast(`Video must be ${MAX_VIDEO_DURATION_SECONDS/60} mins or less`, 'o');
                     return;
                 }
             }
@@ -2485,7 +2488,7 @@
                 setTimeout(loadCategories, 500);
             }
 
-            console.log('[DEBUG] create.html final: video limit 20MB, tags max 5, commentsHidden toggle added');
+            console.log('[DEBUG] create.html final: video limit 100MB, 3 mins, tags max 5, commentsHidden toggle added');
         }
 
         if (document.readyState === 'loading') {
