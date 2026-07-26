@@ -1389,9 +1389,10 @@
     <script>
         // ── CONFIG (your original Cloudinary settings) ──
         const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
-        const CLOUDINARY_IMAGE_UPLOAD_PRESET = 'image_upload';
-        const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload';
-        const CLOUDINARY_MARKET_UPLOAD_PRESET = 'market_upload';
+        // ─── SEPARATE PRESETS FOR EACH MEDIA TYPE ───
+        const CLOUDINARY_IMAGE_UPLOAD_PRESET = 'image_upload';      // for images
+        const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload';      // for videos (must be configured)
+        const CLOUDINARY_MARKET_UPLOAD_PRESET = 'market_upload';    // for marketplace images
 
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
         const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
@@ -1558,27 +1559,29 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // CLOUDINARY UPLOAD – using XMLHttpRequest with progress & timeout
+        // CLOUDINARY UPLOAD – using separate presets for each type
         // ──────────────────────────────────────────────────────────────
         function uploadToCloudinary(file, mode = 'post', onProgress) {
             return new Promise((resolve, reject) => {
                 const isVideo = file.type.startsWith('video');
                 const resourceType = isVideo ? 'video' : 'image';
-                let preset = CLOUDINARY_IMAGE_UPLOAD_PRESET;
-                if (mode === 'market') preset = CLOUDINARY_MARKET_UPLOAD_PRESET;
-                else if (isVideo) preset = CLOUDINARY_VIDEO_UPLOAD_PRESET;
 
-                // If video preset is undefined, fallback to image preset (some accounts use same)
-                // But we need to use the correct resource type anyway.
-                // We'll try the video preset, and if it fails we can retry with image preset? That's not ideal.
-                // We'll log the preset and proceed.
+                // Select the correct preset based on mode and file type
+                let preset;
+                if (mode === 'market') {
+                    preset = CLOUDINARY_MARKET_UPLOAD_PRESET; // only images
+                } else if (isVideo) {
+                    preset = CLOUDINARY_VIDEO_UPLOAD_PRESET;
+                } else {
+                    preset = CLOUDINARY_IMAGE_UPLOAD_PRESET;
+                }
 
                 const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('upload_preset', preset);
 
-                console.log(`[Upload] URL: ${url}, preset: ${preset}, resource: ${resourceType}`);
+                console.log(`[Upload] → URL: ${url}, preset: ${preset}, resource: ${resourceType}, file size: ${(file.size/1024/1024).toFixed(1)}MB`);
 
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', url);
@@ -1597,7 +1600,7 @@
                     if (xhr.status === 200) {
                         try {
                             const data = JSON.parse(xhr.responseText);
-                            console.log('[Upload] Success:', data);
+                            console.log('[Upload] ✅ Success:', data.secure_url);
                             resolve({
                                 url: data.secure_url,
                                 type: resourceType,
@@ -1611,7 +1614,7 @@
                         try {
                             const data = JSON.parse(xhr.responseText);
                             errMsg = data.error?.message || errMsg;
-                            console.error('[Upload] Cloudinary error:', data.error);
+                            console.error('[Upload] ❌ Cloudinary error:', data.error);
                         } catch (e) {}
                         reject(new Error(errMsg));
                     }
@@ -1687,6 +1690,19 @@
                     `;
                 showToast('Image linked', 'p');
             }
+        }
+
+        async function getVideoDuration(file) {
+            return new Promise((resolve) => {
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                video.src = URL.createObjectURL(file);
+                video.onloadedmetadata = () => {
+                    URL.revokeObjectURL(video.src);
+                    resolve(video.duration);
+                };
+                video.onerror = () => resolve(0);
+            });
         }
 
         async function handlePostUpload(event) {
@@ -2504,7 +2520,7 @@
                 setTimeout(loadCategories, 500);
             }
 
-            console.log('[DEBUG] create.html final: video limit 100MB, 3 mins, real progress, 5-min timeout, enhanced logging');
+            console.log('[DEBUG] create.html: separate presets, 100MB/3min, real progress');
         }
 
         if (document.readyState === 'loading') {
