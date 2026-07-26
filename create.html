@@ -528,6 +528,70 @@
             color: var(--danger);
         }
 
+        /* ─── TOGGLE SWITCH ─── */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            margin-bottom: 16px;
+        }
+        .toggle-row-text { min-width: 0; }
+        .toggle-row-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .toggle-row-sub {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+            line-height: 1.4;
+        }
+        .toggle {
+            position: relative;
+            width: 46px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle .track {
+            position: absolute;
+            inset: 0;
+            border-radius: 100px;
+            background: rgba(150, 150, 150, .25);
+            cursor: pointer;
+            transition: background .2s;
+            border: 1.5px solid var(--brd);
+        }
+        .toggle input:checked + .track {
+            background: var(--p);
+            border-color: var(--p);
+        }
+        .toggle .track::after {
+            content: '';
+            position: absolute;
+            left: 2px;
+            top: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            transition: transform .2s cubic-bezier(.34, 1.4, .64, 1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+        }
+        .toggle input:checked + .track::after {
+            transform: translateX(20px);
+        }
+
         .tag-pills {
             display: flex;
             flex-wrap: wrap;
@@ -1155,6 +1219,18 @@
                             <input type="hidden" id="postMediaUrl" value="">
                             <input type="hidden" id="postMediaType" value="">
                             <input type="hidden" id="postPublicId" value="">
+                        </div>
+
+                        <!-- Toggle: Hide Comments -->
+                        <div class="toggle-row">
+                            <div class="toggle-row-text">
+                                <div class="toggle-row-title">Hide Comments</div>
+                                <div class="toggle-row-sub">Turn off replies for this post. You can change this anytime from the post's menu.</div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="postHideComments">
+                                <div class="track"></div>
+                            </label>
                         </div>
 
                         <button class="btn-primary" onclick="submitPost()">Publish Post</button>
@@ -2078,7 +2154,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT POST – with Mentions + Notifications (content optional, no category, no description)
+        // SUBMIT POST – with Mentions + Notifications + commentsHidden flag
         // ──────────────────────────────────────────────────────────────
         async function submitPost() {
             console.log('[DEBUG] submitPost called');
@@ -2102,6 +2178,7 @@
             const mediaUrl = document.getElementById('postMediaUrl').value;
             const mediaType = document.getElementById('postMediaType').value;
             const publicId = document.getElementById('postPublicId').value;
+            const hideComments = document.getElementById('postHideComments').checked;
 
             // Only title is required
             if (!title) {
@@ -2145,7 +2222,8 @@
                     media: media,
                     mediaUrl: mediaUrl,
                     mediaType: mediaType,
-                    mentions: mentions
+                    mentions: mentions,
+                    commentsHidden: hideComments   // <-- toggle flag
                 });
 
                 console.log('[DEBUG] Post created successfully:', result);
@@ -2173,6 +2251,7 @@
                 document.getElementById('postMediaUrl').value = '';
                 document.getElementById('postMediaType').value = '';
                 document.getElementById('postPublicId').value = '';
+                document.getElementById('postHideComments').checked = false;
                 const input = document.getElementById('postMediaUrlInput');
                 input.value = '';
                 input.style.color = '';
@@ -2404,7 +2483,7 @@
                 setTimeout(loadCategories, 500);
             }
 
-            console.log('[DEBUG] create.html final: no category, no description, tags max 5');
+            console.log('[DEBUG] create.html final: no category, no description, tags max 5, commentsHidden toggle added');
         }
 
         if (document.readyState === 'loading') {
