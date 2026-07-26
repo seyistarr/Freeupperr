@@ -1,5 +1,5 @@
 // =====================================================================
-// posts.js – FreeUpper v2.3 – Fully Atomic Social Feed
+// posts.js – FreeUpper v2.3.2 – Fully Atomic Social Feed
 // =====================================================================
 //
 // This module provides a unified API for all social interactions.
