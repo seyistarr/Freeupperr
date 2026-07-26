@@ -1568,10 +1568,17 @@
                 if (mode === 'market') preset = CLOUDINARY_MARKET_UPLOAD_PRESET;
                 else if (isVideo) preset = CLOUDINARY_VIDEO_UPLOAD_PRESET;
 
+                // If video preset is undefined, fallback to image preset (some accounts use same)
+                // But we need to use the correct resource type anyway.
+                // We'll try the video preset, and if it fails we can retry with image preset? That's not ideal.
+                // We'll log the preset and proceed.
+
                 const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('upload_preset', preset);
+
+                console.log(`[Upload] URL: ${url}, preset: ${preset}, resource: ${resourceType}`);
 
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', url);
@@ -1590,6 +1597,7 @@
                     if (xhr.status === 200) {
                         try {
                             const data = JSON.parse(xhr.responseText);
+                            console.log('[Upload] Success:', data);
                             resolve({
                                 url: data.secure_url,
                                 type: resourceType,
@@ -1603,6 +1611,7 @@
                         try {
                             const data = JSON.parse(xhr.responseText);
                             errMsg = data.error?.message || errMsg;
+                            console.error('[Upload] Cloudinary error:', data.error);
                         } catch (e) {}
                         reject(new Error(errMsg));
                     }
@@ -1759,6 +1768,7 @@
             } catch (e) {
                 progress.style.display = 'none';
                 showToast('Upload failed: ' + e.message, 'r');
+                console.error('[Upload Error]', e);
             }
             event.target.value = '';
         }
@@ -1850,6 +1860,7 @@
                     marketImages.splice(idx, 1);
                     renderMarketImages();
                     showToast('Upload failed: ' + e.message, 'r');
+                    console.error('[Market Upload Error]', e);
                 }
             }
             event.target.value = '';
@@ -2493,7 +2504,7 @@
                 setTimeout(loadCategories, 500);
             }
 
-            console.log('[DEBUG] create.html final: video limit 100MB, 3 mins, real progress, 5-min timeout');
+            console.log('[DEBUG] create.html final: video limit 100MB, 3 mins, real progress, 5-min timeout, enhanced logging');
         }
 
         if (document.readyState === 'loading') {
