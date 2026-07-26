@@ -59,7 +59,7 @@
         .conversations-sidebar .conversation-list { flex: 1; overflow-y: auto; padding: 8px 0; -webkit-overflow-scrolling: touch; }
         .conversations-sidebar .conversation-list::-webkit-scrollbar { width: 0; }
 
-        /* ─── CONVERSATION ITEM ─── */
+        /* ─── CONVERSATION ITEM (also used for user search results) ─── */
         .conv-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; transition: background .12s; border-bottom: 1px solid var(--brd); position: relative; }
         .conv-item:hover { background: var(--pdim); }
         .conv-item.active { background: var(--pdim); border-left: 3px solid var(--p); }
@@ -71,6 +71,11 @@
         .conv-item .conv-last-msg .msg-sender { font-weight: 600; color: var(--text); }
         .conv-item .conv-time { font-size: .7rem; color: var(--muted2); flex-shrink: 0; align-self: flex-start; margin-top: 4px; }
         .conv-item .unread-badge { background: var(--p); color: #fff; font-size: .65rem; font-weight: 700; border-radius: 50%; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0 6px; flex-shrink: 0; }
+        .conv-item .start-chat-btn { background: var(--p); color: #fff; border: none; border-radius: 16px; padding: 4px 12px; font-size: .7rem; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+        .conv-item .start-chat-btn:hover { opacity: .85; }
+
+        /* ─── SECTION HEADER IN SEARCH RESULTS ─── */
+        .search-section-header { font-size: .7rem; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: .05em; padding: 12px 16px 4px; border-bottom: 1px solid var(--brd); }
 
         /* ─── CHAT VIEW ─── */
         .chat-view { flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; position: relative; }
@@ -305,11 +310,11 @@
                 <div class="conversations-sidebar" id="conversationsSidebar">
                     <div class="sidebar-header">
                         <h2>Messages</h2>
-                        <!-- "New" button with ONCLICK for guaranteed functionality -->
+                        <!-- "+ New" button with inline onclick -->
                         <button class="new-chat-btn" onclick="openNewChatModal()">+ New</button>
                     </div>
                     <div class="search-box">
-                        <input type="text" id="convSearch" placeholder="Search conversations..." oninput="filterConversations(this.value)">
+                        <input type="text" id="convSearch" placeholder="Search conversations or friends..." oninput="filterConversations(this.value)">
                     </div>
                     <div class="conversation-list" id="conversationList"></div>
                 </div>
@@ -381,7 +386,7 @@
                 </button>
             </div>
             <div class="modal-search">
-                <input type="text" id="userSearchInput" placeholder="Search by name or username..." oninput="searchUsers(this.value)">
+                <input type="text" id="userSearchInput" placeholder="Search by name or username..." oninput="searchUsersInModal(this.value)">
             </div>
             <div class="modal-list" id="userSearchResults">
                 <div class="modal-empty">Type to find users</div>
@@ -453,6 +458,7 @@
             let selectedPartnerId = null;
             let messages = [];
             let allUsers = [];
+            let mutualFollowers = new Set(); // user IDs of mutual followers
             let messageSubscription = null;
             let conversationSubscription = null;
             let typingTimeout = null;
@@ -539,6 +545,36 @@
             }
 
             // ============================================================
+            // LOAD MUTUAL FOLLOWERS (Friends)
+            // ============================================================
+            async function loadMutualFollowers() {
+                if (!currentUserId) return;
+                try {
+                    // Get users I follow
+                    const { data: following, error: fErr } = await sb
+                        .from('follows')
+                        .select('following_id')
+                        .eq('follower_id', currentUserId);
+                    if (fErr) throw fErr;
+                    const followingIds = following.map(f => f.following_id);
+
+                    // Get users who follow me
+                    const { data: followers, error: flErr } = await sb
+                        .from('follows')
+                        .select('follower_id')
+                        .eq('following_id', currentUserId);
+                    if (flErr) throw flErr;
+                    const followerIds = followers.map(f => f.follower_id);
+
+                    // Mutual = intersection
+                    const mutual = followingIds.filter(id => followerIds.includes(id));
+                    mutualFollowers = new Set(mutual);
+                } catch (err) {
+                    console.error('loadMutualFollowers error:', err);
+                }
+            }
+
+            // ============================================================
             // SUPABASE - CONVERSATIONS
             // ============================================================
             async function loadConversations() {
@@ -585,50 +621,115 @@
             }
 
             // ============================================================
-            // RENDER CONVERSATIONS
+            // RENDER CONVERSATIONS (with search for friends)
             // ============================================================
             function renderConversations(filter = '') {
                 const q = filter.toLowerCase().trim();
-                let list = conversations;
+                let html = '';
+
+                // 1. Filter existing conversations
+                let matchedConvs = conversations;
                 if (q) {
-                    list = list.filter(c => {
+                    matchedConvs = matchedConvs.filter(c => {
                         const name = c.otherUser ? (c.otherUser.display_name || c.otherUser.username || '') :
                         '';
                         return name.toLowerCase().includes(q);
                     });
                 }
-                if (!list.length) {
+
+                // 2. Find mutual followers matching the query (only if query not empty)
+                let matchedFriends = [];
+                if (q && mutualFollowers.size > 0) {
+                    const allFriendIds = Array.from(mutualFollowers);
+                    // Fetch profiles for these friends (we can cache them to avoid repeated queries)
+                    // We'll fetch them on demand and cache in allUsers
+                    const friendProfiles = allUsers.filter(u => mutualFollowers.has(u.id));
+                    // Also, ensure we have profiles for all mutual followers
+                    // For simplicity, we'll rely on allUsers being populated (from loadAllUsers)
+                    // If not, we'll query them now.
+                    if (friendProfiles.length === 0 && mutualFollowers.size > 0) {
+                        // Fetch them now
+                        sb.from('profiles')
+                            .select('id, display_name, username, avatar_url, verified_status')
+                            .in('id', Array.from(mutualFollowers))
+                            .then(({ data, error }) => {
+                                if (!error && data) {
+                                    allUsers = allUsers.concat(data);
+                                    // Re-render
+                                    renderConversations(filter);
+                                }
+                            })
+                            .catch(() => {});
+                        return;
+                    }
+                    matchedFriends = friendProfiles.filter(u => {
+                        const name = (u.display_name || u.username || '').toLowerCase();
+                        return name.includes(q) && !conversations.some(c => c.otherUserId === u.id);
+                    });
+                }
+
+                // Build HTML
+                if (matchedConvs.length === 0 && matchedFriends.length === 0) {
                     convList.innerHTML = `
                         <div style="padding: 30px 16px; text-align: center; color: var(--muted);">
-                            <p>${q ? 'No conversations match your search.' : 'No conversations yet. Start a new one!'}</p>
+                            <p>${q ? 'No results found.' : 'No conversations yet. Start a new one!'}</p>
                         </div>
                     `;
                     return;
                 }
-                convList.innerHTML = list.map(c => {
-                    const other = c.otherUser || {};
-                    const name = other.display_name || other.username || 'User';
-                    const avatar = getAvatar(other);
-                    let lastMsg = 'No messages yet';
-                    if (c.lastMessage) {
-                        const prefix = c.lastMessage.sender_id === currentUserId ? 'You: ' : '';
-                        lastMsg = prefix + (c.lastMessage.text || 'Media');
+
+                // Conversations section
+                if (matchedConvs.length > 0) {
+                    if (q) {
+                        html += `<div class="search-section-header">Conversations</div>`;
                     }
-                    const time = c.lastMessageTime ? formatDate(c.lastMessageTime) : '';
-                    const active = c.id === selectedConversationId ? 'active' : '';
-                    const badge = getVerifiedBadge(other.verified_status);
-                    const online = other.online_status === 'online' ? '<div class="online-dot"></div>' : '';
-                    return `
-                        <div class="conv-item ${active}" data-conv-id="${c.id}" onclick="selectConversation('${c.id}')">
-                            <div class="av">${online}<img src="${avatar}" alt="${escapeHtml(name)}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'%3E%3Ccircle cx=\\'50\\' cy=\\'50\\' r=\\'50\\' fill=\\'%23E5E7EB\\'/%3E%3Ccircle cx=\\'50\\' cy=\\'38\\' r=\\'16\\' fill=\\'%239CA3AF\\'/%3E%3Cellipse cx=\\'50\\' cy=\\'75\\' rx=\\'30\\' ry=\\'22\\' fill=\\'%239CA3AF\\'/%3E%3C/svg%3E'"></div>
-                            <div class="conv-info">
-                                <div class="conv-name">${escapeHtml(name)} ${badge}</div>
-                                <div class="conv-last-msg">${escapeHtml(lastMsg)}</div>
+                    html += matchedConvs.map(c => {
+                        const other = c.otherUser || {};
+                        const name = other.display_name || other.username || 'User';
+                        const avatar = getAvatar(other);
+                        let lastMsg = 'No messages yet';
+                        if (c.lastMessage) {
+                            const prefix = c.lastMessage.sender_id === currentUserId ? 'You: ' : '';
+                            lastMsg = prefix + (c.lastMessage.text || 'Media');
+                        }
+                        const time = c.lastMessageTime ? formatDate(c.lastMessageTime) : '';
+                        const active = c.id === selectedConversationId ? 'active' : '';
+                        const badge = getVerifiedBadge(other.verified_status);
+                        const online = other.online_status === 'online' ? '<div class="online-dot"></div>' : '';
+                        return `
+                            <div class="conv-item ${active}" data-conv-id="${c.id}" onclick="selectConversation('${c.id}')">
+                                <div class="av">${online}<img src="${avatar}" alt="${escapeHtml(name)}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'%3E%3Ccircle cx=\\'50\\' cy=\\'50\\' r=\\'50\\' fill=\\'%23E5E7EB\\'/%3E%3Ccircle cx=\\'50\\' cy=\\'38\\' r=\\'16\\' fill=\\'%239CA3AF\\'/%3E%3Cellipse cx=\\'50\\' cy=\\'75\\' rx=\\'30\\' ry=\\'22\\' fill=\\'%239CA3AF\\'/%3E%3C/svg%3E'"></div>
+                                <div class="conv-info">
+                                    <div class="conv-name">${escapeHtml(name)} ${badge}</div>
+                                    <div class="conv-last-msg">${escapeHtml(lastMsg)}</div>
+                                </div>
+                                <div class="conv-time">${time}</div>
                             </div>
-                            <div class="conv-time">${time}</div>
-                        </div>
-                    `;
-                }).join('');
+                        `;
+                    }).join('');
+                }
+
+                // Friends section
+                if (matchedFriends.length > 0) {
+                    html += `<div class="search-section-header">Friends</div>`;
+                    html += matchedFriends.map(u => {
+                        const name = u.display_name || u.username || 'User';
+                        const avatar = getAvatar(u);
+                        const badge = getVerifiedBadge(u.verified_status);
+                        return `
+                            <div class="conv-item" onclick="startConversationWith('${u.id}')">
+                                <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'%3E%3Ccircle cx=\\'50\\' cy=\\'50\\' r=\\'50\\' fill=\\'%23E5E7EB\\'/%3E%3Ccircle cx=\\'50\\' cy=\\'38\\' r=\\'16\\' fill=\\'%239CA3AF\\'/%3E%3Cellipse cx=\\'50\\' cy=\\'75\\' rx=\\'30\\' ry=\\'22\\' fill=\\'%239CA3AF\\'/%3E%3C/svg%3E'"></div>
+                                <div class="conv-info">
+                                    <div class="conv-name">${escapeHtml(name)} ${badge}</div>
+                                    <div class="conv-last-msg" style="color:var(--muted2);">Tap to start chat</div>
+                                </div>
+                                <button class="start-chat-btn" onclick="event.stopPropagation();startConversationWith('${u.id}')">Chat</button>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                convList.innerHTML = html;
             }
 
             window.filterConversations = function(value) { renderConversations(value); };
@@ -1402,7 +1503,7 @@
             };
 
             // ============================================================
-            // NEW CHAT MODAL (FIXED: Works with inline onclick)
+            // NEW CHAT MODAL (full-screen user search)
             // ============================================================
             window.openNewChatModal = function() {
                 const modal = document.getElementById('newChatModal');
@@ -1430,7 +1531,8 @@
                 }
             }
 
-            window.searchUsers = function(query) {
+            // Search function for the modal
+            window.searchUsersInModal = function(query) {
                 const q = query.toLowerCase().trim();
                 const resultsContainer = document.getElementById('userSearchResults');
                 if (!q) {
@@ -1461,6 +1563,9 @@
                 }).join('');
             };
 
+            // ============================================================
+            // START CONVERSATION WITH A USER
+            // ============================================================
             window.startConversationWith = async function(otherUserId) {
                 closeNewChatModal();
                 let existing = conversations.find(c =>
@@ -1564,6 +1669,7 @@
                     return;
                 }
                 currentUserId = user.id;
+                await loadMutualFollowers();
                 await loadConversations();
                 subscribeToMessages();
                 subscribeToConversations();
