@@ -1601,7 +1601,7 @@
             }
 
             // ============================================================
-            // START CONVERSATION WITH A USER (block-gated)
+            // START CONVERSATION WITH A USER (block-gated + normalised order)
             // ============================================================
             window.startConversationWith = async function(otherUserId) {
                 if (otherUserId === currentUserId) return;
@@ -1613,30 +1613,57 @@
                     return;
                 }
 
+                // Normalise the order
+                const id1 = currentUserId < otherUserId ? currentUserId : otherUserId;
+                const id2 = currentUserId < otherUserId ? otherUserId : currentUserId;
+
+                // Check if conversation already exists using normalised order
                 let existing = conversations.find(c =>
-                    (c.user1_id === currentUserId && c.user2_id === otherUserId) ||
-                    (c.user1_id === otherUserId && c.user2_id === currentUserId)
+                    (c.user1_id === id1 && c.user2_id === id2)
                 );
-                if (existing) { selectConversation(existing.id); return; }
+
+                if (existing) {
+                    selectConversation(existing.id);
+                    return;
+                }
 
                 try {
                     const { data, error } = await sb
                         .from('conversations')
                         .insert({
-                            user1_id: currentUserId,
-                            user2_id: otherUserId,
+                            user1_id: id1,
+                            user2_id: id2,
                             created_at: new Date().toISOString(),
                             updated_at: new Date().toISOString(),
                             typing_users: [],
                         })
                         .select()
                         .single();
-                    if (error) throw error;
+
+                    if (error) {
+                        // If it's a duplicate key, fetch the existing conversation
+                        if (error.code === '23505') {
+                            const { data: existingConv, error: fetchError } = await sb
+                                .from('conversations')
+                                .select('*')
+                                .or(`user1_id.eq.${id1},user2_id.eq.${id2}`)
+                                .maybeSingle();
+                            if (fetchError || !existingConv) {
+                                showToast('Could not find the conversation', 'r');
+                                return;
+                            }
+                            await loadConversations();
+                            selectConversation(existingConv.id);
+                            return;
+                        }
+                        throw error;
+                    }
+
                     await loadConversations();
                     selectConversation(data.id);
                 } catch (err) {
                     console.error('startConversationWith error:', err);
-                    showToast('Failed to create conversation', 'r');
+                    showToast(err.message || 'Failed to create conversation', 'r');
                 }
             };
 
