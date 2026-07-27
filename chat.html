@@ -11,6 +11,14 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
 
+    <!-- ===== PDF.js for document preview ===== -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        if (window['pdfjs-dist/build/pdf']) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="global.js" defer></script>
     <script src="auth.js" defer></script>
@@ -20,7 +28,7 @@
 
     <style>
         /* ============================================================
-           CHAT STYLES
+           CHAT STYLES – merged from the UI demo and previous fixes
         ============================================================ */
         :root {
             --chat-header-h: 56px;
@@ -494,8 +502,16 @@
             let userSearchDebounce = null;
             let userSearchToken = 0;
 
-            const sb = window.sb;
-            if (!sb) { console.error('Supabase client not ready'); return; }
+            let sb;
+            function waitForSupabase(cb) {
+                if (window.sb) { cb(window.sb); return; }
+                let tries = 0;
+                const iv = setInterval(() => {
+                    tries++;
+                    if (window.sb) { clearInterval(iv); cb(window.sb); }
+                    else if (tries > 100) { clearInterval(iv); console.error('Supabase client failed to load'); }
+                }, 50);
+            }
 
             // ============================================================
             // DOM REFS
@@ -1712,11 +1728,14 @@
                 }
             }
 
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', initChat);
-            } else {
-                initChat();
-            }
+            waitForSupabase(function(client) {
+                sb = client;
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initChat);
+                } else {
+                    initChat();
+                }
+            });
 
         })();
     </script>
