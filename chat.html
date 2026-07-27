@@ -28,7 +28,34 @@
 
     <style>
         /* ============================================================
-           CHAT STYLES – merged from the UI demo and previous fixes
+           GLOBAL FIXES
+        ============================================================ */
+        * {
+            -webkit-tap-highlight-color: transparent !important;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            -webkit-user-select: none;
+            user-select: none;
+            padding-bottom: 0 !important;
+        }
+
+        .layout {
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .main {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding-bottom: 0 !important;
+        }
+
+        /* ============================================================
+           CHAT STYLES – merged from UI demo and previous fixes
         ============================================================ */
         :root {
             --chat-header-h: 56px;
@@ -38,11 +65,21 @@
             --avatar-size: 42px;
             --bubble-radius: 18px;
             --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --bottom-nav-height: 78px;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
-        .layout { display: flex; height: 100vh; width: 100%; overflow: hidden; }
-        .main { flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
+        .chat-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            background: var(--bg);
+            padding-bottom: var(--bottom-nav-height);
+        }
+        @media (min-width: 768px) {
+            .chat-container {
+                padding-bottom: 0;
+            }
+        }
 
         /* ─── HEADER ─── */
         .chat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--bg2); border-bottom: 1px solid var(--brd); flex-shrink: 0; min-height: var(--chat-header-h); }
@@ -52,9 +89,6 @@
         .chat-header .header-actions button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 50%; transition: background .15s, color .15s; display: flex; align-items: center; justify-content: center; }
         .chat-header .header-actions button:hover { background: var(--pdim); color: var(--p); }
         .chat-header .header-actions button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-
-        /* ─── CHAT CONTAINER ─── */
-        .chat-container { display: flex; flex: 1; overflow: hidden; position: relative; background: var(--bg); }
 
         /* ─── SIDEBAR ─── */
         .conversations-sidebar { width: var(--sidebar-w); background: var(--bg2); border-right: 1px solid var(--brd); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; transition: transform .25s ease; z-index: 5; }
@@ -69,7 +103,7 @@
         .conversations-sidebar .conversation-list { flex: 1; overflow-y: auto; padding: 8px 0; -webkit-overflow-scrolling: touch; }
         .conversations-sidebar .conversation-list::-webkit-scrollbar { width: 0; }
 
-        /* ─── CONVERSATION ITEM (also used for user search results) ─── */
+        /* ─── CONVERSATION ITEM ─── */
         .conv-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; transition: background .12s; border-bottom: 1px solid var(--brd); position: relative; }
         .conv-item:hover { background: var(--pdim); }
         .conv-item.active { background: var(--pdim); border-left: 3px solid var(--p); }
@@ -187,7 +221,7 @@
         .attach-menu .attach-option .icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
         .attach-menu .attach-option .label { font-size: .85rem; font-weight: 600; }
 
-        /* ─── FULL-SCREEN NEW CHAT MODAL (matches profile.html .mfs pattern) ─── */
+        /* ─── FULL-SCREEN NEW CHAT MODAL ─── */
         .mfs {
             position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 9000;
             background: var(--bg2); display: flex; flex-direction: column;
@@ -294,10 +328,12 @@
             .chat-view { width: 100%; }
             .chat-view .chat-view-header { padding-left: 8px; }
             :root { --max-msg-width: 90%; }
+            .chat-container { padding-bottom: calc(var(--bottom-nav-height) + 8px); }
         }
         @media (min-width: 769px) {
             .conversations-sidebar { display: flex; }
             .chat-view .chat-view-header .back-btn { display: none; }
+            .chat-container { padding-bottom: 0; }
         }
 
         /* ─── TOAST ─── */
@@ -473,10 +509,12 @@
             'use strict';
 
             // ============================================================
-            // CONFIG
+            // CONFIG – using your existing Cloudinary presets
             // ============================================================
             const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
-            const CLOUDINARY_UPLOAD_PRESET = 'chat_uploads';
+            const CLOUDINARY_IMAGE_PRESET = 'image_upload';
+            const CLOUDINARY_VIDEO_PRESET = 'video_upload';
+            const CLOUDINARY_DOC_PRESET = 'market_upload'; // fallback for docs
             const MAX_FILE_SIZE = 25 * 1024 * 1024;
             const DEFAULT_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
@@ -489,11 +527,11 @@
             let conversations = [];
             let selectedConversationId = null;
             let selectedPartnerId = null;
-            let isBlockedConversation = false; // either direction
+            let isBlockedConversation = false;
             let messages = [];
-            let friendProfiles = [];       // profiles of mutual followers, preloaded at init
-            let mutualFollowers = new Set(); // user IDs of mutual followers
-            let blockedByMeIds = new Set();  // users I have blocked
+            let friendProfiles = [];
+            let mutualFollowers = new Set();
+            let blockedByMeIds = new Set();
             let messageSubscription = null;
             let conversationSubscription = null;
             let typingTimeout = null;
@@ -595,7 +633,7 @@
             }
 
             // ============================================================
-            // BLOCK STATE (mirrors profile.html's block logic)
+            // BLOCK STATE
             // ============================================================
             async function loadMyBlockList() {
                 if (!window.SettingsAPI || typeof window.SettingsAPI.listBlockedUsers !== 'function') return;
@@ -621,7 +659,7 @@
             }
 
             // ============================================================
-            // LOAD MUTUAL FOLLOWERS (Friends) — preloaded fully at init
+            // LOAD MUTUAL FOLLOWERS
             // ============================================================
             async function loadMutualFollowers() {
                 if (!currentUserId) return;
@@ -696,7 +734,7 @@
             }
 
             // ============================================================
-            // RENDER CONVERSATIONS (includes friends who match the query)
+            // RENDER CONVERSATIONS
             // ============================================================
             function renderConversations(filter = '') {
                 const q = filter.toLowerCase().trim();
@@ -711,7 +749,6 @@
                     });
                 }
 
-                // Friends matching the query who don't already have a conversation
                 let matchedFriends = [];
                 if (q) {
                     matchedFriends = friendProfiles.filter(function(u) {
@@ -783,7 +820,7 @@
             window.filterConversations = function(value) { renderConversations(value); };
 
             // ============================================================
-            // SELECT CONVERSATION (with block gate)
+            // SELECT CONVERSATION
             // ============================================================
             window.selectConversation = async function(convId) {
                 selectedConversationId = convId;
@@ -811,6 +848,7 @@
                     return;
                 }
 
+                // Enable input
                 messageInput.disabled = false;
                 sendBtn.disabled = false;
                 messageInputArea.classList.remove('blocked-input');
@@ -1053,8 +1091,7 @@
                 await loadConversations();
             };
 
-            // Helper to send with custom payloads. Keeps a `failed` flag on the
-            // local temp message instead of dropping it, so the user can retry.
+            // Helper to send with custom payloads
             async function sendMessageToConv(text, type = 'text', mediaUrl = null, replyTo = null, pollData = null) {
                 if (!selectedConversationId || isBlockedConversation) return;
                 const payload = {
@@ -1152,16 +1189,26 @@
             }
 
             // ============================================================
-            // UPLOADS (Cloudinary)
+            // UPLOADS (Cloudinary) – using your existing presets
             // ============================================================
             function uploadToCloudinary(file, onProgress) {
                 return new Promise((resolve, reject) => {
                     const isVideo = file.type.startsWith('video');
-                    const resourceType = isVideo ? 'video' : 'image';
+                    const isImage = file.type.startsWith('image');
+                    let preset = CLOUDINARY_IMAGE_PRESET;
+                    let resourceType = 'image';
+                    if (isVideo) {
+                        preset = CLOUDINARY_VIDEO_PRESET;
+                        resourceType = 'video';
+                    } else if (isImage) {
+                        preset = CLOUDINARY_IMAGE_PRESET;
+                    } else {
+                        preset = CLOUDINARY_DOC_PRESET; // fallback
+                    }
                     const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
                     const formData = new FormData();
                     formData.append('file', file);
-                    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                    formData.append('upload_preset', preset);
 
                     const xhr = new XMLHttpRequest();
                     xhr.open('POST', url);
@@ -1208,7 +1255,7 @@
             };
 
             // ============================================================
-            // VOICE RECORDING — dedicated recording bar, no ambient listeners
+            // VOICE RECORDING
             // ============================================================
             let mediaRecorder = null;
             let audioChunks = [];
