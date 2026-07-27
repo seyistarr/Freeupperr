@@ -820,13 +820,25 @@
             window.filterConversations = function(value) { renderConversations(value); };
 
             // ============================================================
-            // SELECT CONVERSATION
+            // SELECT CONVERSATION – with profile fetch fallback
             // ============================================================
             window.selectConversation = async function(convId) {
                 selectedConversationId = convId;
                 const conv = conversations.find(c => c.id === convId);
                 if (!conv) return;
                 selectedPartnerId = conv.otherUserId;
+
+                // If we don't have the partner's profile yet, fetch it now
+                if (!conv.otherUser && selectedPartnerId) {
+                    const { data: profile, error } = await sb
+                        .from('profiles')
+                        .select('id, display_name, username, avatar_url, verified_status, online_status')
+                        .eq('id', selectedPartnerId)
+                        .single();
+                    if (!error && profile) {
+                        conv.otherUser = profile;
+                    }
+                }
 
                 const other = conv.otherUser || {};
                 chatPartnerName.textContent = getDisplayName(other);
