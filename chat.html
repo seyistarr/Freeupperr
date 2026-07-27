@@ -14,6 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="global.js" defer></script>
     <script src="auth.js" defer></script>
+    <script src="settings.js" defer></script>
     <script src="bottom-nav.js" defer></script>
     <script src="side-nav.js" defer></script>
 
@@ -51,8 +52,9 @@
         .conversations-sidebar { width: var(--sidebar-w); background: var(--bg2); border-right: 1px solid var(--brd); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; transition: transform .25s ease; z-index: 5; }
         .conversations-sidebar .sidebar-header { padding: 14px 16px 8px; border-bottom: 1px solid var(--brd); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
         .conversations-sidebar .sidebar-header h2 { font-size: 1.1rem; font-weight: 800; color: var(--text); }
-        .conversations-sidebar .sidebar-header .new-chat-btn { background: var(--p); color: #fff; border: none; border-radius: 20px; padding: 6px 14px; font-weight: 700; font-size: .8rem; cursor: pointer; transition: opacity .15s; }
+        .conversations-sidebar .sidebar-header .new-chat-btn { background: var(--p); color: #fff; border: none; border-radius: 20px; padding: 6px 14px; font-weight: 700; font-size: .8rem; cursor: pointer; transition: opacity .15s; display: flex; align-items: center; gap: 4px; }
         .conversations-sidebar .sidebar-header .new-chat-btn:hover { opacity: .85; }
+        .conversations-sidebar .sidebar-header .new-chat-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; }
         .conversations-sidebar .search-box { padding: 8px 16px; flex-shrink: 0; }
         .conversations-sidebar .search-box input { width: 100%; padding: 8px 14px 8px 36px; border-radius: 20px; border: 1.5px solid var(--brd); background: var(--inp); font-size: .9rem; color: var(--text); outline: none; transition: border-color .15s; background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(150,150,150,0.5)' stroke-width='2' stroke-linecap='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 12px center; }
         .conversations-sidebar .search-box input:focus { border-color: var(--p); }
@@ -71,11 +73,12 @@
         .conv-item .conv-last-msg .msg-sender { font-weight: 600; color: var(--text); }
         .conv-item .conv-time { font-size: .7rem; color: var(--muted2); flex-shrink: 0; align-self: flex-start; margin-top: 4px; }
         .conv-item .unread-badge { background: var(--p); color: #fff; font-size: .65rem; font-weight: 700; border-radius: 50%; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0 6px; flex-shrink: 0; }
-        .conv-item .start-chat-btn { background: var(--p); color: #fff; border: none; border-radius: 16px; padding: 4px 12px; font-size: .7rem; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+        .conv-item .start-chat-btn { background: var(--p); color: #fff; border: none; border-radius: 16px; padding: 4px 12px; font-size: .7rem; font-weight: 700; cursor: pointer; transition: opacity .15s; flex-shrink: 0; }
         .conv-item .start-chat-btn:hover { opacity: .85; }
+        .conv-item .friend-tag { font-size: .6rem; font-weight: 800; padding: 1px 7px; border-radius: 100px; background: var(--pdim); color: var(--pl); flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em; }
 
         /* ─── SECTION HEADER IN SEARCH RESULTS ─── */
-        .search-section-header { font-size: .7rem; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: .05em; padding: 12px 16px 4px; border-bottom: 1px solid var(--brd); }
+        .search-section-header { font-size: .7rem; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: .05em; padding: 12px 16px 4px; border-bottom: 1px solid var(--brd); background: var(--bg2); position: sticky; top: 0; z-index: 1; }
 
         /* ─── CHAT VIEW ─── */
         .chat-view { flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; position: relative; }
@@ -100,9 +103,13 @@
         .message-bubble { max-width: var(--max-msg-width); padding: 10px 14px; border-radius: var(--bubble-radius); font-size: .9rem; line-height: 1.5; word-break: break-word; position: relative; animation: fadeUp .15s ease both; margin-bottom: 2px; }
         .message-bubble.sent { align-self: flex-end; background: var(--p); color: #fff; border-bottom-right-radius: 4px; }
         .message-bubble.received { align-self: flex-start; background: var(--bg3); border: 1px solid var(--brd); color: var(--text); border-bottom-left-radius: 4px; }
+        .message-bubble.failed { opacity: .75; }
         .message-bubble .msg-time { font-size: .65rem; opacity: .7; margin-top: 4px; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
         .message-bubble .msg-time .read-receipt { display: inline-flex; align-items: center; }
         .message-bubble .msg-time .read-receipt svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .message-bubble .msg-time .read-receipt.read { color: #4fc3f7; }
+        .message-bubble .msg-failed-row { font-size: .7rem; margin-top: 4px; text-align: right; color: #fca5a5; cursor: pointer; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+        .message-bubble .msg-failed-row svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
         .message-bubble .msg-media { margin: -4px -2px 6px; border-radius: 12px; overflow: hidden; cursor: pointer; background: #000; max-height: 300px; }
         .message-bubble .msg-media img, .message-bubble .msg-media video { width: 100%; max-height: 300px; object-fit: contain; display: block; }
         .message-bubble .msg-doc { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(255,255,255,.06); border-radius: 10px; margin: 4px 0 6px; cursor: pointer; transition: background .15s; }
@@ -145,10 +152,10 @@
         .typing-indicator .dots span:nth-child(3) { animation-delay: .4s; }
         @keyframes typingDot { 0%,60%,100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-6px); opacity: 1; } }
 
-        .no-messages { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; gap: 8px; }
-        .no-messages svg { width: 48px; height: 48px; stroke: var(--muted2); fill: none; stroke-width: 1.5; }
-        .no-messages h3 { font-weight: 700; font-size: 1.1rem; }
-        .no-messages p { font-size: .9rem; max-width: 220px; }
+        .no-messages, .blocked-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; gap: 8px; padding: 0 24px; }
+        .no-messages svg, .blocked-state svg { width: 48px; height: 48px; stroke: var(--muted2); fill: none; stroke-width: 1.5; }
+        .no-messages h3, .blocked-state h3 { font-weight: 700; font-size: 1.1rem; color: var(--text); }
+        .no-messages p, .blocked-state p { font-size: .9rem; max-width: 260px; }
 
         /* ─── MESSAGE INPUT ─── */
         .message-input-area { display: flex; align-items: flex-end; gap: 8px; padding: 8px 12px; padding-bottom: max(8px, var(--safe-bottom)); background: var(--bg2); border-top: 1px solid var(--brd); flex-shrink: 0; min-height: var(--chat-input-h); }
@@ -163,6 +170,7 @@
         .message-input-area .send-btn:active { transform: scale(.92); }
         .message-input-area .send-btn:disabled { opacity: .4; cursor: not-allowed; }
         .message-input-area .send-btn svg { width: 20px; height: 20px; stroke: #fff; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+        .message-input-area.blocked-input { align-items: center; justify-content: center; color: var(--muted); font-size: .8rem; font-weight: 600; }
 
         .attach-menu { display: none; position: absolute; bottom: 70px; left: 12px; background: var(--bg3); border: 1px solid var(--brd); border-radius: 16px; padding: 12px 16px; box-shadow: 0 8px 32px rgba(0,0,0,.3); z-index: 20; min-width: 200px; }
         .attach-menu.open { display: block; }
@@ -171,48 +179,49 @@
         .attach-menu .attach-option .icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
         .attach-menu .attach-option .label { font-size: .85rem; font-weight: 600; }
 
-        /* ─── NEW CHAT MODAL ─── */
-        .new-chat-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 200;
-            background: rgba(0,0,0,.5);
-            backdrop-filter: blur(8px);
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
+        /* ─── FULL-SCREEN NEW CHAT MODAL (matches profile.html .mfs pattern) ─── */
+        .mfs {
+            position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 9000;
+            background: var(--bg2); display: flex; flex-direction: column;
+            visibility: hidden; opacity: 0; transform: translateY(100%);
+            transition: opacity .3s, visibility .3s, transform .36s cubic-bezier(.32,1,.64,1);
         }
-        .new-chat-modal.open { display: flex; }
-        .new-chat-modal .modal-sheet {
-            background: var(--bg3);
-            border-radius: 24px;
-            max-width: 500px;
-            width: 100%;
-            max-height: 80vh;
-            display: flex;
-            flex-direction: column;
-            border: 1px solid var(--brd2);
-            box-shadow: 0 24px 60px rgba(0,0,0,.4);
-            overflow: hidden;
-            animation: fadeUp .25s ease both;
-        }
-        .modal-sheet .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--brd); flex-shrink: 0; }
-        .modal-sheet .modal-header h3 { font-weight: 800; font-size: 1.1rem; color: var(--text); }
-        .modal-sheet .modal-header button { background: none; border: none; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--muted); transition: background .15s; }
-        .modal-sheet .modal-header button:hover { background: var(--pdim); }
-        .modal-sheet .modal-header button svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; }
-        .modal-sheet .modal-search { padding: 12px 20px; flex-shrink: 0; border-bottom: 1px solid var(--brd); }
-        .modal-sheet .modal-search input { width: 100%; padding: 10px 14px; border-radius: 14px; border: 1.5px solid var(--brd); background: var(--inp); font-size: .9rem; color: var(--text); outline: none; transition: border-color .15s; }
-        .modal-sheet .modal-search input:focus { border-color: var(--p); }
-        .modal-sheet .modal-list { flex: 1; overflow-y: auto; padding: 8px 0; -webkit-overflow-scrolling: touch; }
-        .modal-sheet .modal-list::-webkit-scrollbar { width: 0; }
-        .modal-sheet .user-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px; cursor: pointer; transition: background .12s; }
-        .modal-sheet .user-row:hover { background: var(--pdim); }
-        .modal-sheet .user-row .u-av { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; background: var(--bg4); flex-shrink: 0; }
-        .modal-sheet .user-row .u-name { font-weight: 700; font-size: .9rem; color: var(--text); }
-        .modal-sheet .user-row .u-handle { font-size: .8rem; color: var(--muted); }
-        .modal-sheet .modal-empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+        .mfs.open { visibility: visible; opacity: 1; transform: translateY(0); }
+        .fs-hdr { display: flex; justify-content: space-between; align-items: center; padding: clamp(52px,10vw,64px) clamp(16px,5vw,24px) 14px; border-bottom: 1px solid var(--brd); flex-shrink: 0; }
+        .fs-title { font-size: clamp(18px,5vw,22px); font-weight: 800; }
+        .fs-x { width: 38px; height: 38px; border-radius: 50%; background: var(--inp); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .15s; }
+        .fs-x:hover { background: var(--pdim); }
+        .fs-x svg { width: 18px; height: 18px; stroke: var(--muted); fill: none; stroke-width: 2.2; stroke-linecap: round; }
+        .fs-search { padding: 12px clamp(14px,5vw,24px) 6px; flex-shrink: 0; }
+        .fs-search input { width: 100%; padding: 11px 16px 11px 42px; border-radius: 14px; border: 1.5px solid var(--brd); background: var(--inp); font-size: 14px; color: var(--text); outline: none; transition: border-color .15s; background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(150,150,150,0.5)' stroke-width='2' stroke-linecap='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 14px center; }
+        .fs-search input::placeholder { color: var(--muted2); }
+        .fs-search input:focus { border-color: var(--p); }
+        .fs-list { overflow-y: auto; flex: 1; min-height: 0; padding: 4px 0 40px; -webkit-overflow-scrolling: touch; }
+        .fs-list::-webkit-scrollbar { width: 0; }
+
+        .u-row { display: flex; align-items: center; gap: 14px; padding: 13px clamp(14px,5vw,24px); cursor: pointer; transition: background .12s; }
+        .u-row:hover { background: var(--rowh); }
+        .u-row-friend { background: rgba(139,92,246,.04); border-left: 2.5px solid var(--p); }
+        .u-av { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--bg4); border: 1.5px solid var(--brd); }
+        .u-info { flex: 1; min-width: 0; }
+        .u-name { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 5px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .u-handle { font-size: 13px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+        .u-tag { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 100px; flex-shrink: 0; background: var(--pdim); color: var(--pl); }
+        .mini-badge { width: 15px; height: 15px; border-radius: 50%; background: linear-gradient(135deg,var(--p),var(--pd)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .mini-badge svg { width: 9px; height: 9px; stroke: #fff; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+
+        .u-skeleton { display: flex; align-items: center; gap: 14px; padding: 13px clamp(14px,5vw,24px); }
+        .u-skeleton-av { width: 50px; height: 50px; border-radius: 50%; background: var(--bg4); animation: shimmer 1.4s ease-in-out infinite; flex-shrink: 0; }
+        .u-skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+        .u-skeleton-name { height: 13px; border-radius: 6px; background: var(--bg4); width: 55%; animation: shimmer 1.4s ease-in-out infinite; }
+        .u-skeleton-sub { height: 11px; border-radius: 6px; background: var(--bg4); width: 35%; animation: shimmer 1.4s ease-in-out infinite; animation-delay: .15s; }
+        @keyframes shimmer { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
+
+        .fw-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; gap: 12px; }
+        .fw-empty-ico { width: 72px; height: 72px; border-radius: 50%; background: var(--pdim); border: 1.5px solid var(--pbrd,rgba(139,92,246,.28)); display: flex; align-items: center; justify-content: center; }
+        .fw-empty-ico svg { width: 32px; height: 32px; stroke: var(--p); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+        .fw-empty h3 { font-size: 17px; font-weight: 800; color: var(--text); }
+        .fw-empty p { font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 260px; }
 
         /* ─── CONTEXT MENU ─── */
         .msg-context-menu { position: fixed; background: var(--bg3); border: 1px solid var(--brd); border-radius: 14px; padding: 6px 0; box-shadow: 0 8px 32px rgba(0,0,0,.4); z-index: 300; min-width: 180px; display: none; animation: fadeUp .15s ease both; }
@@ -233,6 +242,17 @@
         .upload-progress.visible { display: flex; }
         .upload-progress .progress-bar { flex: 1; height: 4px; background: var(--brd); border-radius: 2px; overflow: hidden; min-width: 60px; }
         .upload-progress .progress-bar .fill { height: 100%; background: var(--p); width: 0%; transition: width .15s; }
+
+        /* ─── VOICE RECORDING BAR ─── */
+        .voice-record-bar { display: none; align-items: center; gap: 12px; flex: 1; padding: 4px 6px 4px 16px; }
+        .voice-record-bar.active { display: flex; }
+        .voice-record-bar .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; animation: recPulse 1s ease-in-out infinite; flex-shrink: 0; }
+        @keyframes recPulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+        .voice-record-bar .rec-time { font-size: .85rem; font-weight: 700; color: var(--text); min-width: 40px; }
+        .voice-record-bar .rec-hint { flex: 1; font-size: .78rem; color: var(--muted); }
+        .voice-record-bar .rec-cancel { background: none; border: none; color: var(--danger); font-weight: 700; font-size: .8rem; cursor: pointer; padding: 6px 10px; }
+        .voice-record-bar .rec-send { background: var(--p); color: #fff; border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .voice-record-bar .rec-send svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 2.5; stroke-linecap: round; }
 
         /* ─── POLL MODAL ─── */
         .poll-modal { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.5); backdrop-filter: blur(8px); align-items: center; justify-content: center; padding: 20px; }
@@ -310,8 +330,10 @@
                 <div class="conversations-sidebar" id="conversationsSidebar">
                     <div class="sidebar-header">
                         <h2>Messages</h2>
-                        <!-- "+ New" button with inline onclick -->
-                        <button class="new-chat-btn" onclick="openNewChatModal()">+ New</button>
+                        <button class="new-chat-btn" onclick="openNewChatModal()">
+                            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            New
+                        </button>
                     </div>
                     <div class="search-box">
                         <input type="text" id="convSearch" placeholder="Search conversations or friends..." oninput="filterConversations(this.value)">
@@ -345,8 +367,8 @@
                         </div>
                     </div>
 
-                    <div class="message-input-area">
-                        <div class="input-wrapper" style="position:relative;">
+                    <div class="message-input-area" id="messageInputArea">
+                        <div class="input-wrapper" style="position:relative;" id="textInputWrapper">
                             <button class="attach-btn" onclick="toggleAttachMenu()" title="Attach">
                                 <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                             </button>
@@ -359,6 +381,12 @@
                                 <div class="attach-option" onclick="handleAttach('poll')"><span class="icon">📊</span><span class="label">Poll</span></div>
                             </div>
                             <input type="file" id="fileInput" accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" multiple />
+                        </div>
+                        <div class="voice-record-bar" id="voiceRecordBar">
+                            <div class="rec-dot"></div>
+                            <span class="rec-time" id="recTime">0:00</span>
+                            <span class="rec-hint">Recording voice note…</span>
+                            <button class="rec-cancel" onclick="cancelVoiceRecording()">Cancel</button>
                         </div>
                         <button class="send-btn" id="sendBtn" disabled onclick="sendMessage()">
                             <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -376,22 +404,16 @@
         <bottom-nav></bottom-nav>
     </div>
 
-    <!-- ===== NEW CHAT MODAL ===== -->
-    <div class="new-chat-modal" id="newChatModal">
-        <div class="modal-sheet">
-            <div class="modal-header">
-                <h3>New Conversation</h3>
-                <button onclick="closeNewChatModal()">
-                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-            </div>
-            <div class="modal-search">
-                <input type="text" id="userSearchInput" placeholder="Search by name or username..." oninput="searchUsersInModal(this.value)">
-            </div>
-            <div class="modal-list" id="userSearchResults">
-                <div class="modal-empty">Type to find users</div>
-            </div>
+    <!-- ===== NEW CHAT — FULL SCREEN MODAL ===== -->
+    <div class="mfs" id="newChatModal">
+        <div class="fs-hdr">
+            <span class="fs-title">New Message</span>
+            <button class="fs-x" onclick="closeNewChatModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
+        <div class="fs-search">
+            <input type="text" id="userSearchInput" placeholder="Search everyone on FreeUpper..." oninput="onUserSearchInput(this.value)">
+        </div>
+        <div class="fs-list" id="userSearchResults"></div>
     </div>
 
     <!-- ===== POLL MODAL ===== -->
@@ -430,7 +452,7 @@
         <button class="menu-item" onclick="copyMessage()">
             <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy
         </button>
-        <button class="menu-item danger" onclick="deleteMessage()">
+        <button class="menu-item danger" data-owner-only onclick="deleteMessage()">
             <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete
         </button>
     </div>
@@ -448,6 +470,9 @@
             const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
             const CLOUDINARY_UPLOAD_PRESET = 'chat_uploads';
             const MAX_FILE_SIZE = 25 * 1024 * 1024;
+            const DEFAULT_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
+            );
 
             // ============================================================
             // GLOBAL STATE
@@ -456,14 +481,18 @@
             let conversations = [];
             let selectedConversationId = null;
             let selectedPartnerId = null;
+            let isBlockedConversation = false; // either direction
             let messages = [];
-            let allUsers = [];
+            let friendProfiles = [];       // profiles of mutual followers, preloaded at init
             let mutualFollowers = new Set(); // user IDs of mutual followers
+            let blockedByMeIds = new Set();  // users I have blocked
             let messageSubscription = null;
             let conversationSubscription = null;
             let typingTimeout = null;
             let replyTargetMessage = null;
             let contextMenuMsgId = null;
+            let userSearchDebounce = null;
+            let userSearchToken = 0;
 
             const sb = window.sb;
             if (!sb) { console.error('Supabase client not ready'); return; }
@@ -484,6 +513,7 @@
             const uploadProgressFill = document.getElementById('uploadProgressFill');
             const uploadPercent = document.getElementById('uploadPercent');
             const uploadLabel = document.getElementById('uploadLabel');
+            const messageInputArea = document.getElementById('messageInputArea');
 
             // ============================================================
             // HELPERS
@@ -527,7 +557,7 @@
             }
 
             function getAvatar(profile) {
-                return profile?.avatar_url || profile?.avatar || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'50\' fill=\'%23E5E7EB\'/%3E%3Ccircle cx=\'50\' cy=\'38\' r=\'16\' fill=\'%239CA3AF\'/%3E%3Cellipse cx=\'50\' cy=\'75\' rx=\'30\' ry=\'22\' fill=\'%239CA3AF\'/%3E%3C/svg%3E';
+                return profile?.avatar_url || profile?.avatar || DEFAULT_AVATAR;
             }
 
             function getDisplayName(profile) {
@@ -537,38 +567,71 @@
             function getVerifiedBadge(status) {
                 if (!status || status === 'none' || status === 'pending') return '';
                 const label = status === 'official' ? 'Official' : status === 'staff' ? 'Staff' : status === 'business' ? 'Business' : 'Verified';
-                return `<span class="verified-badge-sm" style="display:inline-flex;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,var(--p),var(--pd));margin-left:2px;flex-shrink:0;" title="${label}"><svg viewBox="0 0 24 24" style="width:9px;height:9px;stroke:#fff;fill:none;stroke-width:3;stroke-linecap:round;"><polyline points="20 6 9 17 4 12"/></svg></span>`;
+                return `<span class="mini-badge" title="${label}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>`;
             }
 
             function scrollToBottom() {
                 messagesArea.scrollTop = messagesArea.scrollHeight;
             }
 
+            function avatarErrAttr() {
+                return `onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'"`;
+            }
+
             // ============================================================
-            // LOAD MUTUAL FOLLOWERS (Friends)
+            // BLOCK STATE (mirrors profile.html's block logic)
+            // ============================================================
+            async function loadMyBlockList() {
+                if (!window.SettingsAPI || typeof window.SettingsAPI.listBlockedUsers !== 'function') return;
+                try {
+                    const list = await window.SettingsAPI.listBlockedUsers();
+                    blockedByMeIds = new Set((list || []).map(function(b) { return b.id; }));
+                } catch (e) { console.warn('loadMyBlockList error:', e); }
+            }
+
+            async function didUserBlockMe(targetId) {
+                try {
+                    const res = await sb.from('blocks').select('blocked_id')
+                        .eq('blocker_id', targetId).eq('blocked_id', currentUserId).maybeSingle();
+                    if (res.error) return false;
+                    return !!res.data;
+                } catch (e) { return false; }
+            }
+
+            async function getBlockStatus(partnerId) {
+                const iBlockedThem = blockedByMeIds.has(partnerId);
+                const theyBlockedMe = iBlockedThem ? false : await didUserBlockMe(partnerId);
+                return { iBlockedThem: iBlockedThem, theyBlockedMe: theyBlockedMe, blocked: iBlockedThem || theyBlockedMe };
+            }
+
+            // ============================================================
+            // LOAD MUTUAL FOLLOWERS (Friends) — preloaded fully at init
             // ============================================================
             async function loadMutualFollowers() {
                 if (!currentUserId) return;
                 try {
-                    // Get users I follow
                     const { data: following, error: fErr } = await sb
-                        .from('follows')
-                        .select('following_id')
-                        .eq('follower_id', currentUserId);
+                        .from('follows').select('following_id').eq('follower_id', currentUserId);
                     if (fErr) throw fErr;
                     const followingIds = following.map(f => f.following_id);
 
-                    // Get users who follow me
                     const { data: followers, error: flErr } = await sb
-                        .from('follows')
-                        .select('follower_id')
-                        .eq('following_id', currentUserId);
+                        .from('follows').select('follower_id').eq('following_id', currentUserId);
                     if (flErr) throw flErr;
                     const followerIds = followers.map(f => f.follower_id);
 
-                    // Mutual = intersection
                     const mutual = followingIds.filter(id => followerIds.includes(id));
                     mutualFollowers = new Set(mutual);
+
+                    if (mutual.length) {
+                        const { data: profiles, error: pErr } = await sb
+                            .from('profiles')
+                            .select('id, display_name, username, avatar_url, verified_status')
+                            .in('id', mutual);
+                        if (!pErr && profiles) friendProfiles = profiles;
+                    } else {
+                        friendProfiles = [];
+                    }
                 } catch (err) {
                     console.error('loadMutualFollowers error:', err);
                 }
@@ -593,10 +656,8 @@
                     conversations = data.map(conv => {
                         const otherId = conv.user1_id === currentUserId ? conv.user2_id : conv.user1_id;
                         const msgs = conv.messages || [];
-                        const lastMsg = msgs.length ? msgs.reduce((a, b) => new Date(a.created_at) > new Date(b
-                            .created_at) ? a : b) : null;
-                        return { ...conv, otherUserId: otherId, lastMessage: lastMsg, lastMessageTime: lastMsg ?
-                                lastMsg.created_at : conv.updated_at };
+                        const lastMsg = msgs.length ? msgs.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b) : null;
+                        return { ...conv, otherUserId: otherId, lastMessage: lastMsg, lastMessageTime: lastMsg ? lastMsg.created_at : conv.updated_at };
                     });
 
                     const userIds = conversations.map(c => c.otherUserId).filter(Boolean);
@@ -608,12 +669,10 @@
                         if (!pErr && profiles) {
                             const profileMap = {};
                             profiles.forEach(p => profileMap[p.id] = p);
-                            conversations.forEach(c => {
-                                c.otherUser = profileMap[c.otherUserId] || null;
-                            });
+                            conversations.forEach(c => { c.otherUser = profileMap[c.otherUserId] || null; });
                         }
                     }
-                    renderConversations();
+                    renderConversations(convSearch.value);
                 } catch (err) {
                     console.error('loadConversations error:', err);
                     showToast('Failed to load conversations', 'r');
@@ -621,68 +680,42 @@
             }
 
             // ============================================================
-            // RENDER CONVERSATIONS (with search for friends)
+            // RENDER CONVERSATIONS (includes friends who match the query)
             // ============================================================
             function renderConversations(filter = '') {
                 const q = filter.toLowerCase().trim();
                 let html = '';
 
-                // 1. Filter existing conversations
                 let matchedConvs = conversations;
                 if (q) {
                     matchedConvs = matchedConvs.filter(c => {
-                        const name = c.otherUser ? (c.otherUser.display_name || c.otherUser.username || '') :
-                        '';
-                        return name.toLowerCase().includes(q);
+                        const name = c.otherUser ? (c.otherUser.display_name || c.otherUser.username || '') : '';
+                        const handle = c.otherUser ? (c.otherUser.username || '') : '';
+                        return name.toLowerCase().includes(q) || handle.toLowerCase().includes(q);
                     });
                 }
 
-                // 2. Find mutual followers matching the query (only if query not empty)
+                // Friends matching the query who don't already have a conversation
                 let matchedFriends = [];
-                if (q && mutualFollowers.size > 0) {
-                    const allFriendIds = Array.from(mutualFollowers);
-                    // Fetch profiles for these friends (we can cache them to avoid repeated queries)
-                    // We'll fetch them on demand and cache in allUsers
-                    const friendProfiles = allUsers.filter(u => mutualFollowers.has(u.id));
-                    // Also, ensure we have profiles for all mutual followers
-                    // For simplicity, we'll rely on allUsers being populated (from loadAllUsers)
-                    // If not, we'll query them now.
-                    if (friendProfiles.length === 0 && mutualFollowers.size > 0) {
-                        // Fetch them now
-                        sb.from('profiles')
-                            .select('id, display_name, username, avatar_url, verified_status')
-                            .in('id', Array.from(mutualFollowers))
-                            .then(({ data, error }) => {
-                                if (!error && data) {
-                                    allUsers = allUsers.concat(data);
-                                    // Re-render
-                                    renderConversations(filter);
-                                }
-                            })
-                            .catch(() => {});
-                        return;
-                    }
-                    matchedFriends = friendProfiles.filter(u => {
+                if (q) {
+                    matchedFriends = friendProfiles.filter(function(u) {
                         const name = (u.display_name || u.username || '').toLowerCase();
-                        return name.includes(q) && !conversations.some(c => c.otherUserId === u.id);
+                        const handle = (u.username || '').toLowerCase();
+                        return (name.includes(q) || handle.includes(q)) && !conversations.some(c => c.otherUserId === u.id);
                     });
                 }
 
-                // Build HTML
                 if (matchedConvs.length === 0 && matchedFriends.length === 0) {
                     convList.innerHTML = `
                         <div style="padding: 30px 16px; text-align: center; color: var(--muted);">
-                            <p>${q ? 'No results found.' : 'No conversations yet. Start a new one!'}</p>
+                            <p>${q ? 'No results found.' : 'No conversations yet. Tap New to start one.'}</p>
                         </div>
                     `;
                     return;
                 }
 
-                // Conversations section
                 if (matchedConvs.length > 0) {
-                    if (q) {
-                        html += `<div class="search-section-header">Conversations</div>`;
-                    }
+                    if (q) html += `<div class="search-section-header">Conversations</div>`;
                     html += matchedConvs.map(c => {
                         const other = c.otherUser || {};
                         const name = other.display_name || other.username || 'User';
@@ -698,7 +731,7 @@
                         const online = other.online_status === 'online' ? '<div class="online-dot"></div>' : '';
                         return `
                             <div class="conv-item ${active}" data-conv-id="${c.id}" onclick="selectConversation('${c.id}')">
-                                <div class="av">${online}<img src="${avatar}" alt="${escapeHtml(name)}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'%3E%3Ccircle cx=\\'50\\' cy=\\'50\\' r=\\'50\\' fill=\\'%23E5E7EB\\'/%3E%3Ccircle cx=\\'50\\' cy=\\'38\\' r=\\'16\\' fill=\\'%239CA3AF\\'/%3E%3Cellipse cx=\\'50\\' cy=\\'75\\' rx=\\'30\\' ry=\\'22\\' fill=\\'%239CA3AF\\'/%3E%3C/svg%3E'"></div>
+                                <div class="av">${online}<img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}></div>
                                 <div class="conv-info">
                                     <div class="conv-name">${escapeHtml(name)} ${badge}</div>
                                     <div class="conv-last-msg">${escapeHtml(lastMsg)}</div>
@@ -709,7 +742,6 @@
                     }).join('');
                 }
 
-                // Friends section
                 if (matchedFriends.length > 0) {
                     html += `<div class="search-section-header">Friends</div>`;
                     html += matchedFriends.map(u => {
@@ -718,7 +750,7 @@
                         const badge = getVerifiedBadge(u.verified_status);
                         return `
                             <div class="conv-item" onclick="startConversationWith('${u.id}')">
-                                <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'%3E%3Ccircle cx=\\'50\\' cy=\\'50\\' r=\\'50\\' fill=\\'%23E5E7EB\\'/%3E%3Ccircle cx=\\'50\\' cy=\\'38\\' r=\\'16\\' fill=\\'%239CA3AF\\'/%3E%3Cellipse cx=\\'50\\' cy=\\'75\\' rx=\\'30\\' ry=\\'22\\' fill=\\'%239CA3AF\\'/%3E%3C/svg%3E'"></div>
+                                <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}></div>
                                 <div class="conv-info">
                                     <div class="conv-name">${escapeHtml(name)} ${badge}</div>
                                     <div class="conv-last-msg" style="color:var(--muted2);">Tap to start chat</div>
@@ -735,7 +767,7 @@
             window.filterConversations = function(value) { renderConversations(value); };
 
             // ============================================================
-            // SELECT CONVERSATION
+            // SELECT CONVERSATION (with block gate)
             // ============================================================
             window.selectConversation = async function(convId) {
                 selectedConversationId = convId;
@@ -748,17 +780,52 @@
                 chatPartnerAvatar.src = getAvatar(other);
                 chatPartnerStatus.textContent = other.online_status === 'online' ? 'Online' : 'Last seen recently';
 
+                if (window.innerWidth <= 768) {
+                    document.getElementById('conversationsSidebar').classList.add('hidden');
+                }
+
+                messagesArea.innerHTML = `<div class="no-messages"><p>Loading…</p></div>`;
+
+                const status = await getBlockStatus(selectedPartnerId);
+                isBlockedConversation = status.blocked;
+
+                if (isBlockedConversation) {
+                    applyBlockedUI(status);
+                    renderConversations(convSearch.value);
+                    return;
+                }
+
                 messageInput.disabled = false;
                 sendBtn.disabled = false;
+                messageInputArea.classList.remove('blocked-input');
+                messageInputArea.innerHTML = messageInputArea.dataset.defaultHtml
+                    ? messageInputArea.dataset.defaultHtml
+                    : messageInputArea.innerHTML;
                 messageInput.focus();
 
                 await loadMessages(convId);
                 renderConversations(convSearch.value);
-
-                if (window.innerWidth <= 768) {
-                    document.getElementById('conversationsSidebar').classList.add('hidden');
-                }
             };
+
+            function applyBlockedUI(status) {
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+                const msg = status.theyBlockedMe
+                    ? { title: "You can't message this user", desc: "This user has blocked you." }
+                    : { title: "You've blocked this user", desc: "Unblock them from Settings → Blocked Users to send messages." };
+                messagesArea.innerHTML = `
+                    <div class="blocked-state">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                        <h3>${msg.title}</h3>
+                        <p>${msg.desc}</p>
+                    </div>
+                `;
+                if (!messageInputArea.dataset.defaultHtml) {
+                    messageInputArea.dataset.defaultHtml = messageInputArea.innerHTML;
+                }
+                messageInputArea.classList.add('blocked-input');
+                messageInputArea.innerHTML = `<span>${msg.title}</span>`;
+            }
 
             // ============================================================
             // LOAD MESSAGES
@@ -779,10 +846,22 @@
                     messages = data || [];
                     renderMessages();
                     scrollToBottom();
+                    markVisibleMessagesRead(convId);
                 } catch (err) {
                     console.error('loadMessages error:', err);
                     showToast('Failed to load messages', 'r');
                 }
+            }
+
+            async function markVisibleMessagesRead(convId) {
+                if (!currentUserId) return;
+                const unread = messages.filter(m => m.sender_id !== currentUserId &&
+                    !(m.message_reads || []).some(r => r.user_id === currentUserId));
+                if (!unread.length) return;
+                try {
+                    const rows = unread.map(m => ({ message_id: m.id, user_id: currentUserId, read_at: new Date().toISOString() }));
+                    await sb.from('message_reads').upsert(rows, { onConflict: 'message_id,user_id' });
+                } catch (e) { /* non-fatal */ }
             }
 
             // ============================================================
@@ -808,8 +887,7 @@
                     const dateKey = msgDate.toDateString();
                     if (dateKey !== lastDate) {
                         lastDate = dateKey;
-                        html +=
-                            `<div class="date-divider">${msgDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>`;
+                        html += `<div class="date-divider">${msgDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>`;
                     }
 
                     const isSent = msg.sender_id === currentUserId;
@@ -845,8 +923,7 @@
                     } else if (msg.message_type === 'document' && msg.media_url) {
                         const fileName = msg.media_url.split('/').pop() || 'Document';
                         const ext = fileName.split('.').pop()?.toLowerCase() || '';
-                        const icons = { pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊', ppt: '📽️', pptx: '📽️',
-                            zip: '📦', txt: '📃' };
+                        const icons = { pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊', ppt: '📽️', pptx: '📽️', zip: '📦', txt: '📃' };
                         const icon = icons[ext] || '📄';
                         contentHtml = `
                             <div class="msg-doc" onclick="openDocument('${msg.media_url}')">
@@ -886,13 +963,11 @@
                         contentHtml = `<div>${escapeHtml(msg.text || '')}</div>`;
                     }
 
-                    // Reply context
                     let replyHtml = '';
                     if (msg.reply_to) {
                         const replied = messages.find(m => m.id === msg.reply_to);
                         if (replied) {
-                            const replyAuthor = replied.sender_id === currentUserId ? 'You' : (replied.sender_name ||
-                                'User');
+                            const replyAuthor = replied.sender_id === currentUserId ? 'You' : (replied.sender_name || 'User');
                             replyHtml = `
                                 <div style="font-size:.75rem;opacity:.7;padding:2px 0 4px 0;border-left:2px solid var(--p);padding-left:8px;margin-bottom:4px;">
                                     ↳ ${escapeHtml(replyAuthor)}: ${escapeHtml(replied.text || '')}
@@ -901,37 +976,41 @@
                         }
                     }
 
-                    // Reactions
                     let reactionsHtml = '';
                     if (msg.message_reactions && msg.message_reactions.length) {
                         const emojiCounts = {};
-                        msg.message_reactions.forEach(r => {
-                            emojiCounts[r.emoji] = (emojiCounts[r.emoji] || 0) + 1;
-                        });
+                        msg.message_reactions.forEach(r => { emojiCounts[r.emoji] = (emojiCounts[r.emoji] || 0) + 1; });
                         reactionsHtml = Object.entries(emojiCounts).map(([emoji, count]) =>
                             `<span style="font-size:.85rem;margin-right:4px;">${emoji} ${count > 1 ? count : ''}</span>`
                         ).join('');
                     }
 
-                    // Read receipt
-                    let readReceiptHtml = '';
-                    if (isSent) {
-                        const reads = msg.message_reads || [];
-                        const otherRead = reads.some(r => r.user_id !== currentUserId);
-                        readReceiptHtml = otherRead ?
-                            `<span class="read-receipt"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>` :
-                            `<span class="read-receipt"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>`;
+                    let footerHtml = '';
+                    if (msg.failed) {
+                        footerHtml = `
+                            <div class="msg-failed-row" onclick="retryMessage('${msg.id}')">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                Failed · Tap to retry
+                            </div>
+                        `;
+                    } else {
+                        let readReceiptHtml = '';
+                        if (isSent) {
+                            const reads = msg.message_reads || [];
+                            const otherRead = reads.some(r => r.user_id !== currentUserId);
+                            readReceiptHtml = otherRead
+                                ? `<span class="read-receipt read"><svg viewBox="0 0 24 24"><path d="M18 6L7 17l-5-5"/><path d="M23 6L12 17l-1-1"/></svg></span>`
+                                : `<span class="read-receipt"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>`;
+                        }
+                        footerHtml = `<div class="msg-time">${time}${readReceiptHtml}</div>`;
                     }
 
                     html += `
-                        <div class="message-bubble ${msgClass}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" ondblclick="toggleReactionPicker(event, '${msg.id}')">
+                        <div class="message-bubble ${msgClass}${msg.failed ? ' failed' : ''}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" ondblclick="toggleReactionPicker(event, '${msg.id}')">
                             ${replyHtml}
                             ${contentHtml}
                             ${reactionsHtml ? `<div style="margin-top:4px;">${reactionsHtml}</div>` : ''}
-                            <div class="msg-time">
-                                ${time}
-                                ${readReceiptHtml}
-                            </div>
+                            ${footerHtml}
                         </div>
                     `;
                 });
@@ -943,96 +1022,90 @@
             // SEND MESSAGE
             // ============================================================
             window.sendMessage = async function() {
+                if (isBlockedConversation) return;
                 const text = messageInput.value.trim();
                 if (!text || !selectedConversationId) return;
                 const replyTo = replyTargetMessage ? replyTargetMessage.id : null;
 
-                const payload = {
-                    conversation_id: selectedConversationId,
-                    sender_id: currentUserId,
-                    text: text,
-                    message_type: 'text',
-                    reply_to: replyTo || null,
-                };
-
-                const tempId = 'temp-' + Date.now();
-                const tempMsg = { ...payload, id: tempId, created_at: new Date().toISOString() };
-                messages.push(tempMsg);
-                renderMessages();
-                scrollToBottom();
                 messageInput.value = '';
                 messageInput.style.height = 'auto';
                 replyTargetMessage = null;
                 messageInput.placeholder = 'Type a message...';
 
-                try {
-                    const { data, error } = await sb
-                        .from('messages')
-                        .insert(payload)
-                        .select()
-                        .single();
+                await sendMessageToConv(text, 'text', null, replyTo);
+                await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selectedConversationId);
+                await loadConversations();
+            };
 
+            // Helper to send with custom payloads. Keeps a `failed` flag on the
+            // local temp message instead of dropping it, so the user can retry.
+            async function sendMessageToConv(text, type = 'text', mediaUrl = null, replyTo = null, pollData = null) {
+                if (!selectedConversationId || isBlockedConversation) return;
+                const payload = {
+                    conversation_id: selectedConversationId,
+                    sender_id: currentUserId,
+                    text: text || '',
+                    message_type: type,
+                    media_url: mediaUrl || null,
+                    reply_to: replyTo || null,
+                    poll_data: pollData || null,
+                };
+                const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+                const tempMsg = { ...payload, id: tempId, created_at: new Date().toISOString() };
+                messages.push(tempMsg);
+                renderMessages();
+                scrollToBottom();
+
+                try {
+                    const { data, error } = await sb.from('messages').insert(payload).select().single();
                     if (error) throw error;
                     const idx = messages.findIndex(m => m.id === tempId);
                     if (idx !== -1) messages[idx] = data;
                     renderMessages();
-
-                    await sb.from('conversations')
-                        .update({ updated_at: new Date().toISOString() })
-                        .eq('id', selectedConversationId);
-
-                    await loadConversations();
                 } catch (err) {
                     console.error('sendMessage error:', err);
-                    messages = messages.filter(m => m.id !== tempId);
+                    const idx = messages.findIndex(m => m.id === tempId);
+                    if (idx !== -1) messages[idx].failed = true;
                     renderMessages();
-                    showToast('Failed to send message', 'r');
+                    showToast('Message failed to send', 'r');
                 }
+            }
+
+            window.retryMessage = function(tempId) {
+                const idx = messages.findIndex(m => m.id === tempId);
+                if (idx === -1) return;
+                const msg = messages[idx];
+                messages.splice(idx, 1);
+                renderMessages();
+                sendMessageToConv(msg.text, msg.message_type, msg.media_url, msg.reply_to, msg.poll_data);
             };
 
             // ============================================================
             // REAL-TIME SUBSCRIPTIONS
             // ============================================================
             function subscribeToMessages() {
-                if (messageSubscription) {
-                    sb.removeChannel(messageSubscription);
-                    messageSubscription = null;
-                }
+                if (messageSubscription) { sb.removeChannel(messageSubscription); messageSubscription = null; }
                 messageSubscription = sb.channel('messages-chat')
-                    .on('postgres_changes', {
-                        event: 'INSERT',
-                        schema: 'public',
-                        table: 'messages',
-                    }, (payload) => {
+                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
                         const newMsg = payload.new;
                         if (newMsg.conversation_id === selectedConversationId) {
                             if (!messages.some(m => m.id === newMsg.id)) {
                                 messages.push(newMsg);
                                 renderMessages();
                                 scrollToBottom();
+                                if (newMsg.sender_id !== currentUserId) markVisibleMessagesRead(selectedConversationId);
                             }
                         }
                         loadConversations();
                     })
-                    .on('postgres_changes', {
-                        event: 'UPDATE',
-                        schema: 'public',
-                        table: 'messages',
-                    }, (payload) => {
+                    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
                         const updated = payload.new;
                         if (updated.conversation_id === selectedConversationId) {
                             const idx = messages.findIndex(m => m.id === updated.id);
-                            if (idx !== -1) {
-                                messages[idx] = updated;
-                                renderMessages();
-                            }
+                            if (idx !== -1) { messages[idx] = updated; renderMessages(); }
                         }
                     })
-                    .on('postgres_changes', {
-                        event: 'DELETE',
-                        schema: 'public',
-                        table: 'messages',
-                    }, (payload) => {
+                    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
                         const old = payload.old;
                         if (old.conversation_id === selectedConversationId) {
                             messages = messages.filter(m => m.id !== old.id);
@@ -1043,18 +1116,9 @@
             }
 
             function subscribeToConversations() {
-                if (conversationSubscription) {
-                    sb.removeChannel(conversationSubscription);
-                    conversationSubscription = null;
-                }
+                if (conversationSubscription) { sb.removeChannel(conversationSubscription); conversationSubscription = null; }
                 conversationSubscription = sb.channel('conversations-chat')
-                    .on('postgres_changes', {
-                        event: '*',
-                        schema: 'public',
-                        table: 'conversations',
-                    }, () => {
-                        loadConversations();
-                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => { loadConversations(); })
                     .subscribe();
             }
 
@@ -1062,17 +1126,13 @@
             // TYPING INDICATORS
             // ============================================================
             function sendTypingIndicator(typing) {
-                if (!selectedConversationId) return;
+                if (!selectedConversationId || isBlockedConversation) return;
                 const conv = conversations.find(c => c.id === selectedConversationId);
                 if (!conv) return;
                 let typingUsers = conv.typing_users || [];
                 typingUsers = typingUsers.filter(id => id !== currentUserId);
                 if (typing) typingUsers.push(currentUserId);
-                sb.from('conversations')
-                    .update({ typing_users: typingUsers })
-                    .eq('id', selectedConversationId)
-                    .then(() => {})
-                    .catch(() => {});
+                sb.from('conversations').update({ typing_users: typingUsers }).eq('id', selectedConversationId).then(() => {}).catch(() => {});
             }
 
             // ============================================================
@@ -1093,9 +1153,7 @@
 
                     if (onProgress) {
                         xhr.upload.addEventListener('progress', (e) => {
-                            if (e.lengthComputable) {
-                                onProgress(Math.round((e.loaded / e.total) * 100));
-                            }
+                            if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
                         });
                     }
 
@@ -1104,12 +1162,8 @@
                             try {
                                 const data = JSON.parse(xhr.responseText);
                                 resolve({ url: data.secure_url, type: resourceType });
-                            } catch (e) {
-                                reject(new Error('Invalid response from Cloudinary'));
-                            }
-                        } else {
-                            reject(new Error(`Upload failed (HTTP ${xhr.status})`));
-                        }
+                            } catch (e) { reject(new Error('Invalid response from Cloudinary')); }
+                        } else { reject(new Error(`Upload failed (HTTP ${xhr.status})`)); }
                     };
                     xhr.onerror = () => reject(new Error('Network error during upload'));
                     xhr.ontimeout = () => reject(new Error('Upload timed out'));
@@ -1121,11 +1175,13 @@
             // ATTACHMENT HANDLERS
             // ============================================================
             window.toggleAttachMenu = function() {
+                if (isBlockedConversation) return;
                 document.getElementById('attachMenu').classList.toggle('open');
             };
 
             window.handleAttach = function(type) {
                 document.getElementById('attachMenu').classList.remove('open');
+                if (isBlockedConversation) return;
                 if (type === 'poll') { openPollModal(); return; }
                 if (type === 'voice') { startVoiceRecording(); return; }
                 fileInput.accept = type === 'image' ? 'image/*' : type === 'video' ? 'video/*' :
@@ -1136,11 +1192,16 @@
             };
 
             // ============================================================
-            // VOICE RECORDING
+            // VOICE RECORDING — dedicated recording bar, no ambient listeners
             // ============================================================
             let mediaRecorder = null;
             let audioChunks = [];
             let isRecording = false;
+            let recordStartTime = 0;
+            let recordTimerInterval = null;
+            const textInputWrapper = document.getElementById('textInputWrapper');
+            const voiceRecordBar = document.getElementById('voiceRecordBar');
+            const recTimeEl = document.getElementById('recTime');
 
             function startVoiceRecording() {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1153,84 +1214,50 @@
                         audioChunks = [];
                         mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
                         mediaRecorder.onstop = () => {
+                            stream.getTracks().forEach(t => t.stop());
+                            clearInterval(recordTimerInterval);
+                            textInputWrapper.style.display = 'flex';
+                            voiceRecordBar.classList.remove('active');
+                            if (mediaRecorder._cancelled) { isRecording = false; return; }
                             const blob = new Blob(audioChunks, { type: 'audio/webm' });
                             const file = new File([blob], 'voice.webm', { type: 'audio/webm' });
                             uploadVoice(file);
-                            stream.getTracks().forEach(t => t.stop());
+                            isRecording = false;
                         };
                         mediaRecorder.start();
                         isRecording = true;
-                        showToast('Recording... tap again to stop', 'p');
+                        recordStartTime = Date.now();
+                        textInputWrapper.style.display = 'none';
+                        voiceRecordBar.classList.add('active');
+                        recTimeEl.textContent = '0:00';
+                        recordTimerInterval = setInterval(() => {
+                            const secs = Math.floor((Date.now() - recordStartTime) / 1000);
+                            const m = Math.floor(secs / 60);
+                            const s = String(secs % 60).padStart(2, '0');
+                            recTimeEl.textContent = m + ':' + s;
+                        }, 250);
                     })
                     .catch(() => showToast('Could not access microphone', 'r'));
             }
 
-            function stopVoiceRecording() {
+            window.cancelVoiceRecording = function() {
                 if (mediaRecorder && isRecording) {
+                    mediaRecorder._cancelled = true;
                     mediaRecorder.stop();
-                    isRecording = false;
-                    showToast('Recording stopped', 'p');
                 }
-            }
-
-            document.addEventListener('click', function(e) {
-                if (e.target.closest('.attach-option') && e.target.closest('.attach-option').textContent.includes(
-                        'Voice')) {
-                    if (isRecording) stopVoiceRecording();
-                }
-            });
+            };
 
             async function uploadVoice(file) {
                 showUploadProgress('Uploading voice note...');
                 try {
-                    const result = await uploadToCloudinary(file, (pct) => {
-                        updateUploadProgress(pct);
-                    });
+                    const result = await uploadToCloudinary(file, (pct) => updateUploadProgress(pct));
                     hideUploadProgress();
                     await sendMessageToConv('', 'voice', result.url);
+                    await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selectedConversationId);
+                    await loadConversations();
                 } catch (err) {
                     hideUploadProgress();
                     showToast('Voice upload failed: ' + err.message, 'r');
-                }
-            }
-
-            // Helper to send with custom payloads
-            async function sendMessageToConv(text, type = 'text', mediaUrl = null, replyTo = null, pollData = null) {
-                if (!selectedConversationId) return;
-                const payload = {
-                    conversation_id: selectedConversationId,
-                    sender_id: currentUserId,
-                    text: text || '',
-                    message_type: type,
-                    media_url: mediaUrl || null,
-                    reply_to: replyTo || null,
-                    poll_data: pollData || null,
-                };
-                const tempId = 'temp-' + Date.now();
-                const tempMsg = { ...payload, id: tempId, created_at: new Date().toISOString() };
-                messages.push(tempMsg);
-                renderMessages();
-                scrollToBottom();
-
-                try {
-                    const { data, error } = await sb
-                        .from('messages')
-                        .insert(payload)
-                        .select()
-                        .single();
-                    if (error) throw error;
-                    const idx = messages.findIndex(m => m.id === tempId);
-                    if (idx !== -1) messages[idx] = data;
-                    renderMessages();
-                    await sb.from('conversations')
-                        .update({ updated_at: new Date().toISOString() })
-                        .eq('id', selectedConversationId);
-                    await loadConversations();
-                } catch (err) {
-                    console.error('sendMessage error:', err);
-                    messages = messages.filter(m => m.id !== tempId);
-                    renderMessages();
-                    showToast('Failed to send message', 'r');
                 }
             }
 
@@ -1238,6 +1265,7 @@
             // FILE UPLOAD HANDLER
             // ============================================================
             fileInput.addEventListener('change', async function() {
+                if (isBlockedConversation) { this.value = ''; return; }
                 const files = Array.from(this.files);
                 if (!files.length) return;
                 this.value = '';
@@ -1251,16 +1279,15 @@
                         showToast(`${file.name} is too large (max 25MB)`, 'o');
                         continue;
                     }
-                    const label = isImage ? 'Uploading image...' : isVideo ? 'Uploading video...' :
-                        'Uploading document...';
+                    const label = isImage ? 'Uploading image...' : isVideo ? 'Uploading video...' : 'Uploading document...';
                     showUploadProgress(label);
                     try {
-                        const result = await uploadToCloudinary(file, (pct) => {
-                            updateUploadProgress(pct);
-                        });
+                        const result = await uploadToCloudinary(file, (pct) => updateUploadProgress(pct));
                         hideUploadProgress();
                         const msgType = isImage ? 'image' : isVideo ? 'video' : 'document';
                         await sendMessageToConv('', msgType, result.url);
+                        await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selectedConversationId);
+                        await loadConversations();
                     } catch (err) {
                         hideUploadProgress();
                         showToast('Upload failed: ' + err.message, 'r');
@@ -1277,15 +1304,11 @@
                 uploadProgressFill.style.width = '0%';
                 uploadPercent.textContent = '0%';
             }
-
             function updateUploadProgress(pct) {
                 uploadProgressFill.style.width = pct + '%';
                 uploadPercent.textContent = pct + '%';
             }
-
-            function hideUploadProgress() {
-                uploadProgress.classList.remove('visible');
-            }
+            function hideUploadProgress() { uploadProgress.classList.remove('visible'); }
 
             // ============================================================
             // POLLS
@@ -1298,11 +1321,7 @@
                     <div class="opt-row"><input type="text" class="poll-opt-input" placeholder="Option 2" maxlength="60"></div>
                 `;
             }
-
-            window.closePollModal = function() {
-                document.getElementById('pollModal').classList.remove('open');
-            };
-
+            window.closePollModal = function() { document.getElementById('pollModal').classList.remove('open'); };
             window.addPollOption = function() {
                 const rows = pollOptionsList.querySelectorAll('.opt-row');
                 if (rows.length >= 6) { showToast('Maximum 6 options', 'o'); return; }
@@ -1314,42 +1333,32 @@
                 `;
                 pollOptionsList.appendChild(row);
             };
-
             window.sendPoll = function() {
                 const question = pollQuestion.value.trim();
                 if (!question) { showToast('Please enter a question', 'o'); return; }
                 const inputs = pollOptionsList.querySelectorAll('.poll-opt-input');
                 const options = Array.from(inputs).map(inp => inp.value.trim()).filter(Boolean);
                 if (options.length < 2) { showToast('Please add at least 2 options', 'o'); return; }
-
-                const pollData = {
-                    question: question,
-                    options: options.map(text => ({ text, votes: 0 })),
-                    totalVotes: 0,
-                };
+                const pollData = { question: question, options: options.map(text => ({ text, votes: 0 })), totalVotes: 0 };
                 closePollModal();
-                sendMessageToConv('', 'poll', null, null, pollData);
+                sendMessageToConv('', 'poll', null, null, pollData).then(() => {
+                    sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selectedConversationId);
+                    loadConversations();
+                });
             };
-
             window.votePoll = async function(messageId, optionIdx) {
                 const msg = messages.find(m => m.id === messageId);
                 if (!msg || msg.sender_id === currentUserId) return;
                 let poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
                 if (poll.userVote !== undefined) { showToast('You already voted', 'o'); return; }
-
                 poll.options[optionIdx].votes = (poll.options[optionIdx].votes || 0) + 1;
                 poll.totalVotes = (poll.totalVotes || 0) + 1;
                 poll.userVote = optionIdx;
-
                 try {
-                    await sb.from('messages')
-                        .update({ poll_data: poll })
-                        .eq('id', messageId);
+                    await sb.from('messages').update({ poll_data: poll }).eq('id', messageId);
                     msg.poll_data = poll;
                     renderMessages();
-                } catch (err) {
-                    showToast('Failed to vote', 'r');
-                }
+                } catch (err) { showToast('Failed to vote', 'r'); }
             };
 
             // ============================================================
@@ -1366,9 +1375,8 @@
                 menu.style.left = x + 'px';
                 menu.style.top = y + 'px';
                 menu.classList.add('open');
-
                 const isOwner = msg.sender_id === currentUserId;
-                menu.querySelectorAll('.menu-item')[2].style.display = isOwner ? 'flex' : 'none';
+                menu.querySelectorAll('[data-owner-only]').forEach(el => el.style.display = isOwner ? 'flex' : 'none');
             };
 
             document.addEventListener('click', () => {
@@ -1389,9 +1397,7 @@
             window.copyMessage = function() {
                 const msg = messages.find(m => m.id === contextMenuMsgId);
                 if (msg && msg.text) {
-                    navigator.clipboard.writeText(msg.text).then(() => {
-                        showToast('Copied to clipboard', 'g');
-                    }).catch(() => {});
+                    navigator.clipboard.writeText(msg.text).then(() => showToast('Copied to clipboard', 'g')).catch(() => {});
                 }
                 document.getElementById('msgContextMenu').classList.remove('open');
             };
@@ -1402,18 +1408,10 @@
                 const msg = messages.find(m => m.id === msgId);
                 if (!msg || msg.sender_id !== currentUserId) return;
                 if (!confirm('Delete this message?')) return;
-
-                sb.from('messages')
-                    .delete()
-                    .eq('id', msgId)
-                    .then(({ error }) => {
-                        if (error) showToast('Failed to delete', 'r');
-                        else {
-                            messages = messages.filter(m => m.id !== msgId);
-                            renderMessages();
-                            showToast('Message deleted', 'g');
-                        }
-                    });
+                sb.from('messages').delete().eq('id', msgId).then(({ error }) => {
+                    if (error) showToast('Failed to delete', 'r');
+                    else { messages = messages.filter(m => m.id !== msgId); renderMessages(); showToast('Message deleted', 'g'); }
+                });
                 document.getElementById('msgContextMenu').classList.remove('open');
             };
 
@@ -1421,38 +1419,23 @@
             // REACTION PICKER
             // ============================================================
             const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '👏'];
-
             window.toggleReactionPicker = function(event, msgId) {
                 const picker = document.getElementById('reactionPicker');
                 const rect = event.target.closest('.message-bubble')?.getBoundingClientRect();
                 if (!rect) return;
-                picker.innerHTML = REACTIONS.map(r =>
-                    `<span class="reaction-emoji" onclick="addReaction('${msgId}', '${r}')">${r}</span>`
-                ).join('');
+                picker.innerHTML = REACTIONS.map(r => `<span class="reaction-emoji" onclick="addReaction('${msgId}', '${r}')">${r}</span>`).join('');
                 picker.style.left = (rect.left + rect.width / 2 - 80) + 'px';
                 picker.style.top = (rect.top - 50) + 'px';
                 picker.classList.toggle('open');
             };
-
             window.addReaction = async function(msgId, emoji) {
                 document.getElementById('reactionPicker').classList.remove('open');
                 try {
-                    const { error } = await sb
-                        .from('message_reactions')
-                        .insert({
-                            message_id: msgId,
-                            user_id: currentUserId,
-                            emoji: emoji
-                        });
-                    if (error) {
-                        if (error.code === '23505') { showToast('Already reacted', 'o'); return; }
-                        throw error;
-                    }
+                    const { error } = await sb.from('message_reactions').insert({ message_id: msgId, user_id: currentUserId, emoji: emoji });
+                    if (error) { if (error.code === '23505') { showToast('Already reacted', 'o'); return; } throw error; }
                     showToast(`Reacted ${emoji}`, 'p');
                     await loadMessages(selectedConversationId);
-                } catch (err) {
-                    showToast('Failed to add reaction', 'r');
-                }
+                } catch (err) { showToast('Failed to add reaction', 'r'); }
             };
 
             // ============================================================
@@ -1460,31 +1443,24 @@
             // ============================================================
             window.openImage = function(url) {
                 const modal = document.createElement('div');
-                modal.style.cssText =
-                    'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;cursor:pointer;';
+                modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;cursor:pointer;';
                 modal.innerHTML = `<img src="${url}" style="max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;" />`;
                 modal.onclick = () => modal.remove();
                 document.body.appendChild(modal);
             };
-
             window.openVideo = function(url) {
                 const modal = document.createElement('div');
-                modal.style.cssText =
-                    'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;cursor:pointer;';
+                modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;cursor:pointer;';
                 modal.innerHTML = `<video src="${url}" controls autoplay style="max-width:95vw;max-height:95vh;border-radius:8px;" />`;
                 modal.onclick = () => { modal.remove(); };
                 document.body.appendChild(modal);
             };
-
-            window.openDocument = function(url) {
-                window.open(url, '_blank');
-            };
+            window.openDocument = function(url) { window.open(url, '_blank'); };
 
             // ============================================================
             // VOICE PLAYBACK
             // ============================================================
             let currentAudio = null;
-
             window.toggleVoicePlay = function(btn, url) {
                 if (currentAudio && !currentAudio.paused) {
                     currentAudio.pause();
@@ -1503,79 +1479,130 @@
             };
 
             // ============================================================
-            // NEW CHAT MODAL (full-screen user search)
+            // NEW CHAT MODAL — full-screen, live search across ALL users
             // ============================================================
             window.openNewChatModal = function() {
                 const modal = document.getElementById('newChatModal');
                 modal.classList.add('open');
+                document.body.style.overflow = 'hidden';
                 document.getElementById('userSearchInput').value = '';
-                document.getElementById('userSearchResults').innerHTML = '<div class="modal-empty">Type to find users</div>';
-                document.getElementById('userSearchInput').focus();
-                loadAllUsers();
+                renderUserSearchDefault();
+                setTimeout(() => document.getElementById('userSearchInput').focus(), 300);
             };
 
             window.closeNewChatModal = function() {
                 document.getElementById('newChatModal').classList.remove('open');
+                document.body.style.overflow = '';
             };
 
-            async function loadAllUsers() {
+            function renderUserSearchDefault() {
+                const resultsContainer = document.getElementById('userSearchResults');
+                if (!friendProfiles.length) {
+                    resultsContainer.innerHTML = `
+                        <div class="fw-empty">
+                            <div class="fw-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+                            <h3>Search FreeUpper</h3>
+                            <p>Type a name or @username to find anyone on FreeUpper.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                resultsContainer.innerHTML =
+                    `<div class="search-section-header">Friends</div>` +
+                    friendProfiles.map(u => userRowHtml(u, true)).join('');
+            }
+
+            function userRowHtml(u, isFriend) {
+                const name = getDisplayName(u);
+                const avatar = getAvatar(u);
+                const badge = getVerifiedBadge(u.verified_status);
+                return `
+                    <div class="u-row${isFriend ? ' u-row-friend' : ''}" onclick="startConversationWith('${u.id}')">
+                        <img class="u-av" src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>
+                        <div class="u-info">
+                            <div class="u-name">${escapeHtml(name)} ${badge}</div>
+                            <div class="u-handle">@${escapeHtml(u.username || '')}</div>
+                        </div>
+                        ${isFriend ? '<span class="u-tag">Friend</span>' : ''}
+                    </div>
+                `;
+            }
+
+            window.onUserSearchInput = function(value) {
+                clearTimeout(userSearchDebounce);
+                const q = value.trim();
+                if (!q) { renderUserSearchDefault(); return; }
+                const resultsContainer = document.getElementById('userSearchResults');
+                resultsContainer.innerHTML = Array.from({ length: 4 }).map(() => `
+                    <div class="u-skeleton">
+                        <div class="u-skeleton-av"></div>
+                        <div class="u-skeleton-lines"><div class="u-skeleton-name"></div><div class="u-skeleton-sub"></div></div>
+                    </div>
+                `).join('');
+                userSearchDebounce = setTimeout(() => runUserSearch(q), 280);
+            };
+
+            async function runUserSearch(q) {
+                const myToken = ++userSearchToken;
+                const resultsContainer = document.getElementById('userSearchResults');
                 try {
                     const { data, error } = await sb
                         .from('profiles')
                         .select('id, display_name, username, avatar_url, verified_status')
-                        .neq('id', currentUserId);
+                        .neq('id', currentUserId)
+                        .or(`display_name.ilike.%${q}%,username.ilike.%${q}%`)
+                        .limit(30);
+                    if (myToken !== userSearchToken) return; // stale response
                     if (error) throw error;
-                    allUsers = data || [];
+
+                    const results = data || [];
+                    if (!results.length) {
+                        resultsContainer.innerHTML = `
+                            <div class="fw-empty">
+                                <div class="fw-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+                                <h3>No users found</h3>
+                                <p>Try a different name or username.</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    const friendResults = results.filter(u => mutualFollowers.has(u.id));
+                    const otherResults = results.filter(u => !mutualFollowers.has(u.id));
+                    let html = '';
+                    if (friendResults.length) {
+                        html += `<div class="search-section-header">Friends</div>` + friendResults.map(u => userRowHtml(u, true)).join('');
+                    }
+                    if (otherResults.length) {
+                        html += `<div class="search-section-header">All Users</div>` + otherResults.map(u => userRowHtml(u, false)).join('');
+                    }
+                    resultsContainer.innerHTML = html;
                 } catch (err) {
-                    console.error('loadAllUsers error:', err);
+                    console.error('runUserSearch error:', err);
+                    if (myToken === userSearchToken) {
+                        resultsContainer.innerHTML = `<div class="fw-empty"><p>Search failed. Please try again.</p></div>`;
+                    }
                 }
             }
 
-            // Search function for the modal
-            window.searchUsersInModal = function(query) {
-                const q = query.toLowerCase().trim();
-                const resultsContainer = document.getElementById('userSearchResults');
-                if (!q) {
-                    resultsContainer.innerHTML = '<div class="modal-empty">Type to find users</div>';
-                    return;
-                }
-                const results = allUsers.filter(u =>
-                    (u.display_name || '').toLowerCase().includes(q) ||
-                    (u.username || '').toLowerCase().includes(q)
-                );
-                if (!results.length) {
-                    resultsContainer.innerHTML = '<div class="modal-empty">No users found</div>';
-                    return;
-                }
-                resultsContainer.innerHTML = results.map(u => {
-                    const name = getDisplayName(u);
-                    const avatar = getAvatar(u);
-                    const badge = getVerifiedBadge(u.verified_status);
-                    return `
-                        <div class="user-row" onclick="startConversationWith('${u.id}')">
-                            <img class="u-av" src="${avatar}" alt="${escapeHtml(name)}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'%3E%3Ccircle cx=\\'50\\' cy=\\'50\\' r=\\'50\\' fill=\\'%23E5E7EB\\'/%3E%3Ccircle cx=\\'50\\' cy=\\'38\\' r=\\'16\\' fill=\\'%239CA3AF\\'/%3E%3Cellipse cx=\\'50\\' cy=\\'75\\' rx=\\'30\\' ry=\\'22\\' fill=\\'%239CA3AF\\'/%3E%3C/svg%3E'">
-                            <div>
-                                <div class="u-name">${escapeHtml(name)} ${badge}</div>
-                                <div class="u-handle">@${escapeHtml(u.username||'')}</div>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            };
-
             // ============================================================
-            // START CONVERSATION WITH A USER
+            // START CONVERSATION WITH A USER (block-gated)
             // ============================================================
             window.startConversationWith = async function(otherUserId) {
+                if (otherUserId === currentUserId) return;
                 closeNewChatModal();
+
+                const status = await getBlockStatus(otherUserId);
+                if (status.blocked) {
+                    showToast(status.theyBlockedMe ? "You can't message this user" : "Unblock this user first", 'o');
+                    return;
+                }
+
                 let existing = conversations.find(c =>
                     (c.user1_id === currentUserId && c.user2_id === otherUserId) ||
                     (c.user1_id === otherUserId && c.user2_id === currentUserId)
                 );
-                if (existing) {
-                    selectConversation(existing.id);
-                    return;
-                }
+                if (existing) { selectConversation(existing.id); return; }
+
                 try {
                     const { data, error } = await sb
                         .from('conversations')
@@ -1590,12 +1617,7 @@
                         .single();
                     if (error) throw error;
                     await loadConversations();
-                    const newConv = conversations.find(c => c.id === data.id);
-                    if (newConv) {
-                        const otherProfile = allUsers.find(u => u.id === otherUserId);
-                        if (otherProfile) newConv.otherUser = otherProfile;
-                        selectConversation(data.id);
-                    }
+                    selectConversation(data.id);
                 } catch (err) {
                     console.error('startConversationWith error:', err);
                     showToast('Failed to create conversation', 'r');
@@ -1608,6 +1630,7 @@
             window.closeChatView = function() {
                 selectedConversationId = null;
                 selectedPartnerId = null;
+                isBlockedConversation = false;
                 messages = [];
                 messagesArea.innerHTML = `
                     <div class="no-messages">
@@ -1619,6 +1642,10 @@
                 chatPartnerName.textContent = 'Select a conversation';
                 chatPartnerAvatar.src = '';
                 chatPartnerStatus.textContent = '';
+                if (messageInputArea.dataset.defaultHtml) {
+                    messageInputArea.classList.remove('blocked-input');
+                    messageInputArea.innerHTML = messageInputArea.dataset.defaultHtml;
+                }
                 messageInput.disabled = true;
                 sendBtn.disabled = true;
                 document.getElementById('conversationsSidebar').classList.remove('hidden');
@@ -1626,19 +1653,14 @@
             };
 
             window.openPartnerProfile = function() {
-                if (selectedPartnerId) {
-                    window.location.href = 'profile.html?uid=' + selectedPartnerId;
-                }
+                if (selectedPartnerId) window.location.href = 'profile.html?uid=' + selectedPartnerId;
             };
 
             // ============================================================
             // EVENT LISTENERS
             // ============================================================
             messageInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    window.sendMessage();
-                }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.sendMessage(); }
                 if (typingTimeout) clearTimeout(typingTimeout);
                 sendTypingIndicator(true);
                 typingTimeout = setTimeout(() => sendTypingIndicator(false), 2000);
@@ -1651,9 +1673,7 @@
 
             document.addEventListener('click', (e) => {
                 const menu = document.getElementById('attachMenu');
-                if (!menu.contains(e.target) && !e.target.closest('.attach-btn')) {
-                    menu.classList.remove('open');
-                }
+                if (!menu.contains(e.target) && !e.target.closest('.attach-btn')) menu.classList.remove('open');
             });
 
             // ============================================================
@@ -1669,14 +1689,12 @@
                     return;
                 }
                 currentUserId = user.id;
-                await loadMutualFollowers();
+                messageInputArea.dataset.defaultHtml = messageInputArea.innerHTML;
+
+                await Promise.all([loadMutualFollowers(), loadMyBlockList()]);
                 await loadConversations();
                 subscribeToMessages();
                 subscribeToConversations();
-
-                if (conversations.length > 0) {
-                    selectConversation(conversations[0].id);
-                }
 
                 const params = new URLSearchParams(window.location.search);
                 const uid = params.get('uid');
@@ -1685,16 +1703,12 @@
                     if (existing) {
                         selectConversation(existing.id);
                     } else {
-                        const { data, error } = await sb
-                            .from('profiles')
-                            .select('id')
-                            .eq('id', uid)
-                            .single();
-                        if (!error && data) {
-                            await startConversationWith(uid);
-                        }
+                        const { data, error } = await sb.from('profiles').select('id').eq('id', uid).single();
+                        if (!error && data) await startConversationWith(uid);
                     }
                     history.replaceState({}, '', window.location.pathname);
+                } else if (conversations.length > 0) {
+                    selectConversation(conversations[0].id);
                 }
             }
 
