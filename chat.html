@@ -52,10 +52,11 @@
             display: flex;
             flex-direction: column;
             padding-bottom: 0 !important;
+            position: relative;
         }
 
         /* ============================================================
-           CHAT STYLES – merged from UI demo and previous fixes
+           CHAT STYLES
         ============================================================ */
         :root {
             --chat-header-h: 56px;
@@ -65,289 +66,1674 @@
             --avatar-size: 42px;
             --bubble-radius: 18px;
             --safe-bottom: env(safe-area-inset-bottom, 0px);
-            --bottom-nav-height: 78px;
+            --bottom-nav-height: calc(78px + env(safe-area-inset-bottom, 0px));
         }
+
         .chat-container {
             display: flex;
             flex: 1;
             overflow: hidden;
             position: relative;
             background: var(--bg);
-            padding-bottom: var(--bottom-nav-height);
         }
-        @media (min-width: 768px) {
+
+        @media (max-width: 768px) {
             .chat-container {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: calc(var(--bottom-nav-height) + 8px);
+                padding-bottom: 0;
+            }
+        }
+
+        @media (min-width: 769px) {
+            .chat-container {
+                position: relative;
+                bottom: auto;
                 padding-bottom: 0;
             }
         }
 
         /* ─── HEADER ─── */
-        .chat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--bg2); border-bottom: 1px solid var(--brd); flex-shrink: 0; min-height: var(--chat-header-h); }
-        .chat-header .brand { font-family: 'Poppins', 'Inter', sans-serif; font-weight: 900; font-size: 1.1rem; cursor: pointer; color: var(--text); display: flex; align-items: center; gap: 2px; }
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--brd);
+            flex-shrink: 0;
+            min-height: var(--chat-header-h);
+            z-index: 10;
+        }
+        .chat-header .brand {
+            font-family: 'Poppins', 'Inter', sans-serif;
+            font-weight: 900;
+            font-size: 1.1rem;
+            cursor: pointer;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
         .chat-header .brand span { color: var(--p); }
-        .chat-header .header-actions { display: flex; align-items: center; gap: 6px; }
-        .chat-header .header-actions button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 50%; transition: background .15s, color .15s; display: flex; align-items: center; justify-content: center; }
-        .chat-header .header-actions button:hover { background: var(--pdim); color: var(--p); }
-        .chat-header .header-actions button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .chat-header .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .chat-header .header-actions button {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 50%;
+            transition: background .15s, color .15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .chat-header .header-actions button:hover {
+            background: var(--pdim);
+            color: var(--p);
+        }
+        .chat-header .header-actions button svg {
+            width: 22px;
+            height: 22px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
 
         /* ─── SIDEBAR ─── */
-        .conversations-sidebar { width: var(--sidebar-w); background: var(--bg2); border-right: 1px solid var(--brd); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; transition: transform .25s ease; z-index: 5; }
-        .conversations-sidebar .sidebar-header { padding: 14px 16px 8px; border-bottom: 1px solid var(--brd); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
-        .conversations-sidebar .sidebar-header h2 { font-size: 1.1rem; font-weight: 800; color: var(--text); }
-        .conversations-sidebar .sidebar-header .new-chat-btn { background: var(--p); color: #fff; border: none; border-radius: 20px; padding: 6px 14px; font-weight: 700; font-size: .8rem; cursor: pointer; transition: opacity .15s; display: flex; align-items: center; gap: 4px; }
-        .conversations-sidebar .sidebar-header .new-chat-btn:hover { opacity: .85; }
-        .conversations-sidebar .sidebar-header .new-chat-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; }
-        .conversations-sidebar .search-box { padding: 8px 16px; flex-shrink: 0; }
-        .conversations-sidebar .search-box input { width: 100%; padding: 8px 14px 8px 36px; border-radius: 20px; border: 1.5px solid var(--brd); background: var(--inp); font-size: .9rem; color: var(--text); outline: none; transition: border-color .15s; background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(150,150,150,0.5)' stroke-width='2' stroke-linecap='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 12px center; }
-        .conversations-sidebar .search-box input:focus { border-color: var(--p); }
-        .conversations-sidebar .conversation-list { flex: 1; overflow-y: auto; padding: 8px 0; -webkit-overflow-scrolling: touch; }
-        .conversations-sidebar .conversation-list::-webkit-scrollbar { width: 0; }
+        .conversations-sidebar {
+            width: var(--sidebar-w);
+            background: var(--bg2);
+            border-right: 1px solid var(--brd);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow: hidden;
+            transition: transform .25s ease;
+            z-index: 5;
+        }
+
+        @media (max-width: 768px) {
+            .conversations-sidebar {
+                width: 100%;
+                border-right: none;
+                position: absolute;
+                top: 0;
+                left: 0;
+                bottom: calc(var(--bottom-nav-height) + 8px);
+                z-index: 10;
+                background: var(--bg2);
+                transform: translateX(0);
+            }
+            .conversations-sidebar.hidden {
+                transform: translateX(-100%);
+            }
+        }
+
+        @media (min-width: 769px) {
+            .conversations-sidebar {
+                position: relative;
+                bottom: auto;
+            }
+        }
+
+        .conversations-sidebar .sidebar-header {
+            padding: 14px 16px 8px;
+            border-bottom: 1px solid var(--brd);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .conversations-sidebar .sidebar-header h2 {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .conversations-sidebar .sidebar-header .new-chat-btn {
+            background: var(--p);
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-weight: 700;
+            font-size: .8rem;
+            cursor: pointer;
+            transition: opacity .15s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .conversations-sidebar .sidebar-header .new-chat-btn:hover {
+            opacity: .85;
+        }
+        .conversations-sidebar .sidebar-header .new-chat-btn svg {
+            width: 15px;
+            height: 15px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
+        .conversations-sidebar .search-box {
+            padding: 8px 16px;
+            flex-shrink: 0;
+        }
+        .conversations-sidebar .search-box input {
+            width: 100%;
+            padding: 8px 14px 8px 36px;
+            border-radius: 20px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            font-size: .9rem;
+            color: var(--text);
+            outline: none;
+            transition: border-color .15s;
+            background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(150,150,150,0.5)' stroke-width='2' stroke-linecap='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: 12px center;
+        }
+        .conversations-sidebar .search-box input:focus {
+            border-color: var(--p);
+        }
+        .conversations-sidebar .conversation-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+            -webkit-overflow-scrolling: touch;
+        }
+        .conversations-sidebar .conversation-list::-webkit-scrollbar {
+            width: 0;
+        }
 
         /* ─── CONVERSATION ITEM ─── */
-        .conv-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; transition: background .12s; border-bottom: 1px solid var(--brd); position: relative; }
-        .conv-item:hover { background: var(--pdim); }
-        .conv-item.active { background: var(--pdim); border-left: 3px solid var(--p); }
-        .conv-item .av { width: var(--avatar-size); height: var(--avatar-size); border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--bg4); position: relative; }
-        .conv-item .av .online-dot { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; background: #22c55e; border: 2px solid var(--bg2); }
-        .conv-item .conv-info { flex: 1; min-width: 0; }
-        .conv-item .conv-name { font-weight: 700; font-size: .95rem; color: var(--text); display: flex; align-items: center; gap: 4px; }
-        .conv-item .conv-last-msg { font-size: .8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-        .conv-item .conv-last-msg .msg-sender { font-weight: 600; color: var(--text); }
-        .conv-item .conv-time { font-size: .7rem; color: var(--muted2); flex-shrink: 0; align-self: flex-start; margin-top: 4px; }
-        .conv-item .unread-badge { background: var(--p); color: #fff; font-size: .65rem; font-weight: 700; border-radius: 50%; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0 6px; flex-shrink: 0; }
-        .conv-item .start-chat-btn { background: var(--p); color: #fff; border: none; border-radius: 16px; padding: 4px 12px; font-size: .7rem; font-weight: 700; cursor: pointer; transition: opacity .15s; flex-shrink: 0; }
-        .conv-item .start-chat-btn:hover { opacity: .85; }
-        .conv-item .friend-tag { font-size: .6rem; font-weight: 800; padding: 1px 7px; border-radius: 100px; background: var(--pdim); color: var(--pl); flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em; }
+        .conv-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: background .12s;
+            border-bottom: 1px solid var(--brd);
+            position: relative;
+        }
+        .conv-item:hover {
+            background: var(--pdim);
+        }
+        .conv-item.active {
+            background: var(--pdim);
+            border-left: 3px solid var(--p);
+        }
+        .conv-item .av {
+            width: var(--avatar-size);
+            height: var(--avatar-size);
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: var(--bg4);
+            position: relative;
+        }
+        .conv-item .av .online-dot {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #22c55e;
+            border: 2px solid var(--bg2);
+        }
+        .conv-item .conv-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .conv-item .conv-name {
+            font-weight: 700;
+            font-size: .95rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .conv-item .conv-last-msg {
+            font-size: .8rem;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 2px;
+        }
+        .conv-item .conv-last-msg .msg-sender {
+            font-weight: 600;
+            color: var(--text);
+        }
+        .conv-item .conv-time {
+            font-size: .7rem;
+            color: var(--muted2);
+            flex-shrink: 0;
+            align-self: flex-start;
+            margin-top: 4px;
+        }
+        .conv-item .unread-badge {
+            background: var(--p);
+            color: #fff;
+            font-size: .65rem;
+            font-weight: 700;
+            border-radius: 50%;
+            min-width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 6px;
+            flex-shrink: 0;
+        }
+        .conv-item .start-chat-btn {
+            background: var(--p);
+            color: #fff;
+            border: none;
+            border-radius: 16px;
+            padding: 4px 12px;
+            font-size: .7rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity .15s;
+            flex-shrink: 0;
+        }
+        .conv-item .start-chat-btn:hover {
+            opacity: .85;
+        }
+        .conv-item .friend-tag {
+            font-size: .6rem;
+            font-weight: 800;
+            padding: 1px 7px;
+            border-radius: 100px;
+            background: var(--pdim);
+            color: var(--pl);
+            flex-shrink: 0;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
 
         /* ─── SECTION HEADER IN SEARCH RESULTS ─── */
-        .search-section-header { font-size: .7rem; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: .05em; padding: 12px 16px 4px; border-bottom: 1px solid var(--brd); background: var(--bg2); position: sticky; top: 0; z-index: 1; }
+        .search-section-header {
+            font-size: .7rem;
+            font-weight: 700;
+            color: var(--muted2);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            padding: 12px 16px 4px;
+            border-bottom: 1px solid var(--brd);
+            background: var(--bg2);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
 
         /* ─── CHAT VIEW ─── */
-        .chat-view { flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; position: relative; }
-        .chat-view .chat-view-header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--bg2); border-bottom: 1px solid var(--brd); flex-shrink: 0; min-height: 56px; }
-        .chat-view .chat-view-header .back-btn { display: none; background: none; border: none; color: var(--text); cursor: pointer; padding: 4px; }
-        .chat-view .chat-view-header .back-btn svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-        .chat-view .chat-view-header .chat-partner-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; background: var(--bg4); flex-shrink: 0; cursor: pointer; }
-        .chat-view .chat-view-header .chat-partner-info { flex: 1; min-width: 0; cursor: pointer; }
-        .chat-view .chat-view-header .chat-partner-name { font-weight: 700; font-size: 1rem; color: var(--text); display: flex; align-items: center; gap: 4px; }
-        .chat-view .chat-view-header .chat-partner-status { font-size: .75rem; color: var(--muted); }
-        .chat-view .chat-view-header .chat-actions { display: flex; gap: 4px; }
-        .chat-view .chat-view-header .chat-actions button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 50%; transition: background .15s, color .15s; display: flex; align-items: center; justify-content: center; }
-        .chat-view .chat-view-header .chat-actions button:hover { background: var(--pdim); color: var(--p); }
-        .chat-view .chat-view-header .chat-actions button svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .chat-view {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+            overflow: hidden;
+            position: relative;
+        }
+
+        @media (max-width: 768px) {
+            .chat-view {
+                width: 100%;
+            }
+        }
+
+        .chat-view .chat-view-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--brd);
+            flex-shrink: 0;
+            min-height: 56px;
+        }
+        .chat-view .chat-view-header .back-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text);
+            cursor: pointer;
+            padding: 4px;
+        }
+        @media (max-width: 768px) {
+            .chat-view .chat-view-header .back-btn {
+                display: flex;
+            }
+        }
+        @media (min-width: 769px) {
+            .chat-view .chat-view-header .back-btn {
+                display: none;
+            }
+        }
+        .chat-view .chat-view-header .back-btn svg {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .chat-view .chat-view-header .chat-partner-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: var(--bg4);
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .chat-view .chat-view-header .chat-partner-info {
+            flex: 1;
+            min-width: 0;
+            cursor: pointer;
+        }
+        .chat-view .chat-view-header .chat-partner-name {
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .chat-view .chat-view-header .chat-partner-status {
+            font-size: .75rem;
+            color: var(--muted);
+        }
+        .chat-view .chat-view-header .chat-actions {
+            display: flex;
+            gap: 4px;
+        }
+        .chat-view .chat-view-header .chat-actions button {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 50%;
+            transition: background .15s, color .15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .chat-view .chat-view-header .chat-actions button:hover {
+            background: var(--pdim);
+            color: var(--p);
+        }
+        .chat-view .chat-view-header .chat-actions button svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
 
         /* ─── MESSAGES AREA ─── */
-        .messages-area { flex: 1; overflow-y: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 2px; -webkit-overflow-scrolling: touch; background: var(--bg); position: relative; }
-        .messages-area::-webkit-scrollbar { width: 0; }
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 16px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            -webkit-overflow-scrolling: touch;
+            background: var(--bg);
+            position: relative;
+        }
+        .messages-area::-webkit-scrollbar {
+            width: 0;
+        }
 
-        .date-divider { text-align: center; padding: 12px 0 8px; font-size: .75rem; color: var(--muted2); font-weight: 600; position: sticky; top: 0; z-index: 2; background: var(--bg); }
+        .date-divider {
+            text-align: center;
+            padding: 12px 0 8px;
+            font-size: .75rem;
+            color: var(--muted2);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: var(--bg);
+        }
 
-        .message-bubble { max-width: var(--max-msg-width); padding: 10px 14px; border-radius: var(--bubble-radius); font-size: .9rem; line-height: 1.5; word-break: break-word; position: relative; animation: fadeUp .15s ease both; margin-bottom: 2px; }
-        .message-bubble.sent { align-self: flex-end; background: var(--p); color: #fff; border-bottom-right-radius: 4px; }
-        .message-bubble.received { align-self: flex-start; background: var(--bg3); border: 1px solid var(--brd); color: var(--text); border-bottom-left-radius: 4px; }
-        .message-bubble.failed { opacity: .75; }
-        .message-bubble .msg-time { font-size: .65rem; opacity: .7; margin-top: 4px; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
-        .message-bubble .msg-time .read-receipt { display: inline-flex; align-items: center; }
-        .message-bubble .msg-time .read-receipt svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-        .message-bubble .msg-time .read-receipt.read { color: #4fc3f7; }
-        .message-bubble .msg-failed-row { font-size: .7rem; margin-top: 4px; text-align: right; color: #fca5a5; cursor: pointer; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
-        .message-bubble .msg-failed-row svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
-        .message-bubble .msg-media { margin: -4px -2px 6px; border-radius: 12px; overflow: hidden; cursor: pointer; background: #000; max-height: 300px; }
-        .message-bubble .msg-media img, .message-bubble .msg-media video { width: 100%; max-height: 300px; object-fit: contain; display: block; }
-        .message-bubble .msg-doc { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(255,255,255,.06); border-radius: 10px; margin: 4px 0 6px; cursor: pointer; transition: background .15s; }
-        .message-bubble .msg-doc:hover { background: rgba(255,255,255,.12); }
-        .message-bubble .msg-doc .doc-icon { font-size: 1.6rem; line-height: 1; }
-        .message-bubble .msg-doc .doc-info { flex: 1; min-width: 0; }
-        .message-bubble .msg-doc .doc-name { font-weight: 600; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .message-bubble .msg-doc .doc-size { font-size: .7rem; opacity: .6; }
+        .message-bubble {
+            max-width: var(--max-msg-width);
+            padding: 10px 14px;
+            border-radius: var(--bubble-radius);
+            font-size: .9rem;
+            line-height: 1.5;
+            word-break: break-word;
+            position: relative;
+            animation: fadeUp .15s ease both;
+            margin-bottom: 2px;
+        }
+        .message-bubble.sent {
+            align-self: flex-end;
+            background: var(--p);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .message-bubble.received {
+            align-self: flex-start;
+            background: var(--bg3);
+            border: 1px solid var(--brd);
+            color: var(--text);
+            border-bottom-left-radius: 4px;
+        }
+        .message-bubble.failed {
+            opacity: .75;
+        }
+        .message-bubble .msg-time {
+            font-size: .65rem;
+            opacity: .7;
+            margin-top: 4px;
+            text-align: right;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+        }
+        .message-bubble .msg-time .read-receipt {
+            display: inline-flex;
+            align-items: center;
+        }
+        .message-bubble .msg-time .read-receipt svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .message-bubble .msg-time .read-receipt.read {
+            color: #4fc3f7;
+        }
+        .message-bubble .msg-failed-row {
+            font-size: .7rem;
+            margin-top: 4px;
+            text-align: right;
+            color: #fca5a5;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+        }
+        .message-bubble .msg-failed-row svg {
+            width: 12px;
+            height: 12px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+        .message-bubble .msg-media {
+            margin: -4px -2px 6px;
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            background: #000;
+            max-height: 300px;
+        }
+        .message-bubble .msg-media img,
+        .message-bubble .msg-media video {
+            width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+            display: block;
+        }
+        .message-bubble .msg-doc {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, .06);
+            border-radius: 10px;
+            margin: 4px 0 6px;
+            cursor: pointer;
+            transition: background .15s;
+        }
+        .message-bubble .msg-doc:hover {
+            background: rgba(255, 255, 255, .12);
+        }
+        .message-bubble .msg-doc .doc-icon {
+            font-size: 1.6rem;
+            line-height: 1;
+        }
+        .message-bubble .msg-doc .doc-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .message-bubble .msg-doc .doc-name {
+            font-weight: 600;
+            font-size: .85rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .message-bubble .msg-doc .doc-size {
+            font-size: .7rem;
+            opacity: .6;
+        }
 
         /* Voice */
-        .message-bubble .voice-msg { display: flex; align-items: center; gap: 12px; padding: 4px 0; min-width: 120px; }
-        .message-bubble .voice-msg .play-btn { width: 32px; height: 32px; border-radius: 50%; background: var(--p); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: transform .15s; }
-        .message-bubble .voice-msg .play-btn:active { transform: scale(.92); }
-        .message-bubble .voice-msg .play-btn svg { width: 14px; height: 14px; fill: currentColor; }
-        .message-bubble .voice-msg .waveform { flex: 1; height: 28px; display: flex; align-items: center; gap: 2px; }
-        .message-bubble .voice-msg .waveform .bar { flex: 1; height: 100%; background: var(--muted2); border-radius: 2px; transition: height .1s; }
-        .message-bubble .voice-msg .waveform .bar.active { background: var(--p); }
-        .message-bubble .voice-msg .voice-duration { font-size: .75rem; opacity: .7; flex-shrink: 0; }
+        .message-bubble .voice-msg {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 4px 0;
+            min-width: 120px;
+        }
+        .message-bubble .voice-msg .play-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--p);
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: transform .15s;
+        }
+        .message-bubble .voice-msg .play-btn:active {
+            transform: scale(.92);
+        }
+        .message-bubble .voice-msg .play-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+        }
+        .message-bubble .voice-msg .waveform {
+            flex: 1;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .message-bubble .voice-msg .waveform .bar {
+            flex: 1;
+            height: 100%;
+            background: var(--muted2);
+            border-radius: 2px;
+            transition: height .1s;
+        }
+        .message-bubble .voice-msg .waveform .bar.active {
+            background: var(--p);
+        }
+        .message-bubble .voice-msg .voice-duration {
+            font-size: .75rem;
+            opacity: .7;
+            flex-shrink: 0;
+        }
 
         /* Poll */
-        .message-bubble .poll-container { margin: 6px 0 2px; padding: 12px 14px; background: rgba(255,255,255,.05); border-radius: 12px; border: 1px solid var(--brd); }
-        .message-bubble .poll-container .poll-question { font-weight: 700; font-size: .95rem; margin-bottom: 8px; }
-        .message-bubble .poll-container .poll-option { display: flex; align-items: center; gap: 10px; padding: 6px 10px; margin-bottom: 4px; border-radius: 8px; cursor: pointer; transition: background .12s; position: relative; }
-        .message-bubble .poll-container .poll-option:hover { background: var(--pdim); }
-        .message-bubble .poll-container .poll-option .poll-bar { position: absolute; left: 0; top: 0; height: 100%; background: var(--pdim); border-radius: 8px; transition: width .3s ease; pointer-events: none; }
-        .message-bubble .poll-container .poll-option .poll-label { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-        .message-bubble .poll-container .poll-option .poll-label .poll-check { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--muted2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s; }
-        .message-bubble .poll-container .poll-option.selected .poll-check { border-color: var(--p); background: var(--p); }
-        .message-bubble .poll-container .poll-option.selected .poll-check svg { display: block; }
-        .message-bubble .poll-container .poll-option .poll-check svg { display: none; width: 10px; height: 10px; stroke: #fff; fill: none; stroke-width: 3; stroke-linecap: round; }
-        .message-bubble .poll-container .poll-option .poll-pct { font-size: .75rem; font-weight: 700; color: var(--muted); flex-shrink: 0; position: relative; z-index: 1; }
-        .message-bubble .poll-container .poll-total { font-size: .7rem; color: var(--muted2); margin-top: 6px; text-align: right; }
+        .message-bubble .poll-container {
+            margin: 6px 0 2px;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, .05);
+            border-radius: 12px;
+            border: 1px solid var(--brd);
+        }
+        .message-bubble .poll-container .poll-question {
+            font-weight: 700;
+            font-size: .95rem;
+            margin-bottom: 8px;
+        }
+        .message-bubble .poll-container .poll-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 10px;
+            margin-bottom: 4px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background .12s;
+            position: relative;
+        }
+        .message-bubble .poll-container .poll-option:hover {
+            background: var(--pdim);
+        }
+        .message-bubble .poll-container .poll-option .poll-bar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: var(--pdim);
+            border-radius: 8px;
+            transition: width .3s ease;
+            pointer-events: none;
+        }
+        .message-bubble .poll-container .poll-option .poll-label {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+        .message-bubble .poll-container .poll-option .poll-label .poll-check {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid var(--muted2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all .15s;
+        }
+        .message-bubble .poll-container .poll-option.selected .poll-check {
+            border-color: var(--p);
+            background: var(--p);
+        }
+        .message-bubble .poll-container .poll-option.selected .poll-check svg {
+            display: block;
+        }
+        .message-bubble .poll-container .poll-option .poll-check svg {
+            display: none;
+            width: 10px;
+            height: 10px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+        }
+        .message-bubble .poll-container .poll-option .poll-pct {
+            font-size: .75rem;
+            font-weight: 700;
+            color: var(--muted);
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1;
+        }
+        .message-bubble .poll-container .poll-total {
+            font-size: .7rem;
+            color: var(--muted2);
+            margin-top: 6px;
+            text-align: right;
+        }
 
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
 
-        .typing-indicator { align-self: flex-start; padding: 8px 14px; background: var(--bg3); border: 1px solid var(--brd); border-radius: var(--bubble-radius); border-bottom-left-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); animation: fadeUp .2s ease both; }
-        .typing-indicator .dots { display: flex; gap: 4px; }
-        .typing-indicator .dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted2); animation: typingDot 1.2s infinite; }
-        .typing-indicator .dots span:nth-child(2) { animation-delay: .2s; }
-        .typing-indicator .dots span:nth-child(3) { animation-delay: .4s; }
-        @keyframes typingDot { 0%,60%,100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-6px); opacity: 1; } }
+        .typing-indicator {
+            align-self: flex-start;
+            padding: 8px 14px;
+            background: var(--bg3);
+            border: 1px solid var(--brd);
+            border-radius: var(--bubble-radius);
+            border-bottom-left-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: .8rem;
+            color: var(--muted);
+            animation: fadeUp .2s ease both;
+        }
+        .typing-indicator .dots {
+            display: flex;
+            gap: 4px;
+        }
+        .typing-indicator .dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--muted2);
+            animation: typingDot 1.2s infinite;
+        }
+        .typing-indicator .dots span:nth-child(2) {
+            animation-delay: .2s;
+        }
+        .typing-indicator .dots span:nth-child(3) {
+            animation-delay: .4s;
+        }
+        @keyframes typingDot {
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+                opacity: .4;
+            }
+            30% {
+                transform: translateY(-6px);
+                opacity: 1;
+            }
+        }
 
-        .no-messages, .blocked-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; gap: 8px; padding: 0 24px; }
-        .no-messages svg, .blocked-state svg { width: 48px; height: 48px; stroke: var(--muted2); fill: none; stroke-width: 1.5; }
-        .no-messages h3, .blocked-state h3 { font-weight: 700; font-size: 1.1rem; color: var(--text); }
-        .no-messages p, .blocked-state p { font-size: .9rem; max-width: 260px; }
+        .no-messages,
+        .blocked-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--muted);
+            text-align: center;
+            gap: 8px;
+            padding: 0 24px;
+        }
+        .no-messages svg,
+        .blocked-state svg {
+            width: 48px;
+            height: 48px;
+            stroke: var(--muted2);
+            fill: none;
+            stroke-width: 1.5;
+        }
+        .no-messages h3,
+        .blocked-state h3 {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--text);
+        }
+        .no-messages p,
+        .blocked-state p {
+            font-size: .9rem;
+            max-width: 260px;
+        }
+        .empty-illustration {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 4px;
+        }
 
         /* ─── MESSAGE INPUT ─── */
-        .message-input-area { display: flex; align-items: flex-end; gap: 8px; padding: 8px 12px; padding-bottom: max(8px, var(--safe-bottom)); background: var(--bg2); border-top: 1px solid var(--brd); flex-shrink: 0; min-height: var(--chat-input-h); }
-        .message-input-area .input-wrapper { flex: 1; display: flex; align-items: flex-end; gap: 6px; background: var(--inp); border: 1.5px solid var(--brd); border-radius: 24px; padding: 4px 6px 4px 14px; transition: border-color .15s; position: relative; }
-        .message-input-area .input-wrapper:focus-within { border-color: var(--p); box-shadow: 0 0 0 3px var(--pdim); }
-        .message-input-area .input-wrapper .attach-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s; flex-shrink: 0; }
-        .message-input-area .input-wrapper .attach-btn:hover { background: var(--pdim); color: var(--p); }
-        .message-input-area .input-wrapper .attach-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-        .message-input-area .input-wrapper textarea { flex: 1; border: none; padding: 8px 0; font-size: .9rem; resize: none; outline: none; font-family: inherit; background: transparent; color: var(--text); line-height: 1.4; min-height: 20px; max-height: 100px; box-sizing: border-box; }
-        .message-input-area .input-wrapper textarea::placeholder { color: var(--muted2); }
-        .message-input-area .send-btn { background: var(--p); color: #fff; border: none; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: opacity .15s, transform .15s; }
-        .message-input-area .send-btn:active { transform: scale(.92); }
-        .message-input-area .send-btn:disabled { opacity: .4; cursor: not-allowed; }
-        .message-input-area .send-btn svg { width: 20px; height: 20px; stroke: #fff; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-        .message-input-area.blocked-input { align-items: center; justify-content: center; color: var(--muted); font-size: .8rem; font-weight: 600; }
+        .message-input-area {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            padding: 8px 12px;
+            padding-bottom: max(8px, var(--safe-bottom));
+            background: var(--bg2);
+            border-top: 1px solid var(--brd);
+            flex-shrink: 0;
+            min-height: var(--chat-input-h);
+            position: relative;
+            z-index: 1;
+        }
+        @media (max-width: 768px) {
+            .message-input-area {
+                margin-bottom: 0;
+            }
+        }
 
-        .attach-menu { display: none; position: absolute; bottom: 70px; left: 12px; background: var(--bg3); border: 1px solid var(--brd); border-radius: 16px; padding: 12px 16px; box-shadow: 0 8px 32px rgba(0,0,0,.3); z-index: 20; min-width: 200px; }
-        .attach-menu.open { display: block; }
-        .attach-menu .attach-option { display: flex; align-items: center; gap: 12px; padding: 8px 4px; cursor: pointer; border-radius: 8px; transition: background .12s; color: var(--text); }
-        .attach-menu .attach-option:hover { background: var(--pdim); }
-        .attach-menu .attach-option .icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
-        .attach-menu .attach-option .label { font-size: .85rem; font-weight: 600; }
+        .message-input-area .input-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            gap: 6px;
+            background: var(--inp);
+            border: 1.5px solid var(--brd);
+            border-radius: 24px;
+            padding: 4px 6px 4px 14px;
+            transition: border-color .15s;
+            position: relative;
+        }
+        .message-input-area .input-wrapper:focus-within {
+            border-color: var(--p);
+            box-shadow: 0 0 0 3px var(--pdim);
+        }
+        .message-input-area .input-wrapper .attach-btn {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .15s, color .15s;
+            flex-shrink: 0;
+        }
+        .message-input-area .input-wrapper .attach-btn:hover {
+            background: var(--pdim);
+            color: var(--p);
+        }
+        .message-input-area .input-wrapper .attach-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .message-input-area .input-wrapper textarea {
+            flex: 1;
+            border: none;
+            padding: 8px 0;
+            font-size: .9rem;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+            background: transparent;
+            color: var(--text);
+            line-height: 1.4;
+            min-height: 20px;
+            max-height: 100px;
+            box-sizing: border-box;
+        }
+        .message-input-area .input-wrapper textarea::placeholder {
+            color: var(--muted2);
+        }
+        .message-input-area .send-btn {
+            background: var(--p);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: opacity .15s, transform .15s;
+        }
+        .message-input-area .send-btn:active {
+            transform: scale(.92);
+        }
+        .message-input-area .send-btn:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+        }
+        .message-input-area .send-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .message-input-area.blocked-input {
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            font-size: .8rem;
+            font-weight: 600;
+        }
+
+        .attach-menu {
+            display: none;
+            position: absolute;
+            bottom: 70px;
+            left: 12px;
+            background: var(--bg3);
+            border: 1px solid var(--brd);
+            border-radius: 16px;
+            padding: 12px 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .3);
+            z-index: 20;
+            min-width: 200px;
+        }
+        .attach-menu.open {
+            display: block;
+        }
+        .attach-menu .attach-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 4px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background .12s;
+            color: var(--text);
+        }
+        .attach-menu .attach-option:hover {
+            background: var(--pdim);
+        }
+        .attach-menu .attach-option .icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .attach-menu .attach-option .label {
+            font-size: .85rem;
+            font-weight: 600;
+        }
 
         /* ─── FULL-SCREEN NEW CHAT MODAL ─── */
         .mfs {
-            position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 9000;
-            background: var(--bg2); display: flex; flex-direction: column;
-            visibility: hidden; opacity: 0; transform: translateY(100%);
-            transition: opacity .3s, visibility .3s, transform .36s cubic-bezier(.32,1,.64,1);
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 9000;
+            background: var(--bg2);
+            display: flex;
+            flex-direction: column;
+            visibility: hidden;
+            opacity: 0;
+            transform: translateY(100%);
+            transition: opacity .3s, visibility .3s, transform .36s cubic-bezier(.32, 1, .64, 1);
         }
-        .mfs.open { visibility: visible; opacity: 1; transform: translateY(0); }
-        .fs-hdr { display: flex; justify-content: space-between; align-items: center; padding: clamp(52px,10vw,64px) clamp(16px,5vw,24px) 14px; border-bottom: 1px solid var(--brd); flex-shrink: 0; }
-        .fs-title { font-size: clamp(18px,5vw,22px); font-weight: 800; }
-        .fs-x { width: 38px; height: 38px; border-radius: 50%; background: var(--inp); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .15s; }
-        .fs-x:hover { background: var(--pdim); }
-        .fs-x svg { width: 18px; height: 18px; stroke: var(--muted); fill: none; stroke-width: 2.2; stroke-linecap: round; }
-        .fs-search { padding: 12px clamp(14px,5vw,24px) 6px; flex-shrink: 0; }
-        .fs-search input { width: 100%; padding: 11px 16px 11px 42px; border-radius: 14px; border: 1.5px solid var(--brd); background: var(--inp); font-size: 14px; color: var(--text); outline: none; transition: border-color .15s; background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(150,150,150,0.5)' stroke-width='2' stroke-linecap='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 14px center; }
-        .fs-search input::placeholder { color: var(--muted2); }
-        .fs-search input:focus { border-color: var(--p); }
-        .fs-list { overflow-y: auto; flex: 1; min-height: 0; padding: 4px 0 40px; -webkit-overflow-scrolling: touch; }
-        .fs-list::-webkit-scrollbar { width: 0; }
+        .mfs.open {
+            visibility: visible;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .fs-hdr {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: clamp(52px, 10vw, 64px) clamp(16px, 5vw, 24px) 14px;
+            border-bottom: 1px solid var(--brd);
+            flex-shrink: 0;
+        }
+        .fs-title {
+            font-size: clamp(18px, 5vw, 22px);
+            font-weight: 800;
+        }
+        .fs-x {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--inp);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background .15s;
+        }
+        .fs-x:hover {
+            background: var(--pdim);
+        }
+        .fs-x svg {
+            width: 18px;
+            height: 18px;
+            stroke: var(--muted);
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+        }
+        .fs-search {
+            padding: 12px clamp(14px, 5vw, 24px) 6px;
+            flex-shrink: 0;
+        }
+        .fs-search input {
+            width: 100%;
+            padding: 11px 16px 11px 42px;
+            border-radius: 14px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            font-size: 14px;
+            color: var(--text);
+            outline: none;
+            transition: border-color .15s;
+            background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(150,150,150,0.5)' stroke-width='2' stroke-linecap='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: 14px center;
+        }
+        .fs-search input::placeholder {
+            color: var(--muted2);
+        }
+        .fs-search input:focus {
+            border-color: var(--p);
+        }
+        .fs-list {
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+            padding: 4px 0 40px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .fs-list::-webkit-scrollbar {
+            width: 0;
+        }
 
-        .u-row { display: flex; align-items: center; gap: 14px; padding: 13px clamp(14px,5vw,24px); cursor: pointer; transition: background .12s; }
-        .u-row:hover { background: var(--rowh); }
-        .u-row-friend { background: rgba(139,92,246,.04); border-left: 2.5px solid var(--p); }
-        .u-av { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--bg4); border: 1.5px solid var(--brd); }
-        .u-info { flex: 1; min-width: 0; }
-        .u-name { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 5px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .u-handle { font-size: 13px; color: var(--muted); font-weight: 500; margin-top: 2px; }
-        .u-tag { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 100px; flex-shrink: 0; background: var(--pdim); color: var(--pl); }
-        .mini-badge { width: 15px; height: 15px; border-radius: 50%; background: linear-gradient(135deg,var(--p),var(--pd)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .mini-badge svg { width: 9px; height: 9px; stroke: #fff; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+        .u-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 13px clamp(14px, 5vw, 24px);
+            cursor: pointer;
+            transition: background .12s;
+        }
+        .u-row:hover {
+            background: var(--rowh);
+        }
+        .u-row-friend {
+            background: rgba(139, 92, 246, .04);
+            border-left: 2.5px solid var(--p);
+        }
+        .u-av {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: var(--bg4);
+            border: 1.5px solid var(--brd);
+        }
+        .u-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .u-name {
+            font-size: 15px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .u-handle {
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 500;
+            margin-top: 2px;
+        }
+        .u-tag {
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 7px;
+            border-radius: 100px;
+            flex-shrink: 0;
+            background: var(--pdim);
+            color: var(--pl);
+        }
+        .mini-badge {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--p), var(--pd));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .mini-badge svg {
+            width: 9px;
+            height: 9px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
 
-        .u-skeleton { display: flex; align-items: center; gap: 14px; padding: 13px clamp(14px,5vw,24px); }
-        .u-skeleton-av { width: 50px; height: 50px; border-radius: 50%; background: var(--bg4); animation: shimmer 1.4s ease-in-out infinite; flex-shrink: 0; }
-        .u-skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
-        .u-skeleton-name { height: 13px; border-radius: 6px; background: var(--bg4); width: 55%; animation: shimmer 1.4s ease-in-out infinite; }
-        .u-skeleton-sub { height: 11px; border-radius: 6px; background: var(--bg4); width: 35%; animation: shimmer 1.4s ease-in-out infinite; animation-delay: .15s; }
-        @keyframes shimmer { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
+        .u-skeleton {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 13px clamp(14px, 5vw, 24px);
+        }
+        .u-skeleton-av {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--bg4);
+            animation: shimmer 1.4s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+        .u-skeleton-lines {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+        .u-skeleton-name {
+            height: 13px;
+            border-radius: 6px;
+            background: var(--bg4);
+            width: 55%;
+            animation: shimmer 1.4s ease-in-out infinite;
+        }
+        .u-skeleton-sub {
+            height: 11px;
+            border-radius: 6px;
+            background: var(--bg4);
+            width: 35%;
+            animation: shimmer 1.4s ease-in-out infinite;
+            animation-delay: .15s;
+        }
+        @keyframes shimmer {
+            0%,
+            100% {
+                opacity: .45;
+            }
+            50% {
+                opacity: 1;
+            }
+        }
 
-        .fw-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; gap: 12px; }
-        .fw-empty-ico { width: 72px; height: 72px; border-radius: 50%; background: var(--pdim); border: 1.5px solid var(--pbrd,rgba(139,92,246,.28)); display: flex; align-items: center; justify-content: center; }
-        .fw-empty-ico svg { width: 32px; height: 32px; stroke: var(--p); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-        .fw-empty h3 { font-size: 17px; font-weight: 800; color: var(--text); }
-        .fw-empty p { font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 260px; }
+        .fw-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 60px 20px;
+            text-align: center;
+            gap: 12px;
+        }
+        .fw-empty-ico {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: var(--pdim);
+            border: 1.5px solid var(--pbrd, rgba(139, 92, 246, .28));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fw-empty-ico svg {
+            width: 32px;
+            height: 32px;
+            stroke: var(--p);
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .fw-empty h3 {
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .fw-empty p {
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.6;
+            max-width: 260px;
+        }
 
         /* ─── CONTEXT MENU ─── */
-        .msg-context-menu { position: fixed; background: var(--bg3); border: 1px solid var(--brd); border-radius: 14px; padding: 6px 0; box-shadow: 0 8px 32px rgba(0,0,0,.4); z-index: 300; min-width: 180px; display: none; animation: fadeUp .15s ease both; }
-        .msg-context-menu.open { display: block; }
-        .msg-context-menu .menu-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; transition: background .1s; font-size: .85rem; color: var(--text); border: none; background: none; width: 100%; text-align: left; }
-        .msg-context-menu .menu-item:hover { background: var(--pdim); }
-        .msg-context-menu .menu-item.danger { color: var(--danger); }
-        .msg-context-menu .menu-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+        .msg-context-menu {
+            position: fixed;
+            background: var(--bg3);
+            border: 1px solid var(--brd);
+            border-radius: 14px;
+            padding: 6px 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .4);
+            z-index: 300;
+            min-width: 180px;
+            display: none;
+            animation: fadeUp .15s ease both;
+        }
+        .msg-context-menu.open {
+            display: block;
+        }
+        .msg-context-menu .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            cursor: pointer;
+            transition: background .1s;
+            font-size: .85rem;
+            color: var(--text);
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+        .msg-context-menu .menu-item:hover {
+            background: var(--pdim);
+        }
+        .msg-context-menu .menu-item.danger {
+            color: var(--danger);
+        }
+        .msg-context-menu .menu-item svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            flex-shrink: 0;
+        }
 
         /* ─── REACTION PICKER ─── */
-        .reaction-picker { display: none; position: absolute; bottom: 100%; left: 0; background: var(--bg3); border: 1px solid var(--brd); border-radius: 20px; padding: 6px 10px; box-shadow: 0 8px 32px rgba(0,0,0,.3); z-index: 30; gap: 4px; animation: fadeUp .15s ease both; }
-        .reaction-picker.open { display: flex; }
-        .reaction-picker .reaction-emoji { font-size: 1.5rem; cursor: pointer; padding: 4px 6px; border-radius: 50%; transition: transform .15s, background .15s; line-height: 1; }
-        .reaction-picker .reaction-emoji:hover { transform: scale(1.2); background: var(--pdim); }
+        .reaction-picker {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            background: var(--bg3);
+            border: 1px solid var(--brd);
+            border-radius: 20px;
+            padding: 6px 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .3);
+            z-index: 30;
+            gap: 4px;
+            animation: fadeUp .15s ease both;
+        }
+        .reaction-picker.open {
+            display: flex;
+        }
+        .reaction-picker .reaction-emoji {
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 50%;
+            transition: transform .15s, background .15s;
+            line-height: 1;
+        }
+        .reaction-picker .reaction-emoji:hover {
+            transform: scale(1.2);
+            background: var(--pdim);
+        }
 
         /* ─── UPLOAD PROGRESS ─── */
-        .upload-progress { display: none; align-self: flex-end; max-width: var(--max-msg-width); padding: 10px 14px; background: var(--bg3); border: 1px solid var(--brd); border-radius: var(--bubble-radius); border-bottom-right-radius: 4px; font-size: .8rem; color: var(--muted); gap: 8px; align-items: center; }
-        .upload-progress.visible { display: flex; }
-        .upload-progress .progress-bar { flex: 1; height: 4px; background: var(--brd); border-radius: 2px; overflow: hidden; min-width: 60px; }
-        .upload-progress .progress-bar .fill { height: 100%; background: var(--p); width: 0%; transition: width .15s; }
+        .upload-progress {
+            display: none;
+            align-self: flex-end;
+            max-width: var(--max-msg-width);
+            padding: 10px 14px;
+            background: var(--bg3);
+            border: 1px solid var(--brd);
+            border-radius: var(--bubble-radius);
+            border-bottom-right-radius: 4px;
+            font-size: .8rem;
+            color: var(--muted);
+            gap: 8px;
+            align-items: center;
+        }
+        .upload-progress.visible {
+            display: flex;
+        }
+        .upload-progress .progress-bar {
+            flex: 1;
+            height: 4px;
+            background: var(--brd);
+            border-radius: 2px;
+            overflow: hidden;
+            min-width: 60px;
+        }
+        .upload-progress .progress-bar .fill {
+            height: 100%;
+            background: var(--p);
+            width: 0%;
+            transition: width .15s;
+        }
 
         /* ─── VOICE RECORDING BAR ─── */
-        .voice-record-bar { display: none; align-items: center; gap: 12px; flex: 1; padding: 4px 6px 4px 16px; }
-        .voice-record-bar.active { display: flex; }
-        .voice-record-bar .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; animation: recPulse 1s ease-in-out infinite; flex-shrink: 0; }
-        @keyframes recPulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
-        .voice-record-bar .rec-time { font-size: .85rem; font-weight: 700; color: var(--text); min-width: 40px; }
-        .voice-record-bar .rec-hint { flex: 1; font-size: .78rem; color: var(--muted); }
-        .voice-record-bar .rec-cancel { background: none; border: none; color: var(--danger); font-weight: 700; font-size: .8rem; cursor: pointer; padding: 6px 10px; }
-        .voice-record-bar .rec-send { background: var(--p); color: #fff; border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
-        .voice-record-bar .rec-send svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+        .voice-record-bar {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            padding: 4px 6px 4px 16px;
+        }
+        .voice-record-bar.active {
+            display: flex;
+        }
+        .voice-record-bar .rec-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: recPulse 1s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+        @keyframes recPulse {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .35;
+            }
+        }
+        .voice-record-bar .rec-time {
+            font-size: .85rem;
+            font-weight: 700;
+            color: var(--text);
+            min-width: 40px;
+        }
+        .voice-record-bar .rec-hint {
+            flex: 1;
+            font-size: .78rem;
+            color: var(--muted);
+        }
+        .voice-record-bar .rec-cancel {
+            background: none;
+            border: none;
+            color: var(--danger);
+            font-weight: 700;
+            font-size: .8rem;
+            cursor: pointer;
+            padding: 6px 10px;
+        }
+        .voice-record-bar .rec-send {
+            background: var(--p);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .voice-record-bar .rec-send svg {
+            width: 16px;
+            height: 16px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
 
         /* ─── POLL MODAL ─── */
-        .poll-modal { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.5); backdrop-filter: blur(8px); align-items: center; justify-content: center; padding: 20px; }
-        .poll-modal.open { display: flex; }
-        .poll-modal .poll-sheet { background: var(--bg3); border-radius: 24px; max-width: 480px; width: 100%; max-height: 80vh; display: flex; flex-direction: column; border: 1px solid var(--brd2); box-shadow: 0 24px 60px rgba(0,0,0,.4); padding: 20px 24px 24px; overflow: hidden; animation: fadeUp .25s ease both; }
-        .poll-sheet .poll-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-        .poll-sheet .poll-header h3 { font-weight: 800; font-size: 1.1rem; }
-        .poll-sheet .poll-header button { background: none; border: none; cursor: pointer; color: var(--muted); padding: 4px; }
-        .poll-sheet .poll-header button svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
-        .poll-sheet .form-group { margin-bottom: 12px; }
-        .poll-sheet .form-group label { font-size: .8rem; font-weight: 700; color: var(--muted); display: block; margin-bottom: 4px; }
-        .poll-sheet .form-group input { width: 100%; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--brd); background: var(--inp); font-size: .9rem; color: var(--text); outline: none; transition: border-color .15s; }
-        .poll-sheet .form-group input:focus { border-color: var(--p); }
-        .poll-sheet .poll-options-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-        .poll-sheet .poll-options-list .opt-row { display: flex; align-items: center; gap: 8px; }
-        .poll-sheet .poll-options-list .opt-row input { flex: 1; }
-        .poll-sheet .poll-options-list .opt-row button { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1.2rem; padding: 4px; }
-        .poll-sheet .add-opt-btn { background: none; border: 1.5px dashed var(--brd); border-radius: 12px; padding: 8px; width: 100%; color: var(--muted); font-weight: 600; cursor: pointer; transition: background .15s; }
-        .poll-sheet .add-opt-btn:hover { background: var(--pdim); }
-        .poll-sheet .poll-footer { display: flex; gap: 8px; margin-top: 12px; }
-        .poll-sheet .poll-footer button { flex: 1; padding: 12px; border-radius: 14px; border: none; font-weight: 700; cursor: pointer; transition: opacity .15s; }
-        .poll-sheet .poll-footer .cancel-poll { background: var(--inp); color: var(--text); }
-        .poll-sheet .poll-footer .create-poll { background: var(--p); color: #fff; }
-        .poll-sheet .poll-footer .create-poll:hover { opacity: .85; }
+        .poll-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, .5);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .poll-modal.open {
+            display: flex;
+        }
+        .poll-modal .poll-sheet {
+            background: var(--bg3);
+            border-radius: 24px;
+            max-width: 480px;
+            width: 100%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--brd2);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, .4);
+            padding: 20px 24px 24px;
+            overflow: hidden;
+            animation: fadeUp .25s ease both;
+        }
+        .poll-sheet .poll-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .poll-sheet .poll-header h3 {
+            font-weight: 800;
+            font-size: 1.1rem;
+        }
+        .poll-sheet .poll-header button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--muted);
+            padding: 4px;
+        }
+        .poll-sheet .poll-header button svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+        .poll-sheet .form-group {
+            margin-bottom: 12px;
+        }
+        .poll-sheet .form-group label {
+            font-size: .8rem;
+            font-weight: 700;
+            color: var(--muted);
+            display: block;
+            margin-bottom: 4px;
+        }
+        .poll-sheet .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            font-size: .9rem;
+            color: var(--text);
+            outline: none;
+            transition: border-color .15s;
+        }
+        .poll-sheet .form-group input:focus {
+            border-color: var(--p);
+        }
+        .poll-sheet .poll-options-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .poll-sheet .poll-options-list .opt-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .poll-sheet .poll-options-list .opt-row input {
+            flex: 1;
+        }
+        .poll-sheet .poll-options-list .opt-row button {
+            background: none;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 4px;
+        }
+        .poll-sheet .add-opt-btn {
+            background: none;
+            border: 1.5px dashed var(--brd);
+            border-radius: 12px;
+            padding: 8px;
+            width: 100%;
+            color: var(--muted);
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .15s;
+        }
+        .poll-sheet .add-opt-btn:hover {
+            background: var(--pdim);
+        }
+        .poll-sheet .poll-footer {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .poll-sheet .poll-footer button {
+            flex: 1;
+            padding: 12px;
+            border-radius: 14px;
+            border: none;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity .15s;
+        }
+        .poll-sheet .poll-footer .cancel-poll {
+            background: var(--inp);
+            color: var(--text);
+        }
+        .poll-sheet .poll-footer .create-poll {
+            background: var(--p);
+            color: #fff;
+        }
+        .poll-sheet .poll-footer .create-poll:hover {
+            opacity: .85;
+        }
+
+        /* ─── GROUP INFO MODAL ─── */
+        .gi-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 13px 4px;
+            border-bottom: 1px solid var(--brd);
+            cursor: pointer;
+            font-size: .9rem;
+            color: var(--text);
+            transition: background .12s;
+        }
+        .gi-row:last-child {
+            border-bottom: none;
+        }
+        .gi-row:hover {
+            background: var(--pdim);
+        }
+        .gi-toggle {
+            position: relative;
+            width: 42px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+        .gi-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .gi-toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--brd);
+            border-radius: 24px;
+            transition: .2s;
+            cursor: pointer;
+        }
+        .gi-toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: .2s;
+        }
+        .gi-toggle input:checked+.gi-toggle-slider {
+            background: var(--p);
+        }
+        .gi-toggle input:checked+.gi-toggle-slider::before {
+            transform: translateX(18px);
+        }
 
         /* ─── RESPONSIVE ─── */
         @media (max-width: 768px) {
-            .conversations-sidebar { width: 100%; border-right: none; position: absolute; top: 0; left: 0; bottom: 0; z-index: 10; background: var(--bg2); transform: translateX(0); }
-            .conversations-sidebar.hidden { transform: translateX(-100%); }
-            .chat-view .chat-view-header .back-btn { display: flex; }
-            .chat-view { width: 100%; }
-            .chat-view .chat-view-header { padding-left: 8px; }
-            :root { --max-msg-width: 90%; }
-            .chat-container { padding-bottom: calc(var(--bottom-nav-height) + 8px); }
-        }
-        @media (min-width: 769px) {
-            .conversations-sidebar { display: flex; }
-            .chat-view .chat-view-header .back-btn { display: none; }
-            .chat-container { padding-bottom: 0; }
+            .chat-view .chat-view-header {
+                padding-left: 8px;
+            }
+            :root {
+                --max-msg-width: 90%;
+            }
         }
 
         /* ─── TOAST ─── */
-        #tw { position: fixed; top: clamp(14px, 4vw, 22px); left: 50%; transform: translateX(-50%); z-index: 99999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: calc(100vw - 32px); }
-        .toast { background: var(--bg3); border: 1px solid var(--brd2); border-radius: 100px; padding: 11px 18px; font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.55); animation: tIn .3s cubic-bezier(.34,1.2,.64,1) both; white-space: nowrap; }
-        .toast.out { animation: tOut .25s ease forwards; }
-        @keyframes tIn { from { transform: translateY(-14px); opacity: 0; } to { transform: none; opacity: 1; } }
-        @keyframes tOut { to { transform: translateY(-10px); opacity: 0; } }
-        .td { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-        .tg { background: var(--ok); }
-        .tp { background: var(--p); }
-        .tr { background: var(--danger); }
-        .to { background: var(--warn); }
-        .hidden { display: none !important; }
+        #tw {
+            position: fixed;
+            top: clamp(14px, 4vw, 22px);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+            max-width: calc(100vw - 32px);
+        }
+        .toast {
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            border-radius: 100px;
+            padding: 11px 18px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .55);
+            animation: tIn .3s cubic-bezier(.34, 1.2, .64, 1) both;
+            white-space: nowrap;
+        }
+        .toast.out {
+            animation: tOut .25s ease forwards;
+        }
+        @keyframes tIn {
+            from {
+                transform: translateY(-14px);
+                opacity: 0;
+            }
+            to {
+                transform: none;
+                opacity: 1;
+            }
+        }
+        @keyframes tOut {
+            to {
+                transform: translateY(-10px);
+                opacity: 0;
+            }
+        }
+        .td {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .tg {
+            background: var(--ok);
+        }
+        .tp {
+            background: var(--p);
+        }
+        .tr {
+            background: var(--danger);
+        }
+        .to {
+            background: var(--warn);
+        }
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -403,13 +1789,7 @@
                         </div>
                     </div>
 
-                    <div class="messages-area" id="messagesArea">
-                        <div class="no-messages">
-                            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                            <h3>No conversation selected</h3>
-                            <p>Choose a conversation from the list or start a new one.</p>
-                        </div>
-                    </div>
+                    <div class="messages-area" id="messagesArea"></div>
 
                     <div class="message-input-area" id="messageInputArea">
                         <div class="input-wrapper" style="position:relative;" id="textInputWrapper">
@@ -457,7 +1837,109 @@
         <div class="fs-search">
             <input type="text" id="userSearchInput" placeholder="Search everyone on FreeUpper..." oninput="onUserSearchInput(this.value)">
         </div>
-        <div class="fs-list" id="userSearchResults"></div>
+        <div class="fs-list" id="userSearchResults">
+            <!-- "New Group" row -->
+            <div class="u-row" onclick="openCreateGroupModal()">
+                <div class="u-av" style="display:flex;align-items:center;justify-content:center;background:var(--pdim);">
+                    <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--p);fill:none;stroke-width:2;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
+                </div>
+                <div class="u-info">
+                    <div class="u-name">New Group</div>
+                    <div class="u-handle">Create a group chat</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CREATE GROUP MODAL ===== -->
+    <div class="poll-modal" id="createGroupModal">
+        <div class="poll-sheet" style="max-height:85vh;">
+            <div class="poll-header">
+                <h3>Create Group</h3>
+                <button onclick="closeCreateGroupModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="form-group">
+                <label>Group Name</label>
+                <input type="text" id="groupNameInput" placeholder="Add group name" maxlength="50">
+            </div>
+            <div class="form-group">
+                <label>Add Members</label>
+                <input type="text" id="groupMemberSearch" placeholder="Search friends..." oninput="filterGroupMembers(this.value)">
+            </div>
+            <div id="groupMemberList" style="overflow-y:auto;max-height:40vh;margin-bottom:12px;"></div>
+            <div class="poll-footer">
+                <button class="cancel-poll" onclick="closeCreateGroupModal()">Cancel</button>
+                <button class="create-poll" id="createGroupBtn" onclick="createGroup()">Create Group (0)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== GROUP INFO MODAL ===== -->
+    <div class="poll-modal" id="groupInfoModal">
+        <div class="poll-sheet" style="max-height:85vh;">
+            <div class="poll-header">
+                <h3>Group Settings</h3>
+                <button onclick="closeGroupInfoModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                <img id="giAvatar" src="" style="width:52px;height:52px;border-radius:50%;object-fit:cover;background:var(--bg4);" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%23E5E7EB%22/%3E%3Ccircle cx=%2250%22 cy=%2238%22 r=%2216%22 fill=%22%239CA3AF%22/%3E%3Cellipse cx=%2250%22 cy=%2275%22 rx=%2230%22 ry=%2222%22 fill=%22%239CA3AF%22/%3E%3C/svg%3E'">
+                <div style="flex:1;min-width:0;">
+                    <div id="giNameDisplay" style="font-weight:800;font-size:1rem;display:flex;align-items:center;gap:6px;cursor:pointer;" onclick="startEditGroupName()">
+                        <span id="giNameText"></span>
+                        <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--muted);fill:none;stroke-width:2;"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+                    </div>
+                    <input id="giNameInput" type="text" maxlength="50" style="display:none;width:100%;padding:6px 10px;border-radius:8px;border:1.5px solid var(--p);background:var(--inp);color:var(--text);font-size:.9rem;" onkeydown="if(event.key==='Enter')saveGroupName()" onblur="saveGroupName()">
+                    <div id="giMemberCount" style="font-size:.8rem;color:var(--muted);margin-top:2px;"></div>
+                </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;">
+                <div class="gi-row" onclick="openGroupMedia()">
+                    <span>Media, Links & Files</span>
+                    <span style="color:var(--muted);font-size:.85rem;" id="giMediaCount">0</span>
+                </div>
+                <div class="gi-row" onclick="openGroupSearch()">
+                    <span>Search in Conversation</span>
+                </div>
+                <div class="gi-row" onclick="openGroupMembersList()">
+                    <span>Members</span>
+                    <span style="color:var(--muted);font-size:.85rem;" id="giMembersLink"></span>
+                </div>
+                <div class="gi-row" onclick="closeGroupInfoModal();openAddMembersModal();">
+                    <span>Add Members</span>
+                </div>
+                <div class="gi-row" style="justify-content:space-between;">
+                    <span>Mute Notifications</span>
+                    <label class="gi-toggle">
+                        <input type="checkbox" id="giMuteToggle" onchange="toggleMuteGroup(this.checked)">
+                        <span class="gi-toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="gi-row" style="color:var(--danger);" onclick="leaveGroup()">
+                    <span>Leave Group</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ADD MEMBERS MODAL ===== -->
+    <div class="poll-modal" id="addMembersModal">
+        <div class="poll-sheet" style="max-height:85vh;">
+            <div class="poll-header">
+                <h3>Add Members</h3>
+                <button onclick="closeAddMembersModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="form-group">
+                <input type="text" id="addMemberSearch" placeholder="Search friends..." oninput="filterAddMembers(this.value)">
+            </div>
+            <div id="addMemberSelectedRow" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+            <div id="addMemberList" style="overflow-y:auto;max-height:40vh;margin-bottom:12px;"></div>
+            <div class="poll-footer">
+                <button class="cancel-poll" onclick="closeAddMembersModal()">Cancel</button>
+                <button class="create-poll" id="addMembersBtn" onclick="submitAddMembers()">Add (0)</button>
+            </div>
+        </div>
     </div>
 
     <!-- ===== POLL MODAL ===== -->
@@ -465,9 +1947,7 @@
         <div class="poll-sheet">
             <div class="poll-header">
                 <h3>Create a Poll</h3>
-                <button onclick="closePollModal()">
-                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
+                <button onclick="closePollModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </div>
             <div class="form-group">
                 <label>Question</label>
@@ -539,6 +2019,11 @@
             let contextMenuMsgId = null;
             let userSearchDebounce = null;
             let userSearchToken = 0;
+
+            // Group state
+            let selectedGroupMembers = new Set();
+            let addMembersSelected = new Set();
+            let addMembersFriendsPool = [];
 
             let sb;
             function waitForSupabase(cb) {
@@ -632,6 +2117,22 @@
                 return `onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'"`;
             }
 
+            function emptyChatIllustration() {
+                return `
+                    <div class="empty-illustration">
+                        <svg viewBox="0 0 160 120" width="150" height="112">
+                            <path d="M20 20h90a14 14 0 0 1 14 14v34a14 14 0 0 1-14 14H55l-22 18v-18H20a14 14 0 0 1-14-14V34a14 14 0 0 1 14-14z"
+                                fill="var(--bg3)" stroke="var(--brd2)" stroke-width="2"/>
+                            <path d="M62 46h72a12 12 0 0 1 12 12v26a12 12 0 0 1-12 12H98l-8 12v-12H62a12 12 0 0 1-12-12V58a12 12 0 0 1 12-12z"
+                                fill="var(--p)" opacity="0.14" stroke="var(--p)" stroke-width="2"/>
+                            <circle cx="82" cy="72" r="3.5" fill="var(--p)"/>
+                            <circle cx="98" cy="72" r="3.5" fill="var(--p)"/>
+                            <circle cx="114" cy="72" r="3.5" fill="var(--p)"/>
+                        </svg>
+                    </div>
+                `;
+            }
+
             // ============================================================
             // BLOCK STATE
             // ============================================================
@@ -692,29 +2193,46 @@
             }
 
             // ============================================================
-            // SUPABASE - CONVERSATIONS
+            // SUPABASE - CONVERSATIONS (with group support)
             // ============================================================
             async function loadConversations() {
                 if (!currentUserId) return;
                 try {
-                    const { data, error } = await sb
+                    // First, get group IDs the user belongs to
+                    const { data: myGroupIds } = await sb
+                        .from('conversation_members')
+                        .select('conversation_id')
+                        .eq('user_id', currentUserId);
+                    const groupIdList = (myGroupIds || []).map(g => g.conversation_id);
+
+                    let query = sb
                         .from('conversations')
                         .select(`
                             *,
                             messages:messages( id, text, sender_id, created_at, message_type, media_url, reply_to )
                         `)
-                        .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`)
                         .order('updated_at', { ascending: false });
 
+                    if (groupIdList.length) {
+                        query = query.or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId},id.in.(${groupIdList.join(',')})`);
+                    } else {
+                        query = query.or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+                    }
+                    const { data, error } = await query;
                     if (error) throw error;
+
                     conversations = data.map(conv => {
-                        const otherId = conv.user1_id === currentUserId ? conv.user2_id : conv.user1_id;
                         const msgs = conv.messages || [];
                         const lastMsg = msgs.length ? msgs.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b) : null;
-                        return { ...conv, otherUserId: otherId, lastMessage: lastMsg, lastMessageTime: lastMsg ? lastMsg.created_at : conv.updated_at };
+                        const base = { ...conv, lastMessage: lastMsg, lastMessageTime: lastMsg ? lastMsg.created_at : conv.updated_at };
+                        if (!conv.is_group) {
+                            base.otherUserId = conv.user1_id === currentUserId ? conv.user2_id : conv.user1_id;
+                        }
+                        return base;
                     });
 
-                    const userIds = conversations.map(c => c.otherUserId).filter(Boolean);
+                    // Fetch partner profiles for 1:1 convs
+                    const userIds = conversations.filter(c => !c.is_group).map(c => c.otherUserId).filter(Boolean);
                     if (userIds.length) {
                         const { data: profiles, error: pErr } = await sb
                             .from('profiles')
@@ -723,7 +2241,11 @@
                         if (!pErr && profiles) {
                             const profileMap = {};
                             profiles.forEach(p => profileMap[p.id] = p);
-                            conversations.forEach(c => { c.otherUser = profileMap[c.otherUserId] || null; });
+                            conversations.forEach(c => {
+                                if (!c.is_group) c.otherUser = profileMap[c.otherUserId] || null;
+                            });
+                        } else if (pErr) {
+                            console.error('profiles fetch error:', pErr);
                         }
                     }
                     renderConversations(convSearch.value);
@@ -734,7 +2256,7 @@
             }
 
             // ============================================================
-            // RENDER CONVERSATIONS
+            // RENDER CONVERSATIONS (group-aware)
             // ============================================================
             function renderConversations(filter = '') {
                 const q = filter.toLowerCase().trim();
@@ -743,7 +2265,7 @@
                 let matchedConvs = conversations;
                 if (q) {
                     matchedConvs = matchedConvs.filter(c => {
-                        const name = c.otherUser ? (c.otherUser.display_name || c.otherUser.username || '') : '';
+                        const name = c.is_group ? (c.group_name || 'Group') : (c.otherUser ? (c.otherUser.display_name || c.otherUser.username || '') : '');
                         const handle = c.otherUser ? (c.otherUser.username || '') : '';
                         return name.toLowerCase().includes(q) || handle.toLowerCase().includes(q);
                     });
@@ -754,7 +2276,7 @@
                     matchedFriends = friendProfiles.filter(function(u) {
                         const name = (u.display_name || u.username || '').toLowerCase();
                         const handle = (u.username || '').toLowerCase();
-                        return (name.includes(q) || handle.includes(q)) && !conversations.some(c => c.otherUserId === u.id);
+                        return (name.includes(q) || handle.includes(q)) && !conversations.some(c => c.otherUserId === u.id && !c.is_group);
                     });
                 }
 
@@ -771,8 +2293,8 @@
                     if (q) html += `<div class="search-section-header">Conversations</div>`;
                     html += matchedConvs.map(c => {
                         const other = c.otherUser || {};
-                        const name = other.display_name || other.username || 'User';
-                        const avatar = getAvatar(other);
+                        const name = c.is_group ? (c.group_name || 'Group') : (other.display_name || other.username || 'User');
+                        const avatar = c.is_group ? (c.group_avatar || DEFAULT_AVATAR) : getAvatar(other);
                         let lastMsg = 'No messages yet';
                         if (c.lastMessage) {
                             const prefix = c.lastMessage.sender_id === currentUserId ? 'You: ' : '';
@@ -780,13 +2302,15 @@
                         }
                         const time = c.lastMessageTime ? formatDate(c.lastMessageTime) : '';
                         const active = c.id === selectedConversationId ? 'active' : '';
-                        const badge = getVerifiedBadge(other.verified_status);
-                        const online = other.online_status === 'online' ? '<div class="online-dot"></div>' : '';
+                        const badge = c.is_group ? '' : getVerifiedBadge(other.verified_status);
+                        const online = !c.is_group && other.online_status === 'online' ? '<div class="online-dot"></div>' : '';
+                        const isMuted = (c.muted_by || []).includes(currentUserId);
+                        const muteIcon = isMuted ? '<svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:var(--muted2);fill:none;stroke-width:2;flex-shrink:0;"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>' : '';
                         return `
                             <div class="conv-item ${active}" data-conv-id="${c.id}" onclick="selectConversation('${c.id}')">
                                 <div class="av">${online}<img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}></div>
                                 <div class="conv-info">
-                                    <div class="conv-name">${escapeHtml(name)} ${badge}</div>
+                                    <div class="conv-name">${escapeHtml(name)} ${badge} ${muteIcon}</div>
                                     <div class="conv-last-msg">${escapeHtml(lastMsg)}</div>
                                 </div>
                                 <div class="conv-time">${time}</div>
@@ -820,38 +2344,52 @@
             window.filterConversations = function(value) { renderConversations(value); };
 
             // ============================================================
-            // SELECT CONVERSATION – with profile fetch fallback
+            // SELECT CONVERSATION (group-aware)
             // ============================================================
             window.selectConversation = async function(convId) {
                 selectedConversationId = convId;
                 const conv = conversations.find(c => c.id === convId);
                 if (!conv) return;
-                selectedPartnerId = conv.otherUserId;
 
-                // If we don't have the partner's profile yet, fetch it now
-                if (!conv.otherUser && selectedPartnerId) {
-                    const { data: profile, error } = await sb
-                        .from('profiles')
-                        .select('id, display_name, username, avatar_url, verified_status, online_status')
-                        .eq('id', selectedPartnerId)
-                        .single();
-                    if (!error && profile) {
-                        conv.otherUser = profile;
+                // For 1:1, ensure partner profile is loaded
+                if (!conv.is_group) {
+                    selectedPartnerId = conv.otherUserId;
+                    if (!conv.otherUser && selectedPartnerId) {
+                        const { data: profile, error } = await sb
+                            .from('profiles')
+                            .select('id, display_name, username, avatar_url, verified_status, online_status')
+                            .eq('id', selectedPartnerId)
+                            .single();
+                        if (error) {
+                            console.error('partner profile fetch error:', error);
+                        } else if (profile) {
+                            conv.otherUser = profile;
+                        }
                     }
                 }
 
+                // Update header
                 const other = conv.otherUser || {};
-                chatPartnerName.textContent = getDisplayName(other);
-                chatPartnerAvatar.src = getAvatar(other);
-                chatPartnerStatus.textContent = other.online_status === 'online' ? 'Online' : 'Last seen recently';
+                if (conv.is_group) {
+                    chatPartnerName.textContent = conv.group_name || 'Group';
+                    chatPartnerAvatar.src = conv.group_avatar || DEFAULT_AVATAR;
+                    chatPartnerStatus.textContent = 'Group chat';
+                } else {
+                    chatPartnerName.textContent = getDisplayName(other);
+                    chatPartnerAvatar.src = getAvatar(other);
+                    chatPartnerStatus.textContent = other.online_status === 'online' ? 'Online' : 'Last seen recently';
+                }
 
                 if (window.innerWidth <= 768) {
                     document.getElementById('conversationsSidebar').classList.add('hidden');
                 }
 
-                messagesArea.innerHTML = `<div class="no-messages"><p>Loading…</p></div>`;
+                messagesArea.innerHTML = `<div class="no-messages">${emptyChatIllustration()}<p>Loading…</p></div>`;
 
-                const status = await getBlockStatus(selectedPartnerId);
+                let status = { blocked: false, theyBlockedMe: false };
+                if (!conv.is_group) {
+                    status = await getBlockStatus(selectedPartnerId);
+                }
                 isBlockedConversation = status.blocked;
 
                 if (isBlockedConversation) {
@@ -935,11 +2473,13 @@
             // ============================================================
             function renderMessages() {
                 if (!messages.length) {
+                    const conv = conversations.find(c => c.id === selectedConversationId);
+                    const partnerName = conv && !conv.is_group ? getDisplayName(conv.otherUser || {}) : 'the group';
                     messagesArea.innerHTML = `
                         <div class="no-messages">
-                            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                            <h3>No messages yet</h3>
-                            <p>Send a message to start the conversation.</p>
+                            ${emptyChatIllustration()}
+                            <h3>Start a private conversation</h3>
+                            <p>Send a message to start chatting with ${escapeHtml(partnerName)}.</p>
                         </div>
                     `;
                     return;
@@ -1146,21 +2686,26 @@
             };
 
             // ============================================================
-            // REAL-TIME SUBSCRIPTIONS
+            // REAL-TIME SUBSCRIPTIONS (with notification)
             // ============================================================
             function subscribeToMessages() {
                 if (messageSubscription) { sb.removeChannel(messageSubscription); messageSubscription = null; }
                 messageSubscription = sb.channel('messages-chat')
                     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
                         const newMsg = payload.new;
-                        if (newMsg.conversation_id === selectedConversationId) {
+                        const isOpenConv = newMsg.conversation_id === selectedConversationId;
+
+                        if (isOpenConv) {
                             if (!messages.some(m => m.id === newMsg.id)) {
                                 messages.push(newMsg);
                                 renderMessages();
                                 scrollToBottom();
                                 if (newMsg.sender_id !== currentUserId) markVisibleMessagesRead(selectedConversationId);
                             }
+                        } else if (newMsg.sender_id !== currentUserId) {
+                            notifyIncomingMessage(newMsg);
                         }
+
                         loadConversations();
                     })
                     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
@@ -1178,6 +2723,40 @@
                         }
                     })
                     .subscribe();
+            }
+
+            async function notifyIncomingMessage(msg) {
+                const conv = conversations.find(c => c.id === msg.conversation_id);
+                if (conv && (conv.muted_by || []).includes(currentUserId)) return; // muted, suppress
+
+                let senderName = 'Someone';
+                let convLabel = '';
+                if (conv) {
+                    if (conv.is_group) {
+                        convLabel = ` in ${conv.group_name || 'a group'}`;
+                        const { data: p } = await sb.from('profiles').select('display_name, username').eq('id', msg.sender_id).single();
+                        if (p) senderName = p.display_name || p.username || 'Someone';
+                    } else {
+                        senderName = getDisplayName(conv.otherUser || {});
+                    }
+                }
+
+                const preview = msg.text ? (msg.text.length > 40 ? msg.text.slice(0, 40) + '…' : msg.text) :
+                    msg.message_type === 'image' ? '📷 Photo' :
+                    msg.message_type === 'video' ? '🎬 Video' :
+                    msg.message_type === 'voice' ? '🎤 Voice note' :
+                    msg.message_type === 'poll' ? '📊 Poll' : 'Sent an attachment';
+
+                const el = document.createElement('div');
+                el.className = 'toast';
+                el.style.cursor = 'pointer';
+                el.innerHTML = `<div class="td tp"></div><b>${escapeHtml(senderName)}${convLabel}:</b>&nbsp;${escapeHtml(preview)}`;
+                el.onclick = () => { selectConversation(msg.conversation_id); el.remove(); };
+                document.getElementById('tw').appendChild(el);
+                setTimeout(() => {
+                    el.classList.add('out');
+                    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 260);
+                }, 3400);
             }
 
             function subscribeToConversations() {
@@ -1554,7 +3133,7 @@
             };
 
             // ============================================================
-            // NEW CHAT MODAL — full-screen, live search across ALL users
+            // NEW CHAT MODAL
             // ============================================================
             window.openNewChatModal = function() {
                 const modal = document.getElementById('newChatModal');
@@ -1572,19 +3151,25 @@
 
             function renderUserSearchDefault() {
                 const resultsContainer = document.getElementById('userSearchResults');
-                if (!friendProfiles.length) {
-                    resultsContainer.innerHTML = `
-                        <div class="fw-empty">
-                            <div class="fw-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
-                            <h3>Search FreeUpper</h3>
-                            <p>Type a name or @username to find anyone on FreeUpper.</p>
+                // Keep the "New Group" row and show friends
+                let html = `
+                    <div class="u-row" onclick="openCreateGroupModal()">
+                        <div class="u-av" style="display:flex;align-items:center;justify-content:center;background:var(--pdim);">
+                            <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--p);fill:none;stroke-width:2;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
                         </div>
-                    `;
-                    return;
+                        <div class="u-info">
+                            <div class="u-name">New Group</div>
+                            <div class="u-handle">Create a group chat</div>
+                        </div>
+                    </div>
+                `;
+                if (friendProfiles.length) {
+                    html += `<div class="search-section-header">Friends</div>` +
+                        friendProfiles.map(u => userRowHtml(u, true)).join('');
+                } else {
+                    html += `<div class="fw-empty"><div class="fw-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><h3>Search FreeUpper</h3><p>Type a name or @username to find anyone on FreeUpper.</p></div>`;
                 }
-                resultsContainer.innerHTML =
-                    `<div class="search-section-header">Friends</div>` +
-                    friendProfiles.map(u => userRowHtml(u, true)).join('');
+                document.getElementById('userSearchResults').innerHTML = html;
             }
 
             function userRowHtml(u, isFriend) {
@@ -1641,9 +3226,20 @@
                         `;
                         return;
                     }
+                    // Keep the "New Group" row at the top
+                    let html = `
+                        <div class="u-row" onclick="openCreateGroupModal()">
+                            <div class="u-av" style="display:flex;align-items:center;justify-content:center;background:var(--pdim);">
+                                <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--p);fill:none;stroke-width:2;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
+                            </div>
+                            <div class="u-info">
+                                <div class="u-name">New Group</div>
+                                <div class="u-handle">Create a group chat</div>
+                            </div>
+                        </div>
+                    `;
                     const friendResults = results.filter(u => mutualFollowers.has(u.id));
                     const otherResults = results.filter(u => !mutualFollowers.has(u.id));
-                    let html = '';
                     if (friendResults.length) {
                         html += `<div class="search-section-header">Friends</div>` + friendResults.map(u => userRowHtml(u, true)).join('');
                     }
@@ -1660,7 +3256,7 @@
             }
 
             // ============================================================
-            // START CONVERSATION WITH A USER (block-gated + normalised order)
+            // START CONVERSATION WITH A USER (normalised)
             // ============================================================
             window.startConversationWith = async function(otherUserId) {
                 if (otherUserId === currentUserId) return;
@@ -1672,11 +3268,9 @@
                     return;
                 }
 
-                // Normalise the order
                 const id1 = currentUserId < otherUserId ? currentUserId : otherUserId;
                 const id2 = currentUserId < otherUserId ? otherUserId : currentUserId;
 
-                // Check if conversation already exists using normalised order
                 let existing = conversations.find(c =>
                     (c.user1_id === id1 && c.user2_id === id2)
                 );
@@ -1700,7 +3294,6 @@
                         .single();
 
                     if (error) {
-                        // If it's a duplicate key, fetch the existing conversation
                         if (error.code === '23505') {
                             const { data: existingConv, error: fetchError } = await sb
                                 .from('conversations')
@@ -1727,6 +3320,381 @@
             };
 
             // ============================================================
+            // GROUP CREATION
+            // ============================================================
+            window.openCreateGroupModal = function() {
+                closeNewChatModal();
+                selectedGroupMembers.clear();
+                document.getElementById('groupNameInput').value = '';
+                document.getElementById('groupMemberSearch').value = '';
+                renderGroupMemberList(friendProfiles);
+                document.getElementById('createGroupModal').classList.add('open');
+            };
+
+            window.closeCreateGroupModal = function() {
+                document.getElementById('createGroupModal').classList.remove('open');
+            };
+
+            function renderGroupMemberList(users) {
+                const list = document.getElementById('groupMemberList');
+                if (!users.length) {
+                    list.innerHTML = `<p style="text-align:center;color:var(--muted);padding:20px;">No friends found.</p>`;
+                    return;
+                }
+                list.innerHTML = users.map(u => {
+                    const checked = selectedGroupMembers.has(u.id);
+                    return `
+                        <div class="u-row" onclick="toggleGroupMember('${u.id}')" style="cursor:pointer;">
+                            <img class="u-av" src="${getAvatar(u)}" ${avatarErrAttr()}>
+                            <div class="u-info">
+                                <div class="u-name">${escapeHtml(getDisplayName(u))} ${getVerifiedBadge(u.verified_status)}</div>
+                                <div class="u-handle">@${escapeHtml(u.username || '')}</div>
+                            </div>
+                            <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${checked ? 'var(--p)' : 'var(--brd)'};background:${checked ? 'var(--p)' : 'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                ${checked ? '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#fff;fill:none;stroke-width:3;"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            window.toggleGroupMember = function(userId) {
+                if (selectedGroupMembers.has(userId)) selectedGroupMembers.delete(userId);
+                else selectedGroupMembers.add(userId);
+                document.getElementById('createGroupBtn').textContent = `Create Group (${selectedGroupMembers.size})`;
+                renderGroupMemberList(friendProfiles);
+            };
+
+            window.filterGroupMembers = function(value) {
+                const q = value.toLowerCase().trim();
+                const filtered = !q ? friendProfiles : friendProfiles.filter(u =>
+                    (u.display_name || '').toLowerCase().includes(q) || (u.username || '').toLowerCase().includes(q)
+                );
+                renderGroupMemberList(filtered);
+            };
+
+            window.createGroup = async function() {
+                const name = document.getElementById('groupNameInput').value.trim();
+                if (!name) { showToast('Please enter a group name', 'o'); return; }
+                if (selectedGroupMembers.size < 2) { showToast('Select at least 2 members', 'o'); return; }
+
+                try {
+                    const { data: conv, error: convErr } = await sb
+                        .from('conversations')
+                        .insert({
+                            is_group: true,
+                            group_name: name,
+                            created_by: currentUserId,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                            typing_users: [],
+                        })
+                        .select()
+                        .single();
+                    if (convErr) throw convErr;
+
+                    const memberRows = [
+                        { conversation_id: conv.id, user_id: currentUserId, role: 'admin' },
+                        ...Array.from(selectedGroupMembers).map(uid => ({ conversation_id: conv.id, user_id: uid, role: 'member' })),
+                    ];
+                    const { error: memErr } = await sb.from('conversation_members').insert(memberRows);
+                    if (memErr) throw memErr;
+
+                    closeCreateGroupModal();
+                    await loadConversations();
+                    selectConversation(conv.id);
+                    showToast('Group created', 'g');
+                } catch (err) {
+                    console.error('createGroup error:', err);
+                    showToast('Failed to create group', 'r');
+                }
+            };
+
+            // ============================================================
+            // GROUP INFO
+            // ============================================================
+            window.openGroupInfoModal = async function() {
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                if (!conv || !conv.is_group) return;
+
+                document.getElementById('giAvatar').src = conv.group_avatar || DEFAULT_AVATAR;
+                document.getElementById('giAvatar').onerror = function() { this.src = DEFAULT_AVATAR; };
+                document.getElementById('giNameText').textContent = conv.group_name || 'Group';
+                document.getElementById('giMuteToggle').checked = (conv.muted_by || []).includes(currentUserId);
+
+                document.getElementById('groupInfoModal').classList.add('open');
+
+                const [{ count: memberCount }, { count: mediaCount }] = await Promise.all([
+                    sb.from('conversation_members').select('id', { count: 'exact', head: true }).eq('conversation_id', conv.id),
+                    sb.from('messages').select('id', { count: 'exact', head: true }).eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document'])
+                ]);
+                document.getElementById('giMemberCount').textContent = `${memberCount || 0} members`;
+                document.getElementById('giMembersLink').textContent = memberCount || 0;
+                document.getElementById('giMediaCount').textContent = mediaCount || 0;
+            };
+
+            window.closeGroupInfoModal = function() {
+                document.getElementById('groupInfoModal').classList.remove('open');
+            };
+
+            // Inline group name editing
+            window.startEditGroupName = function() {
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                const disp = document.getElementById('giNameDisplay');
+                const input = document.getElementById('giNameInput');
+                disp.style.display = 'none';
+                input.style.display = 'block';
+                input.value = conv.group_name || '';
+                input.focus();
+            };
+
+            window.saveGroupName = async function() {
+                const input = document.getElementById('giNameInput');
+                const disp = document.getElementById('giNameDisplay');
+                const newName = input.value.trim();
+                input.style.display = 'none';
+                disp.style.display = 'flex';
+                if (!newName) return;
+
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                if (!conv || newName === conv.group_name) return;
+
+                try {
+                    const { error } = await sb.from('conversations').update({ group_name: newName }).eq('id', conv.id);
+                    if (error) throw error;
+                    conv.group_name = newName;
+                    document.getElementById('giNameText').textContent = newName;
+                    chatPartnerName.textContent = newName;
+                    renderConversations(convSearch.value);
+                    showToast('Group name updated', 'g');
+                } catch (err) {
+                    showToast('Failed to rename group', 'r');
+                }
+            };
+
+            // Mute
+            window.toggleMuteGroup = async function(muted) {
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                if (!conv) return;
+                let list = new Set(conv.muted_by || []);
+                if (muted) list.add(currentUserId); else list.delete(currentUserId);
+                const arr = Array.from(list);
+                try {
+                    const { error } = await sb.from('conversations').update({ muted_by: arr }).eq('id', conv.id);
+                    if (error) throw error;
+                    conv.muted_by = arr;
+                    showToast(muted ? 'Notifications muted' : 'Notifications unmuted', 'g');
+                } catch (err) {
+                    showToast('Failed to update notifications', 'r');
+                    document.getElementById('giMuteToggle').checked = !muted;
+                }
+            };
+
+            // Media, Links & Files viewer
+            window.openGroupMedia = async function() {
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                if (!conv || !conv.is_group) return;
+                const { data, error } = await sb
+                    .from('messages')
+                    .select('id, message_type, media_url, created_at')
+                    .eq('conversation_id', conv.id)
+                    .in('message_type', ['image', 'video', 'document'])
+                    .order('created_at', { ascending: false });
+                if (error) { showToast('Failed to load media', 'r'); return; }
+
+                const modal = document.createElement('div');
+                modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+                const grid = (data || []).filter(m => m.message_type !== 'document').map(m =>
+                    `<div style="aspect-ratio:1;border-radius:10px;overflow:hidden;cursor:pointer;background:#000;" onclick="${m.message_type === 'image' ? `openImage('${m.media_url}')` : `openVideo('${m.media_url}')`}">
+                        ${m.message_type === 'image' ? `<img src="${m.media_url}" style="width:100%;height:100%;object-fit:cover;">` : `<video src="${m.media_url}" style="width:100%;height:100%;object-fit:cover;"></video>`}
+                    </div>`
+                ).join('');
+                const docs = (data || []).filter(m => m.message_type === 'document').map(m => {
+                    const name = m.media_url.split('/').pop();
+                    return `<div class="msg-doc" style="margin:6px 0;" onclick="openDocument('${m.media_url}')"><span class="doc-icon">📄</span><div class="doc-info"><div class="doc-name">${escapeHtml(name)}</div></div></div>`;
+                }).join('');
+
+                modal.innerHTML = `
+                    <div style="background:var(--bg3);border-radius:20px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto;padding:20px;" onclick="event.stopPropagation()">
+                        <h3 style="margin-bottom:14px;font-weight:800;">Media, Links & Files</h3>
+                        ${data && data.length ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">${grid}</div>${docs}` : '<p style="color:var(--muted);">No media shared yet.</p>'}
+                    </div>
+                `;
+                modal.onclick = () => modal.remove();
+                document.body.appendChild(modal);
+            };
+
+            // Search in conversation
+            window.openGroupSearch = function() {
+                closeGroupInfoModal();
+                const q = prompt('Search messages in this conversation:');
+                if (!q || !q.trim()) return;
+                const term = q.trim().toLowerCase();
+                const match = messages.find(m => (m.text || '').toLowerCase().includes(term));
+                if (!match) { showToast('No matching messages found', 'o'); return; }
+                const el = messagesArea.querySelector(`[data-msg-id="${match.id}"]`);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.style.outline = '2px solid var(--p)';
+                    setTimeout(() => { el.style.outline = 'none'; }, 1500);
+                }
+            };
+
+            // Members list
+            window.openGroupMembersList = async function() {
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                if (!conv) return;
+                const { data, error } = await sb
+                    .from('conversation_members')
+                    .select('user_id, role, profiles:profiles(id, display_name, username, avatar_url, verified_status)')
+                    .eq('conversation_id', conv.id);
+                if (error) { showToast('Failed to load members', 'r'); return; }
+
+                const myRow = data.find(m => m.user_id === currentUserId);
+                const iAmAdmin = myRow && myRow.role === 'admin';
+
+                const modal = document.createElement('div');
+                modal.id = 'membersListOverlay';
+                modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+                modal.innerHTML = `
+                    <div style="background:var(--bg3);border-radius:20px;max-width:420px;width:100%;max-height:75vh;overflow-y:auto;padding:20px;" onclick="event.stopPropagation()">
+                        <h3 style="margin-bottom:14px;font-weight:800;">Members (${data.length})</h3>
+                        <div id="membersListRows">
+                            ${data.map(m => memberRowHtml(m, iAmAdmin)).join('')}
+                        </div>
+                    </div>
+                `;
+                modal.onclick = () => modal.remove();
+                document.body.appendChild(modal);
+            };
+
+            function memberRowHtml(m, iAmAdmin) {
+                const p = m.profiles || {};
+                const isSelf = m.user_id === currentUserId;
+                const canRemove = iAmAdmin && !isSelf;
+                return `
+                    <div class="u-row" data-member-id="${m.user_id}" style="cursor:default;">
+                        <img class="u-av" src="${getAvatar(p)}" ${avatarErrAttr()} style="cursor:pointer;" onclick="window.location.href='profile.html?uid=${p.id}'">
+                        <div class="u-info" style="cursor:pointer;" onclick="window.location.href='profile.html?uid=${p.id}'">
+                            <div class="u-name">${escapeHtml(getDisplayName(p))} ${getVerifiedBadge(p.verified_status)} ${isSelf ? '<span style="color:var(--muted);font-weight:500;">(You)</span>' : ''}</div>
+                            <div class="u-handle">@${escapeHtml(p.username || '')}</div>
+                        </div>
+                        ${m.role === 'admin' ? '<span class="u-tag">Admin</span>' : ''}
+                        ${canRemove ? `<button onclick="event.stopPropagation();removeMemberFromGroup('${m.user_id}', '${escapeHtml(getDisplayName(p))}')" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:6px;flex-shrink:0;" title="Remove"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : ''}
+                    </div>
+                `;
+            }
+
+            window.removeMemberFromGroup = async function(userId, name) {
+                if (!confirm(`Remove ${name} from the group?`)) return;
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                if (!conv) return;
+                try {
+                    const { error } = await sb.from('conversation_members').delete()
+                        .eq('conversation_id', conv.id).eq('user_id', userId);
+                    if (error) throw error;
+                    const row = document.querySelector(`[data-member-id="${userId}"]`);
+                    if (row) row.remove();
+                    showToast(`Removed ${name}`, 'g');
+                } catch (err) {
+                    console.error('removeMemberFromGroup error:', err);
+                    showToast('Failed to remove member', 'r');
+                }
+            };
+
+            // Leave group
+            window.leaveGroup = async function() {
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                if (!conv) return;
+                if (!confirm(`Leave "${conv.group_name || 'this group'}"?`)) return;
+                try {
+                    const { error } = await sb.from('conversation_members').delete()
+                        .eq('conversation_id', conv.id).eq('user_id', currentUserId);
+                    if (error) throw error;
+                    closeGroupInfoModal();
+                    showToast('You left the group', 'g');
+                    closeChatView();
+                    await loadConversations();
+                } catch (err) {
+                    showToast('Failed to leave group', 'r');
+                }
+            };
+
+            // ============================================================
+            // ADD MEMBERS TO EXISTING GROUP
+            // ============================================================
+            window.openAddMembersModal = async function() {
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                if (!conv) return;
+                addMembersSelected.clear();
+                document.getElementById('addMemberSearch').value = '';
+                document.getElementById('addMembersBtn').textContent = 'Add (0)';
+
+                const { data: existing } = await sb.from('conversation_members').select('user_id').eq('conversation_id', conv.id);
+                const existingIds = new Set((existing || []).map(m => m.user_id));
+                addMembersFriendsPool = friendProfiles.filter(u => !existingIds.has(u.id));
+
+                renderAddMemberList(addMembersFriendsPool);
+                document.getElementById('addMembersModal').classList.add('open');
+            };
+
+            window.closeAddMembersModal = function() {
+                document.getElementById('addMembersModal').classList.remove('open');
+            };
+
+            function renderAddMemberList(users) {
+                const list = document.getElementById('addMemberList');
+                if (!users.length) {
+                    list.innerHTML = `<p style="text-align:center;color:var(--muted);padding:20px;">No friends to add.</p>`;
+                    return;
+                }
+                list.innerHTML = users.map(u => {
+                    const checked = addMembersSelected.has(u.id);
+                    return `
+                        <div class="u-row" onclick="toggleAddMember('${u.id}')" style="cursor:pointer;">
+                            <img class="u-av" src="${getAvatar(u)}" ${avatarErrAttr()}>
+                            <div class="u-info">
+                                <div class="u-name">${escapeHtml(getDisplayName(u))} ${getVerifiedBadge(u.verified_status)}</div>
+                                <div class="u-handle">@${escapeHtml(u.username || '')}</div>
+                            </div>
+                            <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${checked ? 'var(--p)' : 'var(--brd)'};background:${checked ? 'var(--p)' : 'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                ${checked ? '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#fff;fill:none;stroke-width:3;"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            window.toggleAddMember = function(userId) {
+                if (addMembersSelected.has(userId)) addMembersSelected.delete(userId);
+                else addMembersSelected.add(userId);
+                document.getElementById('addMembersBtn').textContent = `Add (${addMembersSelected.size})`;
+                renderAddMemberList(addMembersFriendsPool);
+            };
+
+            window.filterAddMembers = function(value) {
+                const q = value.toLowerCase().trim();
+                const filtered = !q ? addMembersFriendsPool : addMembersFriendsPool.filter(u =>
+                    (u.display_name || '').toLowerCase().includes(q) || (u.username || '').toLowerCase().includes(q)
+                );
+                renderAddMemberList(filtered);
+            };
+
+            window.submitAddMembers = async function() {
+                const conv = conversations.find(c => c.id === selectedConversationId);
+                if (!conv || addMembersSelected.size === 0) return;
+                const rows = Array.from(addMembersSelected).map(uid => ({ conversation_id: conv.id, user_id: uid, role: 'member' }));
+                try {
+                    const { error } = await sb.from('conversation_members').insert(rows);
+                    if (error) throw error;
+                    closeAddMembersModal();
+                    showToast(`Added ${rows.length} member${rows.length > 1 ? 's' : ''}`, 'g');
+                } catch (err) {
+                    showToast('Failed to add members', 'r');
+                }
+            };
+
+            // ============================================================
             // CLOSE CHAT VIEW (mobile)
             // ============================================================
             window.closeChatView = function() {
@@ -1736,7 +3704,7 @@
                 messages = [];
                 messagesArea.innerHTML = `
                     <div class="no-messages">
-                        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        ${emptyChatIllustration()}
                         <h3>No conversation selected</h3>
                         <p>Choose a conversation from the list or start a new one.</p>
                     </div>
