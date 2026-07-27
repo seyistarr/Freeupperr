@@ -2193,17 +2193,24 @@
             }
 
             // ============================================================
-            // SUPABASE - CONVERSATIONS (with group support)
+            // SUPABASE - CONVERSATIONS (with group support, defensive group lookup)
             // ============================================================
             async function loadConversations() {
                 if (!currentUserId) return;
                 try {
-                    // First, get group IDs the user belongs to
-                    const { data: myGroupIds } = await sb
-                        .from('conversation_members')
-                        .select('conversation_id')
-                        .eq('user_id', currentUserId);
-                    const groupIdList = (myGroupIds || []).map(g => g.conversation_id);
+                    // First, get group IDs the user belongs to — non-fatal if it fails
+                    let groupIdList = [];
+                    try {
+                        const { data: myGroupIds, error: gErr } = await sb
+                            .from('conversation_members')
+                            .select('conversation_id')
+                            .eq('user_id', currentUserId);
+                        if (gErr) throw gErr;
+                        groupIdList = (myGroupIds || []).map(g => g.conversation_id);
+                    } catch (groupErr) {
+                        console.error('conversation_members lookup failed (groups will be hidden until fixed):', groupErr);
+                        groupIdList = [];
+                    }
 
                     let query = sb
                         .from('conversations')
