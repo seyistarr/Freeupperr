@@ -52,6 +52,8 @@
     if (updates.showInSuggestions !== undefined) payload.show_in_suggestions = updates.showInSuggestions;
     if (updates.hiddenTabs !== undefined) payload.hidden_tabs = updates.hiddenTabs;
     if (updates.city !== undefined) payload.city = updates.city;
+    // ★ NEW: Hide All Posts toggle
+    if (updates.hideAllPosts !== undefined) payload.hide_all_posts = updates.hideAllPosts;
 
     var { error } = await sb.from('profiles').update(payload).eq('id', user.id);
     if (error) throw error;
