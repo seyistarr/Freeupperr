@@ -92,6 +92,53 @@
         .stat.locked { pointer-events: none; }
         .profile-tabs.frozen-tabs { pointer-events: none; opacity: .45; }
 
+        /* ─── SKELETON LOADING ─── */
+        @keyframes sklPulse {
+            0%, 100% { opacity: .55; }
+            50% { opacity: 1; }
+        }
+        .skl-line, .skl-block {
+            background: var(--bg4);
+            animation: sklPulse 1.3s ease-in-out infinite;
+            border-radius: 6px;
+            color: transparent !important;
+        }
+        #displayName.skl-name, #headerUsername.skl-name {
+            display: inline-block;
+            height: 18px;
+            width: 130px;
+            border-radius: 6px;
+        }
+        #headerUsername.skl-name { height: 15px; width: 90px; }
+        #heroBio.skl-bio {
+            display: block;
+            height: 14px;
+            width: 200px;
+            margin: 0 auto 18px;
+            border-radius: 6px;
+        }
+        .stat-n.skl-stat {
+            display: inline-block;
+            height: 20px;
+            width: 34px;
+            border-radius: 6px;
+            background: var(--bg4);
+            -webkit-background-clip: initial;
+            background-clip: initial;
+        }
+        .skl-btn {
+            flex: 1;
+            height: 42px;
+            border-radius: 12px;
+        }
+        .avatar-wrap.skl-avatar .avatar-ring {
+            animation: none;
+            background: var(--bg4);
+        }
+        .avatar-wrap.skl-avatar .avatar-img {
+            background: var(--bg4) !important;
+        }
+
         .layout {
             display: flex;
             height: 100vh;
@@ -481,28 +528,31 @@
         .panel { display: none; animation: fadeUp .3s ease both; }
         .panel.active { display: block; }
 
-        /* ─── 3-COLUMN SQUARE GRID ─── */
+        /* ─── 3-COLUMN SQUARE GRID (edge-to-edge) ─── */
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 2px;
+            padding: 2px 0 12px;
+            width: calc(100% + 32px);
+            margin-left: -16px;
+            margin-right: -16px;
+        }
         .grid-2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
             padding: 12px 0;
         }
-        .grid-3 {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            padding: 12px 0;
-        }
         .grid-card {
             position: relative;
-            border-radius: 14px;
+            border-radius: 0;
             overflow: hidden;
             background: var(--bg4);
             cursor: pointer;
             aspect-ratio: 1 / 1;
             transition: transform .18s ease;
-            border: 1px solid var(--brd);
+            border: none;
         }
         .grid-card:active { transform: scale(.97); }
         .grid-card img {
@@ -2415,7 +2465,7 @@
                 return isNaN(n) ? 0 : n;
             }
             function formatPrice(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
-            function truncateName(name, max) { max = max || 14; name = name || ''; return name.length > max ? name.slice(0, max) + '…' : name; }
+            function truncateName(name, max) { max = max || 24; name = name || ''; return name.length > max ? name.slice(0, max) + '…' : name; }
 
             // ─── LINKIFY BIO ─────────────────────────────────
             function linkifyBio(text) {
@@ -2434,6 +2484,7 @@
             var targetUser = null;
             var allPosts = [];
             var activeTab = 'posts';
+            var viewerIsBlockedByPrivacy = false;
             var selAvIdx = -1;
             var selCountry = '';
             var selGender = '';
@@ -2445,6 +2496,7 @@
             var marketItemsCache = [];
             var _sugOffset = 0;
             var _profileUserPosts = [];
+            var _profileLoadedOnce = false;
 
             var _fwPageIdx = 0;
             var _fwPageState = [
@@ -2472,6 +2524,42 @@
                 return params.get('uid') || null;
             }
 
+            // ─── SKELETON HELPERS ──────────────────────────────
+            function showProfileSkeleton() {
+                var avatarWrap = document.getElementById('avatarWrap');
+                if (avatarWrap) avatarWrap.classList.add('skl-avatar');
+                ['displayName', 'headerUsername'].forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) { el.classList.add('skl-line', 'skl-name'); el.textContent = ''; }
+                });
+                var bioEl = document.getElementById('heroBio');
+                if (bioEl) { bioEl.classList.add('skl-line', 'skl-bio'); bioEl.innerHTML = ''; }
+                ['statPosts', 'statFollowers', 'statFollowing'].forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) { el.classList.add('skl-line', 'skl-stat'); el.textContent = ''; }
+                });
+                var actionRow = document.getElementById('actionRow');
+                if (actionRow) actionRow.innerHTML = '<div class="skl-block skl-btn"></div><div class="skl-block skl-btn"></div>';
+                var postsPanel = document.getElementById('panel-posts');
+                if (postsPanel) postsPanel.innerHTML = buildGridSkeleton();
+            }
+
+            function hideProfileSkeleton() {
+                var avatarWrap = document.getElementById('avatarWrap');
+                if (avatarWrap) avatarWrap.classList.remove('skl-avatar');
+                ['displayName', 'headerUsername', 'heroBio', 'statPosts', 'statFollowers', 'statFollowing'].forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) el.classList.remove('skl-line', 'skl-name', 'skl-bio', 'skl-stat');
+                });
+            }
+
+            function buildGridSkeleton() {
+                var sq = '';
+                for (var i = 0; i < 9; i++) sq += '<div class="grid-card skl-block" style="aspect-ratio:1/1;"></div>';
+                return '<div class="grid-3">' + sq + '</div>';
+            }
+
+            // ─── FETCH HELPERS ────────────────────────────────
             async function fetchProfile(userId) {
                 var result = await window.sb
                     .from('profiles')
@@ -2594,7 +2682,7 @@
                 }
             }
 
-            // ─── BUILD GRID POST CARD (no owner actions) ───
+            // ─── BUILD GRID POST CARD ──────────────────────
             function buildGridPostCard(post, opts) {
                 opts = opts || {};
                 var forceNavigate = !!opts.forceNavigate;
@@ -2627,7 +2715,6 @@
                     '';
                 var verifiedBadgeHtml = window.getVerifiedBadgeHTML(author.verified_status);
 
-                // Always navigate to index.html
                 var tapAction = "window.location.href='index.html?post=" + post.id + "'";
 
                 return '<div class="grid-card" onclick="' + tapAction + '">' +
@@ -2700,6 +2787,7 @@
 
             // ─── RENDER PROFILE ────────────────────────────────
             async function renderProfile() {
+                if (!_profileLoadedOnce) showProfileSkeleton();
                 var user = getCurrentUser();
                 currentUser = user;
 
@@ -2776,11 +2864,21 @@
                     updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner);
                 } catch (err) {
                     console.error('Error rendering profile:', err);
+                    hideProfileSkeleton();
                     showToast('Failed to load profile', 'r');
                 }
             }
 
+            function buildPrivateAccountIllustration() {
+                var name = truncateName(targetUser && targetUser.display_name ? targetUser.display_name : 'This account', 20);
+                return '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>' +
+                    '<h3>This account is private</h3>' +
+                    '<p>Follow ' + name + ' to see their posts and engagement.</p></div>';
+            }
+
             function renderFrozenBlockedProfile(profile, reason) {
+                hideProfileSkeleton();
+                _profileLoadedOnce = true;
                 var defaultAvatar = 'data:image/svg+xml,' + encodeURIComponent(
                     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
                 );
@@ -2791,7 +2889,6 @@
                 document.getElementById('roleTags').innerHTML = '';
                 document.getElementById('verifiedBadge').classList.add('hidden');
                 document.getElementById('onlineDot').style.display = 'none';
-                document.getElementById('actionRow').innerHTML = '';
 
                 document.getElementById('statPosts').textContent = '—';
                 document.getElementById('statFollowers').textContent = '—';
@@ -2805,7 +2902,16 @@
 
                 var msg = reason === 'blocked-by-them'
                     ? { title: "You've been blocked", desc: "This user has blocked you. You can't view their content." }
-                    : { title: "Account blocked", desc: "You've blocked this account. Unblock them from Settings → Blocked Users to view their content." };
+                    : { title: "Account blocked", desc: "You've blocked this account. Unblock them to view their content again." };
+
+                if (reason === 'blocked-by-me') {
+                    document.getElementById('actionRow').innerHTML =
+                        '<button class="act-btn" id="unblockProfileBtn" style="background:var(--inp);border:1.5px solid var(--brd2);color:var(--text);">Unblock</button>';
+                    var ub = document.getElementById('unblockProfileBtn');
+                    if (ub) ub.onclick = function() { unblockUserFromProfile(); };
+                } else {
+                    document.getElementById('actionRow').innerHTML = '';
+                }
 
                 var illustration =
                     '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>' +
@@ -2819,7 +2925,23 @@
                 if (postsPanel) postsPanel.classList.add('active');
             }
 
+            async function unblockUserFromProfile() {
+                var btn = document.getElementById('unblockProfileBtn');
+                if (btn) { btn.disabled = true; btn.textContent = 'Unblocking…'; }
+                try {
+                    await window.SettingsAPI.unblockUser(targetUserId);
+                    showToast('User unblocked', 'g');
+                    document.getElementById('tabsBar').classList.remove('frozen-tabs');
+                    renderProfile();
+                } catch (err) {
+                    showToast(err.message, 'r');
+                    if (btn) { btn.disabled = false; btn.textContent = 'Unblock'; }
+                }
+            }
+
             function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner) {
+                hideProfileSkeleton();
+                _profileLoadedOnce = true;
                 var avatarSrc = getAvatar(profile);
                 document.getElementById('profileAvatar').src = avatarSrc;
                 document.getElementById('editAv').src = avatarSrc;
@@ -2855,14 +2977,13 @@
 
                 var isPrivate = !!profile.is_private;
                 var viewerBlocked = isPrivate && !isOwner && !viewerFollowsOwner;
+                viewerIsBlockedByPrivacy = viewerBlocked;
                 var tabs = ['panel-posts', 'panel-love', 'panel-share', 'panel-star', 'panel-market'];
                 if (viewerBlocked) {
+                    var privateIllustration = buildPrivateAccountIllustration();
                     tabs.forEach(function(id) {
                         var el = document.getElementById(id);
-                        if (el) {
-                            el.innerHTML =
-                                '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><h3>This account is private</h3><p>Follow to see their posts and activity.</p></div>';
-                        }
+                        if (el) el.innerHTML = privateIllustration;
                     });
                     document.getElementById('statFollowersBox').classList.add('locked');
                     document.getElementById('statFollowingBox').classList.add('locked');
@@ -2881,21 +3002,43 @@
                     el.style.display = isOwner ? '' : 'none';
                 });
 
-                // ─── HIDE ALL POSTS (if enabled) ─────────────────────────
+                // ─── HIDE ALL POSTS / TABS (if enabled) ──────────────────
                 var hiddenTabs = (!isOwner && profile.hidden_tabs) ? profile.hidden_tabs : [];
                 var postsForceHidden = !isOwner && !!profile.hide_all_posts;
-                document.querySelectorAll('#tabsBar .tab').forEach(function(tabBtn) {
-                    var key = tabBtn.getAttribute('data-tab');
-                    var isHidden = (key === 'posts' ? postsForceHidden : hiddenTabs.indexOf(key) !== -1);
-                    tabBtn.style.display = isHidden ? 'none' : '';
-                    if (isHidden && tabBtn.classList.contains('active')) {
-                        var fallback = document.querySelector('#tabsBar .tab:not([style*="display: none"])');
-                        if (fallback) switchTab(fallback, fallback.getAttribute('data-tab'));
+                var optionalTabKeys = ['love', 'share', 'star', 'market'];
+                var allOptionalHidden = optionalTabKeys.every(function(k) { return hiddenTabs.indexOf(k) !== -1; });
+                var allTabsHidden = !isOwner && !viewerBlocked && postsForceHidden && allOptionalHidden;
+
+                document.getElementById('tabsBar').style.display = allTabsHidden ? 'none' : '';
+
+                if (allTabsHidden) {
+                    ['panel-posts', 'panel-love', 'panel-share', 'panel-star', 'panel-market'].forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el) el.classList.remove('active');
+                    });
+                    var soleName = truncateName(profile.display_name || 'This user', 20);
+                    var pp2 = document.getElementById('panel-posts');
+                    if (pp2) {
+                        pp2.innerHTML =
+                            '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><path d="M12 20h.01"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M2 8.5a15 15 0 0 1 20 0"/></svg></div>' +
+                            '<h3>Nothing to see here yet</h3>' +
+                            '<p>' + soleName + ' hasn\'t shared any content publicly. Follow to be notified the moment they do!</p></div>';
+                        pp2.classList.add('active');
                     }
-                });
-                if (postsForceHidden) {
-                    var pp = document.getElementById('panel-posts');
-                    if (pp) pp.innerHTML = '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><h3>Posts hidden</h3><p>This user has chosen to hide their posts.</p></div>';
+                } else {
+                    document.querySelectorAll('#tabsBar .tab').forEach(function(tabBtn) {
+                        var key = tabBtn.getAttribute('data-tab');
+                        var isHidden = (key === 'posts' ? postsForceHidden : hiddenTabs.indexOf(key) !== -1);
+                        tabBtn.style.display = isHidden ? 'none' : '';
+                        if (isHidden && tabBtn.classList.contains('active')) {
+                            var fallback = document.querySelector('#tabsBar .tab:not([style*="display: none"])');
+                            if (fallback) switchTab(fallback, fallback.getAttribute('data-tab'));
+                        }
+                    });
+                    if (postsForceHidden && !viewerBlocked) {
+                        var pp = document.getElementById('panel-posts');
+                        if (pp) pp.innerHTML = '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><h3>Posts hidden</h3><p>This user has chosen to hide their posts.</p></div>';
+                    }
                 }
 
                 document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
@@ -2919,6 +3062,7 @@
             function renderTab(tab, data) {
                 var container = document.getElementById('panel-' + tab);
                 if (!container) return;
+                if (viewerIsBlockedByPrivacy) return;
                 var userPosts = data?.userPosts || _profileUserPosts;
                 var likedIds = data?.likedIds || likedPostIds;
                 var bookmarkedIds = data?.bookmarkedIds || bookmarkedPostIds;
@@ -2963,7 +3107,6 @@
                     '</div>';
             }
 
-            // Reposts – fetch missing posts if needed
             async function renderReposts(container, repostedIds) {
                 if (!repostedIds.length) {
                     container.innerHTML =
@@ -3085,6 +3228,7 @@
                 document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
                 document.getElementById('panel-' + tab).classList.add('active');
                 activeTab = tab;
+                if (viewerIsBlockedByPrivacy) return;
                 renderTab(tab);
             };
 
@@ -3132,8 +3276,6 @@
                 }
                 renderTab(activeTab);
             };
-
-            // ─── NO POST ACTIONS (Pin, Lock, Hide, Delete) on profile ───
 
             // ─── MODAL HELPERS ──────────────────────────────────
             function openMov(id) { document.getElementById(id).classList.add('open');
@@ -3225,7 +3367,7 @@
                 }
             };
 
-            // ─── REPORT USER (insert into reports table) ───
+            // ─── REPORT USER ─────────────────────────────────
             window.reportUser = function() {
                 closeFS('shareOtherModal');
                 var reason = prompt('Please describe why you are reporting this user:');
@@ -3494,8 +3636,7 @@
                 var count = _profileUserPosts.length;
                 document.getElementById('mcCount').textContent = count;
                 document.getElementById('mcNum').textContent = count;
-                // TRUNCATE in stats modal
-                document.getElementById('mcName').textContent = truncateName(targetUser?.display_name || 'User', 14);
+                document.getElementById('mcName').textContent = truncateName(targetUser?.display_name || 'User', 24);
                 document.getElementById('postsModal').classList.add('open');
                 document.body.style.overflow = 'hidden';
             };
@@ -3739,8 +3880,8 @@
                         html += '<div class="u-row u-row-suggestion" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;padding:0 clamp(14px,5vw,24px)">' +
                             '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
                             '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
-                            '<div class="u-name truncate-1">' + truncateName(u.displayName, 14) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
-                            '<div class="u-handle">' + (u.handle || '') + '</div>' +
+                            '<div class="u-name truncate-1">' + truncateName(u.displayName, 24) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-handle">' + truncateName(u.handle || '', 18) + '</div>' +
                             '<div class="u-sugg-src">' + srcLbl + '</div>' +
                             '</div>' +
                             '<div class="u-sugg-actions" style="display:flex;gap:8px;flex-shrink:0">' +
@@ -3752,8 +3893,8 @@
                         html += '<div class="u-row" data-row-idx="' + i + '" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 clamp(14px,5vw,24px)">' +
                             '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
                             '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
-                            '<div class="u-name truncate-1">' + truncateName(u.displayName, 14) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
-                            '<div class="u-handle">' + (u.handle || '') + '</div>' +
+                            '<div class="u-name truncate-1">' + truncateName(u.displayName, 24) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-handle">' + truncateName(u.handle || '', 18) + '</div>' +
                             '</div>' +
                             actionHtml +
                             '</div>';
@@ -4193,7 +4334,6 @@
             window.toggleReaction = toggleReaction;
             window.toggleBookmark = toggleBookmark;
             window.toggleRepost = toggleRepost;
-            // No post actions exposed from profile
             window.handleAvatarTap = handleAvatarTap;
             window.openAvatarViewer = openAvatarViewer;
             window.closeAvatarViewer = closeAvatarViewer;
