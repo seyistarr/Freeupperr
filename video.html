@@ -101,12 +101,12 @@
         body {
             width: 100%;
             height: 100%;
-            background: var(--bg);
+            background: #000;
             color: var(--text);
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             overflow: hidden;
             overscroll-behavior: none;
-            transition: background .3s, color .3s;
+            transition: color .3s;
         }
 
         /* ─── MAIN CONTENT ─── */
@@ -284,14 +284,43 @@
             aspect-ratio: 4 / 5;
             border-radius: 14px;
             overflow: hidden;
-            background: #111;
+            background: #151515;
+        }
+        .explore-card-media::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(100deg, #151515 30%, #232323 50%, #151515 70%);
+            background-size: 200% 100%;
+            animation: exploreShimmer 1.6s ease-in-out infinite;
+            transition: opacity .25s ease;
+        }
+        .explore-card-media.media-loaded::before {
+            opacity: 0;
+            pointer-events: none;
+        }
+        @keyframes exploreShimmer {
+            0% {
+                background-position: 200% 0;
+            }
+            100% {
+                background-position: -200% 0;
+            }
         }
         .explore-card-media img {
+            position: relative;
+            z-index: 1;
+            opacity: 0;
+            transition: opacity .3s ease;
             width: 100%;
             height: 100%;
             object-fit: cover;
             display: block;
         }
+        .explore-card-media img.loaded {
+            opacity: 1;
+        }
+
         .explore-card-badge {
             position: absolute;
             top: 8px;
@@ -305,15 +334,17 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 2;
         }
         .explore-card-badge svg {
             width: 11px;
             height: 11px;
             fill: #fff;
         }
+
         .explore-card-title {
             margin-top: 10px;
-            color: var(--text);
+            color: #fff;
             font-family: "Inter", sans-serif;
             font-size: 15px;
             font-weight: 700;
@@ -347,26 +378,26 @@
             font-family: "Inter", sans-serif;
             font-size: 13px;
             font-weight: 600;
-            color: var(--muted);
+            color: rgba(255, 255, 255, .6);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .explore-card-likes {
+        .explore-card-views {
             display: flex;
             align-items: center;
             gap: 4px;
             flex-shrink: 0;
-            color: var(--muted);
+            color: rgba(255, 255, 255, .6);
             font-family: "Inter", sans-serif;
             font-size: 13px;
             font-weight: 600;
         }
-        .explore-card-likes svg {
+        .explore-card-views svg {
             width: 15px;
             height: 15px;
             fill: none;
-            stroke: var(--muted);
+            stroke: rgba(255, 255, 255, .6);
             stroke-width: 2;
         }
         .explore-card.returned .explore-card-media {
@@ -385,6 +416,34 @@
             }
         }
 
+        /* ── Explore skeleton ── */
+        .explore-skel-card {
+            display: flex;
+            flex-direction: column;
+        }
+        .explore-skel-media {
+            aspect-ratio: 4 / 5;
+            border-radius: 14px;
+            background: linear-gradient(100deg, #151515 30%, #232323 50%, #151515 70%);
+            background-size: 200% 100%;
+            animation: exploreShimmer 1.6s ease-in-out infinite;
+        }
+        .explore-skel-line {
+            height: 10px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, .08);
+            margin-top: 10px;
+        }
+        .explore-skel-line.w-title {
+            width: 85%;
+            height: 12px;
+        }
+        .explore-skel-line.w-sub {
+            width: 55%;
+            margin-top: 8px;
+        }
+
+        /* ── Video card (unchanged) ── */
         .v-card {
             position: relative;
             width: 100%;
@@ -3211,6 +3270,7 @@
                         soundImg: author.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + author.name,
                         likes: post.likes || 0,
                         comments: post.comments || 0,
+                        views: post.views || 0,
                         reposts: post.repostCount || 0,
                         bookmarks: post.bookmarkCount || 0,
                         shares: post.shareCount || 0,
@@ -3918,6 +3978,21 @@
 
         // ─── EXPLORE GRID FUNCTIONS ────────────────────────────────
 
+        function renderExploreSkeletons(count) {
+            count = count || 8;
+            let html = '';
+            for (let i = 0; i < count; i++) {
+                html += `
+                    <div class="explore-skel-card">
+                        <div class="explore-skel-media"></div>
+                        <div class="explore-skel-line w-title"></div>
+                        <div class="explore-skel-line w-sub"></div>
+                    </div>
+                `;
+            }
+            return html;
+        }
+
         function showExploreGrid() {
             videoViewMode = 'grid';
             pauseCard(_curIdx);
@@ -3948,8 +4023,12 @@
 
         function buildExploreGridContent() {
             const grid = document.getElementById('exploreGrid');
+            if (!videoPosts || videoPosts.length === 0) {
+                grid.innerHTML = renderExploreSkeletons(8);
+                return;
+            }
             const items = [...videoPosts].sort((a, b) =>
-                ((b.likes || 0) + (b.comments || 0) * 2) - ((a.likes || 0) + (a.comments || 0) * 2)
+                ((b.views || 0) + (b.comments || 0) * 2) - ((a.views || 0) + (a.comments || 0) * 2)
             );
             if (items.length === 0) {
                 grid.innerHTML = '<p style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">No videos yet.</p>';
@@ -3965,7 +4044,8 @@
             <div class="explore-card" data-post-id="${v.id}" onclick="openVideoFromExplore('${v.id}')">
                 <div class="explore-card-media">
                     <img src="${v.poster || ''}" alt="" loading="lazy"
-                         onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'">
+                         onload="this.classList.add('loaded'); this.parentElement.classList.add('media-loaded')"
+                         onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'; this.classList.add('loaded'); this.parentElement.classList.add('media-loaded')">
                     <div class="explore-card-badge">
                         <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     </div>
@@ -3977,9 +4057,9 @@
                              onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${author.name}'">
                         <span>${escapeHtml(author.name)}</span>
                     </div>
-                    <div class="explore-card-likes">
-                        <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                        <span>${fmtNum(v.likes || 0)}</span>
+                    <div class="explore-card-views">
+                        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <span>${fmtNum(v.views || 0)}</span>
                     </div>
                 </div>
             </div>`;
@@ -5160,6 +5240,7 @@
         window.showVideoFeed = showVideoFeed;
         window.buildExploreGridContent = buildExploreGridContent;
         window.buildExploreCard = buildExploreCard;
+        window.renderExploreSkeletons = renderExploreSkeletons;
     </script>
 </body>
 </html>
