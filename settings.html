@@ -1341,6 +1341,26 @@
             font-size: 20px;
             flex-shrink: 0;
             border: 1px solid var(--brd);
+            cursor: pointer;
+        }
+        .bl-info {
+            flex: 1;
+            min-width: 0;
+            cursor: pointer;
+        }
+        .bl-info .bl-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .bl-info .bl-handle {
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 500;
+            margin-top: 2px;
         }
         .unblock-btn {
             padding: 7px 14px;
@@ -1352,6 +1372,8 @@
             color: var(--danger);
             cursor: pointer;
             transition: all .15s;
+            flex-shrink: 0;
+            margin-left: auto;
         }
         .unblock-btn:hover { background: rgba(248, 113, 113, .18); }
 
@@ -2155,6 +2177,11 @@
                             <div class="r-text"><div class="r-title">Profile Tabs</div><div class="r-sub" id="hiddenTabsSub">All tabs visible</div></div>
                             <div class="r-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
                         </div>
+                        <div class="row no-tap">
+                            <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+                            <div class="r-text"><div class="r-title">Hide All Posts</div><div class="r-sub">Others won't see any of your posts</div></div>
+                            <label class="toggle" onclick="event.stopPropagation()"><input type="checkbox" id="hideAllPostsTog" onchange="toggleHideAllPosts()"><div class="track"></div></label>
+                        </div>
                         <div class="row" onclick="openBlockedUsers()">
                             <div class="r-icon icon-gray"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
                             <div class="r-text"><div class="r-title">Blocked Users</div><div class="r-sub" id="blCountSub">0 accounts blocked</div></div>
@@ -2488,6 +2515,9 @@
                 <div class="pw-wrap">
                     <input class="pw-inp" type="password" id="pwCur" placeholder="Enter current password" />
                     <button class="pw-eye" onclick="toggleEye('pwCur')"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                </div>
+                <div style="text-align:right;margin-top:6px">
+                    <button type="button" onclick="requestPasswordReset()" style="background:none;border:none;color:var(--pl);font-size:12px;font-weight:700;cursor:pointer;padding:0">Forgot password?</button>
                 </div>
             </div>
             <div style="height:14px"></div>
@@ -2842,7 +2872,7 @@
                 try {
                     var { data, error } = await sb
                         .from('profiles')
-                        .select('is_private, hide_follower_count, activity_status, show_in_suggestions, hidden_tabs')
+                        .select('is_private, hide_follower_count, activity_status, show_in_suggestions, hidden_tabs, hide_all_posts')
                         .eq('id', user.id)
                         .single();
                     if (error) throw error;
@@ -2859,6 +2889,9 @@
 
                     var suggest = document.getElementById('suggestTog');
                     if (suggest) suggest.checked = data.show_in_suggestions !== false;
+
+                    var hideAll = document.getElementById('hideAllPostsTog');
+                    if (hideAll) hideAll.checked = !!data.hide_all_posts;
 
                     var hiddenTabs = data.hidden_tabs || [];
                     var sub = document.getElementById('hiddenTabsSub');
@@ -2914,6 +2947,17 @@
                         'o');
                 } catch (err) {
                     document.getElementById('suggestTog').checked = !checked;
+                    showToast(err.message, 'r');
+                }
+            };
+
+            window.toggleHideAllPosts = async function() {
+                var checked = document.getElementById('hideAllPostsTog').checked;
+                try {
+                    await window.SettingsAPI.updateFlags({ hideAllPosts: checked });
+                    showToast(checked ? 'All posts hidden from others' : 'Posts are visible again', checked ? 'o' : 'g');
+                } catch (err) {
+                    document.getElementById('hideAllPostsTog').checked = !checked;
                     showToast(err.message, 'r');
                 }
             };
@@ -3341,6 +3385,12 @@
                 }
             }
 
+            function escapeHtmlSettings(s) {
+                var d = document.createElement('div');
+                d.textContent = s || '';
+                return d.innerHTML;
+            }
+
             function renderBlockedUsers(list) {
                 var container = document.getElementById('blockedList');
                 if (!list.length) {
@@ -3349,15 +3399,24 @@
                     return;
                 }
                 container.innerHTML = list.map(function(u, i) {
-                    return '<div class="bl-row"><div class="bl-av" style="background:' + (u.avatar ? 'url(' + u
-                        .avatar + ')' : 'var(--bg4)') + ';background-size:cover;">' +
+                    return '<div class="bl-row">' +
+                        '<div class="bl-av" style="background:' + (u.avatar ? 'url(' + u.avatar + ')' : 'var(--bg4)') + ';background-size:cover;" onclick="goToBlockedProfile(' + i + ')">' +
                         (!u.avatar ? (u.name ? u.name.charAt(0).toUpperCase() : '?') : '') +
-                        '</div><div class="u-info"><div class="u-name">' + (u.name || 'Unknown') +
-                        '</div><div class="u-handle">' + (u.handle || '') +
-                        '</div></div><button class="unblock-btn" onclick="unblockUser(' + i +
-                        ')">Unblock</button></div>';
+                        '</div>' +
+                        '<div class="bl-info" onclick="goToBlockedProfile(' + i + ')">' +
+                        '<div class="bl-name">' + escapeHtmlSettings(u.name || 'Unknown') + '</div>' +
+                        '<div class="bl-handle">' + escapeHtmlSettings(u.handle || '') + '</div>' +
+                        '</div>' +
+                        '<button class="unblock-btn" onclick="event.stopPropagation();unblockUser(' + i + ')">Unblock</button>' +
+                        '</div>';
                 }).join('');
             }
+
+            window.goToBlockedProfile = function(idx) {
+                var u = blockedUsers[idx];
+                if (!u || !u.id) return;
+                window.location.href = 'profile.html?uid=' + u.id;
+            };
 
             window.filterBlockedUsers = function(q) {
                 if (!q) { renderBlockedUsers(blockedUsers); return; }
@@ -3772,6 +3831,30 @@
                     showToast('Failed to disable 2FA: ' + err.message, 'r');
                 }
             }
+
+            // ─── FORGOT PASSWORD (inside Change Password modal) ──
+            window.requestPasswordReset = async function() {
+                var user = getCurrentUser();
+                if (!user || !user.email) {
+                    showToast('No email found on this account', 'r');
+                    return;
+                }
+                var btn = event ? event.currentTarget : null;
+                if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+                try {
+                    var redirectUrl = window.location.origin + '/reset-password.html';
+                    var { error } = await sb.auth.resetPasswordForEmail(user.email, { redirectTo: redirectUrl });
+                    if (error) throw error;
+                    showToast('Reset link sent to ' + user.email, 'g');
+                    if (btn) { btn.textContent = 'Check your email'; }
+                    setTimeout(function() {
+                        if (btn) { btn.disabled = false; btn.textContent = 'Forgot password?'; }
+                    }, 8000);
+                } catch (err) {
+                    showToast(err.message || 'Failed to send reset link', 'r');
+                    if (btn) { btn.disabled = false; btn.textContent = 'Forgot password?'; }
+                }
+            };
 
             // ─── CHANGE PASSWORD ──────────────────────────────
             window.toggleEye = function(id) {
