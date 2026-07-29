@@ -374,9 +374,7 @@
 
         /* ─── FULL-WIDTH MEDIA ─── */
         .ig-media-container {
-            width: calc(100% + 32px);
-            margin-left: -16px;
-            margin-right: -16px;
+            width: 100%;
             border-radius: 0 !important;
             overflow: hidden;
             margin-top: 10px;
@@ -394,9 +392,7 @@
         }
         .ig-video-wrap {
             position: relative;
-            width: calc(100% + 32px);
-            margin-left: -16px;
-            margin-right: -16px;
+            width: 100%;
             background: #000;
             border-radius: 0 !important;
             overflow: hidden;
@@ -540,9 +536,7 @@
 
         /* ─── CAROUSEL ─── */
         .media-carousel {
-            width: calc(100% + 32px);
-            margin-left: -16px;
-            margin-right: -16px;
+            width: 100%;
             position: relative;
             overflow: hidden;
             background: #000;
@@ -836,6 +830,45 @@
         }
         .market-main-content {
             display: block;
+        }
+
+        /* ─── FEED SKELETON (post loading state) ─── */
+        [data-theme="dark"] .skeleton {
+            background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+            background-size: 200% 100%;
+        }
+        .skeleton-post {
+            padding: 16px 0;
+            border-bottom: 1px solid var(--brd);
+        }
+        .skeleton-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .skeleton-line {
+            height: 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        .skeleton-title {
+            height: 16px;
+            width: 85%;
+            border-radius: 6px;
+            margin: 6px 0 10px;
+        }
+        .skeleton-image {
+            width: 100%;
+            margin: 0 0 10px;
+            aspect-ratio: 16 / 10;
+            border-radius: 0;
+        }
+        .skeleton-reactions {
+            height: 18px;
+            width: 100%;
+            border-radius: 6px;
+            margin-top: 12px;
         }
 
         /* ─── COMMENTS ─── */
@@ -1923,8 +1956,6 @@
             .ig-video-wrap,
             .media-carousel {
                 width: 100%;
-                margin-left: 0;
-                margin-right: 0;
                 border-radius: 0 !important;
             }
             .repost-banner .repost-author {
@@ -4623,6 +4654,7 @@
 
                 const isRepostClass = repostBanner ? 'is-repost' : '';
 
+                // New structure: avatar+header+text inside flex row, then media and actions as siblings
                 return `<article class="feed-post ${isRepostClass}" data-post-id="${p.id}" data-author-id="${author.id}">
                         ${repostBanner}
                         <div class="flex items-start gap-3" style="padding:0 16px;">
@@ -4641,11 +4673,13 @@
                               <div class="content-preview preview-text-${p.id}">${renderedPreview}</div>
                               ${isLong?`<div class="content-text full-text-${p.id} hidden">${renderedContent}</div><button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm">Show more</button>`:`<div class="content-text full-text-${p.id}">${renderedContent}</div>`}
                             </div>
-                            ${mh}
-                            ${th}
-                            <div class="post-actions-row" style="position:relative;">
-                              ${buildActionsRow(p)}
-                            </div>
+                          </div>
+                        </div>
+                        ${mh}
+                        <div style="padding:0 16px;">
+                          ${th}
+                          <div class="post-actions-row" style="position:relative;">
+                            ${buildActionsRow(p)}
                           </div>
                         </div>
                       </article>`;
@@ -4706,7 +4740,17 @@
             function renderSkeletons(c = 3) {
                 let h = '';
                 for (let i = 0; i < c; i++) h +=
-                    `<div class="skeleton-post"><div class="flex gap-3" style="padding:0 16px;"><div class="skeleton skeleton-avatar"></div><div style="flex:1;"><div class="skeleton skeleton-line" style="width:40%;height:10px"></div><div class="skeleton skeleton-title"></div>${i===0?'<div class="skeleton skeleton-image"></div>':''}<div class="skeleton skeleton-line" style="width:100%"></div><div class="skeleton skeleton-line" style="width:70%"></div><div class="skeleton skeleton-reactions"></div></div></div></div>`;
+                    `<div class="skeleton-post"><div class="flex gap-3" style="padding:0 16px;align-items:flex-start;">
+                        <div class="skeleton skeleton-avatar"></div>
+                        <div style="flex:1;min-width:0;">
+                            <div class="skeleton skeleton-line" style="width:35%;height:10px"></div>
+                            <div class="skeleton skeleton-title"></div>
+                            ${i===0?'<div class="skeleton skeleton-image"></div>':''}
+                            <div class="skeleton skeleton-line" style="width:100%"></div>
+                            <div class="skeleton skeleton-line" style="width:60%;margin-bottom:0"></div>
+                            <div class="skeleton skeleton-reactions"></div>
+                        </div>
+                    </div></div>`;
                 return h;
             }
 
