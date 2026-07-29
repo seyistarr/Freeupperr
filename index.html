@@ -658,19 +658,17 @@
             }
         }
         .explore-card {
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .explore-card-media {
             position: relative;
+            aspect-ratio: 4 / 5;
             border-radius: 14px;
             overflow: hidden;
-            background: #111;
-            cursor: pointer;
-            aspect-ratio: 1 / 1;
-            opacity: 1;
-            transform: none;
-            transition: transform .18s ease;
-        }
-        .explore-card:active {
-            transform: scale(.97);
-            transition: transform .15s;
+            background: #151515;
         }
         .explore-card-thumb {
             width: 100%;
@@ -678,85 +676,84 @@
             object-fit: cover;
             display: block;
         }
-        .explore-card-overlay {
+        .explore-card-badge {
             position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: linear-gradient(transparent, rgba(0, 0, 0, .85));
-            padding: 32px 9px 10px;
+            top: 8px;
+            right: 8px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, .45);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+        }
+        .explore-card-badge svg {
+            width: 11px;
+            height: 11px;
+            fill: #fff;
         }
         .explore-card-title {
-            font-size: .78rem;
+            margin-top: 10px;
+            color: var(--text);
+            font-family: "Inter", sans-serif;
+            font-size: .82rem;
             font-weight: 700;
-            color: #fff;
-            line-height: 1.35;
+            line-height: 1.3;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
-            margin-bottom: 6px;
         }
-        .explore-card-meta {
+        .explore-card-bottom {
+            margin-top: 8px;
             display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: space-between;
+            gap: 6px;
+        }
+        .explore-card-author {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
         }
         .explore-card-avatar {
             width: 20px;
             height: 20px;
             border-radius: 50%;
             object-fit: cover;
-            border: 1.5px solid rgba(255, 255, 255, .55);
             flex-shrink: 0;
             background: #374151;
         }
-        .explore-card-author {
-            font-size: .68rem;
+        .explore-card-author span {
+            font-family: "Inter", sans-serif;
+            font-size: .72rem;
             font-weight: 600;
-            color: rgba(255, 255, 255, .85);
+            color: var(--muted);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            flex: 1;
-            min-width: 0;
         }
         .explore-card-views {
-            font-size: .65rem;
-            color: rgba(255, 255, 255, .65);
             display: flex;
             align-items: center;
-            gap: 2px;
+            gap: 4px;
             flex-shrink: 0;
+            color: var(--muted);
+            font-family: "Inter", sans-serif;
+            font-size: .72rem;
+            font-weight: 600;
         }
-        .explore-card-category {
-            position: absolute;
-            top: 8px;
-            left: 8px;
-            background: rgba(124, 58, 237, .9);
-            color: #fff;
-            font-size: .58rem;
-            font-weight: 700;
-            padding: 3px 7px;
-            border-radius: 20px;
-            letter-spacing: .04em;
-            text-transform: uppercase;
-            display: none;
-        }
-        .explore-card-video-badge {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            background: rgba(0, 0, 0, .65);
-            color: #fff;
-            font-size: .6rem;
-            font-weight: 700;
-            padding: 3px 7px;
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            gap: 3px;
-            backdrop-filter: blur(4px);
+        .explore-card-views svg {
+            width: 14px;
+            height: 14px;
+            fill: none;
+            stroke: var(--muted);
+            stroke-width: 2;
         }
         .explore-card-no-media {
             width: 100%;
@@ -779,15 +776,12 @@
             overflow: hidden;
         }
         .explore-skeleton-card {
-            position: relative;
-            border-radius: 14px;
-            overflow: hidden;
-            aspect-ratio: 1 / 1;
-            background: #1a1a1a;
+            display: flex;
+            flex-direction: column;
         }
         .explore-skeleton-thumb {
-            width: 100%;
-            height: 100%;
+            aspect-ratio: 4 / 5;
+            border-radius: 14px;
             background: linear-gradient(90deg, #1f1f1f 25%, #2a2a2a 50%, #1f1f1f 75%);
             background-size: 200% 100%;
             animation: shimmer 1.4s infinite;
@@ -5829,15 +5823,27 @@
                         mh =
                             `<div class="explore-card-no-media loaded"><div class="explore-card-no-media-text">${escapeHtml(post.title)}</div></div>`;
                     }
+
+                    // Video badge: small circle with play icon, no "Video" text
                     const vb = mediaItems.length > 0 && (mediaItems[0].type === 'video' || (mediaItems[0].url && isYouTubeUrl(mediaItems[0].url))) ?
-                        `<div class="explore-card-video-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg> Video</div>` :
+                        `<div class="explore-card-badge"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>` :
                         '';
+
                     const ah = av ?
                         `<img src="${av}" class="explore-card-avatar" alt="" onerror="this.style.display='none'">` :
                         `<div class="explore-card-avatar" style="display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#9CA3AF;">${au.charAt(0).toUpperCase()}</div>`;
                     const nl = !post.mediaUrl && mediaItems.length === 0;
                     const cc = nl ? 'explore-card loaded' : 'explore-card';
-                    return `<div class="${cc}" data-post-id="${post.id}" ${mediaItems.length > 0 && mediaItems[0].type === 'video' ? 'data-video-card="true"' : ''}>${mh}${vb}<div class="explore-card-overlay"><div class="explore-card-title">${escapeHtml(post.title)}</div><div class="explore-card-meta">${ah}<span class="explore-card-author">${escapeHtml(au)}</span><span class="explore-card-views">${svgEye()}${formatCount(post.views||0)}</span></div></div></div>`;
+
+                    // New card structure: media on top, title + author/views below
+                    return `<div class="${cc}" data-post-id="${post.id}" ${mediaItems.length > 0 && mediaItems[0].type === 'video' ? 'data-video-card="true"' : ''}>
+                        <div class="explore-card-media">${mh}${vb}</div>
+                        <div class="explore-card-title">${escapeHtml(post.title)}</div>
+                        <div class="explore-card-bottom">
+                            <div class="explore-card-author">${ah}<span>${escapeHtml(au)}</span></div>
+                            <div class="explore-card-views">${svgEye()}<span>${formatCount(post.views||0)}</span></div>
+                        </div>
+                    </div>`;
                 }).join('');
             }
 
