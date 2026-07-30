@@ -619,6 +619,7 @@
             z-index: 2;
         }
 
+        /* ─── MARKETPLACE CARDS (old layout kept for reference, but we'll replace with new overlay) ─── */
         .market-card {
             position: relative;
             border-radius: 16px;
@@ -735,6 +736,42 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        /* ===== FIX 2: NEW OVERLAY-STYLE MARKET CARD ===== */
+        .market-subtabs { display: flex; gap: 8px; padding: 12px 0 6px; }
+        .market-subtab {
+            padding: 7px 16px; border-radius: 100px; font-size: 12.5px; font-weight: 700;
+            border: 1.5px solid var(--brd2); background: var(--inp); color: var(--muted);
+            cursor: pointer; transition: all .15s;
+        }
+        .market-subtab.active { background: var(--pdim); border-color: var(--pbrd); color: var(--pl); }
+        .market-card-v2 { cursor: pointer; transition: transform .18s ease; }
+        .market-card-v2:active { transform: scale(.97); }
+        .mc2-media {
+            position: relative; width: 100%; aspect-ratio: 1/1; border-radius: 16px;
+            overflow: hidden; background: var(--bg4); margin-bottom: 8px;
+        }
+        .mc2-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .mc2-media .no-media {
+            width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+            color: var(--muted2); font-size: .75rem; font-weight: 700;
+        }
+        .mc2-media .delete-btn {
+            position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%;
+            background: rgba(220,38,38,.85); border: none; color: #fff; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; z-index: 5;
+        }
+        .mc2-media .delete-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+        .mc2-overlay {
+            position: absolute; left: 0; right: 0; bottom: 0; padding: 10px;
+            background: linear-gradient(to top, rgba(0,0,0,.8), rgba(0,0,0,.35) 60%, transparent);
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        .mc2-seller { display: flex; align-items: center; gap: 6px; }
+        .mc2-seller-av { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+        .mc2-seller-name { font-size: 11px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+        .mc2-price { font-size: 15px; font-weight: 800; color: #fff; }
+        .mc2-title { font-size: .82rem; font-weight: 600; color: var(--text); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
         .empty-state {
             display: flex;
@@ -2484,6 +2521,11 @@
             var FW_BUFFER = 4;
             var followModalData = null;
 
+            // ===== FIX 3: Market tab state =====
+            var marketSubView = 'mine';
+            var savedMarketItemsCache = [];
+            var savedMarketLoaded = false;
+
             function getCurrentUser() {
                 if (window.AuthUser && window.AuthUser.getCurrentUser) {
                     return window.AuthUser.getCurrentUser();
@@ -2655,8 +2697,6 @@
             }
 
             // ─── BUILD GRID POST CARD (TikTok-style: thumbnail + view count only) ───
-            // FIX: Use static onerror that only toggles visibility of a pre‑rendered fallback,
-            // so titles with quotes/apostrophes never break out of a JS string.
             function buildGridPostCard(post, opts) {
                 opts = opts || {};
                 var mediaHtml = '';
@@ -2692,7 +2732,6 @@
                     '</div>';
             }
 
-            // Same fix applied to love cards
             function buildGridLoveCard(post) {
                 var mediaHtml = '';
                 var noMediaFallback = '<div class="no-media" style="display:none">' + escapeHtml(post.title) + '</div>';
@@ -2717,28 +2756,65 @@
                     '</div>';
             }
 
-            function buildMarketCard(item, isOwner) {
+            // ===== FIX 3: NEW buildMarketCard (overlay style) =====
+            function buildMarketCard(item, ctx) {
+                ctx = ctx || {};
                 var images = item.images || [];
-                var imgUrl = images.length ? images[0].url : '';
+                var imgUrl = images.length ? (typeof images[0] === 'object' ? images[0].url : images[0]) : '';
                 var sellerName = item.profiles ? (item.profiles.display_name || item.profiles.username) : 'Seller';
                 var sellerAvatar = item.profiles ? (item.profiles.avatar_url || '') : '';
-                var categoryName = item.market_categories ? item.market_categories.name : 'General';
-                var deleteBtn = isOwner ?
-                    '<button class="delete-btn" onclick="event.stopPropagation();deleteMarketItem(' + item.id + ')" title="Delete"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>' :
-                    '';
-                return '<div class="market-card" onclick="showToast(\'Market detail coming soon\',\'p\')">' +
-                    '<div class="img-wrap">' +
-                    (imgUrl ? '<img src="' + imgUrl + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\"no-media\\" style=\\"display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted2);\\">No image</div>\'">' : '<div class="no-media" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted2);">No image</div>') +
-                    '<span class="cat-badge">' + escapeHtml(categoryName) + '</span>' +
-                    '<span class="price-tag">₦' + formatPrice(item.price) + '</span>' +
-                    deleteBtn +
+                var sellerVerified = item.profiles ? (item.profiles.verified_status || (item.profiles.verified ? 'verified' : 'none')) : 'none';
+                var badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(sellerVerified) : '';
+                var actionBtn = '';
+                if (ctx.canDelete) {
+                    actionBtn = '<button class="delete-btn" onclick="event.stopPropagation();deleteMarketItem(\'' + item.id + '\')" title="Delete listing"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>';
+                } else if (ctx.canUnsave) {
+                    actionBtn = '<button class="delete-btn" onclick="event.stopPropagation();unsaveMarketItem(\'' + item.id + '\')" title="Remove from saved"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+                }
+                return '<div class="market-card-v2" onclick="showToast(\'Market detail coming soon\',\'p\')">' +
+                    '<div class="mc2-media">' +
+                    (imgUrl ? '<img src="' + imgUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.no-media\').style.display=\'flex\'">' : '') +
+                    '<div class="no-media"' + (imgUrl ? ' style="display:none"' : '') + '>No image</div>' +
+                    actionBtn +
+                    '<div class="mc2-overlay">' +
+                    '<div class="mc2-seller">' +
+                    (sellerAvatar ? '<img class="mc2-seller-av" src="' + sellerAvatar + '" onerror="this.style.display=\'none\'">' : '') +
+                    '<span class="mc2-seller-name">' + escapeHtml(truncateName(sellerName, 16)) + '</span>' + badgeHtml +
                     '</div>' +
-                    '<div class="body">' +
-                    '<div class="title">' + escapeHtml(item.title) + '</div>' +
-                    '<div class="location"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' + escapeHtml(item.location || 'Campus') + '</div>' +
-                    '<div class="seller"><img src="' + sellerAvatar + '" class="avatar" onerror="this.style.display=\'none\'"><span class="name">' + escapeHtml(sellerName) + '</span></div>' +
-                    '</div></div>';
+                    '<div class="mc2-price">₦' + formatPrice(item.price) + '</div>' +
+                    '</div>' +
+                    '</div>' +
+                    '<div class="mc2-title">' + escapeHtml(item.title) + '</div>' +
+                    '</div>';
             }
+
+            // ===== FIX 3: delete & unsave functions =====
+            async function deleteMarketItem(id) {
+                if (!confirm('Delete this listing permanently?')) return;
+                try {
+                    await window.ListingsAPI.deleteListing(id);
+                    marketItemsCache = marketItemsCache.filter(function(i) { return i.id !== id; });
+                    showToast('Listing deleted', 'g');
+                    renderTab('market');
+                } catch (err) { showToast(err.message || 'Failed to delete listing', 'r'); }
+            }
+            window.deleteMarketItem = deleteMarketItem;
+
+            async function unsaveMarketItem(id) {
+                try {
+                    await window.ListingsAPI.unsaveListing(id);
+                    savedMarketItemsCache = savedMarketItemsCache.filter(function(i) { return i.id !== id; });
+                    showToast('Removed from saved', 'o');
+                    renderTab('market');
+                } catch (err) { showToast(err.message || 'Failed to remove', 'r'); }
+            }
+            window.unsaveMarketItem = unsaveMarketItem;
+
+            window.switchMarketSubView = function(el, view) {
+                marketSubView = view;
+                document.querySelectorAll('.market-subtab').forEach(function(b) { b.classList.toggle('active', b.getAttribute('data-sub') === view); });
+                renderTab('market');
+            };
 
             // ─── RENDER PROFILE ────────────────────────────────
             async function renderProfile() {
@@ -2903,7 +2979,6 @@
                 document.getElementById('qrAvatar').src = avatarSrc;
                 updateNavAvatar();
 
-                // Display name and header username are NOT truncated
                 document.getElementById('displayName').textContent = profile.display_name || 'Guest';
                 document.getElementById('headerUsername').textContent = profile.username || '@user';
                 document.getElementById('qrName').textContent = profile.display_name || 'Guest';
@@ -2981,9 +3056,11 @@
                         pp2.classList.add('active');
                     }
                 } else {
+                    // ===== FIX 4: Hide Repost and Saved tabs for non-owners =====
                     document.querySelectorAll('#tabsBar .tab').forEach(function(tabBtn) {
                         var key = tabBtn.getAttribute('data-tab');
-                        var isHidden = (key === 'posts' ? postsForceHidden : hiddenTabs.indexOf(key) !== -1);
+                        var ownerOnlyHidden = !isOwner && (key === 'share' || key === 'star');
+                        var isHidden = ownerOnlyHidden || (key === 'posts' ? postsForceHidden : hiddenTabs.indexOf(key) !== -1);
                         tabBtn.style.display = isHidden ? 'none' : '';
                         if (isHidden && tabBtn.classList.contains('active')) {
                             var fallback = document.querySelector('#tabsBar .tab:not([style*="display: none"])');
@@ -3102,14 +3179,47 @@
                     '</div>';
             }
 
+            // ===== FIX 3: renderMarket with subtabs and saved view =====
             function renderMarket(container, marketItems) {
+                marketItemsCache = marketItems;
+                var subtabsHtml = isOwner ?
+                    '<div class="market-subtabs">' +
+                    '<button class="market-subtab' + (marketSubView === 'mine' ? ' active' : '') + '" data-sub="mine" onclick="switchMarketSubView(this,\'mine\')">My Listings</button>' +
+                    '<button class="market-subtab' + (marketSubView === 'saved' ? ' active' : '') + '" data-sub="saved" onclick="switchMarketSubView(this,\'saved\')">Saved</button>' +
+                    '</div>' : '';
+
+                if (isOwner && marketSubView === 'saved') {
+                    if (!savedMarketLoaded) {
+                        container.innerHTML = subtabsHtml + '<div class="grid-2" style="min-height:120px"></div>';
+                        window.ListingsAPI.getSavedListings({ limit: 100 }).then(function(items) {
+                            savedMarketItemsCache = items || [];
+                            savedMarketLoaded = true;
+                            renderMarket(container, marketItems);
+                        }).catch(function(err) {
+                            savedMarketLoaded = true;
+                            showToast(err.message || 'Failed to load saved items', 'r');
+                            renderMarket(container, marketItems);
+                        });
+                        return;
+                    }
+                    if (!savedMarketItemsCache.length) {
+                        container.innerHTML = subtabsHtml +
+                            '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div><h3>No saved items</h3><p>Items you save from the Market will appear here.</p></div>';
+                        return;
+                    }
+                    container.innerHTML = subtabsHtml + '<div class="grid-2">' +
+                        savedMarketItemsCache.map(function(item) { return buildMarketCard(item, { canUnsave: true }); }).join('') +
+                        '</div>';
+                    return;
+                }
+
                 if (!marketItems.length) {
-                    container.innerHTML =
+                    container.innerHTML = subtabsHtml +
                         '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div><h3>No listings</h3><p>' + (isOwner ? 'Sell something on Campus Market.' : 'No items listed yet.') + '</p></div>';
                     return;
                 }
-                container.innerHTML = '<div class="grid-2">' +
-                    marketItems.map(function(item) { return buildMarketCard(item, isOwner); }).join('') +
+                container.innerHTML = subtabsHtml + '<div class="grid-2">' +
+                    marketItems.map(function(item) { return buildMarketCard(item, { canDelete: isOwner }); }).join('') +
                     '</div>';
             }
 
@@ -4301,6 +4411,9 @@
             window.closeMov = closeMov;
             window.loadMoreSuggestions = loadMoreSuggestions;
             window._fwTap = _fwTap;
+            window.switchMarketSubView = switchMarketSubView;
+            window.deleteMarketItem = deleteMarketItem;
+            window.unsaveMarketItem = unsaveMarketItem;
         })();
     </script>
 </body>
