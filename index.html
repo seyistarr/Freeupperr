@@ -3766,6 +3766,70 @@
                 }
             }
 
+            // ===== FIX 1: SAVED LISTINGS STATE =====
+            let savedListingsSet = new Set();
+            let savedListingsLoaded = false;
+
+            async function loadSavedListings() {
+                if (!window.ListingsAPI) return;
+                const user = getCurrentUser();
+                if (!user || !user.isLoggedIn) {
+                    savedListingsSet = new Set();
+                    savedListingsLoaded = true;
+                    return;
+                }
+                try {
+                    const saved = await window.ListingsAPI.getSavedListings({ limit: 200 });
+                    savedListingsSet = new Set(saved.map(item => item.id));
+                } catch (e) {
+                    console.warn('loadSavedListings error:', e);
+                } finally {
+                    savedListingsLoaded = true;
+                }
+            }
+
+            // ===== FIX 1: NEW toggleFavorite with API =====
+            async function toggleFavorite(btn, listingId) {
+                const user = getCurrentUser();
+                if (!user || !user.isLoggedIn) {
+                    triggerToast('Please sign in', 'Sign in to save items');
+                    return;
+                }
+                const svg = btn.querySelector('.heart-icon');
+                const wasSaved = savedListingsSet.has(listingId);
+                if (svg) {
+                    if (wasSaved) {
+                        svg.classList.remove('liked');
+                        svg.setAttribute('fill', 'none');
+                    } else {
+                        svg.classList.add('liked');
+                        svg.setAttribute('fill', 'currentColor');
+                    }
+                }
+                try {
+                    if (wasSaved) {
+                        await window.ListingsAPI.unsaveListing(listingId);
+                        savedListingsSet.delete(listingId);
+                        triggerToast('Removed from Saved');
+                    } else {
+                        await window.ListingsAPI.saveListing(listingId);
+                        savedListingsSet.add(listingId);
+                        triggerToast('Saved ✓', 'View it in your profile Market tab');
+                    }
+                } catch (err) {
+                    if (svg) {
+                        if (wasSaved) {
+                            svg.classList.add('liked');
+                            svg.setAttribute('fill', 'currentColor');
+                        } else {
+                            svg.classList.remove('liked');
+                            svg.setAttribute('fill', 'none');
+                        }
+                    }
+                    triggerToast('Error', err.message || 'Could not update saved items');
+                }
+            }
+
             async function loadMarketListings() {
                 if (!window.ListingsAPI) return;
                 try {
@@ -3948,6 +4012,7 @@
                 });
             }
 
+            // ===== FIX 1: createMarketCardHTML with saved state =====
             function createMarketCardHTML(item) {
                 if (!(item.id in currentImageIndexMap)) {
                     currentImageIndexMap[item.id] = 0;
@@ -3974,13 +4039,15 @@
                 }
                 sellerChip += `</div>`;
 
+                const isSaved = savedListingsSet.has(item.id);
+
                 return `
                     <div onclick="window.openProductModal('${item.id}')" class="group cursor-pointer product-card">
                         <div class="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 mb-2">
                             <img id="market-card-img-${item.id}" src="${images[activeIdx]}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
                             ${dotsHTML}
-                            <button onclick="event.stopPropagation(); toggleFavorite(this)" class="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-black/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/40 transition">
-                                <svg class="w-4 h-4 heart-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <button onclick="event.stopPropagation(); toggleFavorite(this, '${item.id}')" class="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-black/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/40 transition">
+                                <svg class="w-4 h-4 heart-icon ${isSaved ? 'liked' : ''}" fill="${isSaved ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
                                 </svg>
                             </button>
@@ -4351,18 +4418,7 @@
                 }, 3000);
             }
 
-            function toggleFavorite(btn) {
-                const svg = btn.querySelector('.heart-icon');
-                if (svg) {
-                    if (svg.classList.contains('liked')) {
-                        svg.classList.remove('liked');
-                        svg.setAttribute('fill', 'none');
-                    } else {
-                        svg.classList.add('liked');
-                        svg.setAttribute('fill', 'currentColor');
-                    }
-                }
-            }
+            // ─── OLD toggleFavorite removed; replaced with API version above ───
 
             function applyFilters() {
                 const val = parseFloat(document.getElementById('filterMaxPrice').value);
@@ -5962,7 +6018,8 @@
                             const ng = document.getElementById('newlyGrid');
                             if (fg) fg.innerHTML = exploreSkeletonGrid();
                             if (ng) ng.innerHTML = exploreSkeletonGrid();
-                            await Promise.all([loadMarketCategories(), loadMarketListings()]);
+                            // ===== FIX 1: load saved listings alongside categories and listings =====
+                            await Promise.all([loadMarketCategories(), loadMarketListings(), loadSavedListings()]);
                             marketDataLoaded = true;
                         }
                         renderMarketCategoryBars();
@@ -6476,7 +6533,7 @@
                     renderUI();
                     setTimeout(async () => {
                         if (!marketDataLoaded) {
-                            await Promise.all([loadMarketCategories(), loadMarketListings()]);
+                            await Promise.all([loadMarketCategories(), loadMarketListings(), loadSavedListings()]);
                             marketDataLoaded = true;
                         }
                         openProductModal(productIdParam);
@@ -6524,7 +6581,7 @@
             window.openSeeAllModal = openSeeAllModal;
             window.closeSeeAllModal = closeSeeAllModal;
             window.handleMarketSearch = handleMarketSearch;
-            window.toggleFavorite = toggleFavorite;
+            window.toggleFavorite = toggleFavorite;   // ===== FIX 1: new toggleFavorite exposed =====
             window.changeMarketImage = changeMarketImage;
             window.triggerToast = triggerToast;
 
