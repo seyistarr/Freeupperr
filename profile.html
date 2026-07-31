@@ -619,7 +619,7 @@
             z-index: 2;
         }
 
-        /* ─── MARKETPLACE CARDS (old layout kept for reference, but we'll replace with new overlay) ─── */
+        /* ─── MARKETPLACE CARDS ─── */
         .market-card {
             position: relative;
             border-radius: 16px;
@@ -737,7 +737,7 @@
             text-overflow: ellipsis;
         }
 
-        /* ===== FIX 2: NEW OVERLAY-STYLE MARKET CARD ===== */
+        /* ===== OVERLAY-STYLE MARKET CARD ===== */
         .market-subtabs { display: flex; gap: 8px; padding: 12px 0 6px; }
         .market-subtab {
             padding: 7px 16px; border-radius: 100px; font-size: 12.5px; font-weight: 700;
@@ -2309,13 +2309,16 @@
                     <span class="char-c" id="dnC">0 / 40</span>
                 </div>
             </div>
+            <!-- ===== UPDATED USERNAME FIELD with live check & suggestions ===== -->
             <div class="form-group">
                 <div class="form-lbl">Username</div>
-                <input class="form-inp" id="eUN" type="text" placeholder="@username" maxlength="30">
+                <input class="form-inp" id="eUN" type="text" placeholder="@username" maxlength="30" oninput="onUsernameInput(this.value)" autocapitalize="none" autocomplete="off" spellcheck="false">
                 <div style="display:flex;justify-content:space-between;align-items:center">
                     <span class="cooldown-note" id="unCooldown"></span>
                     <span class="char-c" id="unC"></span>
                 </div>
+                <div id="unStatus" style="font-size:12.5px;font-weight:700;min-height:16px;"></div>
+                <div id="unSuggestions" style="display:none;flex-wrap:wrap;gap:6px;margin-top:2px;"></div>
             </div>
             <div class="form-group">
                 <div class="form-lbl">Bio</div>
@@ -2521,10 +2524,112 @@
             var FW_BUFFER = 4;
             var followModalData = null;
 
-            // ===== FIX 3: Market tab state =====
+            // ===== Market tab state =====
             var marketSubView = 'mine';
             var savedMarketItemsCache = [];
             var savedMarketLoaded = false;
+
+            // ===== USERNAME CASE-INSENSITIVE UNIQUENESS =====
+            var usernameCheckTimer = null;
+            var usernameCheckState = { canonical: '', available: null, checking: false };
+
+            function canonicalizeUsername(raw) {
+                return (raw || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+            }
+
+            function setUsernameStatus(html, color) {
+                var el = document.getElementById('unStatus');
+                if (!el) return;
+                el.innerHTML = html || '';
+                el.style.color = color || 'var(--muted)';
+            }
+
+            function hideUsernameSuggestions() {
+                var el = document.getElementById('unSuggestions');
+                if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+            }
+
+            async function usernameExists(canonical) {
+                var result = await window.sb.from('profiles').select('id').eq('username', canonical).maybeSingle();
+                if (result.error) throw result.error;
+                return !!result.data;
+            }
+
+            async function generateUsernameSuggestions(base) {
+                var suffixes = ['1', '23', '2026', 'x'];
+                var prefixes = ['its', 'the', 'real', 'go', 'hey'];
+                var candidates = [];
+                suffixes.forEach(function(s) { candidates.push(base + s); });
+                prefixes.forEach(function(p) { candidates.push(p + base); });
+                candidates = candidates.slice(0, 8);
+                try {
+                    var result = await window.sb.from('profiles').select('username').in('username', candidates);
+                    var taken = new Set((result.data || []).map(function(r) { return r.username; }));
+                    return candidates.filter(function(c) { return !taken.has(c); }).slice(0, 5);
+                } catch (e) { return []; }
+            }
+
+            function renderUsernameSuggestions(list, displayBase) {
+                var el = document.getElementById('unSuggestions');
+                if (!el) return;
+                if (!list.length) { hideUsernameSuggestions(); return; }
+                el.style.display = 'flex';
+                el.innerHTML = list.map(function(c) {
+                    return '<span class="pill-chip" style="cursor:pointer" onclick="applyUsernameSuggestion(\'' + c + '\')">@' + c + '</span>';
+                }).join('');
+            }
+
+            window.applyUsernameSuggestion = function(canonical) {
+                var inp = document.getElementById('eUN');
+                inp.value = canonical;
+                onUsernameInput(canonical);
+            };
+
+            window.onUsernameInput = function(raw) {
+                document.getElementById('unC').textContent = raw.length + ' / 30';
+                var canonical = canonicalizeUsername(raw);
+                hideUsernameSuggestions();
+                clearTimeout(usernameCheckTimer);
+
+                if (!canonical) {
+                    setUsernameStatus('', 'var(--muted)');
+                    usernameCheckState = { canonical: '', available: null, checking: false };
+                    return;
+                }
+                if (canonical.length < 3) {
+                    setUsernameStatus('Username must be at least 3 characters', 'var(--danger)');
+                    usernameCheckState = { canonical: canonical, available: false, checking: false };
+                    return;
+                }
+                if (targetUser && canonical === (targetUser.username || '').toLowerCase()) {
+                    setUsernameStatus('✓ This is your current username', 'var(--ok)');
+                    usernameCheckState = { canonical: canonical, available: true, checking: false };
+                    return;
+                }
+
+                setUsernameStatus('⏳ Checking availability…', 'var(--muted)');
+                usernameCheckState = { canonical: canonical, available: null, checking: true };
+
+                usernameCheckTimer = setTimeout(async function() {
+                    try {
+                        var taken = await usernameExists(canonical);
+                        if (usernameCheckState.canonical !== canonical) return; // stale response
+                        usernameCheckState.checking = false;
+                        usernameCheckState.available = !taken;
+                        if (taken) {
+                            setUsernameStatus('❌ Already taken', 'var(--danger)');
+                            var suggestions = await generateUsernameSuggestions(canonical);
+                            if (usernameCheckState.canonical === canonical) renderUsernameSuggestions(suggestions);
+                        } else {
+                            setUsernameStatus('✅ Available', 'var(--ok)');
+                            hideUsernameSuggestions();
+                        }
+                    } catch (e) {
+                        usernameCheckState.checking = false;
+                        setUsernameStatus('Could not check availability', 'var(--warn)');
+                    }
+                }, 400);
+            };
 
             function getCurrentUser() {
                 if (window.AuthUser && window.AuthUser.getCurrentUser) {
@@ -2696,7 +2801,7 @@
                 }
             }
 
-            // ─── BUILD GRID POST CARD (TikTok-style: thumbnail + view count only) ───
+            // ─── BUILD GRID POST CARD ──────────────────────────
             function buildGridPostCard(post, opts) {
                 opts = opts || {};
                 var mediaHtml = '';
@@ -2756,7 +2861,7 @@
                     '</div>';
             }
 
-            // ===== FIX 3: NEW buildMarketCard (overlay style) =====
+            // ===== MARKET CARD (overlay style) =====
             function buildMarketCard(item, ctx) {
                 ctx = ctx || {};
                 var images = item.images || [];
@@ -2771,7 +2876,8 @@
                 } else if (ctx.canUnsave) {
                     actionBtn = '<button class="delete-btn" onclick="event.stopPropagation();unsaveMarketItem(\'' + item.id + '\')" title="Remove from saved"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
                 }
-                return '<div class="market-card-v2" onclick="showToast(\'Market detail coming soon\',\'p\')">' +
+                // ===== FIX: navigate to index.html?product=id =====
+                return '<div class="market-card-v2" onclick="window.location.href=\'index.html?product=' + item.id + '\'">' +
                     '<div class="mc2-media">' +
                     (imgUrl ? '<img src="' + imgUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.no-media\').style.display=\'flex\'">' : '') +
                     '<div class="no-media"' + (imgUrl ? ' style="display:none"' : '') + '>No image</div>' +
@@ -2788,7 +2894,6 @@
                     '</div>';
             }
 
-            // ===== FIX 3: delete & unsave functions =====
             async function deleteMarketItem(id) {
                 if (!confirm('Delete this listing permanently?')) return;
                 try {
@@ -2970,6 +3075,7 @@
                 }
             }
 
+            // ─── UPDATE PROFILE UI ─────────────────────────────
             function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner) {
                 hideProfileSkeleton();
                 _profileLoadedOnce = true;
@@ -2979,10 +3085,11 @@
                 document.getElementById('qrAvatar').src = avatarSrc;
                 updateNavAvatar();
 
+                // ===== display_username instead of raw username =====
                 document.getElementById('displayName').textContent = profile.display_name || 'Guest';
-                document.getElementById('headerUsername').textContent = profile.username || '@user';
+                document.getElementById('headerUsername').textContent = profile.display_username || profile.username || '@user';
                 document.getElementById('qrName').textContent = profile.display_name || 'Guest';
-                document.getElementById('qrHandle').textContent = '@' + (profile.username || 'user');
+                document.getElementById('qrHandle').textContent = '@' + (profile.display_username || profile.username || 'user');
 
                 var bioEl = document.getElementById('heroBio');
                 bioEl.innerHTML = linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
@@ -3001,7 +3108,7 @@
                 document.getElementById('statFollowing').textContent = fmtNum(counts.following);
 
                 document.getElementById('onlineDot').style.display = profile.activity_status ? 'block' : 'none';
-                document.getElementById('blockUsernameTarget').textContent = profile.username || 'user';
+                document.getElementById('blockUsernameTarget').textContent = profile.display_username || profile.username || 'user';
 
                 renderActionRow();
 
@@ -3032,7 +3139,7 @@
                     el.style.display = isOwner ? '' : 'none';
                 });
 
-                // ─── HIDE ALL POSTS / TABS (if enabled) ──────────────────
+                // ─── HIDE ALL POSTS / TABS (settings-driven) ──────────
                 var hiddenTabs = (!isOwner && profile.hidden_tabs) ? profile.hidden_tabs : [];
                 var postsForceHidden = !isOwner && !!profile.hide_all_posts;
                 var optionalTabKeys = ['love', 'share', 'star', 'market'];
@@ -3056,11 +3163,10 @@
                         pp2.classList.add('active');
                     }
                 } else {
-                    // ===== FIX 4: Hide Repost and Saved tabs for non-owners =====
+                    // ===== FIX 4 REVERTED: settings-driven tab visibility only =====
                     document.querySelectorAll('#tabsBar .tab').forEach(function(tabBtn) {
                         var key = tabBtn.getAttribute('data-tab');
-                        var ownerOnlyHidden = !isOwner && (key === 'share' || key === 'star');
-                        var isHidden = ownerOnlyHidden || (key === 'posts' ? postsForceHidden : hiddenTabs.indexOf(key) !== -1);
+                        var isHidden = (key === 'posts' ? postsForceHidden : hiddenTabs.indexOf(key) !== -1);
                         tabBtn.style.display = isHidden ? 'none' : '';
                         if (isHidden && tabBtn.classList.contains('active')) {
                             var fallback = document.querySelector('#tabsBar .tab:not([style*="display: none"])');
@@ -3179,7 +3285,7 @@
                     '</div>';
             }
 
-            // ===== FIX 3: renderMarket with subtabs and saved view =====
+            // ===== renderMarket with subtabs and saved view =====
             function renderMarket(container, marketItems) {
                 marketItemsCache = marketItems;
                 var subtabsHtml = isOwner ?
@@ -3405,7 +3511,7 @@
 
             // ─── SHARE / REPORT FOR OTHER PROFILES ───────────
             function openShareOtherModal() {
-                var username = targetUser?.username || 'user';
+                var username = targetUser?.display_username || targetUser?.username || 'user';
                 document.getElementById('reportUsername').textContent = username;
                 document.getElementById('blockUsernameTarget').textContent = username;
                 openFS('shareOtherModal');
@@ -3475,7 +3581,7 @@
             // ─── BLOCK USER ─────────────────────────────────────
             window.openBlockConfirm = function() {
                 closeFS('shareOtherModal');
-                var uname = targetUser?.username || 'user';
+                var uname = targetUser?.display_username || targetUser?.username || 'user';
                 document.getElementById('blockUsernameConfirm').textContent = uname;
                 openMov('blockConfirmDlg');
             };
@@ -3522,8 +3628,8 @@
             function stopCamera() {
                 if (scanRAF) { cancelAnimationFrame(scanRAF);
                     scanRAF = null; }
-                if (camStream) { camStream.getTracks().forEach(function(t) { t.stop(); });
-                    camStream = null; }
+                if (camStream) { camStream.getTracks().forEach(function(t) { t.stop();
+                    camStream = null; }); }
                 var video = document.getElementById('scanVideo');
                 if (video) video.srcObject = null;
             }
@@ -3696,7 +3802,7 @@
                 document.body.style.overflow = '';
             };
 
-            // ─── POSTS MODAL (with truncate) ──────────────────
+            // ─── POSTS MODAL ──────────────────────────────────
             window.openPostsModal = function() {
                 var count = _profileUserPosts.length;
                 document.getElementById('mcCount').textContent = count;
@@ -3715,7 +3821,10 @@
             function syncEdit() {
                 var user = targetUser;
                 document.getElementById('eDN').value = user.display_name || '';
-                document.getElementById('eUN').value = user.username || '';
+                // ===== populate display_username (fallback username) =====
+                document.getElementById('eUN').value = user.display_username || user.username || '';
+                setUsernameStatus('', 'var(--muted)');
+                hideUsernameSuggestions();
                 document.getElementById('eBio').value = user.bio || '';
                 document.getElementById('dnC').textContent = (user.display_name || '').length + ' / 40';
                 pendingPills = (user.tags || []).slice();
@@ -3764,14 +3873,37 @@
             window.removePill = function(i) { pendingPills.splice(i, 1);
                 renderPillsEd(); };
 
+            // ===== SAVE PROFILE with display_username + canonical + uniqueness =====
             window.saveProfile = async function() {
                 var dn = document.getElementById('eDN').value.trim();
-                var un = document.getElementById('eUN').value.trim();
+                var rawUn = document.getElementById('eUN').value.trim();
                 var bio = document.getElementById('eBio').value.trim();
                 var user = getCurrentUser();
+                var canonical = canonicalizeUsername(rawUn);
+
+                if (!canonical || canonical.length < 3) {
+                    showToast('Please choose a username of at least 3 characters', 'r');
+                    return;
+                }
+
+                var isUnchanged = targetUser && canonical === (targetUser.username || '').toLowerCase();
+                if (!isUnchanged) {
+                    if (usernameCheckState.checking) {
+                        showToast('Still checking username availability…', 'o');
+                        return;
+                    }
+                    if (usernameCheckState.canonical !== canonical || usernameCheckState.available !== true) {
+                        try {
+                            var stillTaken = await usernameExists(canonical);
+                            if (stillTaken) { showToast('That username is already taken', 'r'); return; }
+                        } catch (e) { showToast('Could not verify username, try again', 'r'); return; }
+                    }
+                }
+
                 var updates = {
                     display_name: dn || 'Guest',
-                    username: un || 'user',
+                    username: canonical,
+                    display_username: rawUn || canonical,
                     bio: bio,
                     tags: pendingPills.slice(),
                     gender: selGender,
@@ -3783,11 +3915,15 @@
                 }
                 try {
                     var result = await window.sb.from('profiles').update(updates).eq('id', user.id);
-                    if (result.error) throw result.error;
+                    if (result.error) {
+                        if (result.error.code === '23505') { showToast('That username is already taken', 'r'); return; }
+                        throw result.error;
+                    }
                     if (window.AuthUser && window.AuthUser.updateCurrentUser) {
                         window.AuthUser.updateCurrentUser({
                             displayName: updates.display_name,
                             username: updates.username,
+                            displayUsername: updates.display_username,
                             bio: updates.bio,
                             tags: updates.tags,
                             gender: updates.gender,
@@ -3865,7 +4001,7 @@
                     return {
                         id: u.id,
                         displayName: u.display_name || u.username,
-                        handle: '@' + (u.username || ''),
+                        handle: '@' + (u.display_username || u.username || ''),
                         avatar: u.avatar_url || '',
                         verified: u.verified || false,
                         isFollowing: false,
@@ -4414,6 +4550,10 @@
             window.switchMarketSubView = switchMarketSubView;
             window.deleteMarketItem = deleteMarketItem;
             window.unsaveMarketItem = unsaveMarketItem;
+            // ===== username functions exposed for inline onclick =====
+            window.onUsernameInput = onUsernameInput;
+            window.applyUsernameSuggestion = applyUsernameSuggestion;
+            window.canonicalizeUsername = canonicalizeUsername;
         })();
     </script>
 </body>
