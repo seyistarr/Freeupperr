@@ -2066,9 +2066,14 @@
             fill: var(--gold);
             stroke: var(--gold);
         }
+        /* ─── engagement: only icon colors, counts stay muted ─── */
         .post-actions-row .reaction-btn.reacted {
-            color: var(--heart-red);
+            color: inherit;
         }
+        .post-actions-row .repost-count-badge.reposted .repost-icon {
+            color: #16A34A;
+        }
+        /* bookmark container color removed, only svg gets gold */
         .post-actions-row svg {
             width: 18px;
             height: 18px;
@@ -2200,6 +2205,12 @@
             z-index: 20;
             background: var(--bg2);
             border-bottom: 1px solid var(--brd);
+            transition: transform .3s ease, opacity .25s ease;
+        }
+        #category-chips.chips-hidden {
+            transform: translateY(-100%);
+            opacity: 0;
+            pointer-events: none;
         }
         #chips-container {
             display: flex;
@@ -2327,6 +2338,11 @@
             text-align: center;
             padding: 40px 20px;
             color: var(--muted);
+        }
+
+        /* ─── VIEW TRANSITIONS ─── */
+        @view-transition {
+            navigation: auto;
         }
     </style>
 </head>
@@ -3789,7 +3805,7 @@
             }
 
             // ===== FIX 1: NEW toggleFavorite with API =====
-            async function toggleFavorite(btn, listingId) {
+            function toggleFavorite(btn, listingId) {
                 const user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
                     triggerToast('Please sign in', 'Sign in to save items');
@@ -3808,11 +3824,11 @@
                 }
                 try {
                     if (wasSaved) {
-                        await window.ListingsAPI.unsaveListing(listingId);
+                        window.ListingsAPI.unsaveListing(listingId);
                         savedListingsSet.delete(listingId);
                         triggerToast('Removed from Saved');
                     } else {
-                        await window.ListingsAPI.saveListing(listingId);
+                        window.ListingsAPI.saveListing(listingId);
                         savedListingsSet.add(listingId);
                         triggerToast('Saved ✓', 'View it in your profile Market tab');
                     }
@@ -5706,6 +5722,12 @@
             }
 
             function closeExploreFullscreen() {
+                if (window._openedFromProfile) {
+                    window._openedFromProfile = false;
+                    pauseAllVideos();
+                    history.back();
+                    return;
+                }
                 const fs = document.getElementById('explore-fullscreen');
                 if (!fs) return;
                 const eb = document.getElementById('explore-comment-bar');
@@ -5917,6 +5939,14 @@
                 if (mode === 'foryou') { currentSortMethod = 'foryou';
                     uiPage = 'home'; } else if (mode === 'explore') { currentSortMethod = 'trending';
                     uiPage = 'explore'; } else if (mode === 'market') { uiPage = 'market'; }
+
+                // ===== RESET hidden state for bottom nav and chips =====
+                bottomNavHidden = false;
+                const bottomNavEl = document.getElementById('bottomNav');
+                const chipsEl = document.getElementById('category-chips');
+                if (bottomNavEl) bottomNavEl.classList.remove('hidden-nav');
+                if (chipsEl) chipsEl.classList.remove('chips-hidden');
+
                 renderUI();
             }
 
@@ -6247,15 +6277,21 @@
             // ─── NAV SCROLL ───────────────────────────────────────────────────
             function handleNavScroll() {
                 const currentScrollY = window.scrollY;
-                if (currentScrollY > lastScrollY && currentScrollY > 100) {
+                const onHomeFeed = (uiPage === 'home');
+                const bottomNavEl = document.getElementById('bottomNav');
+                const chipsEl = document.getElementById('category-chips');
+
+                if (onHomeFeed && currentScrollY > lastScrollY && currentScrollY > 100) {
                     if (!bottomNavHidden) {
                         bottomNavHidden = true;
-                        document.getElementById('bottomNav').classList.add('hidden-nav');
+                        if (bottomNavEl) bottomNavEl.classList.add('hidden-nav');
+                        if (chipsEl) chipsEl.classList.add('chips-hidden');
                     }
-                } else if (currentScrollY < lastScrollY) {
+                } else if (!onHomeFeed || currentScrollY < lastScrollY) {
                     if (bottomNavHidden) {
                         bottomNavHidden = false;
-                        document.getElementById('bottomNav').classList.remove('hidden-nav');
+                        if (bottomNavEl) bottomNavEl.classList.remove('hidden-nav');
+                        if (chipsEl) chipsEl.classList.remove('chips-hidden');
                     }
                 }
                 lastScrollY = currentScrollY;
@@ -6519,15 +6555,16 @@
                         .subscribe();
                 }
 
+                // ===== DEEP-LINK BLOCK (UPDATED with from=profile handling) =====
                 const urlParams = new URLSearchParams(window.location.search);
                 const postIdParam = urlParams.get('post');
                 const productIdParam = urlParams.get('product');
-                if (postIdParam) {
-                    const id = postIdParam;
-                    if (allPosts.some(p => p.id === id)) {
-                        setTimeout(() => { openExplorePost(id, 'home');
-                            history.replaceState({}, '', window.location.pathname); }, 400);
-                    }
+                const fromProfile = urlParams.get('from') === 'profile';
+                window._openedFromProfile = fromProfile;
+
+                if (postIdParam && allPosts.some(p => p.id === postIdParam)) {
+                    openExplorePost(postIdParam, 'home');
+                    history.replaceState({}, '', window.location.pathname);
                 } else if (productIdParam) {
                     uiPage = 'market';
                     renderUI();
@@ -6539,13 +6576,14 @@
                         openProductModal(productIdParam);
                         history.replaceState({}, '', window.location.pathname);
                     }, 500);
+                } else {
+                    renderUI();
                 }
 
                 if (window.syncThemeColorMeta) {
                     window.syncThemeColorMeta();
                 }
 
-                renderUI();
                 setupPullToRefresh();
                 setupKeyboardAvoidance();
             }
