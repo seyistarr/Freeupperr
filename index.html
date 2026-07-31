@@ -165,6 +165,12 @@
             position: sticky;
             top: 0;
             z-index: 29;
+            transition: transform .3s ease, opacity .25s ease;
+        }
+        .top-header.header-hidden {
+            transform: translateY(-100%);
+            opacity: 0;
+            pointer-events: none;
         }
         .top-header .brand {
             font-family: 'Poppins', 'Inter', sans-serif;
@@ -2710,6 +2716,7 @@
             let _feedShuffleSeed = 0;
             let _shuffleExploreOnce = false;
             let _shuffleMarketOnce = false;
+            let _shuffleHomeOnce = false;
 
             // Marketplace state
             let marketCategories = [];
@@ -4775,21 +4782,26 @@
                 }
                 if (currentSortMethod === 'trending') p.sort((a, b) => (b.views || 0) - (a.views || 0));
                 else if (currentSortMethod === 'foryou') {
-                    const uc = getUserCategories();
-                    const jitter = new Map(p.map(post => [post.id, ((hashStr(post.id + _feedShuffleSeed) % 1000) /
-                        1000) * 0.25]));
-                    p.sort((a, b) => {
-                        const score = p => {
-                            const ah = (Date.now() - new Date(p.timestamp || p.date)) / 36e5;
-                            const commentCount = Array.isArray(p.comments) ? p.comments.filter(c => c
-                                .approved !== false).length : (p.comments || 0);
-                            const eg = (p.views || 0) + ((p.reactions.like || 0) * 2) + (commentCount *
-                            2);
-                            return (eg / Math.pow(ah + 2, 1.5)) * (1 + (jitter.get(p.id) || 0));
-                        };
-                        return (score(b) * (uc.includes(b.category) ? 1.4 : 1)) - (score(a) * (uc
-                            .includes(a.category) ? 1.4 : 1));
-                    });
+                    if (_shuffleHomeOnce) {
+                        p = shuffleArray(p);
+                        _shuffleHomeOnce = false;
+                    } else {
+                        const uc = getUserCategories();
+                        const jitter = new Map(p.map(post => [post.id, ((hashStr(post.id + _feedShuffleSeed) % 1000) /
+                            1000) * 0.25]));
+                        p.sort((a, b) => {
+                            const score = p => {
+                                const ah = (Date.now() - new Date(p.timestamp || p.date)) / 36e5;
+                                const commentCount = Array.isArray(p.comments) ? p.comments.filter(c => c
+                                    .approved !== false).length : (p.comments || 0);
+                                const eg = (p.views || 0) + ((p.reactions.like || 0) * 2) + (commentCount *
+                                2);
+                                return (eg / Math.pow(ah + 2, 1.5)) * (1 + (jitter.get(p.id) || 0));
+                            };
+                            return (score(b) * (uc.includes(b.category) ? 1.4 : 1)) - (score(a) * (uc
+                                .includes(a.category) ? 1.4 : 1));
+                        });
+                    }
                 } else p.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
                 return p;
             }
@@ -5738,6 +5750,14 @@
                 currentPostId = null;
                 const returnPage = window._fullscreenReturnPage || 'home';
                 uiPage = returnPage;
+                // reset nav state when returning
+                bottomNavHidden = false;
+                const bottomNavEl = document.getElementById('bottomNav');
+                const chipsEl = document.getElementById('category-chips');
+                const headerEl = document.querySelector('.top-header');
+                if (bottomNavEl) bottomNavEl.classList.remove('hidden-nav');
+                if (chipsEl) chipsEl.classList.remove('chips-hidden');
+                if (headerEl) headerEl.classList.remove('header-hidden');
                 refreshTabStates();
                 renderUI();
                 setTimeout(() => {
@@ -5940,12 +5960,14 @@
                     uiPage = 'home'; } else if (mode === 'explore') { currentSortMethod = 'trending';
                     uiPage = 'explore'; } else if (mode === 'market') { uiPage = 'market'; }
 
-                // ===== RESET hidden state for bottom nav and chips =====
+                // ===== RESET hidden state for bottom nav, chips, and header =====
                 bottomNavHidden = false;
                 const bottomNavEl = document.getElementById('bottomNav');
                 const chipsEl = document.getElementById('category-chips');
+                const headerEl = document.querySelector('.top-header');
                 if (bottomNavEl) bottomNavEl.classList.remove('hidden-nav');
                 if (chipsEl) chipsEl.classList.remove('chips-hidden');
+                if (headerEl) headerEl.classList.remove('header-hidden');
 
                 renderUI();
             }
@@ -6219,6 +6241,7 @@
             // ─── REFRESH / SHUFFLE ────────────────────────────────────────────
             async function refreshHome() {
                 _feedShuffleSeed++;
+                _shuffleHomeOnce = true;
                 await reloadData();
                 currentCategoryFilter = '';
                 searchQuery = '';
@@ -6277,21 +6300,24 @@
             // ─── NAV SCROLL ───────────────────────────────────────────────────
             function handleNavScroll() {
                 const currentScrollY = window.scrollY;
-                const onHomeFeed = (uiPage === 'home');
+                const scrollHidePages = (uiPage === 'home' || uiPage === 'explore');
                 const bottomNavEl = document.getElementById('bottomNav');
                 const chipsEl = document.getElementById('category-chips');
+                const headerEl = document.querySelector('.top-header');
 
-                if (onHomeFeed && currentScrollY > lastScrollY && currentScrollY > 100) {
+                if (scrollHidePages && currentScrollY > lastScrollY && currentScrollY > 100) {
                     if (!bottomNavHidden) {
                         bottomNavHidden = true;
                         if (bottomNavEl) bottomNavEl.classList.add('hidden-nav');
                         if (chipsEl) chipsEl.classList.add('chips-hidden');
+                        if (headerEl) headerEl.classList.add('header-hidden');
                     }
-                } else if (!onHomeFeed || currentScrollY < lastScrollY) {
+                } else if (!scrollHidePages || currentScrollY < lastScrollY) {
                     if (bottomNavHidden) {
                         bottomNavHidden = false;
                         if (bottomNavEl) bottomNavEl.classList.remove('hidden-nav');
                         if (chipsEl) chipsEl.classList.remove('chips-hidden');
+                        if (headerEl) headerEl.classList.remove('header-hidden');
                     }
                 }
                 lastScrollY = currentScrollY;
@@ -6363,8 +6389,16 @@
                 unlockBodyScroll();
             }
 
+            // ─── RENDER INITIAL SKELETON ────────────────────────────────────
+            function renderInitialSkeleton() {
+                const co = document.getElementById('user-content');
+                if (!co) return;
+                co.innerHTML = `<div class="max-w-2xl mx-auto"><div></div><div id="feed-container" class="px-0">${renderSkeletons(3)}</div></div>`;
+            }
+
             // ─── INIT ─────────────────────────────────────────────────────────
             async function init() {
+                renderInitialSkeleton();
                 if (window.AuthUser && window.AuthUser.getCurrentUser) {} else {
                     await new Promise(resolve => setTimeout(resolve, 300));
                 }
