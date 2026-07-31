@@ -2479,6 +2479,51 @@
             function formatPrice(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
             function truncateName(name, max) { max = max || 24; name = name || ''; return name.length > max ? name.slice(0, max) + '…' : name; }
 
+            // ─── NAVIGATION FUNCTIONS ──────────────────────────────────────
+            window.openPostFromGrid = function(postId) {
+                try {
+                    sessionStorage.setItem('fu_return_url', window.location.href);
+                    sessionStorage.setItem('fu_return_scroll', String(document.getElementById('mainScroll').scrollTop));
+                    sessionStorage.setItem('fu_return_tab', activeTab);
+                } catch (e) {}
+                window.location.href = 'index.html?post=' + postId + '&from=profile';
+            };
+
+            window.openMarketFromGrid = function(productId) {
+                try {
+                    sessionStorage.setItem('fu_return_url', window.location.href);
+                    sessionStorage.setItem('fu_return_scroll', String(document.getElementById('mainScroll').scrollTop));
+                    sessionStorage.setItem('fu_return_tab', activeTab);
+                } catch (e) {}
+                window.location.href = 'index.html?product=' + productId + '&from=profile';
+            };
+
+            function restoreProfileReturnState() {
+                try {
+                    var savedTab = sessionStorage.getItem('fu_return_tab');
+                    var savedScroll = sessionStorage.getItem('fu_return_scroll');
+                    var savedUrl = sessionStorage.getItem('fu_return_url');
+                    if (savedUrl && savedUrl.indexOf(window.location.pathname) !== -1) {
+                        if (savedTab) {
+                            var tabBtn = document.querySelector('.tab[data-tab="' + savedTab + '"]');
+                            if (tabBtn) switchTab(tabBtn, savedTab);
+                        }
+                        if (savedScroll) {
+                            requestAnimationFrame(function() {
+                                document.getElementById('mainScroll').scrollTop = parseInt(savedScroll, 10) || 0;
+                            });
+                        }
+                    }
+                } catch (e) {}
+                sessionStorage.removeItem('fu_return_url');
+                sessionStorage.removeItem('fu_return_scroll');
+                sessionStorage.removeItem('fu_return_tab');
+            }
+
+            window.addEventListener('pageshow', function(e) {
+                restoreProfileReturnState();
+            });
+
             // ─── LINKIFY BIO ─────────────────────────────────
             function linkifyBio(text) {
                 if (!text) return '';
@@ -2828,7 +2873,7 @@
                         '<div class="lock-pill"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Only you</div>' :
                         '');
 
-                var tapAction = "window.location.href='index.html?post=" + post.id + "'";
+                var tapAction = "openPostFromGrid('" + post.id + "')";
 
                 return '<div class="grid-card" onclick="' + tapAction + '">' +
                     mediaHtml +
@@ -2853,7 +2898,7 @@
                     mediaHtml = '<div class="no-media">' + escapeHtml(post.title) + '</div>';
                 }
 
-                var tapAction = "window.location.href='index.html?post=" + post.id + "'";
+                var tapAction = "openPostFromGrid('" + post.id + "')";
 
                 return '<div class="grid-card" onclick="' + tapAction + '">' +
                     mediaHtml +
@@ -2876,8 +2921,7 @@
                 } else if (ctx.canUnsave) {
                     actionBtn = '<button class="delete-btn" onclick="event.stopPropagation();unsaveMarketItem(\'' + item.id + '\')" title="Remove from saved"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
                 }
-                // ===== FIX: navigate to index.html?product=id =====
-                return '<div class="market-card-v2" onclick="window.location.href=\'index.html?product=' + item.id + '\'">' +
+                return '<div class="market-card-v2" onclick="openMarketFromGrid(\'' + item.id + '\')">' +
                     '<div class="mc2-media">' +
                     (imgUrl ? '<img src="' + imgUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.no-media\').style.display=\'flex\'">' : '') +
                     '<div class="no-media"' + (imgUrl ? ' style="display:none"' : '') + '>No image</div>' +
@@ -4483,6 +4527,8 @@
                     await new Promise(function(resolve) { setTimeout(resolve, 300); });
                 }
                 await renderProfile();
+                // Restore return state after profile loads
+                restoreProfileReturnState();
                 if (typeof window.setupProfileSync === 'function') {
                     window.setupProfileSync(function() { renderProfile(); });
                 }
@@ -4554,6 +4600,10 @@
             window.onUsernameInput = onUsernameInput;
             window.applyUsernameSuggestion = applyUsernameSuggestion;
             window.canonicalizeUsername = canonicalizeUsername;
+            // ===== navigation functions exposed =====
+            window.openPostFromGrid = openPostFromGrid;
+            window.openMarketFromGrid = openMarketFromGrid;
+            window.restoreProfileReturnState = restoreProfileReturnState;
         })();
     </script>
 </body>
