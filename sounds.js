@@ -14,6 +14,7 @@
 //
 // DEPENDENCIES: the following SQL must exist in your Supabase schema:
 //   increment_sound_usage(text)  – atomic usage counter RPC
+//   get_sound_stats(text)        – aggregate stats RPC
 // =====================================================================
 
 (function() {
@@ -90,26 +91,39 @@
     return mapSound(data);
   }
 
-  // ─── LOAD VIDEOS USING A SOUND ────────────────────────────────────
+  // ─── LOAD VIDEOS USING A SOUND (FIXED – two-step) ──────────────────
   async function loadSoundVideos(soundId, offset = 0, limit = 30) {
     if (!soundId) return [];
-    const { data, error } = await sb
+
+    // 1. Fetch posts that use this sound (without profile join)
+    const { data: posts, error } = await sb
       .from('posts')
-      .select(`
-        id, media_url, media_type, views, like_count, is_pinned, created_at,
-        profile:profiles!posts_user_id_fkey(${PROFILE_SELECT})
-      `)
+      .select(`id, media_url, media_type, views, like_count, is_pinned, created_at, user_id`)
       .eq('sound_id', soundId)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (error) {
-      console.error('loadSoundVideos error:', error);
+    if (error || !posts?.length) {
+      if (error) console.error('loadSoundVideos error:', error);
       return [];
     }
 
-    return (data || []).map(row => ({
+    // 2. Fetch profiles for all unique user_ids from the posts
+    const userIds = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
+    let profiles = {};
+    if (userIds.length) {
+      const { data: profData } = await sb
+        .from('profiles')
+        .select(`id, display_name, username, avatar_url`)
+        .in('id', userIds);
+      if (profData) {
+        profiles = Object.fromEntries(profData.map(p => [p.id, p]));
+      }
+    }
+
+    // 3. Map each post with its creator profile
+    return posts.map(row => ({
       id: row.id,
       mediaUrl: row.media_url || '',
       mediaType: row.media_type || 'video',
@@ -117,11 +131,11 @@
       likes: row.like_count || 0,
       pinned: !!row.is_pinned,
       timestamp: row.created_at,
-      creator: row.profile ? {
-        id: row.profile.id,
-        displayName: row.profile.display_name || 'Anonymous',
-        username: row.profile.username || '',
-        avatarUrl: row.profile.avatar_url || '',
+      creator: row.user_id && profiles[row.user_id] ? {
+        id: profiles[row.user_id].id,
+        displayName: profiles[row.user_id].display_name || 'Anonymous',
+        username: profiles[row.user_id].username || '',
+        avatarUrl: profiles[row.user_id].avatar_url || '',
       } : null,
     }));
   }
@@ -144,7 +158,7 @@
     return (data || []).map(mapSound);
   }
 
-  // ─── TRENDING SOUNDS (by usage_count) ─────────────────────────────
+  // ─── TRENDING SOUNDS ─────────────────────────────────────────────
   async function loadTrendingSounds(offset = 0, limit = 25) {
     const { data, error } = await sb
       .from('sounds')
@@ -160,9 +174,6 @@
   }
 
   // ─── RECOMMENDED SOUNDS ────────────────────────────────────────────
-  // Simple heuristic for now: recent + moderately used sounds, excluding
-  // the user's own uploads. Can be swapped for a real recommendation
-  // RPC later without changing the public API surface.
   async function loadRecommendedSounds(limit = 25) {
     const userId = await _getCurrentUserIdSafe();
     let q = sb
@@ -181,7 +192,7 @@
     return (data || []).map(mapSound);
   }
 
-  // ─── ORIGINAL SOUNDS (created by real users, not synthetic) ───────
+  // ─── ORIGINAL SOUNDS ───────────────────────────────────────────────
   async function loadOriginalSounds(offset = 0, limit = 25) {
     const { data, error } = await sb
       .from('sounds')
@@ -197,7 +208,7 @@
     return (data || []).map(mapSound);
   }
 
-  // ─── CREATE SOUND (from studio.html "Save Original Sound") ───────
+  // ─── CREATE SOUND ───────────────────────────────────────────────────
   async function createSound(fields) {
     const userId = await _getUserId();
     const payload = {
@@ -220,7 +231,7 @@
     return mapSound(data);
   }
 
-  // ─── UPDATE SOUND (owner-only) ─────────────────────────────────────
+  // ─── UPDATE SOUND ─────────────────────────────────────────────────
   async function updateSound(soundId, fields) {
     const userId = await _getUserId();
     const payload = {};
@@ -234,7 +245,7 @@
       .from('sounds')
       .update(payload)
       .eq('id', soundId)
-      .eq('created_by', userId) // security: only owner can update
+      .eq('created_by', userId)
       .select(`*, profile:profiles!sounds_created_by_fkey(${PROFILE_SELECT})`)
       .single();
 
@@ -242,14 +253,13 @@
     return mapSound(data);
   }
 
-  // ─── SAVE / UNSAVE SOUND ───────────────────────────────────────────
+  // ─── SAVE / UNSAVE ──────────────────────────────────────────────────
   async function saveSound(soundId) {
     const userId = await _getUserId();
     const { error } = await sb
       .from('saved_sounds')
       .insert({ user_id: userId, sound_id: soundId });
 
-    // Unique constraint violation just means it's already saved — treat as success.
     if (error && error.code !== '23505') throw error;
     return { saved: true };
   }
@@ -283,7 +293,7 @@
     return !!data;
   }
 
-  // ─── LOAD USER'S SAVED SOUNDS ──────────────────────────────────────
+  // ─── LOAD SAVED SOUNDS ─────────────────────────────────────────────
   async function loadSavedSounds(offset = 0, limit = 50) {
     const userId = await _getUserId();
     const { data, error } = await sb
@@ -307,7 +317,7 @@
       .map(row => ({ ...mapSound(row.sound), savedAt: row.created_at }));
   }
 
-  // ─── INCREMENT SOUND USAGE (atomic, called when a post is published) ─
+  // ─── INCREMENT USAGE ──────────────────────────────────────────────
   async function incrementSoundUsage(soundId) {
     if (!soundId) return { usageCount: 0 };
     try {
@@ -321,7 +331,7 @@
     }
   }
 
-  // ─── AGGREGATE STATS (video count, likes, shares — via RPC) ───────
+  // ─── AGGREGATE STATS ───────────────────────────────────────────────
   async function loadSoundStats(soundId) {
     try {
       const { data, error } = await sb.rpc('get_sound_stats', { p_sound_id: soundId });
