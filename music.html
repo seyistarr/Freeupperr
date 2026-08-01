@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Sounds · Freeupper</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="freeupper.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#7C3AED" />
+    <meta name="description" content="Discover trending sounds and music on Freeupper." />
+    <link rel="stylesheet" href="global.css" />
+    <link rel="stylesheet" href="bottom-nav.css" />
+    <link rel="stylesheet" href="side-nav.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="global.js"></script>
+    <script src="auth.js"></script>
+    <script src="posts.js"></script>
+    <script src="sounds.js"></script>
+
+    <style>
+        :root {
+            --bg:#000; --surface:rgba(255,255,255,.08); --brd:rgba(255,255,255,.1);
+            --text:#fff; --muted:rgba(255,255,255,.6); --muted2:rgba(255,255,255,.35);
+            --p:#8b5cf6; --pd:#6c3fc5; --pdim:rgba(139,92,246,.15); --pbrd:rgba(139,92,246,.28);
+            --red:#ff2d2d; --sheet-bg:#111; --sheet-bd:#2a2a2a; --inp-bg:#1a1a1a;
+            --navbg:rgba(0,0,0,.97); --sidebg:#0a0a0a; --bg4:#2a2a2a; --rowh:rgba(255,255,255,.06);
+            --nav-h:78px;
+        }
+        [data-theme="light"] {
+            --bg:#f5f5f7; --surface:rgba(0,0,0,.06); --brd:rgba(0,0,0,.1);
+            --text:#0d0d0d; --muted:rgba(0,0,0,.55); --muted2:rgba(0,0,0,.35);
+            --sheet-bg:#fff; --sheet-bd:#e5e7eb; --inp-bg:#f5f5f5;
+            --navbg:rgba(242,242,247,.97); --sidebg:#fff; --bg4:#e5e7eb; --rowh:rgba(0,0,0,.05);
+        }
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+        html,body{width:100%;min-height:100%;background:var(--bg);color:var(--text);
+            font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+            overscroll-behavior:none;transition:background .3s,color .3s}
+        button{font-family:inherit;border:none;cursor:pointer;background:none;color:inherit}
+        input{font-family:inherit;outline:none;border:none;background:none;color:inherit}
+
+        .main{width:100%;min-height:100vh;padding-bottom:calc(var(--nav-h) + 80px)}
+
+        .m-topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;
+            padding:max(env(safe-area-inset-top),14px) 16px 12px;background:var(--bg)}
+        .m-back{width:38px;height:38px;border-radius:50%;background:var(--surface);
+            display:flex;align-items:center;justify-content:center;flex-shrink:0}
+        .m-back svg{width:18px;height:18px;stroke:var(--text);fill:none;stroke-width:2.2;stroke-linecap:round}
+        .m-title{font-size:18px;font-weight:800;letter-spacing:-.2px}
+
+        .m-search-wrap{padding:0 16px 14px}
+        .m-search{position:relative}
+        .m-search input{width:100%;padding:11px 16px 11px 42px;border-radius:100px;
+            background:var(--surface);border:1px solid var(--brd);font-size:14px;color:var(--text)}
+        .m-search input::placeholder{color:var(--muted2)}
+        .m-search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted2);pointer-events:none}
+        .m-search-icon svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
+        .m-search-clear{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+            width:20px;height:20px;border-radius:50%;background:var(--bg4);display:none;
+            align-items:center;justify-content:center}
+        .m-search-clear.show{display:flex}
+        .m-search-clear svg{width:10px;height:10px;stroke:var(--muted);fill:none;stroke-width:2.5}
+
+        .m-tabs{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;scrollbar-width:none}
+        .m-tabs::-webkit-scrollbar{display:none}
+        .m-tab{flex-shrink:0;padding:8px 18px;border-radius:100px;background:var(--surface);
+            border:1px solid var(--brd);font-size:13px;font-weight:700;color:var(--muted)}
+        .m-tab.on{background:var(--p);border-color:var(--p);color:#fff}
+
+        .m-list{padding:0 12px}
+        .m-section-title{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+            color:var(--muted2);margin:14px 12px 8px}
+
+        .snd-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;
+            cursor:pointer;transition:background .15s}
+        .snd-item:active{background:var(--rowh)}
+        .snd-item.playing{background:var(--pdim)}
+        .snd-art-btn{position:relative;width:46px;height:46px;border-radius:12px;flex-shrink:0;
+            background:var(--bg4);overflow:hidden;display:flex;align-items:center;justify-content:center}
+        .snd-art-btn img{width:100%;height:100%;object-fit:cover}
+        .snd-play-overlay{position:absolute;inset:0;background:rgba(0,0,0,.35);display:flex;
+            align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
+        .snd-item.playing .snd-play-overlay{opacity:1}
+        .snd-play-overlay svg{width:18px;height:18px;fill:#fff}
+        .snd-info{flex:1;min-width:0}
+        .snd-title{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .snd-sub{font-size:12px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:5px}
+        .snd-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+        .snd-save-btn{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;
+            justify-content:center;color:var(--muted)}
+        .snd-save-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2}
+        .snd-save-btn.saved{color:var(--p)}
+        .snd-save-btn.saved svg{fill:var(--p)}
+        .snd-use-btn{padding:8px 16px;border-radius:100px;background:var(--pdim);
+            border:1px solid var(--pbrd);color:var(--p);font-size:12.5px;font-weight:700;white-space:nowrap}
+
+        .m-empty{display:flex;flex-direction:column;align-items:center;text-align:center;
+            padding:60px 30px;color:var(--muted)}
+        .m-empty svg{width:40px;height:40px;stroke:var(--muted2);fill:none;stroke-width:1.5;margin-bottom:12px}
+        .m-empty p{font-size:14px;line-height:1.6}
+
+        .m-skel{display:flex;align-items:center;gap:12px;padding:10px 12px}
+        .m-skel-art{width:46px;height:46px;border-radius:12px;background:linear-gradient(100deg,var(--bg4) 30%,var(--surface) 50%,var(--bg4) 70%);
+            background-size:200% 100%;animation:mShimmer 1.5s infinite}
+        .m-skel-lines{flex:1}
+        .m-skel-line{height:11px;border-radius:5px;background:var(--bg4);margin-bottom:6px}
+        .m-skel-line.w1{width:60%}
+        .m-skel-line.w2{width:35%}
+        @keyframes mShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+        .mini-player{position:fixed;left:0;right:0;bottom:var(--nav-h);z-index:60;
+            display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--sheet-bg);
+            border-top:1px solid var(--sheet-bd);transform:translateY(120%);
+            transition:transform .3s cubic-bezier(.4,0,.2,1)}
+        .mini-player.show{transform:translateY(0)}
+        .mp-art{width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--bg4);flex-shrink:0}
+        .mp-meta{flex:1;min-width:0}
+        .mp-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .mp-btn{width:32px;height:32px;border-radius:50%;background:var(--surface);
+            display:flex;align-items:center;justify-content:center;flex-shrink:0}
+        .mp-btn svg{width:14px;height:14px}
+
+        #toast{position:fixed;bottom:calc(var(--nav-h) + 20px);left:50%;transform:translateX(-50%) translateY(20px);
+            background:rgba(30,30,30,.95);color:#fff;font-size:13px;font-weight:700;padding:10px 20px;
+            border-radius:100px;border:1px solid rgba(255,255,255,.12);z-index:400;opacity:0;
+            transition:opacity .25s,transform .25s;white-space:nowrap;pointer-events:none;backdrop-filter:blur(12px)}
+        #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+        @media (min-width:768px){ .mini-player{bottom:0} }
+    </style>
+</head>
+<body>
+
+    <side-nav show-chat></side-nav>
+
+    <div class="main" id="mainScroll">
+        <div class="m-topbar">
+            <button class="m-back" onclick="goBack()">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span class="m-title">Sounds</span>
+        </div>
+
+        <div class="m-search-wrap">
+            <div class="m-search">
+                <span class="m-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                <input id="searchInput" placeholder="Search sounds…" oninput="onSearchInput(this.value)" />
+                <button class="m-search-clear" id="searchClear" onclick="clearSearch()">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="m-tabs" id="tabRow">
+            <button class="m-tab on" data-tab="trending" onclick="switchTab('trending',this)">Trending</button>
+            <button class="m-tab" data-tab="recommended" onclick="switchTab('recommended',this)">For You</button>
+            <button class="m-tab" data-tab="originals" onclick="switchTab('originals',this)">Originals</button>
+            <button class="m-tab" data-tab="saved" onclick="switchTab('saved',this)">Saved</button>
+        </div>
+
+        <div class="m-list" id="soundList"></div>
+    </div>
+
+    <div class="mini-player" id="miniPlayer">
+        <img class="mp-art" id="mpArt" src="" alt="">
+        <div class="mp-meta"><div class="mp-title" id="mpTitle"></div></div>
+        <button class="mp-btn" onclick="togglePreviewPlayback()">
+            <svg id="mpToggleIcon" viewBox="0 0 24 24" fill="var(--text)"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <button class="mp-btn" onclick="stopPreview()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
+
+    <bottom-nav></bottom-nav>
+    <div id="toast"></div>
+    <audio id="previewAudio" preload="none"></audio>
+
+    <script src="bottom-nav.js" defer></script>
+    <script src="side-nav.js" defer></script>
+    <script src="music.js"></script>
+</body>
+</html>
