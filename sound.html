@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Sound · Freeupper</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="freeupper.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="freeupper.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="freeupper.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="freeupper.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="Freeupper" />
+    <meta name="theme-color" content="#7C3AED" />
+    <meta name="description" content="Explore sounds and tracks on Freeupper." />
+    <link rel="stylesheet" href="global.css" />
+    <link rel="stylesheet" href="bottom-nav.css" />
+    <link rel="stylesheet" href="side-nav.css" />
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+    </script>
+    <script src="global.js"></script>
+    <script src="auth.js"></script>
+    <script src="posts.js"></script>
+    <script src="listings.js"></script>
+    <script src="router.js"></script>
+    <script src="mentions.js"></script>
+    <script src="hashtags.js"></script>
+
+    <style>
+        /* ── reuse video.css variables + sound-specific ── */
+        :root {
+            --bg: #000;
+            --surface: rgba(255, 255, 255, .08);
+            --brd: rgba(255, 255, 255, .1);
+            --text: #fff;
+            --muted: rgba(255, 255, 255, .6);
+            --muted2: rgba(255, 255, 255, .35);
+            --accent: #1d9bf0;
+            --red: #ff2d2d;
+            --gold: #ffd700;
+            --sheet-bg: #111;
+            --sheet-bd: #2a2a2a;
+            --inp-bg: #1a1a1a;
+            --p: #8b5cf6;
+            --pd: #6c3fc5;
+            --pdim: rgba(139, 92, 246, .15);
+            --pbrd: rgba(139, 92, 246, .28);
+            --pglow: rgba(108, 63, 197, .45);
+            --navbg: rgba(0, 0, 0, .97);
+            --sidebg: #0a0a0a;
+            --bg4: #2a2a2a;
+            --rowh: rgba(255, 255, 255, .06);
+            --nav-h: 78px;
+        }
+
+        [data-theme="light"] {
+            --bg: #000;
+            --surface: rgba(0, 0, 0, .06);
+            --brd: rgba(0, 0, 0, .1);
+            --text: #0d0d0d;
+            --muted: rgba(0, 0, 0, .55);
+            --muted2: rgba(0, 0, 0, .35);
+            --sheet-bg: #fff;
+            --sheet-bd: #e5e7eb;
+            --inp-bg: #f5f5f5;
+            --navbg: rgba(242, 242, 247, .97);
+            --sidebg: #fff;
+            --bg4: #e5e7eb;
+            --rowh: rgba(0, 0, 0, .05);
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+            overscroll-behavior: none;
+            transition: background .3s, color .3s;
+        }
+
+        .main {
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            background: var(--bg);
+            transition: background .3s;
+            position: relative;
+        }
+
+        /* ─── SOUND TOP BAR ─── */
+        .sound-topbar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: max(env(safe-area-inset-top), 14px) 16px 10px;
+            pointer-events: none;
+            background: linear-gradient(to bottom, rgba(0, 0, 0, .7) 0%, transparent 100%);
+        }
+        .sound-topbar>* {
+            pointer-events: auto;
+        }
+        .sound-back-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255, 255, 255, .25);
+            background: rgba(0, 0, 0, .45);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform .12s, background .18s;
+            flex-shrink: 0;
+        }
+        .sound-back-btn:active {
+            transform: scale(.92);
+        }
+        .sound-back-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.4;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .sound-top-title {
+            font-size: 17px;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 1px 12px rgba(0, 0, 0, .8);
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sound-top-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .sound-top-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255, 255, 255, .2);
+            background: rgba(0, 0, 0, .4);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform .12s, background .18s;
+        }
+        .sound-top-btn:active {
+            transform: scale(.92);
+        }
+        .sound-top-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* ─── SOUND HERO ─── */
+        .sound-hero {
+            position: relative;
+            width: 100%;
+            padding-top: 110px;
+            padding-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: linear-gradient(160deg, var(--pd), #1a1035);
+            z-index: 2;
+            min-height: 320px;
+        }
+        .sound-hero-cover {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 4px solid rgba(255, 255, 255, .2);
+            box-shadow: 0 8px 40px rgba(0, 0, 0, .6);
+            flex-shrink: 0;
+            position: relative;
+            animation: soundCoverPulse 4s ease-in-out infinite;
+        }
+        @keyframes soundCoverPulse {
+            0%,
+            100% {
+                box-shadow: 0 8px 40px rgba(0, 0, 0, .6), 0 0 0 0 rgba(139, 92, 246, .3);
+            }
+            50% {
+                box-shadow: 0 8px 40px rgba(0, 0, 0, .6), 0 0 40px 12px rgba(139, 92, 246, .2);
+            }
+        }
+        .sound-hero-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .sound-hero-cover .play-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .4);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity .25s ease;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .sound-hero-cover .play-overlay:hover {
+            opacity: 1;
+        }
+        .sound-hero-cover .play-overlay.show {
+            opacity: 1;
+        }
+        .sound-hero-cover .play-overlay svg {
+            width: 44px;
+            height: 44px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            filter: drop-shadow(0 2px 8px rgba(0, 0, 0, .5));
+        }
+        .sound-hero-cover .play-overlay .pause-icon {
+            display: none;
+        }
+        .sound-hero-cover .play-overlay.playing .play-icon {
+            display: none;
+        }
+        .sound-hero-cover .play-overlay.playing .pause-icon {
+            display: block;
+        }
+
+        .sound-hero-name {
+            font-size: clamp(22px, 5vw, 30px);
+            font-weight: 800;
+            color: #fff;
+            margin-top: 16px;
+            text-align: center;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+        }
+        .sound-hero-artist {
+            font-size: 16px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, .75);
+            margin-top: 2px;
+            text-align: center;
+            cursor: pointer;
+            transition: color .2s;
+        }
+        .sound-hero-artist:hover {
+            color: #fff;
+        }
+        .sound-hero-stats {
+            display: flex;
+            gap: 28px;
+            margin-top: 14px;
+        }
+        .sound-hero-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        .sound-hero-stat .num {
+            font-size: 18px;
+            font-weight: 800;
+            color: #fff;
+        }
+        .sound-hero-stat .lbl {
+            font-size: 12px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, .5);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+        .sound-hero-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 18px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .sound-hero-actions .sh-btn {
+            padding: 10px 24px;
+            border-radius: 100px;
+            border: none;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform .12s, background .18s, box-shadow .18s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .sound-hero-actions .sh-btn:active {
+            transform: scale(.95);
+        }
+        .sound-hero-actions .sh-btn.primary {
+            background: var(--p);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(139, 92, 246, .35);
+        }
+        .sound-hero-actions .sh-btn.primary:hover {
+            background: var(--pd);
+            box-shadow: 0 4px 28px rgba(139, 92, 246, .5);
+        }
+        .sound-hero-actions .sh-btn.secondary {
+            background: rgba(255, 255, 255, .12);
+            color: #fff;
+            border: 1.5px solid rgba(255, 255, 255, .15);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        .sound-hero-actions .sh-btn.secondary:hover {
+            background: rgba(255, 255, 255, .2);
+        }
+        .sound-hero-actions .sh-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* ─── SOUND FEED (Grid) ─── */
+        .sound-feed-section {
+            position: relative;
+            z-index: 3;
+            background: var(--bg);
+            padding: 16px 12px 80px;
+            min-height: 50vh;
+        }
+        .sound-feed-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 4px 12px;
+        }
+        .sound-feed-header h3 {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .sound-feed-header .count {
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+        }
+        .video-grid-item {
+            position: relative;
+            aspect-ratio: 9 / 16;
+            background: #111;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform .15s ease;
+        }
+        .video-grid-item:active {
+            transform: scale(.96);
+        }
+        .video-grid-item img,
+        .video-grid-item video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .video-grid-item .play-icon-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, .2);
+            opacity: 0;
+            transition: opacity .2s;
+        }
+        .video-grid-item:hover .play-icon-overlay {
+            opacity: 1;
+        }
+        .video-grid-item .play-icon-overlay svg {
+            width: 32px;
+            height: 32px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            filter: drop-shadow(0 2px 8px rgba(0, 0, 0, .5));
+        }
+        .video-grid-item .views-badge {
+            position: absolute;
+            bottom: 6px;
+            left: 6px;
+            background: rgba(0, 0, 0, .65);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .video-grid-item .views-badge svg {
+            width: 12px;
+            height: 12px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        /* ─── SOUND PICKER MODAL ─── */
+        .picker-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 300;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity .3s, visibility .3s;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+        }
+        .picker-backdrop.open {
+            opacity: 1;
+            visibility: visible;
+        }
+        .picker-sheet {
+            width: 100%;
+            max-width: 500px;
+            max-height: 92dvh;
+            background: var(--sheet-bg);
+            border-radius: 24px 24px 0 0;
+            transform: translateY(100%);
+            transition: transform .35s cubic-bezier(.4, 0, .2, 1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .picker-backdrop.open .picker-sheet {
+            transform: translateY(0);
+        }
+        .picker-handle {
+            width: 40px;
+            height: 4px;
+            background: rgba(255, 255, 255, .2);
+            border-radius: 2px;
+            margin: 10px auto 0;
+            flex-shrink: 0;
+        }
+        .picker-header {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px 8px;
+            border-bottom: 1px solid var(--sheet-bd);
+            flex-shrink: 0;
+            gap: 8px;
+        }
+        .picker-header .back-btn {
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 22px;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+        }
+        .picker-header .title {
+            font-size: 18px;
+            font-weight: 800;
+            flex: 1;
+        }
+        .picker-header .close-btn {
+            background: none;
+            border: none;
+            color: var(--muted);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+        .picker-search {
+            padding: 8px 16px;
+            flex-shrink: 0;
+        }
+        .picker-search input {
+            width: 100%;
+            padding: 10px 16px;
+            border-radius: 30px;
+            border: 1.5px solid var(--sheet-bd);
+            background: var(--inp-bg);
+            color: var(--text);
+            font-size: 15px;
+            outline: none;
+            font-family: inherit;
+        }
+        .picker-search input::placeholder {
+            color: var(--muted2);
+        }
+        .picker-tabs {
+            display: flex;
+            gap: 12px;
+            padding: 6px 16px 0;
+            overflow-x: auto;
+            scrollbar-width: none;
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--sheet-bd);
+        }
+        .picker-tabs::-webkit-scrollbar {
+            display: none;
+        }
+        .picker-tab {
+            padding: 8px 0 10px;
+            background: none;
+            border: none;
+            color: var(--muted);
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color .2s, border-color .2s;
+        }
+        .picker-tab.active {
+            color: var(--text);
+            border-bottom-color: var(--p);
+        }
+        .picker-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0 16px;
+            scrollbar-width: none;
+        }
+        .picker-list::-webkit-scrollbar {
+            display: none;
+        }
+
+        .sound-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: background .15s;
+            border-bottom: 1px solid rgba(255, 255, 255, .03);
+        }
+        .sound-item:hover {
+            background: var(--rowh);
+        }
+        .sound-item .cover {
+            width: 52px;
+            height: 52px;
+            border-radius: 8px;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: var(--bg4);
+        }
+        .sound-item .info {
+            flex: 1;
+            min-width: 0;
+        }
+        .sound-item .title {
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sound-item .artist {
+            font-size: 13px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sound-item .duration {
+            font-size: 12px;
+            color: var(--muted2);
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+        .sound-item .use-btn {
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: var(--p);
+            color: #fff;
+            border: none;
+            font-weight: 700;
+            font-size: 12px;
+            cursor: pointer;
+            transition: transform .12s, background .18s;
+            flex-shrink: 0;
+        }
+        .sound-item .use-btn:active {
+            transform: scale(.9);
+        }
+        .sound-item .use-btn.used {
+            background: var(--muted2);
+        }
+        .sound-item .use-btn.used:hover {
+            background: var(--muted);
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+            color: var(--muted);
+            text-align: center;
+        }
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            stroke: var(--muted2);
+            margin-bottom: 12px;
+        }
+        .empty-state h4 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+        .empty-state p {
+            font-size: 14px;
+            max-width: 240px;
+        }
+
+        /* ─── TOAST ─── */
+        #toast {
+            position: fixed;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(30, 30, 30, .95);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 20px;
+            border-radius: 100px;
+            border: 1px solid rgba(255, 255, 255, .12);
+            z-index: 400;
+            opacity: 0;
+            transition: opacity .25s, transform .25s;
+            white-space: nowrap;
+            pointer-events: none;
+            backdrop-filter: blur(12px);
+        }
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ─── SKELETON ─── */
+        .grid-skeleton {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            padding: 12px;
+        }
+        .grid-skeleton .item {
+            aspect-ratio: 9/16;
+            background: #1a1a1a;
+            border-radius: 8px;
+            animation: shimmer 1.4s ease-in-out infinite;
+            background: linear-gradient(100deg, #1a1a1a 30%, #2a2a2a 50%, #1a1a1a 70%);
+            background-size: 200% 100%;
+        }
+        @keyframes shimmer {
+            0% {
+                background-position: 200% 0;
+            }
+            100% {
+                background-position: -200% 0;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .video-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 3px;
+            }
+        }
+        @media (min-width: 768px) {
+            .video-grid {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 6px;
+            }
+            .sound-feed-section {
+                padding-left: 24px;
+                padding-right: 24px;
+            }
+        }
+        @media (min-width: 1024px) {
+            .video-grid {
+                grid-template-columns: repeat(5, 1fr);
+            }
+        }
+
+        /* ─── LIGHT THEME OVERRIDES ─── */
+        [data-theme="light"] .sound-hero {
+            background: linear-gradient(160deg, var(--pd), #1a1035);
+        }
+        [data-theme="light"] .sound-topbar {
+            background: linear-gradient(to bottom, rgba(0, 0, 0, .7) 0%, transparent 100%);
+        }
+        [data-theme="light"] .sound-top-title {
+            color: #fff;
+        }
+        [data-theme="light"] .sound-hero-name {
+            color: #fff;
+        }
+        [data-theme="light"] .sound-hero-artist {
+            color: rgba(255, 255, 255, .75);
+        }
+        [data-theme="light"] .sound-hero-stat .num {
+            color: #fff;
+        }
+        [data-theme="light"] .sound-hero-stat .lbl {
+            color: rgba(255, 255, 255, .5);
+        }
+        [data-theme="light"] .sound-hero-actions .sh-btn.secondary {
+            background: rgba(255, 255, 255, .12);
+            color: #fff;
+            border-color: rgba(255, 255, 255, .15);
+        }
+        [data-theme="light"] .sound-hero-actions .sh-btn.secondary:hover {
+            background: rgba(255, 255, 255, .2);
+        }
+        [data-theme="light"] .sound-feed-section {
+            background: var(--bg);
+        }
+        [data-theme="light"] .sound-feed-header h3 {
+            color: var(--text);
+        }
+        [data-theme="light"] .sound-feed-header .count {
+            color: var(--muted);
+        }
+        [data-theme="light"] .video-grid-item {
+            background: #111;
+        }
+        [data-theme="light"] .picker-sheet {
+            background: var(--sheet-bg);
+        }
+        [data-theme="light"] .picker-header .title {
+            color: var(--text);
+        }
+        [data-theme="light"] .sound-item .title {
+            color: var(--text);
+        }
+        [data-theme="light"] .sound-item .artist {
+            color: var(--muted);
+        }
+        [data-theme="light"] .sound-item .duration {
+            color: var(--muted2);
+        }
+        [data-theme="light"] .picker-tab {
+            color: var(--muted);
+        }
+        [data-theme="light"] .picker-tab.active {
+            color: var(--text);
+        }
+        [data-theme="light"] .empty-state h4 {
+            color: var(--text);
+        }
+        [data-theme="light"] .empty-state p {
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ════ SIDE NAV ════ -->
+    <side-nav show-chat></side-nav>
+
+    <!-- ════ MAIN ════ -->
+    <div class="main" id="mainScroll">
+
+        <!-- TOP BAR -->
+        <div class="sound-topbar">
+            <button class="sound-back-btn" onclick="goBack()">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span class="sound-top-title" id="soundTopTitle">Sound</span>
+            <div class="sound-top-actions">
+                <button class="sound-top-btn" onclick="shareSound()">
+                    <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- SOUND HERO -->
+        <div class="sound-hero" id="soundHero">
+            <div class="sound-hero-cover" id="soundCover">
+                <img id="soundCoverImg" src="" alt="Sound cover" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=sound'">
+                <div class="play-overlay" id="soundPlayOverlay" onclick="toggleSoundPlayback(event)">
+                    <svg class="play-icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <svg class="pause-icon" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                </div>
+            </div>
+            <div class="sound-hero-name" id="soundName">Track Name</div>
+            <div class="sound-hero-artist" id="soundArtist" onclick="goToArtistProfile()">Artist Name</div>
+            <div class="sound-hero-stats">
+                <div class="sound-hero-stat">
+                    <span class="num" id="soundVideosCount">0</span>
+                    <span class="lbl">Videos</span>
+                </div>
+                <div class="sound-hero-stat">
+                    <span class="num" id="soundLikesCount">0</span>
+                    <span class="lbl">Likes</span>
+                </div>
+                <div class="sound-hero-stat">
+                    <span class="num" id="soundUsedCount">0</span>
+                    <span class="lbl">Used</span>
+                </div>
+            </div>
+            <div class="sound-hero-actions">
+                <button class="sh-btn primary" id="soundUseBtn" onclick="useSound()">
+                    <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    Use this sound
+                </button>
+                <button class="sh-btn secondary" id="soundFollowBtn" onclick="toggleSoundFollow()">
+                    <svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Follow
+                </button>
+            </div>
+        </div>
+
+        <!-- SOUND FEED (GRID) -->
+        <div class="sound-feed-section" id="soundFeedSection">
+            <div class="sound-feed-header">
+                <h3>Videos using this sound</h3>
+                <span class="count" id="feedCount">0</span>
+            </div>
+            <div class="video-grid" id="videoGrid">
+                <!-- Rendered by JS -->
+            </div>
+            <div id="loadMoreContainer" style="display:flex;justify-content:center;padding:20px 0;">
+                <button id="loadMoreBtn" class="sh-btn secondary" style="padding:8px 24px;font-size:14px;" onclick="loadMoreVideos()">Load more</button>
+            </div>
+        </div>
+
+        <!-- EMPTY STATE (hidden by default) -->
+        <div class="empty-state" id="emptyState" style="display:none;padding:60px 20px;">
+            <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            <h4>No Videos Yet</h4>
+            <p>This sound hasn't been used in any videos yet. Be the first!</p>
+        </div>
+    </div>
+
+    <!-- ════ BOTTOM NAV ════ -->
+    <bottom-nav></bottom-nav>
+
+    <!-- ════ SOUND PICKER MODAL ════ -->
+    <div class="picker-backdrop" id="pickerBackdrop">
+        <div class="picker-sheet" id="pickerSheet">
+            <div class="picker-handle"></div>
+            <div class="picker-header">
+                <button class="back-btn" onclick="closeSoundPicker()">←</button>
+                <span class="title">Add sound</span>
+                <button class="close-btn" onclick="closeSoundPicker()">✕</button>
+            </div>
+            <div class="picker-search">
+                <input type="text" id="pickerSearchInput" placeholder="Search sounds..." oninput="searchSounds(this.value)" />
+            </div>
+            <div class="picker-tabs" id="pickerTabs">
+                <button class="picker-tab active" data-tab="for-you" onclick="switchSoundTab('for-you')">For You</button>
+                <button class="picker-tab" data-tab="trending" onclick="switchSoundTab('trending')">Trending</button>
+                <button class="picker-tab" data-tab="original" onclick="switchSoundTab('original')">Original</button>
+                <button class="picker-tab" data-tab="saved" onclick="switchSoundTab('saved')">Saved</button>
+            </div>
+            <div class="picker-list" id="pickerList">
+                <!-- Rendered by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ════ SHARE SHEET ════ -->
+    <div class="sheet-backdrop" id="backdrop" onclick="closeAllSheets()"></div>
+    <div class="sheet" id="shareSheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-hdr">
+            <span class="sheet-title">Share Sound</span>
+            <button class="sheet-close" onclick="closeSheet('shareSheet')">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="share-preview" style="padding:14px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--sheet-bd);">
+            <img class="share-preview-thumb" id="shareSoundThumb" src="" alt="" style="width:48px;height:48px;border-radius:50%;object-fit:cover;background:var(--bg4);flex-shrink:0;">
+            <div>
+                <div class="share-preview-caption" id="shareSoundName" style="font-size:14px;font-weight:700;color:var(--text);">Sound</div>
+                <div class="share-preview-handle" id="shareSoundArtist" style="font-size:12px;color:var(--muted);">Artist</div>
+            </div>
+        </div>
+        <div class="share-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:16px 12px 8px;">
+            <button class="share-item" onclick="shareAction('native')" style="display:none" id="nativeShareBtn">
+                <div class="share-ico share-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/2985/2985150.png" alt="Share"/></div>
+                <span class="share-lbl">Share via…</span>
+            </button>
+            <button class="share-item" onclick="shareAction('copy')">
+                <div class="share-ico share-ico-3d" style="background:linear-gradient(145deg,#64d2ff,#1d9bf0)">
+                    <svg viewBox="0 0 24 24" style="stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;width:24px;height:24px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25))">
+                        <rect x="9" y="9" width="11" height="11" rx="2.5"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                </div>
+                <span class="share-lbl">Copy Link</span>
+            </button>
+            <button class="share-item" onclick="shareAction('whatsapp')">
+                <div class="share-ico share-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/3670/3670051.png" alt="WhatsApp"/></div>
+                <span class="share-lbl">WhatsApp</span>
+            </button>
+            <button class="share-item" onclick="shareAction('twitter')">
+                <div class="share-ico share-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/5968/5968958.png" alt="X"/></div>
+                <span class="share-lbl">X</span>
+            </button>
+        </div>
+        <div class="share-links" style="display:flex;flex-direction:column;gap:2px;padding:4px 12px 12px;">
+            <button class="share-link-row" onclick="shareAction('telegram')">
+                <div class="share-link-ico share-link-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/2111/2111646.png" alt="Telegram"/></div>
+                <span class="share-link-txt">Telegram</span>
+            </button>
+            <button class="share-link-row" onclick="shareAction('facebook')">
+                <div class="share-link-ico share-link-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/124/124010.png" alt="Facebook"/></div>
+                <span class="share-link-txt">Facebook</span>
+            </button>
+            <button class="share-link-row" onclick="shareAction('instagram')">
+                <div class="share-link-ico share-link-ico-3d"><img src="https://cdn-icons-png.flaticon.com/128/2111/2111463.png" alt="Instagram"/></div>
+                <span class="share-link-txt">Instagram</span>
+            </button>
+        </div>
+        <button class="share-cancel-btn" onclick="closeSheet('shareSheet')" style="width:calc(100% - 24px);margin:4px 12px calc(12px + env(safe-area-inset-bottom));padding:14px;border-radius:14px;background:var(--inp-bg);border:none;color:var(--text);font-weight:700;font-size:15px;cursor:pointer;">Cancel</button>
+    </div>
+
+    <!-- ════ TOAST ════ -->
+    <div id="toast"></div>
+
+    <!-- ===== SHARED NAV SCRIPTS ===== -->
+    <script src="bottom-nav.js" defer></script>
+    <script src="side-nav.js" defer></script>
+
+    <!-- ════════════════════════════════════════════════════════════
+    MAIN SCRIPT – Sound Page + Picker
+    ════════════════════════════════════════════════════════════ -->
+    <script>
+        'use strict';
+
+        // ─── GLOBALS ──────────────────────────────────────────────
+        const SITE_URL = window.location.origin;
+        let _toastTimer = null;
+        let currentSoundId = null;
+        let currentSound = null;
+        let soundVideos = [];
+        let soundFollowing = false;
+        let soundAudio = null;
+        let soundPlaying = false;
+
+        // Picker state
+        let pickerSounds = [];
+        let pickerPage = 0;
+        let pickerHasMore = true;
+        let pickerCurrentTab = 'for-you';
+        let pickerSearchQuery = '';
+
+        // ─── HELPERS ──────────────────────────────────────────────
+        function getCurrentUser() {
+            if (window.AuthUser && typeof window.AuthUser.getCurrentUser === 'function') {
+                return window.AuthUser.getCurrentUser();
+            }
+            if (typeof window.getCurrentUser === 'function') {
+                return window.getCurrentUser();
+            }
+            return { id: 'guest', isLoggedIn: false, displayName: 'Guest', avatar: '' };
+        }
+
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.add('show');
+            clearTimeout(_toastTimer);
+            _toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+        }
+
+        function fmtNum(n) {
+            if (n >= 1000000000) return (n / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+            if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+            return String(n);
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str || '';
+            return div.innerHTML;
+        }
+
+        function goBack() {
+            if (window.history.length > 1) window.history.back();
+            else window.location.href = '/';
+        }
+
+        function goToProfile(userId) {
+            if (!userId) return;
+            window.Router.openProfile(userId);
+        }
+
+        function goToArtistProfile() {
+            if (currentSound && currentSound.artist_id) {
+                goToProfile(currentSound.artist_id);
+            } else {
+                showToast('Artist profile coming soon');
+            }
+        }
+
+        function openSoundPage(soundId) {
+            if (!soundId) return;
+            window.Router.openSound(soundId);
+        }
+
+        // ─── FETCH SOUND DATA ──────────────────────────────────────
+
+        async function fetchSound(soundId) {
+            try {
+                // Try to fetch from sounds table
+                const { data, error } = await window.sb
+                    .from('sounds')
+                    .select('*')
+                    .eq('id', soundId)
+                    .single();
+
+                if (!error && data) {
+                    return data;
+                }
+                return null;
+            } catch (err) {
+                console.warn('fetchSound error:', err);
+                return null;
+            }
+        }
+
+        async function fetchSoundVideos(soundId, page = 0, limit = 15) {
+            try {
+                const from = page * limit;
+                const to = from + limit - 1;
+                const { data, error } = await window.sb
+                    .from('posts')
+                    .select('*, profiles(*)')
+                    .eq('sound_id', soundId)
+                    .order('created_at', { ascending: false })
+                    .range(from, to);
+
+                if (error) return { data: [], hasMore: false };
+
+                const posts = data.filter(p => {
+                    const isVideo = (p.media_type === 'video') ||
+                        (p.media_url && (p.media_url.includes('youtube.com/embed') || p.media_url.includes('youtu.be'))) ||
+                        (p.media_type !== 'image' && p.media_type !== 'text' &&
+                            p.media_url && /\.(mp4|webm|mov)(\?|$)/i.test(p.media_url));
+                    return isVideo;
+                });
+
+                const hasMore = posts.length === limit;
+                return { data: posts, hasMore };
+            } catch (err) {
+                console.warn('fetchSoundVideos error:', err);
+                return { data: [], hasMore: false };
+            }
+        }
+
+        async function fetchPickerSounds(tab = 'for-you', query = '', page = 0) {
+            const limit = 20;
+            const from = page * limit;
+            const to = from + limit - 1;
+
+            try {
+                let sbQuery = window.sb.from('sounds').select('*', { count: 'exact' });
+
+                if (query) {
+                    sbQuery = sbQuery.or(`title.ilike.%${query}%,artist_name.ilike.%${query}%`);
+                }
+
+                // Tab sorting
+                if (tab === 'trending') {
+                    sbQuery = sbQuery.order('usage_count', { ascending: false });
+                } else if (tab === 'original') {
+                    sbQuery = sbQuery.eq('is_original', true).order('created_at', { ascending: false });
+                } else if (tab === 'saved') {
+                    // We'll filter saved sounds client-side after fetching (or via join if we add a saved_sounds table)
+                    // For now, just show a placeholder message
+                    return { data: [], hasMore: false, isSavedTab: true };
+                } else {
+                    // For You: mix of recent and popular
+                    sbQuery = sbQuery.order('usage_count', { ascending: false }).order('created_at', { ascending: false });
+                }
+
+                const { data, error, count } = await sbQuery.range(from, to);
+
+                if (error) return { data: [], hasMore: false };
+
+                const hasMore = data.length === limit;
+                return { data, hasMore, count };
+            } catch (err) {
+                console.warn('fetchPickerSounds error:', err);
+                return { data: [], hasMore: false };
+            }
+        }
+
+        // ─── RENDER SOUND PAGE ─────────────────────────────────────
+
+        function renderSoundPage(sound) {
+            document.getElementById('soundTopTitle').textContent = sound.title || 'Sound';
+            document.getElementById('soundName').textContent = sound.title || 'Unknown Track';
+            document.getElementById('soundArtist').textContent = sound.artist_name || 'Unknown Artist';
+            document.getElementById('soundCoverImg').src = sound.cover_url ||
+                'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (sound.title || 'sound');
+            document.getElementById('soundVideosCount').textContent = fmtNum(sound.usage_count || 0);
+            document.getElementById('soundLikesCount').textContent = fmtNum(sound.likes || 0);
+            document.getElementById('soundUsedCount').textContent = fmtNum(sound.usage_count || 0);
+            document.getElementById('feedCount').textContent = fmtNum(sound.usage_count || 0);
+
+            // Show/hide audio play
+            const overlay = document.getElementById('soundPlayOverlay');
+            if (sound.audio_url) {
+                overlay.style.display = 'flex';
+            } else {
+                overlay.style.display = 'none';
+            }
+        }
+
+        function renderVideoGrid(videos) {
+            const grid = document.getElementById('videoGrid');
+            if (videos.length === 0) {
+                grid.innerHTML = '';
+                document.getElementById('emptyState').style.display = 'flex';
+                document.getElementById('loadMoreContainer').style.display = 'none';
+                return;
+            }
+            document.getElementById('emptyState').style.display = 'none';
+
+            let html = '';
+            videos.forEach(v => {
+                const profile = v.profiles || {};
+                const thumb = v.media_url || '';
+                const views = fmtNum(v.views || 0);
+                // Pass sound context so video page can show a feed of videos from this sound
+                const href = '/video.html?post=' + encodeURIComponent(v.id) + '&sound=' + encodeURIComponent(
+                currentSoundId);
+                html += `
+                    <div class="video-grid-item" onclick="window.location.href='${href}'">
+                        ${thumb ? `<img src="${thumb}" alt="Video thumbnail" loading="lazy" onerror="this.style.display='none'">` : '<div style="background:#2a2a2a;width:100%;height:100%;"></div>'}
+                        <div class="play-icon-overlay">
+                            <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </div>
+                        <div class="views-badge">
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            ${views}
+                        </div>
+                    </div>
+                `;
+            });
+            grid.innerHTML = html;
+
+            // Show load more if there are more
+            document.getElementById('loadMoreContainer').style.display = hasMoreVideos ? 'flex' : 'none';
+        }
+
+        // ─── SOUND PAGE INIT ──────────────────────────────────────
+
+        let videoPage = 0;
+        let hasMoreVideos = true;
+        let isLoadingVideos = false;
+
+        async function loadSoundPage(soundId) {
+            currentSoundId = soundId;
+            videoPage = 0;
+            hasMoreVideos = true;
+            soundVideos = [];
+
+            // Show skeleton
+            document.getElementById('videoGrid').innerHTML =
+                '<div class="grid-skeleton">' + '<div class="item"></div>'.repeat(6) + '</div>';
+
+            const sound = await fetchSound(soundId);
+            if (!sound) {
+                showToast('Sound not found');
+                document.getElementById('videoGrid').innerHTML = '';
+                document.getElementById('emptyState').style.display = 'flex';
+                document.getElementById('emptyState').querySelector('h4').textContent = 'Sound not found';
+                document.getElementById('emptyState').querySelector('p').textContent =
+                    'This sound may have been removed or never existed.';
+                return;
+            }
+            currentSound = sound;
+            renderSoundPage(sound);
+
+            // Load videos
+            await loadMoreVideos();
+
+            // Load follow status
+            await loadSoundFollowStatus();
+        }
+
+        async function loadMoreVideos() {
+            if (isLoadingVideos || !hasMoreVideos) return;
+            isLoadingVideos = true;
+            const btn = document.getElementById('loadMoreBtn');
+            if (btn) btn.textContent = 'Loading...';
+
+            const result = await fetchSoundVideos(currentSoundId, videoPage, 15);
+            if (result.data.length > 0) {
+                soundVideos = [...soundVideos, ...result.data];
+                renderVideoGrid(soundVideos);
+                videoPage++;
+                hasMoreVideos = result.hasMore;
+            } else {
+                hasMoreVideos = false;
+            }
+
+            if (btn) {
+                btn.textContent = hasMoreVideos ? 'Load more' : 'No more videos';
+                btn.style.opacity = hasMoreVideos ? '1' : '0.5';
+                btn.disabled = !hasMoreVideos;
+            }
+            isLoadingVideos = false;
+        }
+
+        // ─── SOUND FOLLOW ──────────────────────────────────────────
+
+        async function toggleSoundFollow() {
+            const user = getCurrentUser();
+            if (!user || !user.isLoggedIn) {
+                showToast('Please sign in to follow sounds');
+                return;
+            }
+            if (!currentSound) return;
+
+            try {
+                const { data, error } = await window.sb
+                    .from('sound_follows')
+                    .select('id')
+                    .eq('user_id', user.id)
+                    .eq('sound_id', currentSound.id)
+                    .maybeSingle();
+
+                if (error) throw error;
+
+                if (data) {
+                    const { error: delError } = await window.sb
+                        .from('sound_follows')
+                        .delete()
+                        .eq('id', data.id);
+                    if (delError) throw delError;
+                    soundFollowing = false;
+                    document.getElementById('soundFollowBtn').innerHTML =
+                        '<svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Follow';
+                    showToast('Unfollowed sound');
+                } else {
+                    const { error: insError } = await window.sb
+                        .from('sound_follows')
+                        .insert({ user_id: user.id, sound_id: currentSound.id });
+                    if (insError) throw insError;
+                    soundFollowing = true;
+                    document.getElementById('soundFollowBtn').innerHTML =
+                        '<svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Following';
+                    showToast('Following sound ✓');
+                }
+            } catch (err) {
+                console.warn('toggleSoundFollow error:', err);
+                showToast('Failed to update follow status');
+            }
+        }
+
+        async function loadSoundFollowStatus() {
+            const user = getCurrentUser();
+            if (!user || !user.isLoggedIn || !currentSound) return;
+            try {
+                const { data, error } = await window.sb
+                    .from('sound_follows')
+                    .select('id')
+                    .eq('user_id', user.id)
+                    .eq('sound_id', currentSound.id)
+                    .maybeSingle();
+                if (!error && data) {
+                    soundFollowing = true;
+                    document.getElementById('soundFollowBtn').innerHTML =
+                        '<svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Following';
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        // ─── SOUND PLAYBACK ────────────────────────────────────────
+
+        function toggleSoundPlayback(e) {
+            e.stopPropagation();
+            if (!currentSound || !currentSound.audio_url) {
+                showToast('No audio preview available');
+                return;
+            }
+
+            const overlay = document.getElementById('soundPlayOverlay');
+
+            if (!soundAudio) {
+                soundAudio = new Audio(currentSound.audio_url);
+                soundAudio.loop = true;
+                soundAudio.addEventListener('ended', () => {
+                    soundPlaying = false;
+                    overlay.classList.remove('playing');
+                });
+            }
+
+            if (soundPlaying) {
+                soundAudio.pause();
+                soundPlaying = false;
+                overlay.classList.remove('playing');
+            } else {
+                soundAudio.play().catch(() => {
+                    showToast('Unable to play audio');
+                });
+                soundPlaying = true;
+                overlay.classList.add('playing');
+            }
+        }
+
+        // ─── USE SOUND ─────────────────────────────────────────────
+
+        function useSound() {
+            const user = getCurrentUser();
+            if (!user || !user.isLoggedIn) {
+                showToast('Please sign in to use this sound');
+                return;
+            }
+            if (!currentSound) return;
+            // Navigate to create page with sound pre-selected
+            window.location.href = '/create.html?sound=' + encodeURIComponent(currentSound.id);
+        }
+
+        // ─── SHARE SOUND ────────────────────────────────────────────
+
+        function shareSound() {
+            if (!currentSound) return;
+            document.getElementById('shareSoundThumb').src = currentSound.cover_url ||
+                'https://api.dicebear.com/7.x/avataaars/svg?seed=sound';
+            document.getElementById('shareSoundName').textContent = currentSound.title || 'Unknown Track';
+            document.getElementById('shareSoundArtist').textContent = currentSound.artist_name || 'Unknown Artist';
+            const nativeBtn = document.getElementById('nativeShareBtn');
+            if (nativeBtn) nativeBtn.style.display = navigator.share ? 'flex' : 'none';
+            openSheet('shareSheet');
+        }
+
+        function getSoundUrl() {
+            return SITE_URL + '/sound.html?sound=' + encodeURIComponent(currentSound?.id || '');
+        }
+
+        async function shareAction(type) {
+            const url = getSoundUrl();
+            const title = currentSound?.title || 'Sound on Freeupper';
+            const text = title + ' by ' + (currentSound?.artist_name || '') + ' — ' + url;
+
+            if (navigator.vibrate) navigator.vibrate(8);
+
+            switch (type) {
+                case 'native':
+                    try { await navigator.share({ title, text: title, url }); } catch (e) {}
+                    closeSheet('shareSheet');
+                    return;
+                case 'copy':
+                    try {
+                        await navigator.clipboard.writeText(url);
+                        showToast('Link copied 🔗');
+                    } catch (e) {
+                        showToast('Could not copy link');
+                    }
+                    closeSheet('shareSheet');
+                    return;
+                case 'whatsapp':
+                    closeSheet('shareSheet');
+                    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+                    return;
+                case 'twitter':
+                    closeSheet('shareSheet');
+                    window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(title) + '&url=' +
+                        encodeURIComponent(url), '_blank');
+                    return;
+                case 'telegram':
+                    closeSheet('shareSheet');
+                    window.open('https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(
+                        title), '_blank');
+                    return;
+                case 'facebook':
+                    closeSheet('shareSheet');
+                    window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(url), '_blank');
+                    return;
+                case 'instagram':
+                    closeSheet('shareSheet');
+                    if (navigator.share) {
+                        try { await navigator.share({ title, url }); } catch (e) {}
+                    } else {
+                        showToast('Open Instagram app to share');
+                    }
+                    return;
+            }
+            closeSheet('shareSheet');
+        }
+
+        // ─── SHEET HELPERS ──────────────────────────────────────────
+
+        function openSheet(id) {
+            document.getElementById('backdrop').classList.add('open');
+            document.getElementById(id).classList.add('open');
+        }
+
+        function closeSheet(id) {
+            document.getElementById(id).classList.remove('open');
+            const anyOpen = document.querySelectorAll('.sheet.open').length > 0;
+            if (!anyOpen) {
+                document.getElementById('backdrop').classList.remove('open');
+            }
+        }
+
+        function closeAllSheets() {
+            document.querySelectorAll('.sheet.open').forEach(s => s.classList.remove('open'));
+            document.getElementById('backdrop').classList.remove('open');
+        }
+
+        // ─── SOUND PICKER ──────────────────────────────────────────
+
+        let pickerSelectedSoundId = null;
+
+        function openSoundPicker(selectedSoundId) {
+            pickerSelectedSoundId = selectedSoundId || null;
+            pickerPage = 0;
+            pickerHasMore = true;
+            pickerSearchQuery = '';
+            document.getElementById('pickerSearchInput').value = '';
+            document.getElementById('pickerBackdrop').classList.add('open');
+            loadPickerSounds(pickerCurrentTab);
+        }
+
+        function closeSoundPicker() {
+            document.getElementById('pickerBackdrop').classList.remove('open');
+        }
+
+        function switchSoundTab(tab) {
+            pickerCurrentTab = tab;
+            document.querySelectorAll('.picker-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+            pickerPage = 0;
+            pickerHasMore = true;
+            document.getElementById('pickerSearchInput').value = '';
+            pickerSearchQuery = '';
+            loadPickerSounds(tab);
+        }
+
+        async function loadPickerSounds(tab, query = '', append = false) {
+            const list = document.getElementById('pickerList');
+            if (!append) {
+                list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);">Loading...</div>';
+            }
+
+            // If tab is 'saved', we need to fetch saved sounds from a separate table or client-side
+            if (tab === 'saved') {
+                // For now, show a placeholder
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                        <h4>Saved Sounds</h4>
+                        <p>Your saved sounds will appear here. Tap the bookmark icon on any sound to save it.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const result = await fetchPickerSounds(tab, query, pickerPage);
+            if (!result || !result.data) return;
+
+            if (append) {
+                pickerSounds = [...pickerSounds, ...result.data];
+            } else {
+                pickerSounds = result.data;
+            }
+            pickerHasMore = result.hasMore;
+
+            if (pickerSounds.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                        <h4>No sounds found</h4>
+                        <p>Try adjusting your search or tab.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            pickerSounds.forEach(s => {
+                const isSelected = s.id === pickerSelectedSoundId;
+                html += `
+                    <div class="sound-item" onclick="selectSound('${s.id}')">
+                        <img class="cover" src="${s.cover_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + s.title}" alt="${s.title}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${s.title}'">
+                        <div class="info">
+                            <div class="title">${escapeHtml(s.title)}</div>
+                            <div class="artist">${escapeHtml(s.artist_name || 'Unknown')}</div>
+                        </div>
+                        <span class="duration">${s.duration ? Math.floor(s.duration) + 's' : ''}</span>
+                        <button class="use-btn ${isSelected ? 'used' : ''}" onclick="event.stopPropagation(); selectSound('${s.id}')">${isSelected ? '✓ Used' : 'Use'}</button>
+                    </div>
+                `;
+            });
+
+            if (pickerHasMore) {
+                html += `<div style="text-align:center;padding:12px;">
+                    <button class="sh-btn secondary" onclick="loadMorePickerSounds()" style="padding:6px 20px;font-size:13px;">Load more</button>
+                </div>`;
+            }
+
+            list.innerHTML = html;
+        }
+
+        async function loadMorePickerSounds() {
+            pickerPage++;
+            await loadPickerSounds(pickerCurrentTab, pickerSearchQuery, true);
+        }
+
+        async function searchSounds(query) {
+            pickerSearchQuery = query;
+            pickerPage = 0;
+            pickerHasMore = true;
+            await loadPickerSounds(pickerCurrentTab, query);
+        }
+
+        function selectSound(soundId) {
+            pickerSelectedSoundId = soundId;
+            // Close picker and update the create page (if opened from create)
+            closeSoundPicker();
+            // Notify parent (create.html) via custom event
+            const event = new CustomEvent('soundSelected', { detail: { soundId } });
+            window.dispatchEvent(event);
+            showToast('Sound selected ✓');
+        }
+
+        // ─── INIT ──────────────────────────────────────────────────
+
+        async function init() {
+            document.addEventListener('themeChanged', function(e) {
+                document.documentElement.setAttribute('data-theme', e.detail.theme);
+            });
+
+            function updateNavAvatar() {
+                const user = getCurrentUser();
+                document.querySelectorAll('.side-av, .nav-av').forEach(el => {
+                    el.src = user.avatar;
+                    el.onerror = function() { this.style.display = 'none'; };
+                });
+            }
+            updateNavAvatar();
+
+            // Get sound ID from URL
+            const params = new URLSearchParams(window.location.search);
+            const soundId = params.get('sound') || params.get('id');
+
+            if (!soundId) {
+                showToast('No sound specified');
+                document.getElementById('soundTopTitle').textContent = 'Sound not found';
+                document.getElementById('emptyState').style.display = 'flex';
+                document.getElementById('emptyState').querySelector('h4').textContent = 'No sound selected';
+                document.getElementById('emptyState').querySelector('p').textContent =
+                'Please specify a sound ID in the URL.';
+                return;
+            }
+
+            await loadSoundPage(soundId);
+
+            // Listen for sound selection from picker (if opened from create)
+            window.addEventListener('soundSelected', (e) => {
+                console.log('Sound selected:', e.detail.soundId);
+                // We could redirect to the sound page if needed
+            });
+
+            console.log('Freeupper Sound Page · Loaded sound:', currentSound?.title);
+        }
+
+        // ─── EXPOSE GLOBALLY ──────────────────────────────────────
+
+        // Sound Page
+        window.loadMoreVideos = loadMoreVideos;
+        window.toggleSoundPlayback = toggleSoundPlayback;
+        window.toggleSoundFollow = toggleSoundFollow;
+        window.useSound = useSound;
+        window.shareSound = shareSound;
+        window.shareAction = shareAction;
+        window.goBack = goBack;
+        window.goToArtistProfile = goToArtistProfile;
+        window.goToProfile = goToProfile;
+        window.openSoundPage = openSoundPage;
+
+        // Sheets
+        window.openSheet = openSheet;
+        window.closeSheet = closeSheet;
+        window.closeAllSheets = closeAllSheets;
+
+        // Sound Picker
+        window.openSoundPicker = openSoundPicker;
+        window.closeSoundPicker = closeSoundPicker;
+        window.switchSoundTab = switchSoundTab;
+        window.searchSounds = searchSounds;
+        window.selectSound = selectSound;
+        window.loadMorePickerSounds = loadMorePickerSounds;
+
+        // Init on DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
