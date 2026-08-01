@@ -22,12 +22,13 @@
     <link rel="stylesheet" href="bottom-nav.css" />
     <link rel="stylesheet" href="side-nav.css" />
 
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="global.js"></script>
     <script src="auth.js"></script>
     <script src="posts.js"></script>
+    <script src="sounds.js"></script>
     <script src="router.js"></script>
 
     <style>
@@ -546,10 +547,15 @@
     <script>
         'use strict';
 
+        if (!window.SoundsAPI) {
+            console.error('sound.html: SoundsAPI missing. Ensure sounds.js loads before this script.');
+        }
+
         const SITE_URL = window.location.origin;
         let _toastTimer = null;
         let currentTab = 'videos';
-        let soundData = null;
+        let soundData = null;      // mapped by SoundsAPI (camelCase fields)
+        let soundStats = null;     // { videoCount, totalUses, totalLikes, totalShares }
         let soundVideos = [];
         let isSaved = false;
         let isPlaying = false;
@@ -622,125 +628,41 @@
             }
         }
 
-        // ─── PARSE SOUND ID ─────────────────────────────────────────
-        // Matches the synthetic scheme from video.html: sound_<authorId>_<audioKey>
-
-        function parseSoundId(soundId) {
-            const m = /^sound_(.+)_([a-z0-9]+)$/.exec(soundId || '');
-            if (!m) return null;
-            return { authorId: m[1], audioKey: m[2] };
+        function useThisSound() {
+            if (!soundData) return;
+            window.location.href = 'studio.html?sound=' + encodeURIComponent(soundData.id);
         }
 
-        function audioKeyFor(title) {
-            return (title || 'original').toLowerCase().replace(/[^a-z0-9]/g, '');
-        }
-
-        // ─── LOAD SOUND + VIDEOS ────────────────────────────────────
+        // ─── LOAD SOUND + VIDEOS (via SoundsAPI) ───────────────────
 
         async function loadSoundPage(soundId) {
             renderSkeleton();
             try {
-                let posts = [];
+                const [sound, videos, stats] = await Promise.all([
+                    SoundsAPI.loadSound(soundId),
+                    SoundsAPI.loadSoundVideos(soundId),
+                    SoundsAPI.loadSoundStats(soundId),
+                ]);
 
-                // 1) Try a direct sound_id column match first (future-proof).
-                try {
-                    const { data, error } = await window.sb
-                        .from('posts')
-                        .select('*, profile:profiles(*)')
-                        .eq('sound_id', soundId)
-                        .order('created_at', { ascending: false });
-                    if (!error && data && data.length) posts = data;
-                } catch (e) { /* column may not exist yet, ignore */ }
-
-                // 2) Fallback: synthetic id → match by author + regenerated audio key.
-                if (!posts.length) {
-                    const parsed = parseSoundId(soundId);
-                    if (parsed) {
-                        const { data, error } = await window.sb
-                            .from('posts')
-                            .select('*, profile:profiles(*)')
-                            .eq('user_id', parsed.authorId)
-                            .order('created_at', { ascending: false });
-                        if (!error && data) {
-                            posts = data.filter(p => {
-                                const title = p.sound_title || p.audio_track || 'original';
-                                return audioKeyFor(title) === parsed.audioKey &&
-                                    (p.mediaType === 'video' || p.media_type === 'video' ||
-                                     (p.mediaUrl || p.media_url || '').match(/\.(mp4|webm|mov)(\?|$)/i));
-                            });
-                        }
-                    }
-                }
-
-                if (!posts.length) {
+                if (!sound) {
                     renderEmpty();
                     return;
                 }
 
-                const first = posts[0];
-                const profile = first.profile || {};
-                const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : {
-                    id: first.user_id, name: profile.display_name || 'Unknown', avatar: profile.avatar_url || '',
-                    verified_status: profile.verified_status
-                };
+                soundData = sound;
+                soundVideos = videos;
+                soundStats = stats;
 
-                const soundTitle = first.sound_title || first.audio_track || ('Original sound');
-                const soundArt = first.sound_art || author.avatar ||
-                    ('https://api.dicebear.com/7.x/avataaars/svg?seed=' + author.name);
+                isSaved = await SoundsAPI.isSoundSaved(soundId);
 
-                let totalLikes = 0, totalShares = 0, totalViews = 0;
-                posts.forEach(p => {
-                    totalLikes += p.likes || p.like_count || 0;
-                    totalShares += p.shares || p.share_count || 0;
-                    totalViews += p.views || p.view_count || 0;
-                });
-
-                soundData = {
-                    id: soundId,
-                    title: soundTitle,
-                    art: soundArt,
-                    authorId: author.id,
-                    authorName: author.name,
-                    authorHandle: '@' + (profile.username || author.name.toLowerCase().replace(/\s+/g, '')),
-                    authorAvatar: author.avatar,
-                    verified: author.verified_status,
-                    createdAt: first.created_at || first.timestamp || null,
-                    duration: first.sound_duration || null,
-                    bpm: first.sound_bpm || null,
-                    audioUrl: first.sound_url || (first.mediaUrl || first.media_url || null),
-                    videoCount: posts.length,
-                    uses: totalViews || posts.length,
-                    likes: totalLikes,
-                    shares: totalShares
-                };
-                soundVideos = posts.map(p => ({
-                    id: p.id,
-                    thumb: p.mediaUrl || p.media_url || p.thumbnail_url || '',
-                    views: p.views || p.view_count || 0,
-                    pinned: !!p.pinned || !!p.is_pinned
-                }));
-
-                await checkSavedState(soundId);
                 renderSoundPage();
+
+                // Fire-and-forget usage increment on view (not on every reload spam —
+                // acceptable here since sound.html is a discrete page visit).
+                SoundsAPI.incrementSoundUsage(soundId).catch(() => {});
             } catch (err) {
                 console.error('loadSoundPage error:', err);
                 renderEmpty();
-            }
-        }
-
-        async function checkSavedState(soundId) {
-            const user = getCurrentUser();
-            if (!user || !user.isLoggedIn) { isSaved = false; return; }
-            try {
-                const { data } = await window.sb
-                    .from('saved_sounds')
-                    .select('id')
-                    .eq('user_id', user.id)
-                    .eq('sound_id', soundId)
-                    .maybeSingle();
-                isSaved = !!data;
-            } catch (e) {
-                isSaved = false;
             }
         }
 
@@ -773,14 +695,20 @@
 
         function renderSoundPage() {
             const s = soundData;
+            const stats = soundStats || { videoCount: 0, totalUses: 0, totalLikes: 0, totalShares: 0 };
             const el = document.getElementById('soundContent');
-            const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(s.verified) : '';
+
+            const authorName = s.creator ? s.creator.displayName : 'Unknown';
+            const authorHandle = s.creator ? ('@' + (s.creator.username || authorName.toLowerCase().replace(/\s+/g, ''))) : '@unknown';
+            const authorAvatar = s.creator ? s.creator.avatarUrl : '';
+            const authorId = s.creator ? s.creator.id : null;
+            const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(s.creator ? s.creator.verifiedStatus : 'none') : '';
 
             el.innerHTML = `
                 <div class="sound-hero">
                     <div class="sound-art-wrap" id="soundArtWrap" onclick="toggleAudioPlayback()">
-                        <img src="${s.art}" alt="${escapeHtml(s.title)}"
-                             onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.authorName)}'">
+                        <img src="${s.artUrl}" alt="${escapeHtml(s.title)}"
+                             onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}'">
                         <div class="sound-art-play">
                             <svg class="icon-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                             <svg class="icon-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
@@ -788,11 +716,11 @@
                     </div>
                     <div class="sound-meta">
                         <div class="sound-title">${escapeHtml(s.title)}</div>
-                        <div class="sound-handle-row" onclick="goToProfile('${s.authorId}')">
-                            <span>${escapeHtml(s.authorHandle)}</span>
+                        <div class="sound-handle-row" onclick="${authorId ? `goToProfile('${authorId}')` : ''}">
+                            <span>${escapeHtml(authorHandle)}</span>
                             <span>${badgeHtml}</span>
                         </div>
-                        <div class="sound-stat-line">${fmtNum(s.videoCount)} videos&nbsp;&nbsp;·&nbsp;&nbsp;${fmtNum(s.uses)} uses</div>
+                        <div class="sound-stat-line">${fmtNum(stats.videoCount)} videos&nbsp;&nbsp;·&nbsp;&nbsp;${fmtNum(stats.totalUses)} uses</div>
                     </div>
                 </div>
 
@@ -800,7 +728,7 @@
                     ${s.duration ? `
                     <div class="sound-pill">
                         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        ${escapeHtml(s.duration)}
+                        ${escapeHtml(String(s.duration))}
                     </div>` : ''}
                     ${s.bpm ? `
                     <div class="sound-pill">
@@ -809,11 +737,11 @@
                     </div>` : ''}
                 </div>
 
-                <div class="created-by-row" onclick="goToProfile('${s.authorId}')">
-                    <img class="created-by-ava" src="${s.authorAvatar}" alt="${escapeHtml(s.authorName)}"
-                         onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.authorName)}'">
+                <div class="created-by-row" onclick="${authorId ? `goToProfile('${authorId}')` : ''}">
+                    <img class="created-by-ava" src="${authorAvatar}" alt="${escapeHtml(authorName)}"
+                         onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authorName)}'">
                     <div>
-                        <div class="created-by-text">Created by <b>${escapeHtml(s.authorHandle)}</b></div>
+                        <div class="created-by-text">Created by <b>${escapeHtml(authorHandle)}</b></div>
                         ${s.createdAt ? `<div class="created-by-date">${formatDate(s.createdAt)}</div>` : ''}
                     </div>
                 </div>
@@ -831,7 +759,7 @@
 
                 <div class="sound-desc" id="soundDesc" onclick="toggleDescExpand()">
                     <div class="sound-desc-text clamped" id="soundDescText">
-                        This is the original sound created by ${escapeHtml(s.authorHandle)}. Feel free to use it in your videos 🔥
+                        This is the original sound created by ${escapeHtml(authorHandle)}. Feel free to use it in your videos 🔥
                     </div>
                     <svg class="sound-desc-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
                 </div>
@@ -839,22 +767,22 @@
                 <div class="sound-stats">
                     <div class="sound-stat">
                         <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                        <b>${fmtNum(s.uses)}</b>
+                        <b>${fmtNum(stats.totalUses)}</b>
                         <span>Uses</span>
                     </div>
                     <div class="sound-stat">
                         <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-                        <b>${fmtNum(s.videoCount)}</b>
+                        <b>${fmtNum(stats.videoCount)}</b>
                         <span>Videos</span>
                     </div>
                     <div class="sound-stat">
                         <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                        <b>${fmtNum(s.likes)}</b>
+                        <b>${fmtNum(stats.totalLikes)}</b>
                         <span>Likes</span>
                     </div>
                     <div class="sound-stat">
                         <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                        <b>${fmtNum(s.shares)}</b>
+                        <b>${fmtNum(stats.totalShares)}</b>
                         <span>Shares</span>
                     </div>
                 </div>
@@ -868,12 +796,12 @@
 
                 <div class="about-panel" id="aboutPanel">
                     <div class="about-row"><span>Sound title</span><span>${escapeHtml(s.title)}</span></div>
-                    <div class="about-row"><span>Creator</span><span>${escapeHtml(s.authorHandle)}</span></div>
+                    <div class="about-row"><span>Creator</span><span>${escapeHtml(authorHandle)}</span></div>
                     ${s.createdAt ? `<div class="about-row"><span>Created</span><span>${formatDate(s.createdAt)}</span></div>` : ''}
-                    ${s.duration ? `<div class="about-row"><span>Duration</span><span>${escapeHtml(s.duration)}</span></div>` : ''}
+                    ${s.duration ? `<div class="about-row"><span>Duration</span><span>${escapeHtml(String(s.duration))}</span></div>` : ''}
                     ${s.bpm ? `<div class="about-row"><span>Tempo</span><span>${escapeHtml(String(s.bpm))} BPM</span></div>` : ''}
-                    <div class="about-row"><span>Total videos</span><span>${fmtNum(s.videoCount)}</span></div>
-                    <div class="about-row"><span>Total uses</span><span>${fmtNum(s.uses)}</span></div>
+                    <div class="about-row"><span>Total videos</span><span>${fmtNum(stats.videoCount)}</span></div>
+                    <div class="about-row"><span>Total uses</span><span>${fmtNum(stats.totalUses)}</span></div>
                 </div>
             `;
 
@@ -882,9 +810,9 @@
             const mpArt = document.getElementById('mpArt');
             const mpTitle = document.getElementById('mpTitle');
             const mpSub = document.getElementById('mpSub');
-            if (mpArt) mpArt.src = s.art;
+            if (mpArt) mpArt.src = s.artUrl;
             if (mpTitle) mpTitle.textContent = s.title;
-            if (mpSub) mpSub.textContent = s.authorHandle;
+            if (mpSub) mpSub.textContent = authorHandle;
         }
 
         function renderSoundGrid() {
@@ -898,7 +826,7 @@
                 <div class="sg-item" onclick="openVideoPost('${v.id}')">
                     ${v.pinned ? '<div class="sg-pin">Pinned</div>' : ''}
                     <div class="sg-grad"></div>
-                    <img src="${v.thumb}" alt="" loading="lazy"
+                    <img src="${v.mediaUrl}" alt="" loading="lazy"
                          onerror="this.style.display='none'">
                     <div class="sg-play-count">
                         <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -925,16 +853,6 @@
 
         // ─── ACTIONS ────────────────────────────────────────────────
 
-        function useThisSound() {
-            if (!soundData) return;
-            const params = new URLSearchParams({ soundId: soundData.id, soundTitle: soundData.title, soundArt: soundData.art });
-            if (window.Router && typeof window.Router.openCreate === 'function') {
-                window.Router.openCreate({ soundId: soundData.id, soundTitle: soundData.title, soundArt: soundData.art });
-            } else {
-                window.location.href = 'create.html?' + params.toString();
-            }
-        }
-
         async function toggleSaveSound() {
             const user = getCurrentUser();
             if (!user || !user.isLoggedIn) { showToast('Please sign in to save sounds'); return; }
@@ -947,24 +865,25 @@
 
             try {
                 if (wasSaved) {
-                    await window.sb.from('saved_sounds').delete().eq('user_id', user.id).eq('sound_id', soundData.id);
+                    await SoundsAPI.unsaveSound(soundData.id);
                     showToast('Removed from saved sounds');
                 } else {
-                    await window.sb.from('saved_sounds').insert({ user_id: user.id, sound_id: soundData.id });
+                    await SoundsAPI.saveSound(soundData.id);
                     showToast('Sound saved ✓');
                 }
             } catch (err) {
                 isSaved = wasSaved;
                 if (btn) btn.classList.toggle('saved', isSaved);
                 if (lbl) lbl.textContent = isSaved ? 'Saved' : 'Save';
-                showToast('Could not save sound');
+                showToast(err.message || 'Could not save sound');
             }
         }
 
         function shareSoundPage() {
             if (!soundData) return;
             const url = SITE_URL + '/sound.html?id=' + encodeURIComponent(soundData.id);
-            const title = soundData.title + ' — ' + soundData.authorHandle;
+            const authorHandle = soundData.creator ? ('@' + (soundData.creator.username || soundData.creator.displayName)) : '';
+            const title = soundData.title + (authorHandle ? ' — ' + authorHandle : '');
             if (navigator.share) {
                 navigator.share({ title, url }).catch(() => {});
                 return;
@@ -1031,6 +950,11 @@
                 });
             }
             updateNavAvatar();
+
+            if (!window.SoundsAPI) {
+                renderEmpty();
+                return;
+            }
 
             const params = new URLSearchParams(window.location.search);
             const soundId = params.get('id');
