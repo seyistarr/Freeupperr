@@ -281,7 +281,7 @@
             opacity: 0;
         }
 
-        /* Upload badge (replaces mute badge) */
+        /* Upload badge – now opens studio.html */
         .v-upload-badge {
             position: absolute;
             top: max(env(safe-area-inset-top), 14px);
@@ -2741,6 +2741,7 @@
 
     <!-- ══════════════════════════════════════════════════════
     MAIN SCRIPT – with sound‑disk + sound‑pill clickable
+    and upload badge now opens studio.html
     ══════════════════════════════════════════════════════ -->
     <script>
         'use strict';
@@ -2751,7 +2752,7 @@
         let _toastTimer = null;
         let feedMode = 'foryou';
         const MUTE_PREF_KEY = 'freeupper_video_muted';
-        let userMutePreference = localStorage.getItem(MUTE_PREF_KEY) !== 'false'; // default: muted until user taps to unmute
+        let userMutePreference = localStorage.getItem(MUTE_PREF_KEY) !== 'false';
 
         function setMutePreference(muted) {
             userMutePreference = muted;
@@ -2843,8 +2844,9 @@
             _toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
         }
 
-        function showComingSoonUpload() {
-            showToast('Coming soon 🚀');
+        // ─── REPLACED: now opens studio.html ──────────────────────
+        function openStudio() {
+            window.location.href = 'studio.html';
         }
 
         function fmtNum(n) {
@@ -2859,7 +2861,6 @@
             if (window.Hashtags && typeof window.Hashtags.hashifyHtml === 'function') {
                 return window.Hashtags.hashifyHtml(escapeHtml(text));
             }
-            // Fallback
             return escapeHtml(text).replace(/#(\w+)/g, '<span class="hashtag-link">#$1</span>');
         }
 
@@ -2913,15 +2914,11 @@
         function openSoundPage(idx) {
             const v = videoPosts[idx];
             if (!v) return;
-            // Use the sound_id from the post, or fallback to a synthetic ID based on author + audio.
             let soundId = v.soundId;
             if (!soundId) {
-                // Generate a stable sound ID from the author ID and a hash of the audio title.
-                // This ensures that all videos from the same author with the same audio track share a sound page.
                 const audioKey = (v.sound || 'original').toLowerCase().replace(/[^a-z0-9]/g, '');
                 soundId = 'sound_' + v.authorId + '_' + audioKey;
             }
-            // Use Router if available, else fallback to window.location.
             if (window.Router && typeof window.Router.openSound === 'function') {
                 window.Router.openSound(soundId);
             } else {
@@ -2946,10 +2943,6 @@
             const iframe = document.getElementById('yt-' + idx);
             if (!iframe || !iframe.contentWindow) return;
             iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
-        }
-
-        function _updateMuteBadge(idx) {
-            // no‑op now, replaced with upload badge
         }
 
         function _showYtPauseIcon(idx, isPlaying) {
@@ -3026,7 +3019,6 @@
 
                 const mapEntryToVideoPost = (entry) => {
                     const post = entry.post;
-                    // Determine media type — video.html only accepts video posts
                     const isVideo = (post.mediaType === 'video') ||
                         (post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post.mediaUrl.includes(
                             'youtu.be'))) ||
@@ -3043,11 +3035,8 @@
                     const ytId = isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] ||
                         post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null;
 
-                    // --- Extract sound info ---
-                    // Prefer explicit sound_id from the post, otherwise generate a synthetic one.
                     let soundId = post.sound_id || null;
                     if (!soundId) {
-                        // Synthetic: author + audio title hash
                         const audioTitle = post.sound_title || post.audio_track || 'original';
                         const clean = audioTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
                         soundId = 'sound_' + post.user_id + '_' + (clean || 'original');
@@ -3184,7 +3173,7 @@
                         <iframe class="v-yt-iframe" id="yt-${i}" src="https://www.youtube.com/embed/${v.ytId}?autoplay=1&loop=1&playlist=${v.ytId}&mute=${userMutePreference ? 1 : 0}&controls=0&modestbranding=1&rel=0&showinfo=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}" allow="autoplay; encrypted-media" allowfullscreen onload="initYtListener(${i})"></iframe>
                         <div class="v-tap-yt" id="tapYt-${i}" onclick="toggleYtControls(${i})"></div>
                         ${hintHtml}
-                        <div class="v-upload-badge" id="uploadBadge-${i}" onclick="event.stopPropagation(); showComingSoonUpload()">
+                        <div class="v-upload-badge" id="uploadBadge-${i}" onclick="event.stopPropagation(); openStudio()">
                             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         </div>
                     </div>`;
@@ -3194,13 +3183,13 @@
                     <video class="v-video" id="vid-${i}" src="${v.src}" poster="${v.poster}"
                       playsinline loop preload="metadata"></video>
                     ${hintHtml}
-                    <div class="v-upload-badge" id="uploadBadge-${i}" onclick="event.stopPropagation(); showComingSoonUpload()">
+                    <div class="v-upload-badge" id="uploadBadge-${i}" onclick="event.stopPropagation(); openStudio()">
                         <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     </div>
                     <div class="v-tap" id="tap-${i}" onclick="handleCardTap(event,${i})"></div>
                 </div>`;
             }
-            // image/text fallback (should not happen after filtering)
+            // fallback for images/text (should not happen after filtering)
             if (v.mediaType === 'image') {
                 const slides = v.images.map(src => `<img class="v-img-slide" src="${src}" alt="" draggable="false">`).join('');
                 const dots = v.images.length > 1 ?
@@ -3237,8 +3226,6 @@
             const mediaHtml = buildMediaHtml(v, i);
             const repostLabel = buildVideoRepostLabel(v.id);
 
-            // Sound pill: clickable → openSoundPage(i)
-            // Sound disk: clickable → openSoundPage(i)
             return `
             <div class="v-card" data-idx="${i}" data-post-id="${v.id}" data-author-id="${v.authorId}">
                 ${mediaHtml}
@@ -4844,7 +4831,7 @@
                 pullOffset = 0;
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · Sound disk & pill clickable ✓');
+            console.log('Freeupper Video Feed · Sound disk & pill clickable ✓ · + badge → studio.html');
         }
 
         if (document.readyState === 'loading') {
@@ -4890,7 +4877,7 @@
         window.toggleClearDisplay = toggleClearDisplay;
         window.imgDragStart = imgDragStart;
         window.openRepostersSheet = openRepostersSheet;
-        window.showComingSoonUpload = showComingSoonUpload;
+        window.openStudio = openStudio;
         window.recordShareForPost = recordShareForPost;
         window.toggleCommentsFromMore = toggleCommentsFromMore;
         window.applyCommentBarLockState = applyCommentBarLockState;
