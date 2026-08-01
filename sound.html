@@ -554,8 +554,8 @@
         const SITE_URL = window.location.origin;
         let _toastTimer = null;
         let currentTab = 'videos';
-        let soundData = null;      // mapped by SoundsAPI (camelCase fields)
-        let soundStats = null;     // { videoCount, totalUses, totalLikes, totalShares }
+        let soundData = null;
+        let soundStats = null;
         let soundVideos = [];
         let isSaved = false;
         let isPlaying = false;
@@ -644,6 +644,10 @@
                     SoundsAPI.loadSoundStats(soundId),
                 ]);
 
+                console.log('🎵 Sound:', sound);
+                console.log('📹 Videos:', videos);
+                console.log('📊 Stats:', stats);
+
                 if (!sound) {
                     renderEmpty();
                     return;
@@ -657,8 +661,7 @@
 
                 renderSoundPage();
 
-                // Fire-and-forget usage increment on view (not on every reload spam —
-                // acceptable here since sound.html is a discrete page visit).
+                // Fire-and-forget usage increment
                 SoundsAPI.incrementSoundUsage(soundId).catch(() => {});
             } catch (err) {
                 console.error('loadSoundPage error:', err);
@@ -810,7 +813,7 @@
             const mpArt = document.getElementById('mpArt');
             const mpTitle = document.getElementById('mpTitle');
             const mpSub = document.getElementById('mpSub');
-            if (mpArt) mpArt.src = s.artUrl;
+            if (mpArt) mpArt.src = s.artUrl || '';
             if (mpTitle) mpTitle.textContent = s.title;
             if (mpSub) mpSub.textContent = authorHandle;
         }
@@ -819,7 +822,7 @@
             const grid = document.getElementById('soundGrid');
             if (!grid) return;
             if (!soundVideos.length) {
-                grid.innerHTML = '';
+                grid.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:14px;">No videos using this sound yet.</div>`;
                 return;
             }
             grid.innerHTML = soundVideos.map(v => `
@@ -945,7 +948,7 @@
             function updateNavAvatar() {
                 const user = getCurrentUser();
                 document.querySelectorAll('.side-av, .nav-av').forEach(el => {
-                    el.src = user.avatar;
+                    el.src = user.avatar || '';
                     el.onerror = function() { this.style.display = 'none'; };
                 });
             }
