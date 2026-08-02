@@ -93,6 +93,9 @@
       tags: row.tags || [],
       mentions: row.mentions || [],
       timestamp: row.created_at || new Date().toISOString(),
+      // ─── NEW: sound_id from posts table ──────────────────────────
+      sound_id: row.sound_id || null,
+      // ──────────────────────────────────────────────────────────────
       views: row.views || 0,
       comments: row.comment_count || 0,
       likes: row.like_count || 0,
@@ -859,10 +862,10 @@
     incrementView,
     reportPost,
 
-    // ─── NEW: hide/unhide post ──────────────────────────────────────
+    // ─── hide/unhide post ──────────────────────────────────────
     toggleHidePost,
 
-    // ─── NEW: turn comments on/off for a post ───────────────────────
+    // ─── turn comments on/off ─────────────────────────────────
     toggleCommentsHidden,
 
     // Real‑time
