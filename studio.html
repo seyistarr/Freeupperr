@@ -1375,10 +1375,11 @@ async function publishPost() {
     }
 
     // ─── IF NO SOUND ATTACHED, AUTO-CREATE "ORIGINAL SOUND" ──────────
+    // ─── PATCH: now throws on failure so the post won't publish without a sound ──
     if (!finalSoundId && window.SoundsAPI) {
+      const isVideo = S.media && S.media.type === 'video';
+      const audioUrl = isVideo && S.media.url ? S.media.url : null;
       try {
-        const isVideo = S.media && S.media.type === 'video';
-        const audioUrl = isVideo && S.media.url ? S.media.url : null;
         const originalSound = await SoundsAPI.createSound({
           title: 'Original sound',
           artUrl: null,
@@ -1387,8 +1388,8 @@ async function publishPost() {
         finalSoundId = originalSound.id;
         payload.sound_id = finalSoundId;
       } catch (e) {
-        console.warn('Could not auto-create original sound:', e);
-        // Non-fatal – post still publishes without a sound
+        console.error('Could not auto-create original sound:', e);
+        throw new Error('Failed to attach sound to post. Please try again.');
       }
     }
 
