@@ -38,25 +38,18 @@
     }
 
     // ─── Resolve the sound_id for a post ────────────────────────────
-    // Prefers the real posts.sound_id column. Falls back to the legacy
-    // synthetic scheme (sound_<authorId>_<audioKey>) for older posts
-    // that predate the sounds table, so nothing already in the feed
-    // breaks.
+    // NOW: ONLY returns a real sound_id from the posts table.
+    // No fallback/synthetic IDs are invented. If there's no sound_id,
+    // returns null.
     function resolveSoundId(post) {
         if (!post) return null;
-        if (post.sound_id) return post.sound_id;
-
-        const authorId = post.user_id || post.authorId;
-        if (!authorId) return null;
-        const rawTitle = post.sound_title || post.audio_track || 'original';
-        const audioKey = String(rawTitle).toLowerCase().replace(/[^a-z0-9]/g, '') || 'original';
-        return 'sound_' + authorId + '_' + audioKey;
+        return post.sound_id || null;
     }
 
     // ─── Fetch (and cache) sound metadata for display ───────────────
     // Returns { id, title, creatorHandle, artUrl } or null if the
-    // sound can't be resolved (e.g. legacy synthetic id with no row
-    // in the sounds table yet — falls back to post-derived defaults).
+    // sound can't be resolved (no sound_id in the post, or no row in
+    // the sounds table).
     async function getSoundMetaForPost(post) {
         const soundId = resolveSoundId(post);
         if (!soundId) return null;
@@ -84,21 +77,9 @@
             } catch (e) {
                 console.warn('getSoundMetaForPost: SoundsAPI.loadSound failed', e);
             }
-
-            // Fallback: no row in sounds table (legacy synthetic id) —
-            // derive a reasonable label directly from the post so the
-            // UI still shows something clickable and correct-looking.
-            const profile = post.profile || {};
-            const authorName = profile.display_name || post.creator || 'Unknown';
-            const authorHandle = '@' + (profile.username || authorName.toLowerCase().replace(/\s+/g, ''));
-            const fallback = {
-                id: soundId,
-                title: post.sound_title || post.audio_track || ('Original sound · ' + authorName),
-                creatorHandle: authorHandle,
-                artUrl: post.sound_art || profile.avatar_url || '',
-            };
-            _soundCache.set(soundId, fallback);
-            return fallback;
+            // Sound not found – cache null so we don't retry
+            _soundCache.set(soundId, null);
+            return null;
         })();
 
         _soundCache.set(soundId, fetchPromise);
@@ -125,9 +106,6 @@
     }
 
     // ─── Render: sound pill (the "🎵 title · @handle" bar under a video) ──
-    // idx is used to build a unique onclick target when rendering into
-    // a feed of multiple cards (matches video.html's existing indexing
-    // convention).
     function renderSoundPillHTML(meta, idx) {
         if (!meta) return '';
         const label = meta.creatorHandle
@@ -142,11 +120,11 @@
 
     // ─── Render: sound disc (the small spinning circular art icon) ──────
     function renderSoundDiscHTML(meta, creatorFallbackSeed) {
-        const art = (meta && meta.artUrl) || '';
-        const seed = encodeURIComponent((meta && meta.title) || creatorFallbackSeed || 'sound');
-        const soundId = meta ? meta.id : '';
+        if (!meta) return '';
+        const art = meta.artUrl || '';
+        const seed = encodeURIComponent(meta.title || creatorFallbackSeed || 'sound');
         return `
-            <div class="v-disc-wrap" onclick="event.stopPropagation(); VideoRender.openSoundPage('${soundId}')" title="View sound details">
+            <div class="v-disc-wrap" onclick="event.stopPropagation(); VideoRender.openSoundPage('${meta.id}')" title="View sound details">
                 <div class="v-disc">
                     <img src="${art}" alt="sound" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}'">
                 </div>
@@ -163,7 +141,10 @@
     async function hydrateSoundLabel(post, labelEl) {
         if (!labelEl) return;
         const meta = await getSoundMetaForPost(post);
-        if (!meta) { labelEl.textContent = 'Original sound'; return; }
+        if (!meta) {
+            labelEl.textContent = 'Original sound';
+            return;
+        }
         labelEl.textContent = meta.creatorHandle
             ? `${meta.title} · ${meta.creatorHandle}`
             : meta.title;
