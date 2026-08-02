@@ -46,6 +46,8 @@
     <script src="mentions.js"></script>
     <script src="hashtags.js"></script>
     <script src="sounds.js"></script>
+    <!-- ─── NEW: video-render.js ─── -->
+    <script src="video-render.js"></script>
 
     <style>
         /* ── all existing CSS from your original file ── */
@@ -2911,19 +2913,15 @@
             window.Router.openCreate();
         }
 
-        // ─── SOUND PAGE NAVIGATION ──────────────────────────────────
+        // ─── SOUND PAGE NAVIGATION (delegates to video-render.js) ────
         function openSoundPage(idx) {
             const v = videoPosts[idx];
             if (!v) return;
-            let soundId = v.soundId;
-            if (!soundId) {
-                const audioKey = (v.sound || 'original').toLowerCase().replace(/[^a-z0-9]/g, '');
-                soundId = 'sound_' + v.authorId + '_' + audioKey;
-            }
-            if (window.Router && typeof window.Router.openSound === 'function') {
-                window.Router.openSound(soundId);
+            if (window.VideoRender) {
+                VideoRender.openSoundPage(v.soundId || VideoRender.resolveSoundId(v.postData || v));
             } else {
-                window.location.href = 'sound.html?id=' + encodeURIComponent(soundId);
+                // Fallback if video-render.js failed to load
+                window.location.href = 'sound.html?id=' + encodeURIComponent(v.soundId || '');
             }
         }
 
@@ -3356,6 +3354,12 @@
                 card.id = 'card-' + i;
                 card.innerHTML = buildCard(v, i);
                 track.appendChild(card);
+
+                // ─── HYDRATE SOUND LABEL ──────────────────────────────
+                const soundLabelEl = card.querySelector('.sound-label');
+                if (soundLabelEl && window.VideoRender) {
+                    VideoRender.hydrateSoundLabel(v.postData || v, soundLabelEl);
+                }
             });
 
             const io = new IntersectionObserver((entries) => {
