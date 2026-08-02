@@ -43,6 +43,12 @@
 //     when comments_hidden = true (except for the owner)
 //   - REQUIRED DATABASE MIGRATION:
 //       ALTER TABLE posts ADD COLUMN comments_hidden BOOLEAN DEFAULT false;
+//
+// NEW in v2.3.3 (SOUND INTEGRATION):
+//   - Added `sound_id` to the mapped post object (from the posts table)
+//   - This allows video.html and video-render.js to fetch sound metadata
+//     from the sounds table using SoundsAPI.
+//   - No new SQL migration needed; sound_id already exists in posts table.
 // =====================================================================
 
 (function() {
@@ -93,9 +99,9 @@
       tags: row.tags || [],
       mentions: row.mentions || [],
       timestamp: row.created_at || new Date().toISOString(),
-      // ─── NEW: sound_id from posts table ──────────────────────────
+      // ─── SOUND INTEGRATION ──────────────────────────
       sound_id: row.sound_id || null,
-      // ──────────────────────────────────────────────────────────────
+      // ────────────────────────────────────────────────
       views: row.views || 0,
       comments: row.comment_count || 0,
       likes: row.like_count || 0,
@@ -106,9 +112,7 @@
       myRepost: !!myRepost,
       myRepostText: myRepost ? (myRepost.comment || '') : '',
       myRepostTime: myRepost ? myRepost.created_at : null,
-      // ─── NEW: is_hidden (used for hiding posts from feed) ──────────
       is_hidden: row.is_hidden || false,
-      // ─── NEW: comments_hidden (used for turning off replies) ───────
       commentsHidden: row.comments_hidden || false,
       profile: profile ? {
         id: profile.id,
@@ -660,6 +664,7 @@
         media_type,
         thumbnail_url,
         media_url,
+        sound_id,
         profiles:user_id ( username, display_name, avatar_url, verified_status )
       `)
       .eq('id', postId)
@@ -673,6 +678,7 @@
       description: data.description || '',
       mediaType: data.media_type,
       thumbnailUrl: data.thumbnail_url || data.media_url || '',
+      sound_id: data.sound_id || null,
       username: data.profiles?.username || '',
       displayName: data.profiles?.display_name || 'Anonymous',
       avatarUrl: data.profiles?.avatar_url || '',
@@ -697,6 +703,8 @@
       mentions: fields.mentions || [],
       comments_hidden: !!fields.commentsHidden,
       // is_hidden defaults to false; no need to set explicitly
+      // sound_id can be passed if known; otherwise null
+      sound_id: fields.sound_id || null,
     };
 
     if (fields.media && fields.media.length > 0) {
