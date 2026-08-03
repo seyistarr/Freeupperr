@@ -1201,9 +1201,9 @@
                             </div>
                         </div>
 
-                        <!-- Media -->
+                        <!-- Media – multi‑image / video (up to 10 images) -->
                         <div class="form-group">
-                            <label class="form-lbl">Media <span style="font-weight:400;color:var(--muted2);">(image or video, max 100MB, 3 mins)</span></label>
+                            <label class="form-lbl">Media <span style="font-weight:400;color:var(--muted2);">(up to 10 images, or 1 video max 100MB/3 mins)</span></label>
                             <div class="upload-row">
                                 <input class="form-inp" id="postMediaUrlInput" type="text" placeholder="Paste image or YouTube link..." oninput="previewPostMedia()">
                                 <button class="upload-btn" onclick="document.getElementById('postFileInput').click()">
@@ -1211,14 +1211,11 @@
                                     Upload
                                 </button>
                             </div>
-                            <input type="file" id="postFileInput" accept="image/*,video/*" style="display:none" onchange="handlePostUpload(event)">
+                            <input type="file" id="postFileInput" accept="image/*,video/*" multiple style="display:none" onchange="handlePostUpload(event)">
                             <div class="upload-progress" id="postProgress" style="display:none;">
                                 <div class="upload-progress-bar" id="postProgressBar"></div>
                             </div>
                             <div class="image-scroll" id="postImageGrid"></div>
-                            <input type="hidden" id="postMediaUrl" value="">
-                            <input type="hidden" id="postMediaType" value="">
-                            <input type="hidden" id="postPublicId" value="">
                         </div>
 
                         <!-- Toggle: Hide Comments -->
@@ -1397,8 +1394,10 @@
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
         const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
         const MAX_VIDEO_DURATION_SECONDS = 180;
+        const MAX_POST_IMAGES = 10; // ─── up to 10 images ───
 
         let postTags = [];
+        let postMedia = [];          // array of {url, type, public_id, uploading}
         let marketImages = [];
         let marketLat = null;
         let marketLng = null;
@@ -1641,54 +1640,69 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // POST MEDIA
+        // POST MEDIA (multi‑image / video)
         // ──────────────────────────────────────────────────────────────
+
         function previewPostMedia() {
             const input = document.getElementById('postMediaUrlInput');
             const url = input.value.trim();
             if (!url) {
-                document.getElementById('postImageGrid').innerHTML = '';
-                document.getElementById('postMediaUrl').value = '';
-                document.getElementById('postMediaType').value = '';
-                document.getElementById('postPublicId').value = '';
+                // Just clear input placeholder – no removal
                 input.placeholder = 'Paste image or YouTube link...';
                 return;
             }
 
             const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
             const isImage = /\.(jpg|jpeg|png|gif|webp)/i.test(url) || url.includes('cloudinary.com') || url.includes(
-                'imgur.com');
+            'imgur.com');
 
             if (ytMatch) {
-                document.getElementById('postMediaUrl').value = `https://www.youtube.com/embed/${ytMatch[1]}`;
-                document.getElementById('postMediaType').value = 'video';
-                document.getElementById('postPublicId').value = 'youtube_' + ytMatch[1];
+                // YouTube video – only one video allowed
+                if (postMedia.length > 0) {
+                    showToast('Remove existing media before adding a video', 'o');
+                    input.value = '';
+                    return;
+                }
+                const videoUrl = `https://www.youtube.com/embed/${ytMatch[1]}`;
+                postMedia = [{
+                    url: videoUrl,
+                    type: 'video',
+                    public_id: 'youtube_' + ytMatch[1],
+                    uploading: false
+                }];
                 input.value = '🎬 Video linked';
                 input.style.color = 'var(--pl)';
                 input.style.fontWeight = '600';
-                document.getElementById('postImageGrid').innerHTML = `
-                        <div class="image-thumb">
-                            <img src="https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg" alt="YouTube video">
-                            <div class="cover-badge">VIDEO</div>
-                            <button class="remove-btn" onclick="removePostMedia()">×</button>
-                        </div>
-                    `;
+                renderPostImageGrid();
                 showToast('YouTube video linked', 'p');
             } else if (isImage) {
-                document.getElementById('postMediaUrl').value = url;
-                document.getElementById('postMediaType').value = 'image';
-                document.getElementById('postPublicId').value = 'external_' + Date.now();
-                input.value = '🖼️ Image linked';
-                input.style.color = 'var(--pl)';
-                input.style.fontWeight = '600';
-                document.getElementById('postImageGrid').innerHTML = `
-                        <div class="image-thumb">
-                            <img src="${url}" alt="Image">
-                            <div class="cover-badge">IMAGE</div>
-                            <button class="remove-btn" onclick="removePostMedia()">×</button>
-                        </div>
-                    `;
-                showToast('Image linked', 'p');
+                if (postMedia.some(m => m.type === 'video')) {
+                    showToast('Remove the video before adding images', 'o');
+                    input.value = '';
+                    return;
+                }
+                if (postMedia.length >= MAX_POST_IMAGES) {
+                    showToast(`Max ${MAX_POST_IMAGES} images`, 'o');
+                    input.value = '';
+                    return;
+                }
+                if (postMedia.some(m => m.url === url)) {
+                    showToast('Image already added', 'o');
+                    input.value = '';
+                    return;
+                }
+                postMedia.push({
+                    url: url,
+                    type: 'image',
+                    public_id: 'external_' + Date.now(),
+                    uploading: false
+                });
+                input.value = '';
+                renderPostImageGrid();
+                showToast('Image added', 'p');
+            } else {
+                showToast('Enter a valid image or YouTube link', 'o');
+                input.value = '';
             }
         }
 
@@ -1706,102 +1720,212 @@
         }
 
         async function handlePostUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+            const files = Array.from(event.target.files);
+            if (!files.length) return;
 
-            const isVideo = file.type.startsWith('video');
-            const isImage = file.type.startsWith('image');
+            // Check if any video is being uploaded
+            const hasVideo = files.some(f => f.type.startsWith('video'));
+            const hasMultiple = files.length > 1;
 
-            if (!isImage && !isVideo) {
-                showToast('Only images or videos allowed', 'o');
-                return;
-            }
-
-            if (isImage && file.size > MAX_FILE_SIZE) {
-                showToast('Image too large (max 5MB)', 'o');
-                return;
-            }
-            if (isVideo && file.size > MAX_VIDEO_SIZE) {
-                showToast('Video too large (max 100MB)', 'o');
-                return;
-            }
-
-            if (isVideo) {
-                const duration = await getVideoDuration(file);
-                if (duration > MAX_VIDEO_DURATION_SECONDS) {
-                    showToast(`Video must be ${MAX_VIDEO_DURATION_SECONDS/60} mins or less`, 'o');
+            // If there's a video, it must be the only file and no existing media
+            if (hasVideo) {
+                if (postMedia.length > 0) {
+                    showToast('Remove existing media before adding a video', 'o');
+                    event.target.value = '';
+                    return;
+                }
+                if (hasMultiple) {
+                    showToast('Only one video allowed per post', 'o');
+                    event.target.value = '';
+                    return;
+                }
+            } else {
+                // Images only – check if we already have a video
+                if (postMedia.some(m => m.type === 'video')) {
+                    showToast('Remove the video before adding images', 'o');
+                    event.target.value = '';
                     return;
                 }
             }
 
             if (Date.now() - lastUploadTime < 8000) {
                 showToast('Please wait before uploading again', 'o');
+                event.target.value = '';
                 return;
             }
             lastUploadTime = Date.now();
 
+            const remaining = hasVideo ? 1 : (MAX_POST_IMAGES - postMedia.length);
+            if (remaining <= 0) {
+                showToast(`Max ${MAX_POST_IMAGES} images`, 'o');
+                event.target.value = '';
+                return;
+            }
+            const toUpload = files.slice(0, remaining);
+
             const progress = document.getElementById('postProgress');
             const bar = document.getElementById('postProgressBar');
-            progress.style.display = 'block';
-            bar.style.width = '0%';
 
-            try {
-                const result = await uploadToCloudinary(file, 'post', (percent) => {
-                    bar.style.width = percent + '%';
-                });
-
-                document.getElementById('postMediaUrl').value = result.url;
-                document.getElementById('postMediaType').value = result.type;
-                document.getElementById('postPublicId').value = result.public_id;
-
-                const input = document.getElementById('postMediaUrlInput');
-                input.value = result.type === 'video' ? '🎬 Video uploaded' : '🖼️ Image uploaded';
-                input.style.color = 'var(--pl)';
-                input.style.fontWeight = '600';
-
-                const grid = document.getElementById('postImageGrid');
-                if (result.type === 'video') {
-                    grid.innerHTML = `
-                            <div class="image-thumb" style="flex:0 0 120px;height:80px;">
-                                <video src="${result.url}" style="width:100%;height:100%;object-fit:cover;"></video>
-                                <div class="cover-badge">VIDEO</div>
-                                <button class="remove-btn" onclick="removePostMedia()">×</button>
-                            </div>
-                        `;
-                } else {
-                    grid.innerHTML = `
-                            <div class="image-thumb">
-                                <img src="${result.url}" alt="Uploaded image">
-                                <div class="cover-badge">IMAGE</div>
-                                <button class="remove-btn" onclick="removePostMedia()">×</button>
-                            </div>
-                        `;
+            for (const file of toUpload) {
+                const isVideo = file.type.startsWith('video');
+                const isImage = file.type.startsWith('image');
+                if (!isImage && !isVideo) {
+                    showToast('Only images or videos allowed', 'o');
+                    continue;
+                }
+                if (isImage && file.size > MAX_FILE_SIZE) {
+                    showToast(`${file.name} too large (max 5MB)`, 'o');
+                    continue;
+                }
+                if (isVideo && file.size > MAX_VIDEO_SIZE) {
+                    showToast('Video too large (max 100MB)', 'o');
+                    continue;
+                }
+                if (isVideo) {
+                    const duration = await getVideoDuration(file);
+                    if (duration > MAX_VIDEO_DURATION_SECONDS) {
+                        showToast(`Video must be ${MAX_VIDEO_DURATION_SECONDS/60} mins or less`, 'o');
+                        continue;
+                    }
                 }
 
-                setTimeout(() => { progress.style.display = 'none'; }, 1500);
-                showToast(result.type === 'video' ? 'Video uploaded!' : 'Image uploaded!', 'g');
+                const localUrl = URL.createObjectURL(file);
+                const idx = postMedia.length;
+                postMedia.push({
+                    url: localUrl,
+                    type: isVideo ? 'video' : 'image',
+                    public_id: '',
+                    uploading: true
+                });
+                renderPostImageGrid();
 
-            } catch (e) {
-                progress.style.display = 'none';
-                showToast('Upload failed: ' + e.message, 'r');
-                console.error('[Upload Error]', e);
+                progress.style.display = 'block';
+                bar.style.width = '0%';
+
+                try {
+                    const result = await uploadToCloudinary(file, 'post', (percent) => {
+                        bar.style.width = percent + '%';
+                    });
+                    URL.revokeObjectURL(localUrl);
+                    postMedia[idx] = {
+                        url: result.url,
+                        type: result.type,
+                        public_id: result.public_id,
+                        uploading: false
+                    };
+                    renderPostImageGrid();
+                    showToast('Uploaded!', 'g');
+                } catch (e) {
+                    URL.revokeObjectURL(localUrl);
+                    postMedia.splice(idx, 1);
+                    renderPostImageGrid();
+                    showToast('Upload failed: ' + e.message, 'r');
+                    console.error('[Upload Error]', e);
+                }
             }
+
+            progress.style.display = 'none';
             event.target.value = '';
         }
 
-        function removePostMedia() {
-            document.getElementById('postMediaUrl').value = '';
-            document.getElementById('postMediaType').value = '';
-            document.getElementById('postPublicId').value = '';
-            const input = document.getElementById('postMediaUrlInput');
-            input.value = '';
-            input.style.color = '';
-            input.style.fontWeight = '';
-            input.placeholder = 'Paste image or YouTube link...';
-            document.getElementById('postImageGrid').innerHTML = '';
-            document.getElementById('postFileInput').value = '';
+        function removePostImage(idx) {
+            if (postMedia[idx]?.url?.startsWith('blob:')) {
+                URL.revokeObjectURL(postMedia[idx].url);
+            }
+            postMedia.splice(idx, 1);
+            renderPostImageGrid();
+            // If no media, reset the input placeholder
+            if (postMedia.length === 0) {
+                const input = document.getElementById('postMediaUrlInput');
+                input.value = '';
+                input.style.color = '';
+                input.style.fontWeight = '';
+                input.placeholder = 'Paste image or YouTube link...';
+            }
             showToast('Media removed', 'o');
         }
+
+        function renderPostImageGrid() {
+            const grid = document.getElementById('postImageGrid');
+            if (!grid) return;
+
+            const hasVideo = postMedia.some(m => m.type === 'video');
+
+            const thumbHtml = postMedia.map((m, i) => {
+                const inner = m.type === 'video' ?
+                    `<video src="${m.url}" style="width:100%;height:100%;object-fit:cover;"></video>` :
+                    `<img src="${m.url}" alt="">`;
+                return `<div class="image-thumb" onclick="${m.type === 'image' ? `openPostFullscreen(${i})` : ''}">
+                        ${inner}
+                        ${m.uploading ? `<div class="uploading-overlay"><div class="spinner"></div></div>` : ''}
+                        <div class="cover-badge">${m.type === 'video' ? 'VIDEO' : (i === 0 && !m.uploading ? 'COVER' : '')}</div>
+                        <button class="remove-btn" onclick="event.stopPropagation();removePostImage(${i})" ${m.uploading ? 'disabled' : ''}>×</button>
+                    </div>`;
+            }).join('');
+
+            const addBtn = (!hasVideo && postMedia.length < MAX_POST_IMAGES) ?
+                `<div class="image-add-btn" onclick="document.getElementById('postFileInput').click()">
+                        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add
+                    </div>` :
+                '';
+
+            grid.innerHTML = thumbHtml + addBtn;
+        }
+
+        // ─── POST FULLSCREEN (only for images) ──────────────────────
+        let postFullscreenImages = [];
+
+        function openPostFullscreen(index) {
+            const images = postMedia.filter(m => m.type === 'image' && !m.uploading);
+            if (images.length === 0) return;
+            postFullscreenImages = images.map(m => m.url);
+            const viewer = document.getElementById('fullscreenViewer');
+            const img = document.getElementById('fullscreenImage');
+            const counter = document.getElementById('viewerCounter');
+            let idx = Math.min(index, images.length - 1);
+            img.src = postFullscreenImages[idx];
+            counter.textContent = `${idx + 1} / ${images.length}`;
+            viewer.classList.add('open');
+            document.body.style.overflow = 'hidden';
+            // Store for navigation
+            viewer._fullscreenData = { images: postFullscreenImages, current: idx };
+            // Reuse existing fullscreen close/esc logic via global closeFullscreen
+        }
+
+        // Override closeFullscreen to handle both market and post
+        const originalCloseFullscreen = closeFullscreen;
+        closeFullscreen = function() {
+            const viewer = document.getElementById('fullscreenViewer');
+            viewer.classList.remove('open');
+            document.body.style.overflow = '';
+            viewer.style.opacity = '';
+            document.getElementById('fullscreenImage').style.transform = '';
+            document.getElementById('fullscreenImage').src = '';
+            if (viewer._touchStart) viewer.removeEventListener('touchstart', viewer._touchStart);
+            if (viewer._touchMove) viewer.removeEventListener('touchmove', viewer._touchMove);
+            if (viewer._touchEnd) viewer.removeEventListener('touchend', viewer._touchEnd);
+            if (viewer._keyHandler) document.removeEventListener('keydown', viewer._keyHandler);
+            viewer._fullscreenData = null;
+        };
+        // Re-attach keyboard handler for navigation in fullscreen
+        document.addEventListener('keydown', function(e) {
+            const viewer = document.getElementById('fullscreenViewer');
+            if (!viewer.classList.contains('open')) return;
+            const data = viewer._fullscreenData;
+            if (!data) return;
+            if (e.key === 'Escape') closeFullscreen();
+            if (e.key === 'ArrowLeft' && data.current > 0) {
+                data.current--;
+                document.getElementById('fullscreenImage').src = data.images[data.current];
+                document.getElementById('viewerCounter').textContent = `${data.current + 1} / ${data.images.length}`;
+            }
+            if (e.key === 'ArrowRight' && data.current < data.images.length - 1) {
+                data.current++;
+                document.getElementById('fullscreenImage').src = data.images[data.current];
+                document.getElementById('viewerCounter').textContent = `${data.current + 1} / ${data.images.length}`;
+            }
+        });
 
         // ──────────────────────────────────────────────────────────────
         // MARKET IMAGES (multiple)
@@ -1818,9 +1942,7 @@
             if (!isImage) { showToast('Please enter a valid image URL', 'o'); return; }
 
             marketImages.push({ url: url, public_id: 'external_' + Date.now(), isUploaded: true, uploading: false });
-            input.value = '🖼️ Image added';
-            input.style.color = 'var(--pl)';
-            input.style.fontWeight = '600';
+            input.value = '';
             renderMarketImages();
             showToast('Image added', 'p');
         }
@@ -1901,11 +2023,11 @@
             if (!grid) return;
 
             const thumbHtml = marketImages.map((img, i) =>
-                `<div class="image-thumb" onclick="openFullscreen(${i})">
+                `<div class="image-thumb" onclick="${img.isUploaded ? `openMarketFullscreen(${i})` : ''}">
                         <img src="${img.url}" onerror="this.style.display='none'">
                         ${img.uploading ? `<div class="uploading-overlay"><div class="spinner"></div></div>` : ''}
                         <button class="remove-btn" onclick="event.stopPropagation();removeMarketImage(${i})" ${img.uploading ? 'disabled' : ''}>×</button>
-                        ${i === 0 && !img.uploading ? `<div class="cover-badge">COVER</div>` : ''}
+                        ${i === 0 && img.isUploaded && !img.uploading ? `<div class="cover-badge">COVER</div>` : ''}
                     </div>`
             ).join('');
 
@@ -1917,97 +2039,24 @@
                 '';
 
             grid.innerHTML = thumbHtml + addBtn;
+            // Update fullscreen data for market
             fullscreenImages = marketImages.filter(i => i.isUploaded).map(i => i.url);
         }
 
-        // ──────────────────────────────────────────────────────────────
-        // FULLSCREEN VIEWER
-        // ──────────────────────────────────────────────────────────────
-        function openFullscreen(index) {
+        // ─── MARKET FULLSCREEN ──────────────────────────────────────
+        function openMarketFullscreen(index) {
             const uploaded = marketImages.filter(i => i.isUploaded);
             if (uploaded.length === 0) return;
-
             fullscreenImages = uploaded.map(i => i.url);
             fullscreenIndex = Math.min(index, fullscreenImages.length - 1);
-
             const viewer = document.getElementById('fullscreenViewer');
             const img = document.getElementById('fullscreenImage');
             const counter = document.getElementById('viewerCounter');
-
             img.src = fullscreenImages[fullscreenIndex];
             counter.textContent = `${fullscreenIndex + 1} / ${fullscreenImages.length}`;
-
             viewer.classList.add('open');
             document.body.style.overflow = 'hidden';
-
-            let startY = 0;
-            let isDragging = false;
-            let currentY = 0;
-
-            const onTouchStart = (e) => {
-                startY = e.touches[0].clientY;
-                isDragging = true;
-                currentY = 0;
-                viewer.classList.add('dragging');
-            };
-
-            const onTouchMove = (e) => {
-                if (!isDragging) return;
-                currentY = e.touches[0].clientY - startY;
-                if (currentY > 0) {
-                    const opacity = Math.max(0, 1 - currentY / 300);
-                    viewer.style.opacity = opacity;
-                    img.style.transform = `translateY(${currentY}px) scale(${1 - currentY/600})`;
-                }
-            };
-
-            const onTouchEnd = () => {
-                isDragging = false;
-                viewer.classList.remove('dragging');
-                if (currentY > 120) {
-                    closeFullscreen();
-                } else {
-                    viewer.style.opacity = '';
-                    img.style.transform = '';
-                }
-                currentY = 0;
-            };
-
-            viewer._touchStart = onTouchStart;
-            viewer._touchMove = onTouchMove;
-            viewer._touchEnd = onTouchEnd;
-
-            viewer.addEventListener('touchstart', onTouchStart, { passive: true });
-            viewer.addEventListener('touchmove', onTouchMove, { passive: true });
-            viewer.addEventListener('touchend', onTouchEnd, { passive: true });
-
-            document.addEventListener('keydown', viewer._keyHandler = (e) => {
-                if (e.key === 'Escape') closeFullscreen();
-                if (e.key === 'ArrowLeft' && fullscreenIndex > 0) {
-                    fullscreenIndex--;
-                    img.src = fullscreenImages[fullscreenIndex];
-                    counter.textContent = `${fullscreenIndex + 1} / ${fullscreenImages.length}`;
-                }
-                if (e.key === 'ArrowRight' && fullscreenIndex < fullscreenImages.length - 1) {
-                    fullscreenIndex++;
-                    img.src = fullscreenImages[fullscreenIndex];
-                    counter.textContent = `${fullscreenIndex + 1} / ${fullscreenImages.length}`;
-                }
-            });
-        }
-
-        function closeFullscreen() {
-            const viewer = document.getElementById('fullscreenViewer');
-            viewer.classList.remove('open');
-            document.body.style.overflow = '';
-            viewer.style.opacity = '';
-            const img = document.getElementById('fullscreenImage');
-            img.style.transform = '';
-            img.src = '';
-            if (viewer._touchStart) viewer.removeEventListener('touchstart', viewer._touchStart);
-            if (viewer._touchMove) viewer.removeEventListener('touchmove', viewer._touchMove);
-            if (viewer._touchEnd) viewer.removeEventListener('touchend', viewer._touchEnd);
-            if (viewer._keyHandler) document.removeEventListener('keydown', viewer._keyHandler);
+            viewer._fullscreenData = { images: fullscreenImages, current: fullscreenIndex };
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -2191,7 +2240,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT POST – with Mentions + Notifications + commentsHidden flag
+        // SUBMIT POST – with Mentions + Notifications + commentsHidden flag + source: 'composer'
         // ──────────────────────────────────────────────────────────────
         async function submitPost() {
             console.log('[DEBUG] submitPost called');
@@ -2211,19 +2260,21 @@
             }
 
             const title = document.getElementById('postTitle').value.trim();
-            const content = document.getElementById('postContent').value.trim(); // optional
-            const mediaUrl = document.getElementById('postMediaUrl').value;
-            const mediaType = document.getElementById('postMediaType').value;
-            const publicId = document.getElementById('postPublicId').value;
+            const content = document.getElementById('postContent').value.trim();
             const hideComments = document.getElementById('postHideComments').checked;
 
-            // Only title is required
+            // Title is required
             if (!title) {
                 showToast('Please enter a title', 'o');
                 return;
             }
             if (postTags.length > 5) {
                 showToast('Max 5 tags allowed', 'o');
+                return;
+            }
+            // Check if any media is still uploading
+            if (postMedia.some(m => m.uploading)) {
+                showToast('Please wait for media to finish uploading', 'o');
                 return;
             }
 
@@ -2240,27 +2291,25 @@
             btn.textContent = 'Publishing...';
             btn.disabled = true;
 
-            let media = [];
-            if (mediaUrl) {
-                media = [{
-                    url: mediaUrl,
-                    type: mediaType || 'image',
-                    public_id: publicId || ''
-                }];
-            }
+            // Build media array from postMedia
+            const media = postMedia.map(m => ({
+                url: m.url,
+                type: m.type,
+                public_id: m.public_id || ''
+            }));
+            const firstItem = media[0] || {};
 
             try {
                 const result = await PostsAPI.createPost({
                     title,
                     content: content || '',
-                    // description removed
-                    // category removed
                     tags: postTags.slice(),
                     media: media,
-                    mediaUrl: mediaUrl,
-                    mediaType: mediaType,
+                    mediaUrl: firstItem.url || '',
+                    mediaType: firstItem.type || '',
                     mentions: mentions,
-                    commentsHidden: hideComments   // <-- toggle flag
+                    commentsHidden: hideComments,
+                    source: 'composer'   // <── explicit source
                 });
 
                 console.log('[DEBUG] Post created successfully:', result);
@@ -2285,16 +2334,12 @@
                 // Reset form
                 document.getElementById('postTitle').value = '';
                 document.getElementById('postContent').value = '';
-                document.getElementById('postMediaUrl').value = '';
-                document.getElementById('postMediaType').value = '';
-                document.getElementById('postPublicId').value = '';
                 document.getElementById('postHideComments').checked = false;
-                const input = document.getElementById('postMediaUrlInput');
-                input.value = '';
-                input.style.color = '';
-                input.style.fontWeight = '';
-                input.placeholder = 'Paste image or YouTube link...';
-                document.getElementById('postImageGrid').innerHTML = '';
+                document.getElementById('postMediaUrlInput').value = '';
+                // Clear media
+                postMedia.forEach(m => { if (m.url?.startsWith('blob:')) URL.revokeObjectURL(m.url); });
+                postMedia = [];
+                renderPostImageGrid();
                 postTags = [];
                 renderPostTags();
 
@@ -2520,7 +2565,7 @@
                 setTimeout(loadCategories, 500);
             }
 
-            console.log('[DEBUG] create.html: separate presets, 100MB/3min, real progress');
+            console.log('[DEBUG] create.html: multi‑image support, source: composer, up to 10 images');
         }
 
         if (document.readyState === 'loading') {
