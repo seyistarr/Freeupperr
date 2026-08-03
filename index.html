@@ -385,10 +385,6 @@
             overflow: hidden;
             margin-top: 10px;
             background: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            max-height: 80vh;
         }
         .ig-media-container img {
             width: 100%;
@@ -407,7 +403,6 @@
         .ig-video-wrap video {
             width: 100%;
             display: block;
-            max-height: 70vh;
             object-fit: contain;
             background: #000;
             pointer-events: none;
@@ -540,16 +535,41 @@
             transform: translate(50%, -50%) scale(1);
         }
 
+        /* ─── VIDEO LOADING OVERLAY ─── */
+        .video-loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, #151515 25%, #232323 50%, #151515 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 4;
+            transition: opacity .2s ease;
+        }
+        .video-loading-overlay.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .video-loading-overlay .spinner {
+            width: 26px;
+            height: 26px;
+            border: 2.5px solid rgba(255, 255, 255, .15);
+            border-top-color: #A78BFA;
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+        }
+
         /* ─── CAROUSEL ─── */
         .media-carousel {
             width: 100%;
             position: relative;
             overflow: hidden;
             background: #000;
-            aspect-ratio: 16 / 9;
-            max-height: 80vh;
             margin-top: 10px;
             border-radius: 0;
+            transition: height .25s ease;
         }
         .media-carousel-track {
             display: flex;
@@ -791,6 +811,18 @@
             background: linear-gradient(90deg, #1f1f1f 25%, #2a2a2a 50%, #1f1f1f 75%);
             background-size: 200% 100%;
             animation: shimmer 1.4s infinite;
+        }
+
+        /* ─── MARKETPLACE SKELETONS ─── */
+        .market-skeleton-thumb {
+            aspect-ratio: 1 / 1;
+            border-radius: 16px;
+        }
+        .category-pill-skeleton {
+            height: 34px;
+            border-radius: 12px;
+            flex-shrink: 0;
+            margin-right: 10px;
         }
 
         /* ─── MARKETPLACE ─── */
@@ -3101,6 +3133,30 @@
                 return [];
             }
 
+            // ─── CAROUSEL HEIGHT HELPER ─────────────────────────────────────
+            function updateCarouselHeight(carouselEl) {
+                if (!carouselEl) return;
+                const activeSlide = carouselEl.querySelector('.media-carousel-slide[data-slide]:nth-child(' +
+                    (Number(carouselEl.dataset.current || 0) + 1) + ')');
+                const media = activeSlide ? activeSlide.querySelector('img,video') : null;
+                if (!media) return;
+                const setHeight = () => {
+                    const w = carouselEl.clientWidth;
+                    const nw = media.naturalWidth || media.videoWidth;
+                    const nh = media.naturalHeight || media.videoHeight;
+                    if (w && nw && nh) {
+                        carouselEl.style.height = (w * (nh / nw)) + 'px';
+                    }
+                };
+                if (media.tagName === 'IMG') {
+                    if (media.complete) setHeight();
+                    else media.addEventListener('load', setHeight, { once: true });
+                } else {
+                    if (media.readyState >= 1) setHeight();
+                    else media.addEventListener('loadedmetadata', setHeight, { once: true });
+                }
+            }
+
             // ─── BUILD MEDIA HTML ───────────────────────────────────────────
             function buildMediaHTML(p, postIndex) {
                 const mediaItems = getMediaItems(p);
@@ -3134,7 +3190,8 @@
                           `;
                         } else {
                             return `<div class="ig-video-wrap" data-full-img="${item.url}">
-                            <video src="${item.url}" playsinline webkit-playsinline="true" muted preload="none"></video>
+                            <video src="${item.url}" playsinline webkit-playsinline="true" muted preload="metadata" onloadeddata="this.parentElement.querySelector('.video-loading-overlay')?.classList.add('hide')"></video>
+                            <div class="video-loading-overlay"><div class="spinner"></div></div>
                           </div>`;
                         }
                     } else {
@@ -3177,11 +3234,11 @@
                           `;
                         } else {
                             contentHtml =
-                                `<video src="${item.url}" muted playsinline preload="none" style="width:100%;height:100%;object-fit:contain;background:#000;"></video>`;
+                                `<div style="position:relative;width:100%;height:100%;"><video src="${item.url}" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;background:#000;" onloadeddata="this.parentElement.querySelector('.video-loading-overlay')?.classList.add('hide')"></video><div class="video-loading-overlay"><div class="spinner"></div></div></div>`;
                         }
                     } else if (isVideo) {
                         contentHtml =
-                            `<video src="${item.url}" muted playsinline preload="none" style="width:100%;height:100%;object-fit:contain;background:#000;"></video>`;
+                            `<div style="position:relative;width:100%;height:100%;"><video src="${item.url}" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;background:#000;" onloadeddata="this.parentElement.querySelector('.video-loading-overlay')?.classList.add('hide')"></video><div class="video-loading-overlay"><div class="spinner"></div></div></div>`;
                     } else {
                         contentHtml =
                             `<img src="${item.url}" class="fade-in-image" loading="lazy" onload="this.classList.add('loaded')" style="width:100%;height:100%;object-fit:contain;background:#000;" />`;
@@ -3236,9 +3293,11 @@
 
                 function goToSlide(idx) {
                     current = (idx + total) % total;
+                    carouselEl.dataset.current = current;
                     track.style.transform = `translateX(-${current * 100}%)`;
                     dots.forEach((d, i) => d.classList.toggle('active', i === current));
                     resetAutoTimer();
+                    updateCarouselHeight(carouselEl);
                 }
 
                 function nextSlide() { goToSlide(current + 1); }
@@ -3301,6 +3360,9 @@
                         showArrowsTemporarily();
                     }
                 }, { passive: true });
+
+                updateCarouselHeight(carouselEl);
+                window.addEventListener('resize', () => updateCarouselHeight(carouselEl));
 
                 resetAutoTimer();
 
@@ -3786,7 +3848,7 @@
                 }
             }
 
-            // ===== FIX 1: SAVED LISTINGS STATE =====
+            // ===== SAVED LISTINGS STATE =====
             let savedListingsSet = new Set();
             let savedListingsLoaded = false;
 
@@ -3808,7 +3870,7 @@
                 }
             }
 
-            // ===== FIX 1: NEW toggleFavorite with API =====
+            // ===== toggleFavorite with API =====
             function toggleFavorite(btn, listingId) {
                 const user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
@@ -3906,6 +3968,34 @@
                     console.error('Error loading market listings:', e);
                     marketListings = [];
                 }
+            }
+
+            // ─── SKELETON BUILDERS ──────────────────────────────────────────
+            function exploreSkeletonGrid() {
+                let h = '';
+                for (let i = 0; i < 8; i++) h +=
+                    '<div class="explore-skeleton-card"><div class="explore-skeleton-thumb"></div></div>';
+                return h;
+            }
+
+            function marketSkeletonGrid(c = 6) {
+                let h = '';
+                for (let i = 0; i < c; i++) {
+                    h += `<div class="explore-skeleton-card">
+                                <div class="skeleton market-skeleton-thumb"></div>
+                                <div class="skeleton skeleton-line" style="width:70%;height:12px;margin:8px 0 6px;"></div>
+                                <div class="skeleton skeleton-line" style="width:45%;height:10px;margin-bottom:0;"></div>
+                              </div>`;
+                }
+                return h;
+            }
+
+            function categoryBarSkeleton(c = 5) {
+                let h = '';
+                for (let i = 0; i < c; i++) {
+                    h += `<div class="skeleton category-pill-skeleton" style="width:${64 + (i % 3) * 16}px;"></div>`;
+                }
+                return h;
             }
 
             function renderMarketCategoryBars() {
@@ -4032,7 +4122,6 @@
                 });
             }
 
-            // ===== FIX 1: createMarketCardHTML with saved state =====
             function createMarketCardHTML(item) {
                 if (!(item.id in currentImageIndexMap)) {
                     currentImageIndexMap[item.id] = 0;
@@ -4438,8 +4527,6 @@
                 }, 3000);
             }
 
-            // ─── OLD toggleFavorite removed; replaced with API version above ───
-
             function applyFilters() {
                 const val = parseFloat(document.getElementById('filterMaxPrice').value);
                 maxPriceFilter = (!isNaN(val) && val > 0) ? val : null;
@@ -4731,7 +4818,6 @@
 
                 const isRepostClass = repostBanner ? 'is-repost' : '';
 
-                // New structure: avatar+header+text inside flex row, then media and actions as siblings
                 return `<article class="feed-post ${isRepostClass}" data-post-id="${p.id}" data-author-id="${author.id}">
                         ${repostBanner}
                         <div class="flex items-start gap-3" style="padding:0 16px;">
@@ -4768,7 +4854,6 @@
             function getFilteredSortedPosts() {
                 const currentUser = getCurrentUser();
                 let p = [...allPosts];
-                // Filter hidden posts (owner can see their own)
                 p = p.filter(post => !hiddenPostsSet.has(post.id));
                 p = p.filter(post => !blockedSet.has(post.user_id));
                 p = p.filter(post => {
@@ -5882,13 +5967,6 @@
                 });
             }
 
-            function exploreSkeletonGrid() {
-                let h = '';
-                for (let i = 0; i < 8; i++) h +=
-                    '<div class="explore-skeleton-card"><div class="explore-skeleton-thumb"></div></div>';
-                return h;
-            }
-
             function buildExploreCards(posts) {
                 return posts.map(post => {
                     const author = window.getAuthorFromProfile(post.profile);
@@ -5926,7 +6004,6 @@
                             `<div class="explore-card-no-media loaded"><div class="explore-card-no-media-text">${escapeHtml(post.title)}</div></div>`;
                     }
 
-                    // Video badge: small circle with play icon, no "Video" text
                     const vb = mediaItems.length > 0 && (mediaItems[0].type === 'video' || (mediaItems[0].url && isYouTubeUrl(mediaItems[0].url))) ?
                         `<div class="explore-card-badge"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>` :
                         '';
@@ -5937,7 +6014,6 @@
                     const nl = !post.mediaUrl && mediaItems.length === 0;
                     const cc = nl ? 'explore-card loaded' : 'explore-card';
 
-                    // New card structure: media on top, title + author/views below
                     return `<div class="${cc}" data-post-id="${post.id}" ${mediaItems.length > 0 && mediaItems[0].type === 'video' ? 'data-video-card="true"' : ''}>
                         <div class="explore-card-media">${mh}${vb}</div>
                         <div class="explore-card-title">${escapeHtml(post.title)}</div>
@@ -5964,7 +6040,6 @@
                     uiPage = 'home'; } else if (mode === 'explore') { currentSortMethod = 'trending';
                     uiPage = 'explore'; } else if (mode === 'market') { uiPage = 'market'; }
 
-                // ===== RESET hidden state for bottom nav, chips, and header =====
                 bottomNavHidden = false;
                 const bottomNavEl = document.getElementById('bottomNav');
                 const chipsEl = document.getElementById('category-chips');
@@ -6072,9 +6147,10 @@
                         if (!marketDataLoaded) {
                             const fg = document.getElementById('featuredGrid');
                             const ng = document.getElementById('newlyGrid');
-                            if (fg) fg.innerHTML = exploreSkeletonGrid();
-                            if (ng) ng.innerHTML = exploreSkeletonGrid();
-                            // ===== FIX 1: load saved listings alongside categories and listings =====
+                            const mb = document.getElementById('mainCategoriesBar');
+                            if (fg) fg.innerHTML = marketSkeletonGrid();
+                            if (ng) ng.innerHTML = marketSkeletonGrid();
+                            if (mb) mb.innerHTML = categoryBarSkeleton();
                             await Promise.all([loadMarketCategories(), loadMarketListings(), loadSavedListings()]);
                             marketDataLoaded = true;
                         }
@@ -6593,7 +6669,6 @@
                         .subscribe();
                 }
 
-                // ===== DEEP-LINK BLOCK (UPDATED with from=profile handling) =====
                 const urlParams = new URLSearchParams(window.location.search);
                 const postIdParam = urlParams.get('post');
                 const productIdParam = urlParams.get('product');
@@ -6657,7 +6732,7 @@
             window.openSeeAllModal = openSeeAllModal;
             window.closeSeeAllModal = closeSeeAllModal;
             window.handleMarketSearch = handleMarketSearch;
-            window.toggleFavorite = toggleFavorite;   // ===== FIX 1: new toggleFavorite exposed =====
+            window.toggleFavorite = toggleFavorite;
             window.changeMarketImage = changeMarketImage;
             window.triggerToast = triggerToast;
 
