@@ -1,5 +1,5 @@
 // =====================================================================
-// posts.js – FreeUpper v2.3.2 – Fully Atomic Social Feed
+// posts.js – FreeUpper v2.3.3 – Fully Atomic Social Feed
 // =====================================================================
 //
 // This module provides a unified API for all social interactions.
@@ -49,6 +49,19 @@
 //   - This allows video.html and video-render.js to fetch sound metadata
 //     from the sounds table using SoundsAPI.
 //   - No new SQL migration needed; sound_id already exists in posts table.
+//
+// NEW in v2.4.0 (SOURCE & TEXT TEMPLATE):
+//   - Added `source` column (composer / studio) – filtered in feed
+//   - Added `text_template_id` column – persisted for text cards
+//   - loadAllPosts() accepts a `source` filter
+//   - loadFeedWithReposts() passes source through and excludes
+//     cross‑source reposts
+//   - createPost() writes source and textTemplateId
+//   - REQUIRED DATABASE MIGRATIONS:
+//       ALTER TABLE posts ADD COLUMN source TEXT NOT NULL DEFAULT 'composer';
+//       ALTER TABLE posts ADD CONSTRAINT posts_source_check
+//           CHECK (source IN ('composer','studio'));
+//       ALTER TABLE posts ADD COLUMN text_template_id TEXT;
 // =====================================================================
 
 (function() {
@@ -101,6 +114,9 @@
       timestamp: row.created_at || new Date().toISOString(),
       // ─── SOUND INTEGRATION ──────────────────────────
       sound_id: row.sound_id || null,
+      // ─── SOURCE & TEXT TEMPLATE ─────────────────────
+      source: row.source || 'composer',
+      textTemplateId: row.text_template_id || null,
       // ────────────────────────────────────────────────
       views: row.views || 0,
       comments: row.comment_count || 0,
@@ -150,8 +166,8 @@
   }
 
   // ─── LOAD POSTS ──────────────────────────────────────────────────────
-  async function loadAllPosts(offset = 0, limit = 20) {
-    const { data: rows, error } = await sb
+  async function loadAllPosts(offset = 0, limit = 20, source = null) {
+    let q = sb
       .from('posts')
       .select(`
         *,
@@ -165,8 +181,11 @@
           is_private
         )
       `)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('created_at', { ascending: false });
+
+    if (source) q = q.eq('source', source);
+
+    const { data: rows, error } = await q.range(offset, offset + limit - 1);
 
     if (error) {
       console.error('loadAllPosts error:', error);
@@ -301,9 +320,9 @@
   }
 
   // ─── LOAD FEED WITH CONTEXTS ──────────────────────────────────────
-  async function loadFeedWithReposts(offset = 0, limit = 20) {
+  async function loadFeedWithReposts(offset = 0, limit = 20, source = null) {
     const [posts, repostItems] = await Promise.all([
-      loadAllPosts(offset, limit),
+      loadAllPosts(offset, limit, source),
       loadRepostFeedItems(offset, limit),
     ]);
 
@@ -370,6 +389,9 @@
     repostGroups.forEach((users, postId) => {
       const originalPost = postsById.get(postId) || extraPostsById.get(postId);
       if (!originalPost) return;
+      // Exclude reposts when source filter is active and the original post
+      // does not match that source (cross‑source reposts are dropped).
+      if (source && originalPost.source !== source) return;
       seenPostIds.add(postId);
       const sorted = [...users].sort((a, b) => new Date(b.time) - new Date(a.time));
 
@@ -703,8 +725,10 @@
       mentions: fields.mentions || [],
       comments_hidden: !!fields.commentsHidden,
       // is_hidden defaults to false; no need to set explicitly
-      // sound_id can be passed if known; otherwise null
       sound_id: fields.sound_id || null,
+      // ─── SOURCE & TEXT TEMPLATE ─────────────────────
+      source: fields.source || 'composer',
+      text_template_id: fields.textTemplateId || null,
     };
 
     if (fields.media && fields.media.length > 0) {
