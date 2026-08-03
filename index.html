@@ -2803,7 +2803,7 @@
                     then = new Date(iso).getTime(),
                     diff = Math.floor((now - then) / 1000);
                 if (diff < 60) return 'Just now';
-                if (diff < 3600) return Math.floor(diff / 3600) + 'm ago';
+                if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
                 if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
                 if (diff < 172800) return 'Yesterday';
                 if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
@@ -3527,7 +3527,8 @@
             // ─── POSTS ──────────────────────────────────────────────────────
             async function reloadPosts() {
                 try {
-                    const feedItems = await window.PostsAPI.loadFeedWithReposts();
+                    // ─── FIX: filter by source 'composer' ───────────────────
+                    const feedItems = await window.PostsAPI.loadFeedWithReposts(0, 20, 'composer');
                     const filtered = feedItems.filter(entry => {
                         if (entry.feedType !== 'repost') return true;
                         return entry.post.mediaType !== 'video';
@@ -4915,7 +4916,7 @@
                     const ps = getFilteredSortedPosts();
                     co.innerHTML = '';
                     if (ps.length === 0) { co.innerHTML =
-                            '<div class="flex flex-col items-center justify-center py-20 text-center"><p class="text-sm" style="color:var(--muted);">No posts yet.</p></div>';
+                            '<div class="flex flex-col items-center justify-center py-20 text-center"><p class="text-sm" style="color:var(--muted);">No posts yet. Create your first post!</p></div>';
                         return; }
                     const fb = ps.slice(0, PAGE_SIZE);
                     co.innerHTML = fb.map((p, i) => buildPostHTML(p, i)).join('');
