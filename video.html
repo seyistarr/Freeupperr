@@ -46,7 +46,7 @@
     <script src="mentions.js"></script>
     <script src="hashtags.js"></script>
     <script src="sounds.js"></script>
-    <!-- ─── NEW: video-render.js ─── -->
+    <!-- ─── video-render.js (shared templates) ─── -->
     <script src="video-render.js"></script>
 
     <style>
@@ -2125,7 +2125,8 @@
         }
         .v-media-wrap.comments-shrink-init video,
         .v-media-wrap.comments-shrink-init .v-img-track,
-        .v-media-wrap.comments-shrink-init .v-text-card {
+        .v-media-wrap.comments-shrink-init .v-text-card-canvas,
+        .v-media-wrap.comments-shrink-init .v-text-card-overlay {
             border-radius: inherit;
         }
         .v-media-wrap.comments-shrink-init .v-upload-badge {
@@ -2214,23 +2215,32 @@
             background: #fff;
             transform: scale(1.2);
         }
-        .v-text-card {
+
+        /* ─── TEXT CARD (canvas + overlay) ─── */
+        .v-text-card-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            background: #111;
+        }
+        .v-text-card-overlay {
             position: absolute;
             inset: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 60px 32px;
-            background: linear-gradient(160deg, var(--pd), #1a1035);
-            cursor: pointer;
+            pointer-events: none;
         }
-        .v-text-card p {
+        .v-text-card-overlay p {
             font-size: clamp(20px, 5vw, 28px);
-            font-weight: 700;
-            color: #fff;
             line-height: 1.5;
             text-align: center;
             word-wrap: break-word;
+            pointer-events: auto;
+            cursor: pointer;
         }
 
         /* ── Clean display mode ── */
@@ -3009,30 +3019,37 @@
             }
         });
 
-        // ─── LOAD VIDEO POSTS (using feedContextMap) ──────────────
+        // ─── LOAD VIDEO POSTS (source: 'studio') ───────────────────
 
         async function loadVideoPosts() {
             try {
-                const feedItems = await window.PostsAPI.loadFeedWithReposts();
+                const feedItems = await window.PostsAPI.loadFeedWithReposts(0, 20, 'studio');
                 const currentUser = getCurrentUser();
 
                 const mapEntryToVideoPost = (entry) => {
                     const post = entry.post;
-                    const isVideo = (post.mediaType === 'video') ||
-                        (post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post.mediaUrl.includes(
-                            'youtu.be'))) ||
-                        (post.mediaType !== 'image' && post.mediaType !== 'text' &&
-                            post.mediaUrl && /\.(mp4|webm|mov)(\?|$)/i.test(post.mediaUrl));
-
-                    if (!isVideo) return null;
-
+                    // Accept any post from studio – no video heuristic
                     const profile = post.profile || {};
                     const author = window.getAuthorFromProfile(profile);
                     const isOwn = post.user_id === currentUser.id;
-                    const isYouTube = isVideo && post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post
-                        .mediaUrl.includes('youtu.be'));
+                    const isYouTube = post.mediaUrl && (post.mediaUrl.includes('youtube.com/embed') || post.mediaUrl
+                        .includes('youtu.be'));
                     const ytId = isYouTube ? post.mediaUrl.match(/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)?.[1] ||
                         post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null;
+
+                    // Determine mediaType from post
+                    const mediaType = post.mediaType || 'text';
+
+                    // Build images array for image posts
+                    let images = null;
+                    if (mediaType === 'image') {
+                        if (Array.isArray(post.media) && post.media.length > 0) {
+                            images = post.media.filter(m => m.type !== 'video').map(m => m.url);
+                            if (images.length === 0 && post.mediaUrl) images = [post.mediaUrl];
+                        } else if (post.mediaUrl) {
+                            images = [post.mediaUrl];
+                        }
+                    }
 
                     let soundId = post.sound_id || null;
                     if (!soundId) {
@@ -3076,8 +3093,9 @@
                         postData: post,
                         isYouTube: isYouTube,
                         ytId: ytId,
-                        mediaType: 'video',
-                        images: null,
+                        mediaType: mediaType,
+                        images: images,
+                        textTemplateId: post.textTemplateId || null,
                         timestamp: post.timestamp || post.date || new Date().toISOString(),
                         profile: post.profile,
                         myRepost: post.myRepost || false,
@@ -3188,7 +3206,7 @@
                     <div class="v-tap" id="tap-${i}" onclick="handleCardTap(event,${i})"></div>
                 </div>`;
             }
-            // fallback for images/text (should not happen after filtering)
+
             if (v.mediaType === 'image') {
                 const slides = v.images.map(src => `<img class="v-img-slide" src="${src}" alt="" draggable="false">`).join('');
                 const dots = v.images.length > 1 ?
@@ -3203,9 +3221,18 @@
                     </div>
                 </div>`;
             }
+
+            // ─── TEXT CARD with canvas template ──────────────────────
+            const tpl = window.VideoRender ? VideoRender.getTemplate(v.textTemplateId) : { color: '#fff', font: '800',
+                shadow: 'none' };
             return `
             <div class="v-media-wrap" id="mediaWrap-${i}">
-                <div class="v-text-card" onclick="handleCardTap(event,${i})"><p>${escapeHtml((v.caption || '').split('\n')[0] || '')}</p></div>
+                <canvas class="v-text-card-canvas" id="txcCanvas-${i}" onclick="handleCardTap(event,${i})"
+                        style="position:absolute;inset:0;width:100%;height:100%;display:block;"></canvas>
+                <div class="v-text-card-overlay" onclick="handleCardTap(event,${i})"
+                     style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:60px 32px;">
+                    <p style="font-size:clamp(20px,5vw,28px);font-weight:${tpl.font};color:${tpl.color};text-shadow:${tpl.shadow};line-height:1.5;text-align:center;word-wrap:break-word;">${escapeHtml((v.caption || '').split('\n')[0] || '')}</p>
+                </div>
             </div>`;
         }
 
@@ -3331,6 +3358,25 @@
             });
         }
 
+        // ─── TEXT CARD ANIMATION HELPER ─────────────────────────────
+        function startTextCardAnimation(canvas, templateId) {
+            let t = Math.random() * 10;
+
+            function frame() {
+                if (!canvas.isConnected) return;
+                const w = canvas.clientWidth,
+                    h = canvas.clientHeight;
+                if (canvas.width !== w) canvas.width = w;
+                if (canvas.height !== h) canvas.height = h;
+                t += 0.02;
+                if (window.VideoRender) {
+                    VideoRender.drawTemplateBackground(templateId, canvas.getContext('2d'), w, h, t);
+                }
+                requestAnimationFrame(frame);
+            }
+            requestAnimationFrame(frame);
+        }
+
         function buildFeed(list) {
             const posts = list || buildEligibleFeed(feedMode);
             const track = document.getElementById('feedTrack');
@@ -3359,6 +3405,12 @@
                 const soundLabelEl = card.querySelector('.sound-label');
                 if (soundLabelEl && window.VideoRender) {
                     VideoRender.hydrateSoundLabel(v.postData || v, soundLabelEl);
+                }
+
+                // ─── START TEXT CARD ANIMATION ──────────────────────
+                const txcCanvas = card.querySelector('.v-text-card-canvas');
+                if (txcCanvas && window.VideoRender) {
+                    startTextCardAnimation(txcCanvas, v.textTemplateId);
                 }
             });
 
@@ -3415,13 +3467,15 @@
             if (!v) return;
             currentPostId = v.id;
 
+            // ─── Increment view for ALL post types ───────────────────
+            if (window.PostsAPI && window.PostsAPI.incrementView) {
+                window.PostsAPI.incrementView(v.id);
+            }
+
+            // If not video, we're done (no playback controls)
             if (v.mediaType !== 'video') {
                 ytState[idx] = null;
                 return;
-            }
-
-            if (window.PostsAPI && window.PostsAPI.incrementView) {
-                window.PostsAPI.incrementView(v.id);
             }
 
             ytState[idx] = { muted: userMutePreference, playing: true };
