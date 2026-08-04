@@ -3,12 +3,10 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <!-- ===== STATUS BAR COLOR (will be updated by global.js) ===== -->
     <meta name="theme-color" id="theme-color-meta" content="#f9fafb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
-    <!-- ===== OPEN GRAPH / SOCIAL SHARING ===== -->
     <meta property="og:title" content="FreeUpper — Express Freely. Connect Globally." />
     <meta property="og:description" content="Share your thoughts, discover new ideas, and connect with a global community on FreeUpper." />
     <meta property="og:image" content="https://freeupper.vercel.app/images/og-image.png" />
@@ -19,7 +17,6 @@
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://freeupper.vercel.app/images/og-image.png" />
-    <!-- ===== END OG ===== -->
 
     <title>FreeUpper — Home</title>
     <link rel="icon" type="image/png" href="freeupper.png" />
@@ -48,11 +45,8 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Inter: added weight 500 for counts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="global.css" />
-
-    <!-- ===== SHARED NAV STYLES ===== -->
     <link rel="stylesheet" href="bottom-nav.css" />
     <link rel="stylesheet" href="side-nav.css" />
 
@@ -65,7 +59,6 @@
     <script src="mentions.js" defer></script>
     <script src="hashtags.js" defer></script>
 
-    <!-- ===== PRE‑PAINT THEME READ (fixes flash) ===== -->
     <script>
         (function() {
             const saved = localStorage.getItem('freeupper_theme');
@@ -668,6 +661,98 @@
             stroke-width: 2.5;
             stroke-linecap: round;
             stroke-linejoin: round;
+        }
+
+        .media-carousel[data-external-dots] .carousel-dots {
+            display: none;
+        }
+        .single-post-top-dots {
+            display: flex;
+            gap: 6px;
+            padding: 10px 16px 0;
+        }
+        .single-post-top-dots .top-dot {
+            height: 3px;
+            border-radius: 3px;
+            flex: 1;
+            background: var(--brd2);
+            transition: background .2s;
+        }
+        .single-post-top-dots .top-dot.active {
+            background: #7C3AED;
+        }
+
+        /* ─── TITLE RENDER SYSTEM ─── */
+        .fu-normal-title {
+            font-family: 'Poppins', 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: var(--text);
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        .fu-short-title {
+            font-family: 'Poppins', 'Inter', sans-serif;
+            font-weight: 800;
+            font-size: 1.25rem;
+            line-height: 1.35;
+            color: var(--text);
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        .fu-title-noclamp {
+            -webkit-line-clamp: unset !important;
+            display: block !important;
+            overflow: visible !important;
+        }
+        .fu-emoji-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 90px;
+            margin: 4px 0 8px;
+            padding: 6px 0;
+        }
+        .fu-emoji-title .fu-emoji-inner {
+            display: inline-block;
+            line-height: 1;
+            text-align: center;
+            transform-origin: center;
+            filter: drop-shadow(0 8px 14px rgba(0,0,0,.28)) drop-shadow(0 2px 4px rgba(0,0,0,.18));
+            animation: fuEmojiPop 2.6s ease-in-out infinite;
+        }
+        .fu-emoji-title.fu-emoji-lg .fu-emoji-inner {
+            font-size: 68px;
+        }
+        .fu-emoji-title.fu-emoji-md .fu-emoji-inner {
+            font-size: 50px;
+        }
+        .fu-emoji-title.fu-emoji-sm .fu-emoji-inner {
+            font-size: 34px;
+        }
+        @keyframes fuEmojiPop {
+            0%,
+            100% {
+                transform: scale(1) rotate(0deg) translateY(0);
+            }
+            25% {
+                transform: scale(1.05) rotate(-2deg) translateY(-2px);
+            }
+            50% {
+                transform: scale(1.1) rotate(2deg) translateY(-4px);
+            }
+            75% {
+                transform: scale(1.04) rotate(-1deg) translateY(-1px);
+            }
         }
 
         /* ─── EXPLORE GRID ─── */
@@ -2807,6 +2892,41 @@
                 return str.length > max ? str.slice(0, max) + '…' : str;
             }
 
+            // ─── TITLE RENDER SYSTEM ────────────────────────────────────────
+            const EMOJI_REGEX = /[\p{Extended_Pictographic}\uFE0F\u200D]/gu;
+
+            function getTitleType(title) {
+                const text = (title || '').trim();
+                if (!text) return 'none';
+                const withoutEmoji = text.replace(EMOJI_REGEX, '').trim();
+                if (!withoutEmoji) return 'emoji';
+                const words = text.split(/\s+/).filter(Boolean);
+                if (words.length <= 6) return 'short';
+                return 'normal';
+            }
+
+            function getEmojiSizeClass(title) {
+                const count = Array.from((title || '').trim()).length;
+                if (count <= 2) return 'fu-emoji-lg';
+                if (count <= 5) return 'fu-emoji-md';
+                return 'fu-emoji-sm';
+            }
+
+            function renderPostTitle(title, opts = {}) {
+                const text = title || '';
+                const type = getTitleType(text);
+                const clampClass = opts.noClamp ? ' fu-title-noclamp' : '';
+                if (type === 'none') return '';
+                if (type === 'emoji') {
+                    const sizeClass = getEmojiSizeClass(text);
+                    return `<div class="fu-emoji-title ${sizeClass}"><span class="fu-emoji-inner">${escapeHtml(text)}</span></div>`;
+                }
+                if (type === 'short') {
+                    return `<div class="fu-short-title${clampClass}">${escapeHtml(text)}</div>`;
+                }
+                return `<div class="fu-normal-title${clampClass}">${escapeHtml(text)}</div>`;
+            }
+
             // ─── LINKIFY CONTENT WITH HASHTAGS ──────────────────────────
 
             function linkifyContent(text) {
@@ -3133,28 +3253,35 @@
                 return [];
             }
 
-            // ─── CAROUSEL HEIGHT HELPER ─────────────────────────────────────
-            function updateCarouselHeight(carouselEl) {
+            // ─── CAROUSEL FIXED HEIGHT (computed once, never changes on swipe) ───
+            function computeCarouselFixedHeight(carouselEl) {
                 if (!carouselEl) return;
-                const activeSlide = carouselEl.querySelector('.media-carousel-slide[data-slide]:nth-child(' +
-                    (Number(carouselEl.dataset.current || 0) + 1) + ')');
-                const media = activeSlide ? activeSlide.querySelector('img,video') : null;
-                if (!media) return;
-                const setHeight = () => {
-                    const w = carouselEl.clientWidth;
-                    const nw = media.naturalWidth || media.videoWidth;
-                    const nh = media.naturalHeight || media.videoHeight;
-                    if (w && nw && nh) {
-                        carouselEl.style.height = (w * (nh / nw)) + 'px';
-                    }
+                const width = carouselEl.clientWidth;
+                if (!width) return;
+                const maxAllowed = window.innerHeight * 0.75;
+                let tallest = 0;
+                const applyHeight = () => {
+                    const h = Math.min(Math.max(tallest, 1), maxAllowed);
+                    carouselEl.style.height = h + 'px';
                 };
-                if (media.tagName === 'IMG') {
-                    if (media.complete) setHeight();
-                    else media.addEventListener('load', setHeight, { once: true });
-                } else {
-                    if (media.readyState >= 1) setHeight();
-                    else media.addEventListener('loadedmetadata', setHeight, { once: true });
-                }
+                carouselEl.querySelectorAll('.media-carousel-slide img, .media-carousel-slide video').forEach(media => {
+                    const measure = () => {
+                        const nw = media.naturalWidth || media.videoWidth;
+                        const nh = media.naturalHeight || media.videoHeight;
+                        if (nw && nh) {
+                            const h = width * (nh / nw);
+                            if (h > tallest) { tallest = h;
+                                applyHeight(); }
+                        }
+                    };
+                    if (media.tagName === 'IMG') {
+                        if (media.complete && media.naturalWidth) measure();
+                        else media.addEventListener('load', measure, { once: true });
+                    } else {
+                        if (media.readyState >= 1) measure();
+                        else media.addEventListener('loadedmetadata', measure, { once: true });
+                    }
+                });
             }
 
             // ─── BUILD MEDIA HTML ───────────────────────────────────────────
@@ -3190,7 +3317,7 @@
                           `;
                         } else {
                             return `<div class="ig-video-wrap" data-full-img="${item.url}">
-                            <video src="${item.url}" playsinline webkit-playsinline="true" muted preload="metadata" onloadeddata="this.parentElement.querySelector('.video-loading-overlay')?.classList.add('hide')"></video>
+                            <video src="${item.url}" playsinline webkit-playsinline="true" muted preload="metadata" onloadeddata="this.closest('.ig-video-wrap').querySelector('.video-loading-overlay')?.classList.add('hide')" onplaying="this.closest('.ig-video-wrap').querySelector('.video-loading-overlay')?.classList.add('hide')"></video>
                             <div class="video-loading-overlay"><div class="spinner"></div></div>
                           </div>`;
                         }
@@ -3234,11 +3361,11 @@
                           `;
                         } else {
                             contentHtml =
-                                `<div style="position:relative;width:100%;height:100%;"><video src="${item.url}" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;background:#000;" onloadeddata="this.parentElement.querySelector('.video-loading-overlay')?.classList.add('hide')"></video><div class="video-loading-overlay"><div class="spinner"></div></div></div>`;
+                                `<div class="carousel-video-wrap" style="position:relative;width:100%;height:100%;"><video src="${item.url}" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;background:#000;" onloadeddata="this.closest('.carousel-video-wrap').querySelector('.video-loading-overlay')?.classList.add('hide')" onplaying="this.closest('.carousel-video-wrap').querySelector('.video-loading-overlay')?.classList.add('hide')"></video><div class="video-loading-overlay"><div class="spinner"></div></div></div>`;
                         }
                     } else if (isVideo) {
                         contentHtml =
-                            `<div style="position:relative;width:100%;height:100%;"><video src="${item.url}" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;background:#000;" onloadeddata="this.parentElement.querySelector('.video-loading-overlay')?.classList.add('hide')"></video><div class="video-loading-overlay"><div class="spinner"></div></div></div>`;
+                            `<div class="carousel-video-wrap" style="position:relative;width:100%;height:100%;"><video src="${item.url}" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:contain;background:#000;" onloadeddata="this.closest('.carousel-video-wrap').querySelector('.video-loading-overlay')?.classList.add('hide')" onplaying="this.closest('.carousel-video-wrap').querySelector('.video-loading-overlay')?.classList.add('hide')"></video><div class="video-loading-overlay"><div class="spinner"></div></div></div>`;
                     } else {
                         contentHtml =
                             `<img src="${item.url}" class="fade-in-image" loading="lazy" onload="this.classList.add('loaded')" style="width:100%;height:100%;object-fit:contain;background:#000;" />`;
@@ -3297,7 +3424,6 @@
                     track.style.transform = `translateX(-${current * 100}%)`;
                     dots.forEach((d, i) => d.classList.toggle('active', i === current));
                     resetAutoTimer();
-                    updateCarouselHeight(carouselEl);
                 }
 
                 function nextSlide() { goToSlide(current + 1); }
@@ -3361,8 +3487,8 @@
                     }
                 }, { passive: true });
 
-                updateCarouselHeight(carouselEl);
-                window.addEventListener('resize', () => updateCarouselHeight(carouselEl));
+                computeCarouselFixedHeight(carouselEl);
+                window.addEventListener('resize', () => computeCarouselFixedHeight(carouselEl));
 
                 resetAutoTimer();
 
@@ -3379,6 +3505,19 @@
                     el._inited = true;
                     initCarousel(el);
                 });
+            }
+
+            function initExternalCarouselDots(container) {
+                const carousel = container.querySelector('.media-carousel[data-external-dots]');
+                const dotsBar = container.querySelector('.single-post-top-dots');
+                if (!carousel || !dotsBar) return;
+                const syncActive = () => {
+                    const current = Number(carousel.dataset.current || 0);
+                    dotsBar.querySelectorAll('.top-dot').forEach((d, i) => d.classList.toggle('active', i === current));
+                };
+                syncActive();
+                const mo = new MutationObserver(syncActive);
+                mo.observe(carousel, { attributes: true, attributeFilter: ['data-current'] });
             }
 
             // ─── VIDEO AUTO-PLAY ─────────────────────────────────────────────
@@ -4830,7 +4969,7 @@
                               ${lockPill}
                               ${followBtn}
                             </div>
-                            <h3 class="font-heading font-bold text-base mt-0.5 cursor-pointer" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;overflow-wrap:anywhere;color:var(--text);">${escapeHtml(p.title)}</h3>
+                            <div class="cursor-pointer mt-0.5">${renderPostTitle(p.title)}</div>
                             ${hd?`<p class="text-sm mt-1 leading-relaxed" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(p.description)}</p>`:''}
                             <div class="mt-1" id="post-content-${p.id}">
                               <div class="content-preview preview-text-${p.id}">${renderedPreview}</div>
@@ -5668,13 +5807,26 @@
                 const aa = author.avatar;
                 const da = truncateName(author.name, 22);
                 const verifiedStatus = author.verified_status;
-                const mh = buildMediaHTML(post, 'single');
+                let mh = buildMediaHTML(post, 'single');
+                const mediaCount = getMediaItems(post).length;
                 const bm = isBookmarked(post.id);
                 const comments = Array.isArray(post.comments) ? post.comments.filter(c => c.approved !== false) : [],
                     vc = getVisibleComments(post.id);
                 const followBtn = buildFollowButton(post.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
                 const renderedContent = linkifyContent(post.content);
+
+                let topDotsHtml = '';
+                if (mediaCount > 1) {
+                    mh = mh.replace('class="media-carousel"', 'class="media-carousel" data-external-dots="true"');
+                    topDotsHtml = `<div class="single-post-top-dots">${
+                        Array.from({ length: mediaCount }).map((_, i) =>
+                            `<div class="top-dot ${i===0?'active':''}"></div>`
+                        ).join('')
+                    }</div>`;
+                }
+
+                const hasCaption = (post.title && post.title.trim()) || (post.description && post.description.trim()) || (post.content && post.content.trim());
 
                 return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
                         <article>
@@ -5689,13 +5841,10 @@
                               ${followBtn}
                             </div>
                           </div>
-                          <h1 class="font-heading font-extrabold mt-1 mb-1" style="font-size:clamp(1.25rem,4vw,1.7rem);word-break:break-word;overflow-wrap:anywhere;line-height:1.3;color:var(--text);">${escapeHtml(post.title)}</h1>
+                          ${topDotsHtml}
                           ${mh}
-                          ${post.description?`<p class="text-sm leading-relaxed mt-2 mb-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
-                          <div class="content-text mt-1">${renderedContent}</div>
                         </article>
-                        <hr class="my-4" style="border-color:var(--brd);">
-                        <div class="post-actions-row" style="max-width:100%;justify-content:space-between;" data-post-reactions="${post.id}">
+                        <div class="post-actions-row" style="max-width:100%;justify-content:space-between;padding:0 4px;" data-post-reactions="${post.id}">
                           <span class="comment-btn ${post.commentsHidden?'comments-off':''}">${post.commentsHidden?svgCommentOff():svgComment()}<span class="comment-count" id="comments-count-${post.id}">${formatCount(comments.length)}</span></span>
                           ${buildReactionButton(post.id)}
                           <span class="views-count">${svgEye()}<span>${formatCount(post.views||0)}</span></span>
@@ -5703,7 +5852,13 @@
                           <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}<span class="share-count">${formatCount(post.shareCount||0)}</span></span>
                           ${repostCountBadge(post)}
                         </div>
-                        <div class="mt-5">
+                        ${hasCaption ? `<div class="mt-2">
+                          ${renderPostTitle(post.title, { noClamp: true })}
+                          ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
+                          ${post.content && post.content.trim() ? `<div class="content-text mt-1">${renderedContent}</div>` : ''}
+                        </div>` : ''}
+                        <hr class="my-4" style="border-color:var(--brd);">
+                        <div class="mt-1">
                           <h3 class="font-heading font-bold text-base mb-3" style="color:var(--text);">Replies</h3>
                           <div id="comments-list">${renderCommentsHTML(comments,post.id,vc)}</div>
                           ${post.commentsHidden ? buildCommentsOffIllustration() : ''}
@@ -5758,6 +5913,7 @@
 
                 if (post && !Array.isArray(post.comments)) post.comments = [];
                 fc.innerHTML = buildSinglePostHTML(post);
+                initExternalCarouselDots(fc);
 
                 fs.classList.add('open');
                 document.body.classList.add('explore-open');
