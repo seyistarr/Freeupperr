@@ -726,9 +726,10 @@
             display: inline-block;
             line-height: 1;
             text-align: center;
-            transform-origin: center;
-            filter: drop-shadow(0 8px 14px rgba(0,0,0,.28)) drop-shadow(0 2px 4px rgba(0,0,0,.18));
-            animation: fuEmojiPop 2.6s ease-in-out infinite;
+            filter:
+                drop-shadow(0 1px 0 rgba(255,255,255,.35))
+                drop-shadow(0 10px 18px rgba(0,0,0,.32))
+                drop-shadow(0 3px 5px rgba(0,0,0,.22));
         }
         .fu-emoji-title.fu-emoji-lg .fu-emoji-inner {
             font-size: 68px;
@@ -739,21 +740,36 @@
         .fu-emoji-title.fu-emoji-sm .fu-emoji-inner {
             font-size: 34px;
         }
-        @keyframes fuEmojiPop {
-            0%,
-            100% {
-                transform: scale(1) rotate(0deg) translateY(0);
-            }
-            25% {
-                transform: scale(1.05) rotate(-2deg) translateY(-2px);
-            }
-            50% {
-                transform: scale(1.1) rotate(2deg) translateY(-4px);
-            }
-            75% {
-                transform: scale(1.04) rotate(-1deg) translateY(-1px);
-            }
+
+        /* ─── CONTENT BOLD RENDER SYSTEM (Facebook-style short posts) ─── */
+        .fu-content-bold {
+            font-family: 'Poppins', 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 1.3rem;
+            line-height: 1.45;
+            color: var(--text);
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
+        .fu-content-emoji {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 80px;
+            margin: 6px 0 8px;
+            padding: 6px 0;
+        }
+        .fu-content-emoji .fu-content-emoji-inner {
+            display: inline-block;
+            line-height: 1;
+            text-align: center;
+            font-weight: 700;
+            filter: drop-shadow(0 6px 10px rgba(0,0,0,.22));
+        }
+        .fu-content-emoji.fu-c-emoji-lg .fu-content-emoji-inner { font-size: 60px; }
+        .fu-content-emoji.fu-c-emoji-md .fu-content-emoji-inner { font-size: 44px; }
+        .fu-content-emoji.fu-c-emoji-sm .fu-content-emoji-inner { font-size: 30px; }
 
         /* ─── EXPLORE GRID ─── */
         .explore-grid {
@@ -2895,11 +2911,12 @@
             // ─── TITLE RENDER SYSTEM ────────────────────────────────────────
             const EMOJI_REGEX = /[\p{Extended_Pictographic}\uFE0F\u200D]/gu;
 
-            function getTitleType(title) {
+            function getTitleType(title, hasMedia) {
                 const text = (title || '').trim();
                 if (!text) return 'none';
                 const withoutEmoji = text.replace(EMOJI_REGEX, '').trim();
-                if (!withoutEmoji) return 'emoji';
+                // ─── if there's media, don't blow the emoji up big ───
+                if (!withoutEmoji) return hasMedia ? 'short' : 'emoji';
                 const words = text.split(/\s+/).filter(Boolean);
                 if (words.length <= 6) return 'short';
                 return 'normal';
@@ -2914,7 +2931,7 @@
 
             function renderPostTitle(title, opts = {}) {
                 const text = title || '';
-                const type = getTitleType(text);
+                const type = getTitleType(text, opts.hasMedia);
                 const clampClass = opts.noClamp ? ' fu-title-noclamp' : '';
                 if (type === 'none') return '';
                 if (type === 'emoji') {
@@ -2925,6 +2942,47 @@
                     return `<div class="fu-short-title${clampClass}">${escapeHtml(text)}</div>`;
                 }
                 return `<div class="fu-normal-title${clampClass}">${escapeHtml(text)}</div>`;
+            }
+
+            // ─── CONTENT BOLD RENDER SYSTEM (Facebook-style short posts) ───
+            function getContentType(text, hasMedia) {
+                const t = (text || '').trim();
+                if (!t) return 'none';
+                if (hasMedia) return 'normal'; // bold treatment only for text-only posts
+                const withoutEmoji = t.replace(EMOJI_REGEX, '').trim();
+                if (!withoutEmoji) return 'emoji';
+                const words = t.split(/\s+/).filter(Boolean);
+                if (words.length <= 8) return 'short';
+                return 'normal';
+            }
+
+            function getContentEmojiSizeClass(text) {
+                const count = Array.from((text || '').trim()).length;
+                if (count <= 2) return 'fu-c-emoji-lg';
+                if (count <= 5) return 'fu-c-emoji-md';
+                return 'fu-c-emoji-sm';
+            }
+
+            function buildContentBlockHTML(postId, rawContent, hasMedia, opts = {}) {
+                const text = rawContent || '';
+                const type = getContentType(text, hasMedia);
+                if (type === 'none') return '';
+                if (type === 'emoji') {
+                    const sizeClass = getContentEmojiSizeClass(text);
+                    return `<div class="fu-content-emoji ${sizeClass}"><span class="fu-content-emoji-inner">${escapeHtml(text)}</span></div>`;
+                }
+                if (type === 'short') {
+                    return `<div class="fu-content-bold">${linkifyContent(text)}</div>`;
+                }
+                if (opts.noPreview) {
+                    return `<div class="content-text">${linkifyContent(text)}</div>`;
+                }
+                const pt = text.substring(0, 250);
+                const isLong = text.length > 250;
+                const renderedContent = linkifyContent(text);
+                const renderedPreview = linkifyContent(pt);
+                return `<div class="content-preview preview-text-${postId}">${renderedPreview}</div>
+                    ${isLong?`<div class="content-text full-text-${postId} hidden">${renderedContent}</div><button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm">Show more</button>`:`<div class="content-text full-text-${postId}">${renderedContent}</div>`}`;
             }
 
             // ─── LINKIFY CONTENT WITH HASHTAGS ──────────────────────────
@@ -4936,8 +4994,7 @@
 
                 const hd = p.description && p.description.trim().length > 0;
                 const rawContent = p.content || '';
-                const pt = rawContent.substring(0, 250);
-                const isLong = rawContent.length > 250;
+                const hasMedia = getMediaItems(p).length > 0;
                 const th = p.tags && p.tags.length > 0 ?
                     `<div class="flex flex-wrap gap-1 mt-2">${p.tags.map(t => 
                         `<span class="tag-badge" style="display:inline-block;padding:3px 9px;border-radius:20px;font-size:.7rem;font-weight:600;background:rgba(124,58,237,.08);color:#7C3AED;cursor:pointer;" onclick="event.stopPropagation();window.Router.openHashtag('${escapeHtml(t)}')">#${escapeHtml(t)}</span>`
@@ -4951,9 +5008,6 @@
                 const lockPill = (p.is_hidden && p.user_id === cuForLock.id)
                     ? '<span style="display:inline-flex;align-items:center;gap:3px;font-size:.68rem;font-weight:700;color:#7C3AED;background:rgba(124,58,237,.1);padding:2px 8px;border-radius:20px;margin-left:4px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Only you</span>'
                     : '';
-
-                const renderedContent = linkifyContent(rawContent);
-                const renderedPreview = linkifyContent(pt);
 
                 const isRepostClass = repostBanner ? 'is-repost' : '';
 
@@ -4969,11 +5023,10 @@
                               ${lockPill}
                               ${followBtn}
                             </div>
-                            <div class="cursor-pointer mt-0.5">${renderPostTitle(p.title)}</div>
+                            <div class="cursor-pointer mt-0.5">${renderPostTitle(p.title, { hasMedia })}</div>
                             ${hd?`<p class="text-sm mt-1 leading-relaxed" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(p.description)}</p>`:''}
                             <div class="mt-1" id="post-content-${p.id}">
-                              <div class="content-preview preview-text-${p.id}">${renderedPreview}</div>
-                              ${isLong?`<div class="content-text full-text-${p.id} hidden">${renderedContent}</div><button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm">Show more</button>`:`<div class="content-text full-text-${p.id}">${renderedContent}</div>`}
+                              ${buildContentBlockHTML(p.id, rawContent, hasMedia)}
                             </div>
                           </div>
                         </div>
@@ -5809,12 +5862,12 @@
                 const verifiedStatus = author.verified_status;
                 let mh = buildMediaHTML(post, 'single');
                 const mediaCount = getMediaItems(post).length;
+                const hasMedia = mediaCount > 0;
                 const bm = isBookmarked(post.id);
                 const comments = Array.isArray(post.comments) ? post.comments.filter(c => c.approved !== false) : [],
                     vc = getVisibleComments(post.id);
                 const followBtn = buildFollowButton(post.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
-                const renderedContent = linkifyContent(post.content);
 
                 let topDotsHtml = '';
                 if (mediaCount > 1) {
@@ -5853,9 +5906,9 @@
                           ${repostCountBadge(post)}
                         </div>
                         ${hasCaption ? `<div class="mt-2">
-                          ${renderPostTitle(post.title, { noClamp: true })}
+                          ${renderPostTitle(post.title, { noClamp: true, hasMedia })}
                           ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
-                          ${post.content && post.content.trim() ? `<div class="content-text mt-1">${renderedContent}</div>` : ''}
+                          ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true })}</div>` : ''}
                         </div>` : ''}
                         <hr class="my-4" style="border-color:var(--brd);">
                         <div class="mt-1">
