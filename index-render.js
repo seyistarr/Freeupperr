@@ -1,885 +1,307 @@
 // =====================================================================
 // index-render.js
-// FreeUpper Feed Renderer v3.0.0
+// FreeUpper Render Coordinator — v4.0.0
+// =====================================================================
+//
+// PURPOSE
+// -----------------------------------------------------------------
+// This file does NOT build any HTML itself.
+//
+// Your existing index.html already has fully working render logic:
+//   - buildPostHTML(post, index)
+//   - renderFeedContainer()
+//   - loadInitialFeed() / loadMorePosts()
+//   - initPlayers(), setupPostEventDelegation(), etc.
+//
+// Instead of replacing any of that, this file is a COORDINATOR that:
+//
+//   1. Lets index.html "register" its own render functions once,
+//      on page load.
+//   2. Listens to FreeUpperFeed's events (loaded, more, refreshed,
+//      post-patched, post-removed).
+//   3. Calls the REGISTERED functions at the right moments, passing
+//      them the ranked posts FreeUpperFeed/FreeUpperAlgorithm produced.
+//   4. Handles the one generic piece every feed needs regardless of
+//      markup: an IntersectionObserver that marks posts "seen" and
+//      triggers view increments — without caring what your card HTML
+//      looks like internally, only that it has [data-post-id].
+//
+// So the flow becomes:
+//
+//   FreeUpperFeed (ranked posts)
+//        ↓ emits 'loaded' / 'more' / 'refreshed'
+//   index-render.js (this file)
+//        ↓ calls your registered function
+//   index.html's own buildPostHTML() / renderFeedContainer()
+//        ↓
+//   Real DOM (unchanged from what you already built)
+//
+// DEPENDENCIES:
+//   window.FreeUpperFeed       (index-feed.js)
+//   window.FreeUpperAlgorithm  (index-algorithm.js) — only for markSeen
+//
 // =====================================================================
 
 (function () {
   'use strict';
 
+  if (!window.FreeUpperFeed) {
+    console.error('index-render.js: FreeUpperFeed missing. Load index-feed.js first.');
+    return;
+  }
+
+  const Feed = window.FreeUpperFeed;
+
+  // ===================================================================
+  // CONFIG
+  // ===================================================================
+  const CONFIG = {
+    SEEN_VISIBILITY_THRESHOLD: 0.55,   // % of card visible before counting as "seen"
+    SEEN_MIN_VISIBLE_MS: 600,          // must stay visible this long before it counts
+    VIEW_INCREMENT_ENABLED: true       // whether this file also triggers PostsAPI.incrementView
+  };
+
+  // ===================================================================
+  // STATE
+  // ===================================================================
   const state = {
-    container: null,
-    posts: new Map()
-  };
-
-  // -------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------
-
-  function escapeHTML(value) {
-    const div = document.createElement('div');
-
-    div.textContent = value == null
-      ? ''
-      : String(value);
-
-    return div.innerHTML;
-  }
-
-  function escapeAttribute(value) {
-    return escapeHTML(value)
-      .replace(/"/g, '&quot;');
-  }
-
-  function formatNumber(value) {
-    const number = Number(value) || 0;
-
-    if (number < 1000) {
-      return String(number);
-    }
-
-    if (number < 1000000) {
-      return `${(number / 1000)
-        .toFixed(number >= 10000 ? 0 : 1)}K`;
-    }
-
-    if (number < 1000000000) {
-      return `${(number / 1000000)
-        .toFixed(number >= 10000000 ? 0 : 1)}M`;
-    }
-
-    return `${(number / 1000000000)
-      .toFixed(1)}B`;
-  }
-
-  function formatTime(timestamp) {
-    if (!timestamp) return '';
-
-    const date = new Date(timestamp);
-
-    if (Number.isNaN(date.getTime())) {
-      return '';
-    }
-
-    const diff =
-      Date.now() - date.getTime();
-
-    const seconds =
-      Math.floor(diff / 1000);
-
-    if (seconds < 60) {
-      return 'now';
-    }
-
-    const minutes =
-      Math.floor(seconds / 60);
-
-    if (minutes < 60) {
-      return `${minutes}m`;
-    }
-
-    const hours =
-      Math.floor(minutes / 60);
-
-    if (hours < 24) {
-      return `${hours}h`;
-    }
-
-    const days =
-      Math.floor(hours / 24);
-
-    if (days < 7) {
-      return `${days}d`;
-    }
-
-    return date.toLocaleDateString(
-      undefined,
-      {
-        month: 'short',
-        day: 'numeric'
-      }
-    );
-  }
-
-  function profileAvatar(profile) {
-    const avatar =
-      profile?.avatar_url || '';
-
-    if (avatar) {
-      return `
-        <img
-          class="fu-avatar"
-          src="${escapeAttribute(avatar)}"
-          alt=""
-          loading="lazy"
-        >
-      `;
-    }
-
-    const name =
-      profile?.display_name ||
-      profile?.username ||
-      'A';
-
-    return `
-      <div class="fu-avatar fu-avatar-placeholder">
-        ${escapeHTML(
-          name.charAt(0).toUpperCase()
-        )}
-      </div>
-    `;
-  }
-
-  function verifiedBadge(profile) {
-    if (
-      !profile?.verified &&
-      profile?.verified_status === 'none'
-    ) {
-      return '';
-    }
-
-    return `
-      <span
-        class="fu-verified"
-        aria-label="Verified"
-      >
-        ✓
-      </span>
-    `;
-  }
-
-  function renderMedia(post) {
-    const media = Array.isArray(post.media)
-      ? post.media
-      : [];
-
-    if (!media.length) {
-      return '';
-    }
-
-    const html = media.map((item, index) => {
-      const url = item?.url || '';
-
-      if (!url) return '';
-
-      const type =
-        String(item?.type || 'image')
-          .toLowerCase();
-
-      if (type === 'video') {
-        return `
-          <div
-            class="fu-media-item fu-video-item"
-            data-media-index="${index}"
-          >
-            <video
-              class="fu-post-video"
-              src="${escapeAttribute(url)}"
-              ${item.thumbnail
-                ? `poster="${escapeAttribute(item.thumbnail)}"`
-                : ''}
-              playsinline
-              preload="metadata"
-              controls
-            ></video>
-          </div>
-        `;
-      }
-
-      return `
-        <div
-          class="fu-media-item fu-image-item"
-          data-media-index="${index}"
-        >
-          <img
-            class="fu-post-image"
-            src="${escapeAttribute(url)}"
-            alt=""
-            loading="lazy"
-          >
-        </div>
-      `;
-    }).join('');
-
-    return `
-      <div
-        class="fu-post-media fu-media-count-${media.length}"
-        data-media-count="${media.length}"
-      >
-        ${html}
-      </div>
-    `;
-  }
-
-  function renderText(post) {
-    const title =
-      String(post.title || '').trim();
-
-    const content =
-      String(
-        post.content ||
-        post.description ||
-        ''
-      ).trim();
-
-    if (!title && !content) {
-      return '';
-    }
-
-    return `
-      <div class="fu-post-text">
-        ${
-          title
-            ? `
-              <h3 class="fu-post-title">
-                ${escapeHTML(title)}
-              </h3>
-            `
-            : ''
-        }
-
-        ${
-          content
-            ? `
-              <div class="fu-post-content">
-                ${escapeHTML(content)}
-              </div>
-            `
-            : ''
-        }
-      </div>
-    `;
-  }
-
-  function renderTags(post) {
-    const tags =
-      Array.isArray(post.tags)
-        ? post.tags
-        : [];
-
-    if (!tags.length) return '';
-
-    return `
-      <div class="fu-post-tags">
-        ${tags.map(tag => `
-          <button
-            type="button"
-            class="fu-tag"
-            data-action="hashtag"
-            data-tag="${escapeAttribute(tag)}"
-          >
-            #${escapeHTML(
-              String(tag).replace(/^#/, '')
-            )}
-          </button>
-        `).join('')}
-      </div>
-    `;
-  }
-
-  function renderRepostContext(feedItem) {
-    if (
-      feedItem.feedType !== 'repost'
-    ) {
-      return '';
-    }
-
-    const context =
-      window.PostsAPI?.getFeedContext?.(
-        feedItem.post.id
-      );
-
-    if (!context?.repost) {
-      return '';
-    }
-
-    const first =
-      context.repost.items?.[0];
-
-    if (!first) {
-      return '';
-    }
-
-    const displayName =
-      first.user?.display_name ||
-      first.user?.username ||
-      'Someone';
-
-    const count =
-      Number(context.repost.count) || 1;
-
-    return `
-      <div class="fu-repost-context">
-        <span class="fu-repost-icon">↻</span>
-
-        <span>
-          <strong>
-            ${escapeHTML(displayName)}
-          </strong>
-
-          ${
-            count > 1
-              ? ` and ${formatNumber(count - 1)} other${count > 2 ? 's' : ''}`
-              : ''
-          }
-
-          reposted
-        </span>
-      </div>
-    `;
-  }
-
-  function renderActions(post) {
-    return `
-      <div
-        class="fu-post-actions"
-        role="group"
-        aria-label="Post actions"
-      >
-
-        <button
-          type="button"
-          class="fu-action ${post.likedByMe ? 'is-active' : ''}"
-          data-action="like"
-          data-post-id="${escapeAttribute(post.id)}"
-          aria-pressed="${post.likedByMe ? 'true' : 'false'}"
-        >
-          <span class="fu-action-icon">
-            ${post.likedByMe ? '♥' : '♡'}
-          </span>
-
-          <span class="fu-action-count">
-            ${formatNumber(post.likes)}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          class="fu-action"
-          data-action="comment"
-          data-post-id="${escapeAttribute(post.id)}"
-        >
-          <span class="fu-action-icon">◯</span>
-
-          <span class="fu-action-count">
-            ${formatNumber(post.comments)}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          class="fu-action ${post.myRepost ? 'is-active' : ''}"
-          data-action="repost"
-          data-post-id="${escapeAttribute(post.id)}"
-        >
-          <span class="fu-action-icon">↻</span>
-
-          <span class="fu-action-count">
-            ${formatNumber(post.repostCount)}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          class="fu-action"
-          data-action="share"
-          data-post-id="${escapeAttribute(post.id)}"
-        >
-          <span class="fu-action-icon">↗</span>
-
-          <span class="fu-action-count">
-            ${formatNumber(post.shareCount)}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          class="fu-action fu-action-more"
-          data-action="more"
-          data-post-id="${escapeAttribute(post.id)}"
-          aria-label="More"
-        >
-          ⋯
-        </button>
-
-      </div>
-    `;
-  }
-
-  function renderPost(feedItem) {
-    const post = feedItem.post;
-
-    if (!post || post.is_hidden) {
-      return '';
-    }
-
-    const profile =
-      post.profile || {};
-
-    const displayName =
-      profile.display_name ||
-      profile.username ||
-      'Anonymous';
-
-    const username =
-      profile.username
-        ? `@${profile.username}`
-        : '';
-
-    const soundMarkup =
-      post.sound_id
-        ? `
-          <button
-            type="button"
-            class="fu-sound"
-            data-action="sound"
-            data-sound-id="${escapeAttribute(post.sound_id)}"
-          >
-            ♪ Original sound
-          </button>
-        `
-        : '';
-
-    return `
-      <article
-        class="fu-post-card"
-        data-post-id="${escapeAttribute(post.id)}"
-        data-feed-type="${escapeAttribute(
-          feedItem.feedType || 'post'
-        )}"
-      >
-
-        ${renderRepostContext(feedItem)}
-
-        <header class="fu-post-header">
-
-          <button
-            type="button"
-            class="fu-profile-button"
-            data-action="profile"
-            data-user-id="${escapeAttribute(
-              post.user_id || ''
-            )}"
-          >
-            ${profileAvatar(profile)}
-
-            <span class="fu-profile-info">
-
-              <span class="fu-display-name">
-                ${escapeHTML(displayName)}
-                ${verifiedBadge(profile)}
-              </span>
-
-              <span class="fu-username-time">
-                ${escapeHTML(username)}
-
-                ${
-                  username
-                    ? '<span>·</span>'
-                    : ''
-                }
-
-                ${formatTime(post.timestamp)}
-              </span>
-
-            </span>
-          </button>
-
-          <button
-            type="button"
-            class="fu-more-button"
-            data-action="more"
-            data-post-id="${escapeAttribute(post.id)}"
-            aria-label="More options"
-          >
-            ⋯
-          </button>
-
-        </header>
-
-        ${renderText(post)}
-
-        ${renderTags(post)}
-
-        ${renderMedia(post)}
-
-        ${soundMarkup}
-
-        <div class="fu-post-stats">
-
-          <span>
-            ${formatNumber(post.views)} views
-          </span>
-
-          ${
-            post.bookmarkCount
-              ? `
-                <span>
-                  ${formatNumber(post.bookmarkCount)}
-                  saves
-                </span>
-              `
-              : ''
-          }
-
-        </div>
-
-        ${renderActions(post)}
-
-      </article>
-    `;
-  }
-
-  // -------------------------------------------------------------
-  // Render complete feed
-  // -------------------------------------------------------------
-
-  function renderFeed(feedItems = []) {
-    if (!state.container) {
-      console.warn(
-        'IndexRenderer: container not initialized.'
-      );
-      return;
-    }
-
-    state.posts.clear();
-
-    feedItems.forEach(item => {
-      if (item?.post?.id) {
-        state.posts.set(
-          item.post.id,
-          item
-        );
-      }
-    });
-
-    state.container.innerHTML =
-      feedItems
-        .map(renderPost)
-        .join('');
-
-    attachMediaObserver();
-  }
-
-  // -------------------------------------------------------------
-  // Append feed
-  // -------------------------------------------------------------
-
-  function appendFeed(feedItems = []) {
-    if (!state.container) return;
-
-    feedItems.forEach(item => {
-      if (!item?.post?.id) return;
-
-      if (
-        state.posts.has(item.post.id)
-      ) {
-        return;
-      }
-
-      state.posts.set(
-        item.post.id,
-        item
-      );
-
-      state.container.insertAdjacentHTML(
-        'beforeend',
-        renderPost(item)
-      );
-    });
-
-    attachMediaObserver();
-  }
-
-  // -------------------------------------------------------------
-  // Update single post
-  // -------------------------------------------------------------
-
-  function updatePost(post) {
-    if (!post?.id) return;
-
-    const old =
-      state.posts.get(post.id);
-
-    if (!old) return;
-
-    const updated = {
-      ...old,
-      post
-    };
-
-    state.posts.set(
-      post.id,
-      updated
-    );
-
-    const element =
-      state.container?.querySelector(
-        `[data-post-id="${CSS.escape(post.id)}"]`
-      );
-
-    if (!element) return;
-
-    const temporary =
-      document.createElement('div');
-
-    temporary.innerHTML =
-      renderPost(updated);
-
-    const newElement =
-      temporary.firstElementChild;
-
-    if (newElement) {
-      element.replaceWith(newElement);
-    }
-
-    attachMediaObserver();
-  }
-
-  // -------------------------------------------------------------
-  // Remove post
-  // -------------------------------------------------------------
-
-  function removePost(postId) {
-    state.posts.delete(postId);
-
-    const element =
-      state.container?.querySelector(
-        `[data-post-id="${CSS.escape(postId)}"]`
-      );
-
-    if (element) {
-      element.remove();
-    }
-  }
-
-  // -------------------------------------------------------------
-  // Update counters locally
-  // -------------------------------------------------------------
-
-  function updateCounters(postId, changes = {}) {
-    const item =
-      state.posts.get(postId);
-
-    if (!item) return;
-
-    item.post = {
-      ...item.post,
-      ...changes
-    };
-
-    state.posts.set(
-      postId,
-      item
-    );
-
-    const card =
-      state.container?.querySelector(
-        `[data-post-id="${CSS.escape(postId)}"]`
-      );
-
-    if (!card) return;
-
-    if (
-      changes.likes !== undefined ||
-      changes.likedByMe !== undefined
-    ) {
-      const likeButton =
-        card.querySelector(
-          '[data-action="like"]'
-        );
-
-      if (likeButton) {
-        likeButton.classList.toggle(
-          'is-active',
-          !!item.post.likedByMe
-        );
-
-        const icon =
-          likeButton.querySelector(
-            '.fu-action-icon'
-          );
-
-        if (icon) {
-          icon.textContent =
-            item.post.likedByMe
-              ? '♥'
-              : '♡';
-        }
-
-        const count =
-          likeButton.querySelector(
-            '.fu-action-count'
-          );
-
-        if (count) {
-          count.textContent =
-            formatNumber(item.post.likes);
-        }
-
-        likeButton.setAttribute(
-          'aria-pressed',
-          item.post.likedByMe
-            ? 'true'
-            : 'false'
-        );
-      }
-    }
-
-    if (
-      changes.comments !== undefined
-    ) {
-      const button =
-        card.querySelector(
-          '[data-action="comment"] .fu-action-count'
-        );
-
-      if (button) {
-        button.textContent =
-          formatNumber(item.post.comments);
-      }
-    }
-
-    if (
-      changes.repostCount !== undefined
-    ) {
-      const button =
-        card.querySelector(
-          '[data-action="repost"] .fu-action-count'
-        );
-
-      if (button) {
-        button.textContent =
-          formatNumber(
-            item.post.repostCount
-          );
-      }
-    }
-
-    if (
-      changes.shareCount !== undefined
-    ) {
-      const button =
-        card.querySelector(
-          '[data-action="share"] .fu-action-count'
-        );
-
-      if (button) {
-        button.textContent =
-          formatNumber(
-            item.post.shareCount
-          );
-      }
-    }
-  }
-
-  // -------------------------------------------------------------
-  // Media observer
-  // -------------------------------------------------------------
-
-  let mediaObserver = null;
-
-  function attachMediaObserver() {
-    if (!state.container) return;
-
-    if (
-      !('IntersectionObserver' in window)
-    ) {
-      return;
-    }
-
-    if (mediaObserver) {
-      mediaObserver.disconnect();
-    }
-
-    mediaObserver =
-      new IntersectionObserver(
-        entries => {
-          entries.forEach(entry => {
-            if (!entry.isIntersecting) {
-              return;
-            }
-
-            const card =
-              entry.target.closest(
-                '[data-post-id]'
-              );
-
-            if (!card) return;
-
-            const postId =
-              card.dataset.postId;
-
-            const item =
-              state.posts.get(postId);
-
-            if (
-              item &&
-              window.FreeUpperFeed
-            ) {
-              window.FreeUpperFeed.markSeen(
-                postId
-              );
-            }
-          });
-        },
-        {
-          threshold: 0.35
-        }
-      );
-
-    state.container
-      .querySelectorAll(
-        '.fu-post-card'
-      )
-      .forEach(card => {
-        mediaObserver.observe(card);
-      });
-  }
-
-  // -------------------------------------------------------------
-  // Initialization
-  // -------------------------------------------------------------
-
-  function init(container) {
-    if (
-      typeof container === 'string'
-    ) {
-      container =
-        document.querySelector(container);
-    }
-
-    if (!container) {
-      console.error(
-        'IndexRenderer: feed container not found.'
-      );
-
-      return false;
-    }
-
-    state.container = container;
-
-    return true;
-  }
-
-  // -------------------------------------------------------------
-  // Public API
-  // -------------------------------------------------------------
-
-  window.IndexRenderer = {
-    init,
-    renderFeed,
-    appendFeed,
-    updatePost,
-    removePost,
-    updateCounters,
-
-    getPost(postId) {
-      return state.posts.get(postId) || null;
+    // Functions index.html registers with us. Each is optional —
+    // if not registered, that hook is simply skipped.
+    handlers: {
+      renderInitial: null,   // (posts) => void   — full feed render, e.g. your loadInitialFeed()
+      appendPosts: null,     // (posts) => void   — append-only render, e.g. your loadMorePosts()
+      patchPost: null,       // (post) => void    — update one card in place
+      removePost: null,      // (postId) => void  — remove one card from DOM
+      getContainer: null     // () => HTMLElement — returns your #feed-container element
     },
+    observer: null,
+    visibilityTimers: new Map(),
+    registered: false
+  };
 
-    getContainer() {
-      return state.container;
+  // ===================================================================
+  // REGISTRATION
+  // ===================================================================
+  // Call this ONCE from index.html, e.g.:
+  //
+  //   IndexRender.registerHandlers({
+  //     renderInitial: (posts) => {
+  //       window._currentFeedPosts = posts;
+  //       document.getElementById('feed-container').innerHTML =
+  //         posts.map((p, i) => buildPostHTML(p, i)).join('');
+  //       initPlayers(document.getElementById('feed-container'));
+  //     },
+  //     appendPosts: (posts) => { ...your existing append logic... },
+  //     patchPost: (post) => { ...update counters on the matching card... },
+  //     removePost: (postId) => {
+  //       document.querySelectorAll(`article[data-post-id="${postId}"]`)
+  //         .forEach(el => el.remove());
+  //     },
+  //     getContainer: () => document.getElementById('feed-container')
+  //   });
+  //
+  // This is intentionally shallow — it does not try to guess your DOM
+  // structure. index.html stays in full control of its own markup.
+  // ===================================================================
+  function registerHandlers(handlers = {}) {
+    Object.keys(handlers).forEach(key => {
+      if (typeof handlers[key] === 'function' && key in state.handlers) {
+        state.handlers[key] = handlers[key];
+      }
+    });
+    state.registered = true;
+    attachFeedListeners();
+    console.log('✅ index-render.js: handlers registered from index.html.');
+  }
+
+  // ===================================================================
+  // FEED EVENT WIRING
+  // ===================================================================
+  let listenersAttached = false;
+
+  function attachFeedListeners() {
+    if (listenersAttached) return;
+    listenersAttached = true;
+
+    Feed.on('loaded', event => {
+      const posts = event.detail.posts || [];
+      if (state.handlers.renderInitial) {
+        state.handlers.renderInitial(posts);
+      }
+      observeVisiblePosts();
+    });
+
+    Feed.on('refreshed', event => {
+      const posts = event.detail.posts || [];
+      if (state.handlers.renderInitial) {
+        state.handlers.renderInitial(posts);
+      }
+      observeVisiblePosts();
+    });
+
+    Feed.on('page-advanced', event => {
+      const posts = event.detail.posts || [];
+      // page-advanced gives the FULL current page (0..N), not just new
+      // items, because it's slicing an already-ranked array. If your
+      // index.html append logic expects only the delta, index.html can
+      // diff against window._currentFeedPosts itself — this file just
+      // hands over the authoritative full list.
+      if (state.handlers.renderInitial) {
+        state.handlers.renderInitial(posts);
+      }
+      observeVisiblePosts();
+    });
+
+    Feed.on('more', event => {
+      const posts = event.detail.posts || [];
+      if (state.handlers.renderInitial) {
+        state.handlers.renderInitial(posts);
+      }
+      observeVisiblePosts();
+    });
+
+    Feed.on('post-patched', event => {
+      const post = event.detail.post;
+      if (post && state.handlers.patchPost) {
+        state.handlers.patchPost(post);
+      }
+    });
+
+    Feed.on('post-removed', event => {
+      const postId = event.detail.postId;
+      if (postId && state.handlers.removePost) {
+        state.handlers.removePost(postId);
+      }
+    });
+
+    // These two are informational — index.html can choose to react
+    // (e.g. show a "new posts available" banner) via its own listener
+    // on FreeUpperFeed directly, or we no-op them here.
+    Feed.on('post-like-change', () => {});
+    Feed.on('comment-change', () => {});
+  }
+
+  // ===================================================================
+  // "SEEN" / VISIBILITY TRACKING
+  // ===================================================================
+  // This is the one piece that's genuinely generic across any card
+  // markup: watch for [data-post-id] elements entering the viewport,
+  // wait a short dwell time so a fast scroll-past doesn't count, then
+  // tell FreeUpperFeed/FreeUpperAlgorithm this post was seen, and
+  // optionally increment its view count via PostsAPI.
+  // ===================================================================
+  function getContainer() {
+    if (state.handlers.getContainer) {
+      return state.handlers.getContainer();
+    }
+    return document.getElementById('feed-container') || document.body;
+  }
+
+  function ensureObserver() {
+    if (state.observer) return state.observer;
+    if (!('IntersectionObserver' in window)) return null;
+
+    state.observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        const el = entry.target;
+        const postId = el.dataset.postId;
+        if (!postId) return;
+
+        if (entry.isIntersecting && entry.intersectionRatio >= CONFIG.SEEN_VISIBILITY_THRESHOLD) {
+          startVisibilityTimer(postId);
+        } else {
+          cancelVisibilityTimer(postId);
+        }
+      });
+    }, {
+      threshold: [0, CONFIG.SEEN_VISIBILITY_THRESHOLD, 0.9]
+    });
+
+    return state.observer;
+  }
+
+  function startVisibilityTimer(postId) {
+    if (state.visibilityTimers.has(postId)) return;
+    if (Feed.getState && Algorithm_hasSeen(postId)) return;
+
+    const timer = setTimeout(() => {
+      state.visibilityTimers.delete(postId);
+      Feed.markSeen(postId);
+
+      if (CONFIG.VIEW_INCREMENT_ENABLED && window.PostsAPI?.incrementView) {
+        window.PostsAPI.incrementView(postId).catch(() => {
+          // View tracking should never break the feed — swallow silently
+        });
+      }
+    }, CONFIG.SEEN_MIN_VISIBLE_MS);
+
+    state.visibilityTimers.set(postId, timer);
+  }
+
+  function cancelVisibilityTimer(postId) {
+    const timer = state.visibilityTimers.get(postId);
+    if (timer) {
+      clearTimeout(timer);
+      state.visibilityTimers.delete(postId);
+    }
+  }
+
+  function Algorithm_hasSeen(postId) {
+    return !!(window.FreeUpperAlgorithm && window.FreeUpperAlgorithm.hasSeen(postId));
+  }
+
+  // Call this after any render (initial, append, page-advance) to make
+  // sure newly-added cards get observed. Safe to call repeatedly —
+  // re-observing an already-observed element is a no-op in the spec.
+  function observeVisiblePosts() {
+    const observer = ensureObserver();
+    if (!observer) return;
+    const container = getContainer();
+    if (!container) return;
+    container.querySelectorAll('[data-post-id]').forEach(el => {
+      observer.observe(el);
+    });
+  }
+
+  // ===================================================================
+  // MANUAL TRIGGER
+  // ===================================================================
+  // Useful if index.html swaps DOM content itself (e.g. tab switch,
+  // search results) without going through FreeUpperFeed events, and
+  // just wants view-tracking wired up on whatever's currently in the DOM.
+  // ===================================================================
+  function rescan() {
+    observeVisiblePosts();
+  }
+
+  // ===================================================================
+  // CLEANUP
+  // ===================================================================
+  function disconnect() {
+    if (state.observer) {
+      state.observer.disconnect();
+      state.observer = null;
+    }
+    state.visibilityTimers.forEach(timer => clearTimeout(timer));
+    state.visibilityTimers.clear();
+  }
+
+  // ===================================================================
+  // PUBLIC API
+  // ===================================================================
+  window.IndexRender = {
+    registerHandlers,
+    rescan,
+    disconnect,
+    // exposed for debugging in console
+    getState() {
+      return {
+        registered: state.registered,
+        activeTimers: state.visibilityTimers.size,
+        handlersSet: Object.keys(state.handlers).filter(k => !!state.handlers[k])
+      };
     }
   };
 
+  console.log('✅ index-render.js v4.0.0 loaded — coordinator only, no DOM building.');
 })();
