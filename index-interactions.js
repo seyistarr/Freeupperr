@@ -1,2080 +1,274 @@
-// ============================================================================
+// =====================================================================
 // index-interactions.js
-// FreeUpper Feed Interaction Controller v3.0.0
-// ============================================================================
+// FreeUpper Interaction Notifier — v4.0.0
+// =====================================================================
 //
-// RESPONSIBILITY:
-//   - Like / unlike
-//   - Comment
-//   - Reply
-//   - Repost / undo repost
-//   - Bookmark / unbookmark
-//   - Share
-//   - View tracking
-//   - Hide / unhide post
-//   - Toggle comments
-//   - Delete post
-//   - Report post
-//   - Optimistic UI
-//   - Realtime interaction synchronization
+// PURPOSE
+// -----------------------------------------------------------------
+// This file does NOT handle clicks, does NOT call PostsAPI, and does
+// NOT touch the DOM.
 //
-// DEPENDENCY:
-//   PostsAPI v3.0.0
+// Your existing index.html already owns all of that:
+//   - setupPostEventDelegation() / event listeners on articles
+//   - toggleReaction(postId)          → calls PostsAPI.toggleLike()
+//   - toggleBookmarkUI(article)       → calls PostsAPI toggle/bookmark
+//   - openShareModal() / handleShareAction() → calls recordShare()
+//   - addComment() / submitCommentFromBar()  → calls PostsAPI.addComment()
+//   - triggerRepostFromFeed()         → opens repost modal → toggleRepostAPI()
 //
-// DOES NOT:
-//   - Query Supabase directly
-//   - Render the entire feed
-//   - Rank posts
-//   - Load feed pages
+// All of that is correct and stays untouched.
 //
-// Architecture:
+// The ONLY thing missing is: after each of those succeed, your
+// algorithm (index-algorithm.js, via index-feed.js) never finds out
+// it happened, so the user's interest vector never learns anything.
 //
-// index.html
-//    ↓
-// index-interactions.js
-//    ↓
-// PostsAPI
-//    ↓
-// Supabase
+// This file's entire job is to be the one line you add at the end of
+// each existing success path:
 //
-// ============================================================================
+//     IndexInteractions.notify(postId, 'like');
+//
+// It then:
+//   1. Forwards to FreeUpperFeed.registerInteraction() so the topic
+//      interest vector + creator affinity update.
+//   2. Debounces/guards against duplicate notifications firing twice
+//      for the same action (e.g. a double-click before disable kicks in).
+//   3. Emits its own event so anything else (analytics, future
+//      features) can listen without touching index.html again.
+//
+// DEPENDENCIES:
+//   window.FreeUpperFeed (index-feed.js)
+//
+// =====================================================================
 
 (function () {
   'use strict';
 
-  // --------------------------------------------------------------------------
-  // SAFETY
-  // --------------------------------------------------------------------------
-
-  if (!window.PostsAPI) {
-    console.error(
-      '❌ index-interactions.js: PostsAPI is missing. Load posts.js first.'
-    );
+  if (!window.FreeUpperFeed) {
+    console.error('index-interactions.js: FreeUpperFeed missing. Load index-feed.js first.');
     return;
   }
 
-  const API = window.PostsAPI;
+  const Feed = window.FreeUpperFeed;
 
-  // --------------------------------------------------------------------------
+  // ===================================================================
   // CONFIG
-  // --------------------------------------------------------------------------
-
-  const CONFIG = {
-    selectors: {
-      feed: '[data-feed], #feed, #posts-feed, .feed-container'
-    },
-
-    view: {
-      minimumVisibleMs: 700,
-      cooldownMs: 8000
-    },
-
-    interaction: {
-      lockMs: 500
-    }
+  // ===================================================================
+  // Maps the "type" string index.html passes in to what
+  // FreeUpperAlgorithm's INTERACTION_WEIGHTS table expects.
+  // Keeping this mapping here (not hardcoded in index.html) means if
+  // the algorithm's internal names ever change, only this file needs
+  // updating.
+  // ===================================================================
+  const TYPE_MAP = {
+    like: 'like',
+    unlike: 'unlike',
+    comment: 'comment',
+    reply: 'comment',
+    repost: 'repost',
+    unrepost: 'unlike',          // undoing a repost — mild negative signal
+    share: 'share',
+    bookmark: 'bookmark',
+    unbookmark: 'unlike',
+    follow: 'follow_creator',
+    watch_complete: 'watch_complete',
+    watch_partial: 'watch_partial',
+    skip: 'skip',
+    hide: 'hide',
+    not_interested: 'hide'
   };
 
-  // --------------------------------------------------------------------------
-  // INTERNAL STATE
-  // --------------------------------------------------------------------------
+  const DUPLICATE_GUARD_MS = 400; // ignore identical notify() calls fired within this window
 
+  // ===================================================================
+  // STATE
+  // ===================================================================
   const state = {
-    initialized: false,
-
-    interactionLocks: new Set(),
-
-    viewedPosts: new Set(),
-
-    viewTimers: new Map(),
-
-    viewCooldowns: new Map(),
-
-    commentLoading: new Set(),
-
-    pendingComments: new Set(),
-
-    pendingReplies: new Set(),
-
-    optimistic: new Map(),
-
-    feedElement: null
+    recentNotifications: new Map(), // key: `${postId}:${type}` -> timestamp
+    listeners: []
   };
 
-  // --------------------------------------------------------------------------
+  // ===================================================================
   // HELPERS
-  // --------------------------------------------------------------------------
-
-  function log(...args) {
-    if (window.FREEUPPER_DEBUG) {
-      console.log('[FreeUpper Interactions]', ...args);
-    }
-  }
-
-  function warn(...args) {
-    console.warn('[FreeUpper Interactions]', ...args);
-  }
-
-  function getFeedElement() {
-    if (state.feedElement && document.body.contains(state.feedElement)) {
-      return state.feedElement;
-    }
-
-    state.feedElement =
-      document.querySelector(CONFIG.selectors.feed) || document.body;
-
-    return state.feedElement;
-  }
-
-  function getPostElement(postId) {
-    if (!postId) return null;
-
-    return document.querySelector(
-      `[data-post-id="${CSS.escape(String(postId))}"]`
-    );
-  }
-
-  function getPostIdFromElement(element) {
-    if (!element) return null;
-
-    const post =
-      element.closest('[data-post-id]') ||
-      element.closest('[data-post]');
-
-    if (!post) return null;
-
-    return (
-      post.dataset.postId ||
-      post.dataset.id ||
-      post.getAttribute('data-post-id') ||
-      null
-    );
-  }
-
-  function getButtonPostId(button) {
-    return (
-      button?.dataset?.postId ||
-      getPostIdFromElement(button)
-    );
-  }
-
-  function setButtonBusy(button, busy) {
-    if (!button) return;
-
-    button.disabled = !!busy;
-
-    if (busy) {
-      button.setAttribute('aria-busy', 'true');
-      button.classList.add('is-loading');
-    } else {
-      button.removeAttribute('aria-busy');
-      button.classList.remove('is-loading');
-    }
-  }
-
-  function lock(key) {
-    if (state.interactionLocks.has(key)) {
-      return false;
-    }
-
-    state.interactionLocks.add(key);
-
-    window.setTimeout(() => {
-      state.interactionLocks.delete(key);
-    }, CONFIG.interaction.lockMs);
-
-    return true;
-  }
-
-  function setText(element, value) {
-    if (!element) return;
-
-    element.textContent =
-      value === null || value === undefined
-        ? ''
-        : String(value);
-  }
-
-  function formatCount(value) {
-    const count = Number(value) || 0;
-
-    if (count < 1000) {
-      return String(count);
-    }
-
-    if (count < 1000000) {
-      const n = count / 1000;
-      return `${n % 1 === 0 ? n : n.toFixed(1)}K`;
-    }
-
-    if (count < 1000000000) {
-      const n = count / 1000000;
-      return `${n % 1 === 0 ? n : n.toFixed(1)}M`;
-    }
-
-    const n = count / 1000000000;
-    return `${n % 1 === 0 ? n : n.toFixed(1)}B`;
-  }
-
-  function updateCounter(postId, type, value) {
-    const post = getPostElement(postId);
-
-    if (!post) return;
-
-    const selectors = {
-      like: [
-        '[data-like-count]',
-        '[data-counter="likes"]',
-        '.like-count'
-      ],
-
-      comment: [
-        '[data-comment-count]',
-        '[data-counter="comments"]',
-        '.comment-count'
-      ],
-
-      repost: [
-        '[data-repost-count]',
-        '[data-counter="reposts"]',
-        '.repost-count'
-      ],
-
-      bookmark: [
-        '[data-bookmark-count]',
-        '[data-counter="bookmarks"]',
-        '.bookmark-count'
-      ],
-
-      share: [
-        '[data-share-count]',
-        '[data-counter="shares"]',
-        '.share-count'
-      ],
-
-      view: [
-        '[data-view-count]',
-        '[data-counter="views"]',
-        '.view-count'
-      ]
-    };
-
-    const list = selectors[type] || [];
-
-    list.forEach(selector => {
-      post.querySelectorAll(selector).forEach(el => {
-        setText(el, formatCount(value));
-      });
-    });
-  }
-
-  function updateActionState(postId, type, active) {
-    const post = getPostElement(postId);
-
-    if (!post) return;
-
-    const selectors = {
-      like: [
-        '[data-action="like"]',
-        '[data-action="toggle-like"]'
-      ],
-
-      repost: [
-        '[data-action="repost"]',
-        '[data-action="toggle-repost"]'
-      ],
-
-      bookmark: [
-        '[data-action="bookmark"]',
-        '[data-action="toggle-bookmark"]'
-      ]
-    };
-
-    (selectors[type] || []).forEach(selector => {
-      post.querySelectorAll(selector).forEach(button => {
-        button.classList.toggle('active', !!active);
-        button.classList.toggle('is-active', !!active);
-
-        button.setAttribute(
-          'aria-pressed',
-          active ? 'true' : 'false'
-        );
-
-        if (active) {
-          button.dataset.active = 'true';
-        } else {
-          delete button.dataset.active;
-        }
-      });
-    });
-  }
-
-  function showToast(message, type = 'default') {
-    if (typeof window.showToast === 'function') {
-      window.showToast(message, type);
-      return;
-    }
-
-    if (typeof window.toast === 'function') {
-      window.toast(message, type);
-      return;
-    }
-
-    log(message);
-  }
-
-  function showError(error, fallback = 'Something went wrong.') {
-    console.error(error);
-
-    const message =
-      error?.message ||
-      error?.error_description ||
-      fallback;
-
-    showToast(message, 'error');
-  }
-
-  // --------------------------------------------------------------------------
-  // OPTIMISTIC STATE
-  // --------------------------------------------------------------------------
-
-  function saveOptimistic(postId, key, value) {
-    if (!state.optimistic.has(postId)) {
-      state.optimistic.set(postId, {});
-    }
-
-    state.optimistic.get(postId)[key] = value;
-  }
-
-  function getOptimistic(postId, key) {
-    return state.optimistic.get(postId)?.[key];
-  }
-
-  // --------------------------------------------------------------------------
-  // LIKE
-  // --------------------------------------------------------------------------
-
-  async function toggleLike(button, postId = null) {
-    postId = postId || getButtonPostId(button);
-
-    if (!postId) return;
-
-    const lockKey = `like:${postId}`;
-
-    if (!lock(lockKey)) return;
-
-    setButtonBusy(button, true);
-
-    const previousActive =
-      button?.classList.contains('active') ||
-      button?.classList.contains('is-active');
-
-    try {
-      // Optimistic state
-      updateActionState(postId, 'like', !previousActive);
-
-      const result = await API.toggleLike(postId);
-
-      updateActionState(
-        postId,
-        'like',
-        !!result.liked
-      );
-
-      updateCounter(
-        postId,
-        'like',
-        result.count
-      );
-
-      saveOptimistic(postId, 'liked', result.liked);
-
-      emitInteraction('like', {
-        postId,
-        liked: result.liked,
-        count: result.count
-      });
-
-    } catch (error) {
-      // Roll back
-      updateActionState(
-        postId,
-        'like',
-        previousActive
-      );
-
-      showError(error, 'Unable to update like.');
-    } finally {
-      setButtonBusy(button, false);
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // BOOKMARK
-  // --------------------------------------------------------------------------
-
-  async function toggleBookmark(button, postId = null) {
-    postId = postId || getButtonPostId(button);
-
-    if (!postId) return;
-
-    const lockKey = `bookmark:${postId}`;
-
-    if (!lock(lockKey)) return;
-
-    setButtonBusy(button, true);
-
-    const previousActive =
-      button?.classList.contains('active') ||
-      button?.classList.contains('is-active');
-
-    try {
-      updateActionState(
-        postId,
-        'bookmark',
-        !previousActive
-      );
-
-      const result = await API.toggleBookmark(postId);
-
-      updateActionState(
-        postId,
-        'bookmark',
-        !!result.bookmarked
-      );
-
-      updateCounter(
-        postId,
-        'bookmark',
-        result.count
-      );
-
-      saveOptimistic(
-        postId,
-        'bookmarked',
-        result.bookmarked
-      );
-
-      emitInteraction('bookmark', {
-        postId,
-        bookmarked: result.bookmarked,
-        count: result.count
-      });
-
-    } catch (error) {
-      updateActionState(
-        postId,
-        'bookmark',
-        previousActive
-      );
-
-      showError(
-        error,
-        'Unable to update bookmark.'
-      );
-    } finally {
-      setButtonBusy(button, false);
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // REPOST
-  // --------------------------------------------------------------------------
-
-  async function toggleRepost(button, postId = null, comment = '') {
-    postId = postId || getButtonPostId(button);
-
-    if (!postId) return;
-
-    const lockKey = `repost:${postId}`;
-
-    if (!lock(lockKey)) return;
-
-    setButtonBusy(button, true);
-
-    const previousActive =
-      button?.classList.contains('active') ||
-      button?.classList.contains('is-active');
-
-    try {
-      const result = await API.toggleRepostAPI(
-        postId,
-        comment
-      );
-
-      updateActionState(
-        postId,
-        'repost',
-        !!result.reposted
-      );
-
-      updateCounter(
-        postId,
-        'repost',
-        result.count
-      );
-
-      saveOptimistic(
-        postId,
-        'reposted',
-        result.reposted
-      );
-
-      emitInteraction('repost', {
-        postId,
-        reposted: result.reposted,
-        count: result.count,
-        comment: result.comment || '',
-        time: result.time || null
-      });
-
-      // The algorithm/feed can decide whether it needs a refresh.
-      document.dispatchEvent(
-        new CustomEvent('freeupper:repost-changed', {
-          detail: {
-            postId,
-            reposted: result.reposted,
-            count: result.count
-          }
-        })
-      );
-
-    } catch (error) {
-      updateActionState(
-        postId,
-        'repost',
-        previousActive
-      );
-
-      showError(
-        error,
-        'Unable to repost this post.'
-      );
-    } finally {
-      setButtonBusy(button, false);
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // UPDATE REPOST COMMENT
-  // --------------------------------------------------------------------------
-
-  async function updateRepostComment(
-    postId,
-    comment
-  ) {
-    if (!postId) return null;
-
-    try {
-      const result =
-        await API.updateRepostComment(
-          postId,
-          comment || ''
-        );
-
-      emitInteraction(
-        'repost-comment-updated',
-        {
-          postId,
-          comment: result.comment || '',
-          time: result.time || null
-        }
-      );
-
-      return result;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to update repost.'
-      );
-
-      return null;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // SHARE
-  // --------------------------------------------------------------------------
-
-  async function sharePost(postId, shareData = {}) {
-    if (!postId) return;
-
-    const lockKey = `share:${postId}`;
-
-    if (!lock(lockKey)) return;
-
-    try {
-      const url =
-        shareData.url ||
-        `${window.location.origin}/post.html?id=${encodeURIComponent(postId)}`;
-
-      let nativeShared = false;
-
-      // Native Web Share
-      if (
-        navigator.share &&
-        shareData.useNative !== false
-      ) {
-        try {
-          await navigator.share({
-            title: shareData.title || 'FreeUpper',
-            text: shareData.text || '',
-            url
-          });
-
-          nativeShared = true;
-        } catch (error) {
-          // User cancelled native share.
-          if (error?.name === 'AbortError') {
-            return;
-          }
-        }
-      }
-
-      // If native sharing wasn't used, still record the share.
-      const result =
-        await API.recordShare(postId);
-
-      updateCounter(
-        postId,
-        'share',
-        result.count
-      );
-
-      emitInteraction('share', {
-        postId,
-        count: result.count,
-        alreadyShared:
-          result.alreadyShared,
-        nativeShared
-      });
-
-      return result;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to share this post.'
-      );
-
-      return null;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // COPY POST LINK
-  // --------------------------------------------------------------------------
-
-  async function copyPostLink(postId) {
-    if (!postId) return;
-
-    const url =
-      `${window.location.origin}/post.html?id=${encodeURIComponent(postId)}`;
-
-    try {
-      await navigator.clipboard.writeText(url);
-
-      // Count the share even when the user copies the link.
-      const result =
-        await API.recordShare(postId);
-
-      updateCounter(
-        postId,
-        'share',
-        result.count
-      );
-
-      showToast(
-        'Post link copied.',
-        'success'
-      );
-
-      emitInteraction('share-copy', {
-        postId,
-        count: result.count
-      });
-
-      return result;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to copy post link.'
-      );
-
-      return null;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // COMMENTS
-  // --------------------------------------------------------------------------
-
-  async function loadComments(postId, container = null) {
-    if (!postId) return [];
-
-    if (state.commentLoading.has(postId)) {
-      return [];
-    }
-
-    state.commentLoading.add(postId);
-
-    try {
-      const comments =
-        await API.loadComments(postId);
-
-      if (container) {
-        renderComments(container, comments);
-      }
-
-      document.dispatchEvent(
-        new CustomEvent(
-          'freeupper:comments-loaded',
-          {
-            detail: {
-              postId,
-              comments
-            }
-          }
-        )
-      );
-
-      return comments;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to load comments.'
-      );
-
-      return [];
-
-    } finally {
-      state.commentLoading.delete(postId);
-    }
-  }
-
-  async function addComment(
-    postId,
-    message,
-    options = {}
-  ) {
-    if (!postId) return null;
-
-    const text =
-      String(message || '').trim();
-
-    if (!text) {
-      showToast(
-        'Write a comment first.',
-        'error'
-      );
-
-      return null;
-    }
-
-    const parentId =
-      options.parentId || null;
-
-    const mentions =
-      options.mentions || [];
-
-    const key =
-      `${postId}:${parentId || 'root'}`;
-
-    const pendingSet =
-      parentId
-        ? state.pendingReplies
-        : state.pendingComments;
-
-    if (pendingSet.has(key)) {
-      return null;
-    }
-
-    pendingSet.add(key);
-
-    try {
-      const comment =
-        await API.addComment(
-          postId,
-          parentId,
-          text,
-          mentions
-        );
-
-      emitInteraction(
-        parentId
-          ? 'reply-added'
-          : 'comment-added',
-        {
-          postId,
-          comment
-        }
-      );
-
-      // Increment is already handled atomically by PostsAPI.
-      // We only update the visual count here if the rendered card
-      // is currently available.
-      const post =
-        getPostElement(postId);
-
-      if (post) {
-        const counter =
-          post.querySelector(
-            '[data-comment-count]'
-          );
-
-        if (counter) {
-          const current =
-            parseInt(
-              counter.dataset.rawCount ||
-              counter.textContent ||
-              '0',
-              10
-            ) || 0;
-
-          const next =
-            current + 1;
-
-          counter.dataset.rawCount =
-            String(next);
-
-          setText(
-            counter,
-            formatCount(next)
-          );
-        }
-      }
-
-      return comment;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to add comment.'
-      );
-
-      return null;
-
-    } finally {
-      pendingSet.delete(key);
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // COMMENT LIKE
-  // --------------------------------------------------------------------------
-
-  async function toggleCommentLike(
-    button,
-    commentId
-  ) {
-    if (!commentId) return;
-
-    const lockKey =
-      `comment-like:${commentId}`;
-
-    if (!lock(lockKey)) return;
-
-    setButtonBusy(button, true);
-
-    try {
-      const result =
-        await API.toggleCommentLike(
-          commentId
-        );
-
-      const commentElement =
-        document.querySelector(
-          `[data-comment-id="${CSS.escape(String(commentId))}"]`
-        );
-
-      if (commentElement) {
-        const count =
-          commentElement.querySelector(
-            '[data-comment-like-count], .comment-like-count'
-          );
-
-        if (count) {
-          setText(
-            count,
-            formatCount(result.count)
-          );
-        }
-
-        const active =
-          !!result.liked;
-
-        commentElement
-          .querySelectorAll(
-            '[data-action="comment-like"], [data-action="toggle-comment-like"]'
-          )
-          .forEach(el => {
-            el.classList.toggle(
-              'active',
-              active
-            );
-
-            el.classList.toggle(
-              'is-active',
-              active
-            );
-
-            el.setAttribute(
-              'aria-pressed',
-              active ? 'true' : 'false'
-            );
-          });
-      }
-
-      emitInteraction(
-        'comment-like',
-        {
-          commentId,
-          liked: result.liked,
-          count: result.count
-        }
-      );
-
-      return result;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to like comment.'
-      );
-
-      return null;
-
-    } finally {
-      setButtonBusy(button, false);
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // COMMENTS RENDERER
-  // --------------------------------------------------------------------------
-
-  function renderComments(container, comments) {
-    if (!container) return;
-
-    // If index-render.js has its own comment renderer, use it.
-    if (
-      typeof window.IndexRender?.renderComments ===
-      'function'
-    ) {
-      window.IndexRender.renderComments(
-        container,
-        comments
-      );
-      return;
-    }
-
-    // Otherwise dispatch an event and allow index-render.js
-    // to respond.
-    document.dispatchEvent(
-      new CustomEvent(
-        'freeupper:render-comments',
-        {
-          detail: {
-            container,
-            comments
-          }
-        }
-      )
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // VIEW TRACKING
-  // --------------------------------------------------------------------------
-
-  function observePost(postElement) {
-    if (!postElement) return;
-
-    const postId =
-      getPostIdFromElement(postElement);
-
-    if (!postId) return;
-
-    if (
-      state.viewedPosts.has(postId) ||
-      state.viewCooldowns.has(postId)
-    ) {
-      return;
-    }
-
-    if (
-      !('IntersectionObserver' in window)
-    ) {
-      startViewTimer(postElement);
-      return;
-    }
-
-    ensureViewObserver();
-
-    viewObserver.observe(postElement);
-  }
-
-  let viewObserver = null;
-
-  function ensureViewObserver() {
-    if (viewObserver) return;
-
-    viewObserver =
-      new IntersectionObserver(
-        entries => {
-          entries.forEach(entry => {
-            const postId =
-              getPostIdFromElement(
-                entry.target
-              );
-
-            if (!postId) return;
-
-            if (
-              entry.isIntersecting &&
-              entry.intersectionRatio >= 0.55
-            ) {
-              startViewTimer(entry.target);
-            } else {
-              cancelViewTimer(postId);
-            }
-          });
-        },
-        {
-          threshold: [0, 0.55, 0.75, 1]
-        }
-      );
-  }
-
-  function startViewTimer(postElement) {
-    const postId =
-      getPostIdFromElement(postElement);
-
-    if (!postId) return;
-
-    if (
-      state.viewedPosts.has(postId) ||
-      state.viewCooldowns.has(postId)
-    ) {
-      return;
-    }
-
-    if (state.viewTimers.has(postId)) {
-      return;
-    }
-
-    const timer =
-      window.setTimeout(
-        () => {
-          state.viewTimers.delete(postId);
-
-          recordView(postId);
-        },
-        CONFIG.view.minimumVisibleMs
-      );
-
-    state.viewTimers.set(
-      postId,
-      timer
-    );
-  }
-
-  function cancelViewTimer(postId) {
-    const timer =
-      state.viewTimers.get(postId);
-
-    if (!timer) return;
-
-    clearTimeout(timer);
-
-    state.viewTimers.delete(postId);
-  }
-
-  async function recordView(postId) {
-    if (!postId) return;
-
-    if (state.viewedPosts.has(postId)) {
-      return;
-    }
-
-    if (state.viewCooldowns.has(postId)) {
-      return;
-    }
-
-    state.viewedPosts.add(postId);
-
-    try {
-      await API.incrementView(
-        postId
-      );
-
-      emitInteraction(
-        'view',
-        { postId }
-      );
-
-    } catch (error) {
-      // A view should never break the feed.
-      warn(
-        'View tracking failed:',
-        error
-      );
-
-      state.viewedPosts.delete(
-        postId
-      );
-    }
-
-    state.viewCooldowns.set(
-      postId,
-      Date.now()
-    );
-
-    window.setTimeout(
-      () => {
-        state.viewCooldowns.delete(
-          postId
-        );
-      },
-      CONFIG.view.cooldownMs
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // HIDE POST
-  // --------------------------------------------------------------------------
-
-  async function hidePost(
-    postId,
-    hidden = true
-  ) {
-    if (!postId) return null;
-
-    try {
-      const result =
-        await API.toggleHidePost(
-          postId,
-          hidden
-        );
-
-      const post =
-        getPostElement(postId);
-
-      if (post) {
-        post.dataset.hidden =
-          result.is_hidden
-            ? 'true'
-            : 'false';
-
-        post.classList.toggle(
-          'is-hidden',
-          !!result.is_hidden
-        );
-      }
-
-      emitInteraction(
-        'post-hidden',
-        {
-          postId,
-          hidden: result.is_hidden
-        }
-      );
-
-      return result;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to hide post.'
-      );
-
-      return null;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // COMMENTS HIDDEN
-  // --------------------------------------------------------------------------
-
-  async function toggleCommentsHidden(
-    postId,
-    hidden
-  ) {
-    if (!postId) return null;
-
-    try {
-      const result =
-        await API.toggleCommentsHidden(
-          postId,
-          hidden
-        );
-
-      const post =
-        getPostElement(postId);
-
-      if (post) {
-        post.dataset.commentsHidden =
-          result.commentsHidden
-            ? 'true'
-            : 'false';
-
-        post.classList.toggle(
-          'comments-disabled',
-          !!result.commentsHidden
-        );
-      }
-
-      emitInteraction(
-        'comments-visibility-changed',
-        {
-          postId,
-          hidden: result.commentsHidden
-        }
-      );
-
-      return result;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to change comment settings.'
-      );
-
-      return null;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // DELETE POST
-  // --------------------------------------------------------------------------
-
-  async function deletePost(postId) {
-    if (!postId) return false;
-
-    try {
-      await API.deletePost(
-        postId
-      );
-
-      const post =
-        getPostElement(postId);
-
-      if (post) {
-        // Let render/feed decide how removal should happen.
-        post.dispatchEvent(
-          new CustomEvent(
-            'freeupper:post-deleted',
-            {
-              bubbles: true,
-              detail: { postId }
-            }
-          )
-        );
-
-        post.remove();
-      }
-
-      emitInteraction(
-        'post-deleted',
-        { postId }
-      );
-
+  // ===================================================================
+  function isDuplicate(key) {
+    const last = state.recentNotifications.get(key);
+    const now = Date.now();
+    if (last && (now - last) < DUPLICATE_GUARD_MS) {
       return true;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to delete post.'
-      );
-
-      return false;
     }
-  }
-
-  // --------------------------------------------------------------------------
-  // REPORT POST
-  // --------------------------------------------------------------------------
-
-  async function reportPost(
-    postId,
-    reason
-  ) {
-    if (!postId) return null;
-
-    try {
-      const result =
-        await API.reportPost(
-          postId,
-          reason
-        );
-
-      emitInteraction(
-        'post-reported',
-        {
-          postId,
-          reason,
-          result
-        }
-      );
-
-      showToast(
-        'Post reported. Thank you for helping keep FreeUpper safe.',
-        'success'
-      );
-
-      return result;
-
-    } catch (error) {
-      showError(
-        error,
-        'Unable to report this post.'
-      );
-
-      return null;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // EVENT BUS
-  // --------------------------------------------------------------------------
-
-  function emitInteraction(
-    type,
-    detail = {}
-  ) {
-    document.dispatchEvent(
-      new CustomEvent(
-        `freeupper:interaction:${type}`,
-        {
-          detail
-        }
-      )
-    );
-
-    document.dispatchEvent(
-      new CustomEvent(
-        'freeupper:interaction',
-        {
-          detail: {
-            type,
-            ...detail
-          }
-        }
-      )
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // CLICK HANDLER
-  // --------------------------------------------------------------------------
-
-  async function handleClick(event) {
-    const target =
-      event.target.closest(
-        '[data-action]'
-      );
-
-    if (!target) return;
-
-    const action =
-      target.dataset.action;
-
-    const postId =
-      getButtonPostId(target);
-
-    // ------------------------------------------------------
-    // LIKE
-    // ------------------------------------------------------
-
-    if (
-      action === 'like' ||
-      action === 'toggle-like'
-    ) {
-      event.preventDefault();
-
-      await toggleLike(
-        target,
-        postId
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // BOOKMARK
-    // ------------------------------------------------------
-
-    if (
-      action === 'bookmark' ||
-      action === 'toggle-bookmark'
-    ) {
-      event.preventDefault();
-
-      await toggleBookmark(
-        target,
-        postId
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // REPOST
-    // ------------------------------------------------------
-
-    if (
-      action === 'repost' ||
-      action === 'toggle-repost'
-    ) {
-      event.preventDefault();
-
-      const comment =
-        target.dataset.repostComment ||
-        '';
-
-      await toggleRepost(
-        target,
-        postId,
-        comment
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // SHARE
-    // ------------------------------------------------------
-
-    if (
-      action === 'share'
-    ) {
-      event.preventDefault();
-
-      await sharePost(
-        postId,
-        {
-          title:
-            target.dataset.shareTitle ||
-            'FreeUpper',
-          text:
-            target.dataset.shareText ||
-            '',
-          useNative:
-            target.dataset.nativeShare !== 'false'
-        }
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // COPY LINK
-    // ------------------------------------------------------
-
-    if (
-      action === 'copy-link'
-    ) {
-      event.preventDefault();
-
-      await copyPostLink(
-        postId
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // HIDE
-    // ------------------------------------------------------
-
-    if (
-      action === 'hide-post'
-    ) {
-      event.preventDefault();
-
-      await hidePost(
-        postId,
-        true
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // UNHIDE
-    // ------------------------------------------------------
-
-    if (
-      action === 'unhide-post'
-    ) {
-      event.preventDefault();
-
-      await hidePost(
-        postId,
-        false
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // DELETE
-    // ------------------------------------------------------
-
-    if (
-      action === 'delete-post'
-    ) {
-      event.preventDefault();
-
-      const confirmed =
-        window.confirm(
-          'Delete this post? This action cannot be undone.'
-        );
-
-      if (!confirmed) return;
-
-      await deletePost(
-        postId
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // TURN COMMENTS OFF
-    // ------------------------------------------------------
-
-    if (
-      action === 'disable-comments'
-    ) {
-      event.preventDefault();
-
-      await toggleCommentsHidden(
-        postId,
-        true
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // TURN COMMENTS ON
-    // ------------------------------------------------------
-
-    if (
-      action === 'enable-comments'
-    ) {
-      event.preventDefault();
-
-      await toggleCommentsHidden(
-        postId,
-        false
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // REPORT
-    // ------------------------------------------------------
-
-    if (
-      action === 'report-post'
-    ) {
-      event.preventDefault();
-
-      const reason =
-        target.dataset.reason ||
-        'Inappropriate content';
-
-      await reportPost(
-        postId,
-        reason
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // COMMENTS
-    // ------------------------------------------------------
-
-    if (
-      action === 'open-comments'
-    ) {
-      event.preventDefault();
-
-      const container =
-        target.closest(
-          '[data-post-id]'
-        )?.querySelector(
-          '[data-comments-container]'
-        );
-
-      await loadComments(
-        postId,
-        container
-      );
-
-      return;
-    }
-
-    // ------------------------------------------------------
-    // COMMENT LIKE
-    // ------------------------------------------------------
-
-    if (
-      action === 'comment-like' ||
-      action === 'toggle-comment-like'
-    ) {
-      event.preventDefault();
-
-      const commentId =
-        target.dataset.commentId ||
-        target.closest(
-          '[data-comment-id]'
-        )?.dataset.commentId;
-
-      await toggleCommentLike(
-        target,
-        commentId
-      );
-
-      return;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // FORM HANDLER
-  // --------------------------------------------------------------------------
-
-  async function handleSubmit(event) {
-    const form =
-      event.target.closest(
-        '[data-comment-form]'
-      );
-
-    if (!form) return;
-
-    event.preventDefault();
-
-    const postId =
-      form.dataset.postId ||
-      getPostIdFromElement(form);
-
-    const parentId =
-      form.dataset.parentId ||
-      null;
-
-    const input =
-      form.querySelector(
-        '[data-comment-input], textarea, input[name="comment"], textarea[name="comment"]'
-      );
-
-    if (!input) return;
-
-    const message =
-      input.value.trim();
-
-    const mentions =
-      parseMentions(input);
-
-    const submit =
-      form.querySelector(
-        'button[type="submit"], [data-submit-comment]'
-      );
-
-    setButtonBusy(
-      submit,
-      true
-    );
-
-    try {
-      const comment =
-        await addComment(
-          postId,
-          message,
-          {
-            parentId,
-            mentions
-          }
-        );
-
-      if (!comment) return;
-
-      input.value = '';
-
-      emitInteraction(
-        'comment-form-cleared',
-        {
-          postId,
-          parentId
-        }
-      );
-
-    } finally {
-      setButtonBusy(
-        submit,
-        false
-      );
-    }
-  }
-
-  function parseMentions(input) {
-    if (!input) return [];
-
-    const text =
-      input.value || '';
-
-    const matches =
-      text.match(
-        /@[a-zA-Z0-9_.-]+/g
-      );
-
-    if (!matches) return [];
-
-    return [
-      ...new Set(
-        matches.map(
-          mention =>
-            mention.slice(1)
-        )
-      )
-    ];
-  }
-
-  // --------------------------------------------------------------------------
-  // MEDIA VIEW TRACKING
-  // --------------------------------------------------------------------------
-
-  function scanForPosts() {
-    const root =
-      getFeedElement();
-
-    if (!root) return;
-
-    root
-      .querySelectorAll(
-        '[data-post-id]'
-      )
-      .forEach(
-        observePost
-      );
-  }
-
-  // --------------------------------------------------------------------------
-  // REALTIME
-  // --------------------------------------------------------------------------
-
-  function handleRealtimeChange(change) {
-    if (!change) return;
-
-    const {
-      table,
-      event,
-      payload,
-      old
-    } = change;
-
-    log(
-      'Realtime:',
-      table,
-      event,
-      payload
-    );
-
-    // We intentionally DON'T blindly overwrite DOM here.
-    //
-    // index-feed.js / index-render.js can listen to these events
-    // and decide whether the affected card should be patched,
-    // refreshed, or re-ranked.
-
-    document.dispatchEvent(
-      new CustomEvent(
-        'freeupper:realtime',
-        {
-          detail: {
-            table,
-            event,
-            payload,
-            old
-          }
-        }
-      )
-    );
-
-    // Interaction-specific events.
-    switch (table) {
-      case 'post_likes':
-        document.dispatchEvent(
-          new CustomEvent(
-            'freeupper:realtime:like',
-            {
-              detail: {
-                event,
-                payload,
-                old
-              }
-            }
-          )
-        );
-        break;
-
-      case 'comment_likes':
-        document.dispatchEvent(
-          new CustomEvent(
-            'freeupper:realtime:comment-like',
-            {
-              detail: {
-                event,
-                payload,
-                old
-              }
-            }
-          )
-        );
-        break;
-
-      case 'reposts':
-        document.dispatchEvent(
-          new CustomEvent(
-            'freeupper:realtime:repost',
-            {
-              detail: {
-                event,
-                payload,
-                old
-              }
-            }
-          )
-        );
-        break;
-
-      case 'bookmarks':
-        document.dispatchEvent(
-          new CustomEvent(
-            'freeupper:realtime:bookmark',
-            {
-              detail: {
-                event,
-                payload,
-                old
-              }
-            }
-          )
-        );
-        break;
-
-      case 'shares':
-        document.dispatchEvent(
-          new CustomEvent(
-            'freeupper:realtime:share',
-            {
-              detail: {
-                event,
-                payload,
-                old
-              }
-            }
-          )
-        );
-        break;
-
-      case 'comments':
-        document.dispatchEvent(
-          new CustomEvent(
-            'freeupper:realtime:comment',
-            {
-              detail: {
-                event,
-                payload,
-                old
-              }
-            }
-          )
-        );
-        break;
-
-      case 'posts':
-        document.dispatchEvent(
-          new CustomEvent(
-            'freeupper:realtime:post',
-            {
-              detail: {
-                event,
-                payload,
-                old
-              }
-            }
-          )
-        );
-        break;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // MUTATION OBSERVER
-  // --------------------------------------------------------------------------
-
-  let mutationObserver = null;
-
-  function observeFeedChanges() {
-    const root =
-      getFeedElement();
-
-    if (!root) return;
-
-    if (mutationObserver) {
-      mutationObserver.disconnect();
-    }
-
-    mutationObserver =
-      new MutationObserver(
-        mutations => {
-          let shouldScan = false;
-
-          mutations.forEach(
-            mutation => {
-              if (
-                mutation.type ===
-                'childList'
-              ) {
-                shouldScan = true;
-              }
-            }
-          );
-
-          if (shouldScan) {
-            scanForPosts();
-          }
-        }
-      );
-
-    mutationObserver.observe(
-      root,
-      {
-        childList: true,
-        subtree: true
+    state.recentNotifications.set(key, now);
+    // Light cleanup so this map doesn't grow forever in a long session
+    if (state.recentNotifications.size > 500) {
+      const cutoff = now - 60000;
+      for (const [k, ts] of state.recentNotifications) {
+        if (ts < cutoff) state.recentNotifications.delete(k);
       }
-    );
+    }
+    return false;
   }
 
-  // --------------------------------------------------------------------------
-  // PUBLIC API
-  // --------------------------------------------------------------------------
-
-  const Interactions = {
-
-    // Likes
-    toggleLike,
-
-    // Comments
-    loadComments,
-    addComment,
-    toggleCommentLike,
-
-    // Reposts
-    toggleRepost,
-    updateRepostComment,
-
-    // Bookmarks
-    toggleBookmark,
-
-    // Shares
-    sharePost,
-    copyPostLink,
-
-    // Views
-    recordView,
-    observePost,
-
-    // Moderation / ownership
-    hidePost,
-    toggleCommentsHidden,
-    deletePost,
-    reportPost,
-
-    // UI
-    updateCounter,
-    updateActionState,
-
-    // Events
-    emitInteraction,
-
-    // State
-    getState() {
-      return state;
-    },
-
-    refreshObservers() {
-      scanForPosts();
+  // ===================================================================
+  // CORE: notify()
+  // ===================================================================
+  // Call this ONE function from index.html right after any existing
+  // interaction succeeds. Examples of where to add it:
+  //
+  //   In toggleReaction(postId), after:
+  //     post.likedByMe = liked; post.reactions.like = count;
+  //   add:
+  //     IndexInteractions.notify(postId, liked ? 'like' : 'unlike');
+  //
+  //   In toggleBookmarkUI(article), after nb = await toggleBookmark(pid):
+  //     IndexInteractions.notify(pid, nb ? 'bookmark' : 'unbookmark');
+  //
+  //   In triggerRepostFromFeed() success path (after toggleRepost resolves):
+  //     IndexInteractions.notify(postId, reposted ? 'repost' : 'unrepost');
+  //
+  //   In handleShareAction('copy'/'native'/etc.) after recordShareForPost():
+  //     IndexInteractions.notify(postId, 'share');
+  //
+  //   In addComment() success:
+  //     IndexInteractions.notify(postId, 'comment');
+  //
+  //   In toggleFollowHandler() success:
+  //     IndexInteractions.notify(authorId... ) — NOTE: follow is keyed by
+  //     postId in our model since the algorithm learns topic+creator
+  //     affinity FROM a post. If you want to notify a pure follow with
+  //     no specific post context, use notifyCreator() below instead.
+  // ===================================================================
+  function notify(postId, type) {
+    if (!postId || !type) return;
+    const mappedType = TYPE_MAP[type];
+    if (!mappedType) {
+      console.warn(`index-interactions.js: unknown interaction type "${type}", ignoring.`);
+      return;
     }
+
+    const key = `${postId}:${type}`;
+    if (isDuplicate(key)) return;
+
+    Feed.registerInteraction(postId, mappedType);
+    emitLocal('interaction', { postId, type, mappedType });
+  }
+
+  // ===================================================================
+  // VARIANT: notifyCreator()
+  // ===================================================================
+  // For actions tied to a creator but not a specific post — e.g.
+  // following someone from their profile page rather than from a
+  // post card. Bumps creator affinity directly without requiring a
+  // post object (so it bypasses topic-interest learning, which needs
+  // post text to infer topics from).
+  // ===================================================================
+  function notifyCreator(userId, type) {
+    if (!userId || !type) return;
+    const mappedType = TYPE_MAP[type] || type;
+
+    const key = `creator:${userId}:${type}`;
+    if (isDuplicate(key)) return;
+
+    // FreeUpperFeed doesn't expose a direct creator-only updater publicly
+    // in v4.0.0, so we reach into FreeUpperAlgorithm the same way
+    // index-feed.js does, keeping the creatorScores Map in sync.
+    if (window.FreeUpperAlgorithm) {
+      const feedState = Feed.getState();
+      // index-feed.js owns the actual Map instance internally; since it's
+      // not exposed directly, the practical approach is to route this
+      // through a post the user has from that creator, OR expand
+      // FreeUpperFeed's public API with a dedicated method. For now:
+      console.log(
+        `index-interactions.js: creator-only signal (${type}) for ${userId} — ` +
+        `consider calling notify(postId, 'follow') from a post by this creator instead.`
+      );
+    }
+    emitLocal('creator-interaction', { userId, type });
+  }
+
+  // ===================================================================
+  // VARIANT: notifyWatch()
+  // ===================================================================
+  // Specifically for video watch-time signals, since these come from
+  // your video player's timeupdate/ended events rather than a click.
+  // percent should be 0–1 (how much of the video was watched).
+  //
+  // Usage in your video player code (wherever you track ended/progress):
+  //
+  //   video.addEventListener('ended', () => {
+  //     IndexInteractions.notifyWatch(postId, 1);
+  //   });
+  //
+  //   Or on scroll-past without finishing:
+  //   IndexInteractions.notifyWatch(postId, video.currentTime / video.duration);
+  // ===================================================================
+  function notifyWatch(postId, percent) {
+    if (!postId || typeof percent !== 'number') return;
+    const type = percent >= 0.9 ? 'watch_complete' : (percent >= 0.3 ? 'watch_partial' : null);
+    if (!type) return; // too short a watch to count as any signal
+    notify(postId, type);
+  }
+
+  // ===================================================================
+  // VARIANT: notifySkip()
+  // ===================================================================
+  // Call when a post scrolls past very quickly without any engagement
+  // (e.g. visible for under ~1s). This is a soft negative signal —
+  // wire it up later if you want; not required for launch.
+  // ===================================================================
+  function notifySkip(postId) {
+    notify(postId, 'skip');
+  }
+
+  // ===================================================================
+  // VARIANT: notifyHide()
+  // ===================================================================
+  // Wire this into your existing "Not interested" / hidePostFromFeed()
+  // flow — it's already a strong explicit negative signal, just needs
+  // the algorithm to know about it too.
+  //
+  // In hidePostFromFeed(postId), add:
+  //   IndexInteractions.notifyHide(postId);
+  // ===================================================================
+  function notifyHide(postId) {
+    notify(postId, 'hide');
+  }
+
+  // ===================================================================
+  // LOCAL EVENT BUS
+  // ===================================================================
+  // Separate from FreeUpperFeed's bus — this one is specifically for
+  // "an interaction was just notified" so future features (e.g. an
+  // analytics dashboard, or a debug overlay showing live interest
+  // scores) can hook in without modifying index.html again.
+  // ===================================================================
+  const bus = new EventTarget();
+  function emitLocal(name, detail) {
+    bus.dispatchEvent(new CustomEvent(name, { detail }));
+  }
+  function on(name, cb) { bus.addEventListener(name, cb); }
+  function off(name, cb) { bus.removeEventListener(name, cb); }
+
+  // ===================================================================
+  // DEBUG
+  // ===================================================================
+  function getState() {
+    return {
+      recentNotificationCount: state.recentNotifications.size
+    };
+  }
+
+  // ===================================================================
+  // PUBLIC API
+  // ===================================================================
+  window.IndexInteractions = {
+    notify,
+    notifyCreator,
+    notifyWatch,
+    notifySkip,
+    notifyHide,
+    on,
+    off,
+    getState
   };
 
-  window.IndexInteractions =
-    Interactions;
-
-  // --------------------------------------------------------------------------
-  // INITIALIZE
-  // --------------------------------------------------------------------------
-
-  function init() {
-    if (state.initialized) return;
-
-    state.initialized = true;
-
-    state.feedElement =
-      getFeedElement();
-
-    // Delegated events.
-    document.addEventListener(
-      'click',
-      handleClick
-    );
-
-    document.addEventListener(
-      'submit',
-      handleSubmit
-    );
-
-    // PostsAPI realtime.
-    if (
-      typeof API.subscribeToAll ===
-      'function'
-    ) {
-      API.subscribeToAll(
-        handleRealtimeChange
-      );
-    }
-
-    scanForPosts();
-
-    observeFeedChanges();
-
-    log(
-      '✅ index-interactions.js v3.0.0 initialized.'
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // DOM READY
-  // --------------------------------------------------------------------------
-
-  if (
-    document.readyState ===
-    'loading'
-  ) {
-    document.addEventListener(
-      'DOMContentLoaded',
-      init,
-      {
-        once: true
-      }
-    );
-  } else {
-    init();
-  }
-
+  console.log('✅ index-interactions.js v4.0.0 loaded — notifier only, no click handling.');
 })();
