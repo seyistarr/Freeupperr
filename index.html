@@ -54,12 +54,1106 @@
     <script src="global.js" defer></script>
     <script src="auth.js" defer></script>
     <!-- New core scripts: order matters -->
-    <script src="posts.js" defer></script>
-    <script src="index-algorithm.js" defer></script>
-    <script src="index-feed.js" defer></script>
-    <script src="index-render.js" defer></script>
-    <script src="index-interactions.js" defer></script>
-    <script src="onboarding.js" defer></script>
+    <!-- New core scripts: order matters -->
+<script src="posts.js" defer></script>
+
+<!-- ===== index-algorithm.js (inlined) ===== -->
+<script>
+(function () {
+  'use strict';
+
+  const CONFIG = {
+    MAX_SCORE: 100,
+    FRESHNESS_WEIGHT: 24,
+    LIKE_WEIGHT: 8,
+    COMMENT_WEIGHT: 10,
+    REPOST_WEIGHT: 9,
+    SHARE_WEIGHT: 12,
+    VIEW_WEIGHT: 3,
+    CATEGORY_AFFINITY_WEIGHT: 16,
+    CREATOR_AFFINITY_WEIGHT: 18,
+    TAG_AFFINITY_WEIGHT: 10,
+    VIDEO_WEIGHT: 3,
+    IMAGE_WEIGHT: 2,
+    TEXT_WEIGHT: 1,
+    SEEN_PENALTY: 18,
+    REPEAT_PENALTY: 10,
+    EXPLORATION_WEIGHT: 7
+  };
+
+  const state = {
+    seen: new Set(),
+    interactionHistory: new Map(),
+    categoryScores: new Map(),
+    creatorScores: new Map(),
+    tagScores: new Map()
+  };
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function safeNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function normalize(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function ageHours(timestamp) {
+    const time = new Date(timestamp || Date.now()).getTime();
+    if (!Number.isFinite(time)) return 24;
+    return Math.max(0, (Date.now() - time) / (1000 * 60 * 60));
+  }
+
+  function freshnessScore(post) {
+    const hours = ageHours(post.timestamp);
+    return 1 / Math.pow(1 + hours / 12, 0.65);
+  }
+
+  function engagementScore(post) {
+    const likes = safeNumber(post.likes);
+    const comments = safeNumber(post.comments);
+    const reposts = safeNumber(post.repostCount);
+    const shares = safeNumber(post.shareCount);
+    const views = safeNumber(post.views);
+    return (
+      Math.log1p(likes) * CONFIG.LIKE_WEIGHT +
+      Math.log1p(comments) * CONFIG.COMMENT_WEIGHT +
+      Math.log1p(reposts) * CONFIG.REPOST_WEIGHT +
+      Math.log1p(shares) * CONFIG.SHARE_WEIGHT +
+      Math.log1p(views) * CONFIG.VIEW_WEIGHT
+    );
+  }
+
+  function contentTypeScore(post) {
+    const media = Array.isArray(post.media) ? post.media : [];
+    if (media.some(m => normalize(m.type) === 'video')) {
+      return CONFIG.VIDEO_WEIGHT;
+    }
+    if (media.length > 0) {
+      return CONFIG.IMAGE_WEIGHT;
+    }
+    return CONFIG.TEXT_WEIGHT;
+  }
+
+  function categoryAffinity(post) {
+    const category = normalize(post.category);
+    if (!category) return 0;
+    return (state.categoryScores.get(category) || 0) * CONFIG.CATEGORY_AFFINITY_WEIGHT;
+  }
+
+  function creatorAffinity(post) {
+    const creatorId = post.user_id;
+    if (!creatorId) return 0;
+    return (state.creatorScores.get(creatorId) || 0) * CONFIG.CREATOR_AFFINITY_WEIGHT;
+  }
+
+  function tagAffinity(post) {
+    const tags = Array.isArray(post.tags) ? post.tags : [];
+    if (!tags.length) return 0;
+    let score = 0;
+    tags.forEach(tag => {
+      score += state.tagScores.get(normalize(tag)) || 0;
+    });
+    return score * CONFIG.TAG_AFFINITY_WEIGHT;
+  }
+
+  function seenPenalty(post) {
+    if (state.seen.has(post.id)) {
+      return CONFIG.SEEN_PENALTY;
+    }
+    return 0;
+  }
+
+  function repeatPenalty(post, index, allPosts) {
+    if (!post.user_id) return 0;
+    const nearby = allPosts.slice(
+      Math.max(0, index - 4),
+      Math.min(allPosts.length, index + 5)
+    );
+    const creatorPosts = nearby.filter(p => p.user_id === post.user_id);
+    if (creatorPosts.length > 2) {
+      return CONFIG.REPEAT_PENALTY;
+    }
+    return 0;
+  }
+
+  function explorationScore(post) {
+    const id = String(post.id || '');
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = ((hash << 5) - hash) + id.charCodeAt(i);
+      hash |= 0;
+    }
+    const normalized = Math.abs(hash % 100) / 100;
+    return normalized * CONFIG.EXPLORATION_WEIGHT;
+  }
+
+  function scorePost(post, index, allPosts) {
+    if (!post || !post.id) return 0;
+    let score = 0;
+    score += freshnessScore(post) * CONFIG.FRESHNESS_WEIGHT;
+    score += engagementScore(post);
+    score += categoryAffinity(post);
+    score += creatorAffinity(post);
+    score += tagAffinity(post);
+    score += contentTypeScore(post);
+    score += explorationScore(post);
+    score -= seenPenalty(post);
+    score -= repeatPenalty(post, index, allPosts);
+    if (post.likedByMe) {
+      score -= 2;
+    }
+    if (post.is_hidden) {
+      return -Infinity;
+    }
+    return clamp(score, -100, CONFIG.MAX_SCORE);
+  }
+
+  function rank(posts, options = {}) {
+    if (!Array.isArray(posts)) return [];
+    const input = posts.filter(Boolean);
+    const scored = input.map((post, index) => ({
+      ...post,
+      _algorithmScore: scorePost(post, index, input)
+    }));
+    const filtered = scored.filter(post => post._algorithmScore !== -Infinity);
+    filtered.sort((a, b) => {
+      if (b._algorithmScore !== a._algorithmScore) {
+        return b._algorithmScore - a._algorithmScore;
+      }
+      return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
+    });
+    if (options.removeScore === true) {
+      return filtered.map(post => {
+        const copy = { ...post };
+        delete copy._algorithmScore;
+        return copy;
+      });
+    }
+    return filtered;
+  }
+
+  function markSeen(postId) {
+    if (!postId) return;
+    state.seen.add(postId);
+    if (state.seen.size > 5000) {
+      const first = state.seen.values().next().value;
+      state.seen.delete(first);
+    }
+  }
+
+  function markManySeen(ids = []) {
+    ids.forEach(markSeen);
+  }
+
+  function hasSeen(postId) {
+    return state.seen.has(postId);
+  }
+
+  function registerInteraction(post, type) {
+    if (!post || !post.id) return;
+    const weightMap = {
+      view: 0.05,
+      like: 1,
+      unlike: -0.5,
+      comment: 1.5,
+      repost: 2,
+      share: 2,
+      bookmark: 1.5,
+      skip: -0.5
+    };
+    const weight = weightMap[type] || 0;
+    const current = state.interactionHistory.get(post.id) || 0;
+    state.interactionHistory.set(post.id, current + weight);
+    if (post.category) {
+      const category = normalize(post.category);
+      const old = state.categoryScores.get(category) || 0;
+      state.categoryScores.set(category, clamp(old + weight * 0.1, -10, 10));
+    }
+    if (post.user_id) {
+      const old = state.creatorScores.get(post.user_id) || 0;
+      state.creatorScores.set(post.user_id, clamp(old + weight * 0.1, -10, 10));
+    }
+    if (Array.isArray(post.tags)) {
+      post.tags.forEach(tag => {
+        const key = normalize(tag);
+        const old = state.tagScores.get(key) || 0;
+        state.tagScores.set(key, clamp(old + weight * 0.05, -10, 10));
+      });
+    }
+  }
+
+  function dedupe(posts) {
+    const map = new Map();
+    posts.forEach(post => {
+      if (!post || !post.id) return;
+      if (!map.has(post.id)) {
+        map.set(post.id, post);
+      }
+    });
+    return [...map.values()];
+  }
+
+  function prepare(posts, options = {}) {
+    const unique = dedupe(posts);
+    const ranked = rank(unique, options);
+    return ranked;
+  }
+
+  function reset() {
+    state.seen.clear();
+    state.interactionHistory.clear();
+    state.categoryScores.clear();
+    state.creatorScores.clear();
+    state.tagScores.clear();
+  }
+
+  window.FreeUpperAlgorithm = {
+    rank,
+    prepare,
+    scorePost,
+    markSeen,
+    markManySeen,
+    hasSeen,
+    registerInteraction,
+    dedupe,
+    reset,
+    getState() {
+      return {
+        seen: new Set(state.seen),
+        interactionHistory: new Map(state.interactionHistory),
+        categoryScores: new Map(state.categoryScores),
+        creatorScores: new Map(state.creatorScores),
+        tagScores: new Map(state.tagScores)
+      };
+    }
+  };
+
+  console.log('✅ FreeUpperAlgorithm loaded');
+})();
+</script>
+
+<!-- ===== index-feed.js (inlined) ===== -->
+<script>
+(function () {
+  'use strict';
+
+  if (!window.PostsAPI) {
+    console.error('index-feed.js: PostsAPI missing.');
+    return;
+  }
+  if (!window.FreeUpperAlgorithm) {
+    console.error('index-feed.js: FreeUpperAlgorithm missing.');
+    return;
+  }
+
+  const API = window.PostsAPI;
+  const Algorithm = window.FreeUpperAlgorithm;
+
+  const CONFIG = {
+    CANDIDATE_POOL_SIZE: 100,
+    PAGE_SIZE: 5,
+    INTEREST_SAVE_DEBOUNCE_MS: 4000,
+    CREATOR_SCORES_STORAGE_KEY: 'freeupper_creator_scores',
+    SEEN_STORAGE_KEY: 'freeupper_seen_posts',
+    MAX_STORED_SEEN: 500
+  };
+
+  const state = {
+    profile: null,
+    rawPosts: [],
+    rankedPosts: [],
+    creatorScores: new Map(),
+    source: 'composer',
+    page: 0,
+    loading: false,
+    refreshing: false,
+    hasMore: true,
+    initialized: false,
+    realtimeStarted: false,
+    interestSaveTimer: null,
+    pendingInterests: null
+  };
+
+  const bus = new EventTarget();
+  function emit(name, detail = {}) {
+    bus.dispatchEvent(new CustomEvent(name, { detail }));
+  }
+
+  async function loadProfile(userId) {
+    if (!userId) {
+      state.profile = null;
+      return null;
+    }
+    try {
+      const { data, error } = await window.sb
+        .from('profiles')
+        .select('id, interests, onboarding_completed')
+        .eq('id', userId)
+        .single();
+      if (error) throw error;
+      state.profile = {
+        id: data.id,
+        interests: data.interests || {},
+        onboarding_completed: !!data.onboarding_completed
+      };
+      return state.profile;
+    } catch (err) {
+      console.warn('index-feed.js: failed to load profile interests:', err);
+      state.profile = { id: userId, interests: {}, onboarding_completed: false };
+      return state.profile;
+    }
+  }
+
+  function getProfile() {
+    return state.profile;
+  }
+
+  function needsOnboarding() {
+    return !!state.profile && !state.profile.onboarding_completed;
+  }
+
+  function scheduleInterestSave(interests) {
+    state.pendingInterests = interests;
+    if (state.interestSaveTimer) {
+      clearTimeout(state.interestSaveTimer);
+    }
+    state.interestSaveTimer = setTimeout(async () => {
+      const toSave = state.pendingInterests;
+      state.pendingInterests = null;
+      state.interestSaveTimer = null;
+      if (!state.profile || !state.profile.id || !toSave) return;
+      try {
+        await window.sb
+          .from('profiles')
+          .update({ interests: toSave })
+          .eq('id', state.profile.id);
+        emit('interests-saved', { interests: toSave });
+      } catch (err) {
+        console.warn('index-feed.js: failed to save interests:', err);
+      }
+    }, CONFIG.INTEREST_SAVE_DEBOUNCE_MS);
+  }
+
+  async function saveOnboardingInterests(interestsObject) {
+    if (!state.profile || !state.profile.id) return false;
+    try {
+      await window.sb
+        .from('profiles')
+        .update({ interests: interestsObject, onboarding_completed: true })
+        .eq('id', state.profile.id);
+      state.profile.interests = interestsObject;
+      state.profile.onboarding_completed = true;
+      emit('onboarding-completed', { interests: interestsObject });
+      return true;
+    } catch (err) {
+      console.error('index-feed.js: failed to save onboarding interests:', err);
+      return false;
+    }
+  }
+
+  function loadCreatorScoresFromStorage() {
+    try {
+      const raw = localStorage.getItem(CONFIG.CREATOR_SCORES_STORAGE_KEY);
+      if (!raw) return new Map();
+      const obj = JSON.parse(raw);
+      return new Map(Object.entries(obj));
+    } catch (_) {
+      return new Map();
+    }
+  }
+
+  function saveCreatorScoresToStorage() {
+    try {
+      const obj = Object.fromEntries(state.creatorScores);
+      localStorage.setItem(CONFIG.CREATOR_SCORES_STORAGE_KEY, JSON.stringify(obj));
+    } catch (_) { /* non-fatal */ }
+  }
+
+  function loadSeenFromStorage() {
+    try {
+      const raw = localStorage.getItem(CONFIG.SEEN_STORAGE_KEY);
+      if (!raw) return;
+      const ids = JSON.parse(raw);
+      Algorithm.markManySeen(ids);
+    } catch (_) { /* non-fatal */ }
+  }
+
+  function saveSeenToStorage(postId) {
+    try {
+      const raw = localStorage.getItem(CONFIG.SEEN_STORAGE_KEY);
+      let ids = raw ? JSON.parse(raw) : [];
+      if (!ids.includes(postId)) {
+        ids.push(postId);
+        if (ids.length > CONFIG.MAX_STORED_SEEN) {
+          ids = ids.slice(ids.length - CONFIG.MAX_STORED_SEEN);
+        }
+        localStorage.setItem(CONFIG.SEEN_STORAGE_KEY, JSON.stringify(ids));
+      }
+    } catch (_) { /* non-fatal */ }
+  }
+
+  function rerank() {
+    state.rankedPosts = Algorithm.rank(state.rawPosts);
+    state.page = 0;
+  }
+
+  async function loadCandidatePool(source) {
+    const items = await API.loadFeedWithReposts(0, CONFIG.CANDIDATE_POOL_SIZE, source);
+    return items.map(item => item.post).filter(Boolean);
+  }
+
+  async function loadInitial(options = {}) {
+    if (state.loading) return getCurrentPage();
+    state.loading = true;
+
+    const source = options.source !== undefined ? options.source : state.source;
+    state.source = source;
+
+    try {
+      const userId = options.userId || state.profile?.id || null;
+      if (userId && !state.profile) {
+        await loadProfile(userId);
+      }
+      if (!state.creatorScores.size) {
+        state.creatorScores = loadCreatorScoresFromStorage();
+      }
+      loadSeenFromStorage();
+
+      state.rawPosts = await loadCandidatePool(source);
+      rerank();
+      state.hasMore = state.rawPosts.length >= CONFIG.CANDIDATE_POOL_SIZE;
+      state.initialized = true;
+
+      emit('loaded', { posts: getCurrentPage() });
+      return getCurrentPage();
+    } catch (err) {
+      console.error('index-feed.js: loadInitial error:', err);
+      emit('error', { error: err });
+      return [];
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  function getCurrentPage() {
+    const start = 0;
+    const end = (state.page + 1) * CONFIG.PAGE_SIZE;
+    return state.rankedPosts.slice(start, end);
+  }
+
+  function loadNextPage() {
+    const maxPage = Math.ceil(state.rankedPosts.length / CONFIG.PAGE_SIZE) - 1;
+    if (state.page >= maxPage) {
+      return loadMoreFromSource();
+    }
+    state.page += 1;
+    const posts = getCurrentPage();
+    emit('page-advanced', { posts, page: state.page });
+    return posts;
+  }
+
+  async function loadMoreFromSource() {
+    if (state.loading || !state.hasMore) return getCurrentPage();
+    state.loading = true;
+    try {
+      const items = await API.loadFeedWithReposts(
+        state.rawPosts.length,
+        CONFIG.CANDIDATE_POOL_SIZE,
+        state.source
+      );
+      const newPosts = items.map(item => item.post).filter(Boolean);
+      if (!newPosts.length) {
+        state.hasMore = false;
+        emit('end');
+        return getCurrentPage();
+      }
+      const merged = new Map(state.rawPosts.map(p => [p.id, p]));
+      newPosts.forEach(p => merged.set(p.id, p));
+      state.rawPosts = [...merged.values()];
+      rerank();
+      state.page = Math.floor((state.rawPosts.length - newPosts.length) / CONFIG.PAGE_SIZE);
+      state.hasMore = newPosts.length >= CONFIG.CANDIDATE_POOL_SIZE;
+      const posts = getCurrentPage();
+      emit('more', { posts });
+      return posts;
+    } catch (err) {
+      console.error('index-feed.js: loadMoreFromSource error:', err);
+      emit('error', { error: err });
+      return getCurrentPage();
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  async function refresh(options = {}) {
+    if (state.refreshing) return getCurrentPage();
+    state.refreshing = true;
+    try {
+      Algorithm.resetSeen();
+      const source = options.source !== undefined ? options.source : state.source;
+      state.source = source;
+      state.rawPosts = await loadCandidatePool(source);
+      rerank();
+      state.hasMore = state.rawPosts.length >= CONFIG.CANDIDATE_POOL_SIZE;
+      emit('refreshed', { posts: getCurrentPage() });
+      return getCurrentPage();
+    } catch (err) {
+      console.error('index-feed.js: refresh error:', err);
+      emit('error', { error: err });
+      return [];
+    } finally {
+      state.refreshing = false;
+    }
+  }
+
+  async function setSource(source) {
+    return refresh({ source });
+  }
+
+  function registerInteraction(postId, type) {
+    const post = state.rawPosts.find(p => p.id === postId);
+    if (!post) return;
+    if (state.profile) {
+      const updated = Algorithm.updateInterests(state.profile.interests, post, type);
+      state.profile.interests = updated;
+      scheduleInterestSave(updated);
+    }
+    state.creatorScores = Algorithm.updateCreatorScore(state.creatorScores, post.user_id, type);
+    saveCreatorScoresToStorage();
+    markSeen(postId);
+    emit('interaction-registered', { postId, type });
+  }
+
+  function markSeen(postId) {
+    Algorithm.markSeen(postId);
+    saveSeenToStorage(postId);
+  }
+
+  function markManySeen(ids = []) {
+    ids.forEach(markSeen);
+  }
+
+  function patchPost(postId, changes = {}) {
+    const idx = state.rawPosts.findIndex(p => p.id === postId);
+    if (idx === -1) return null;
+    const updated = { ...state.rawPosts[idx], ...changes };
+    if (changes.title || changes.content || changes.description || changes.tags) {
+      delete updated._topics;
+    }
+    state.rawPosts[idx] = updated;
+    const rankedIdx = state.rankedPosts.findIndex(p => p.id === postId);
+    if (rankedIdx !== -1) {
+      state.rankedPosts[rankedIdx] = updated;
+    }
+    emit('post-patched', { post: updated });
+    return updated;
+  }
+
+  function removePost(postId) {
+    state.rawPosts = state.rawPosts.filter(p => p.id !== postId);
+    state.rankedPosts = state.rankedPosts.filter(p => p.id !== postId);
+    emit('post-removed', { postId });
+  }
+
+  async function reloadSinglePost(postId) {
+    try {
+      const fresh = await API.loadPostById(postId);
+      if (fresh) {
+        patchPost(postId, fresh);
+      }
+      return fresh;
+    } catch (err) {
+      console.warn('index-feed.js: reloadSinglePost error:', err);
+      return null;
+    }
+  }
+
+  function startRealtime() {
+    if (state.realtimeStarted) return;
+    if (typeof API.subscribeToAll !== 'function') {
+      console.warn('index-feed.js: PostsAPI.subscribeToAll unavailable.');
+      return;
+    }
+    state.realtimeStarted = true;
+    API.subscribeToAll(change => handleRealtimeChange(change));
+  }
+
+  function handleRealtimeChange(change) {
+    if (!change || !change.table) return;
+    const { table, event, payload } = change;
+    switch (table) {
+      case 'posts':
+        if (event === 'INSERT') {
+          emit('new-post-available', { postId: payload.id });
+        } else if (event === 'UPDATE') {
+          if (payload.is_hidden === true) {
+            removePost(payload.id);
+          } else {
+            patchPost(payload.id, payload);
+          }
+        } else if (event === 'DELETE') {
+          removePost(payload.id);
+        }
+        break;
+      case 'post_likes':
+        emit('post-like-change', { postId: payload.post_id, event });
+        break;
+      case 'comments':
+        emit('comment-change', { postId: payload.post_id, event });
+        break;
+      case 'reposts':
+        API.clearFeedContext?.();
+        emit('repost-change', { postId: payload.post_id, event });
+        break;
+      case 'bookmarks':
+        emit('bookmark-change', { postId: payload.post_id, event });
+        break;
+      case 'shares':
+        emit('share-change', { postId: payload.post_id, event });
+        break;
+    }
+  }
+
+  function stopRealtime() {
+    if (typeof API.unsubscribe === 'function') {
+      API.unsubscribe();
+    }
+    state.realtimeStarted = false;
+  }
+
+  function getState() {
+    return {
+      profile: state.profile,
+      rawCount: state.rawPosts.length,
+      rankedCount: state.rankedPosts.length,
+      page: state.page,
+      hasMore: state.hasMore,
+      creatorScoreCount: state.creatorScores.size,
+      source: state.source
+    };
+  }
+
+  function explainPost(postId) {
+    const post = state.rawPosts.find(p => p.id === postId);
+    if (!post) return null;
+    return Algorithm.explain(post, state.profile, state.creatorScores);
+  }
+
+  window.FreeUpperFeed = {
+    loadInitial,
+    refresh,
+    setSource,
+    getCurrentPage,
+    loadNextPage,
+    loadProfile,
+    getProfile,
+    needsOnboarding,
+    saveOnboardingInterests,
+    registerInteraction,
+    markSeen,
+    markManySeen,
+    patchPost,
+    removePost,
+    reloadSinglePost,
+    startRealtime,
+    stopRealtime,
+    on(name, cb) { bus.addEventListener(name, cb); },
+    off(name, cb) { bus.removeEventListener(name, cb); },
+    getState,
+    explainPost
+  };
+
+  console.log('✅ FreeUpper Feed Controller loaded.');
+})();
+</script>
+
+<!-- ===== index-render.js (inlined) ===== -->
+<script>
+(function () {
+  'use strict';
+
+  if (!window.FreeUpperFeed) {
+    console.error('index-render.js: FreeUpperFeed missing.');
+    return;
+  }
+
+  const Feed = window.FreeUpperFeed;
+
+  const CONFIG = {
+    SEEN_VISIBILITY_THRESHOLD: 0.55,
+    SEEN_MIN_VISIBLE_MS: 600,
+    VIEW_INCREMENT_ENABLED: true
+  };
+
+  const state = {
+    handlers: {
+      renderInitial: null,
+      appendPosts: null,
+      patchPost: null,
+      removePost: null,
+      getContainer: null
+    },
+    observer: null,
+    visibilityTimers: new Map(),
+    registered: false
+  };
+
+  function registerHandlers(handlers = {}) {
+    Object.keys(handlers).forEach(key => {
+      if (typeof handlers[key] === 'function' && key in state.handlers) {
+        state.handlers[key] = handlers[key];
+      }
+    });
+    state.registered = true;
+    attachFeedListeners();
+    console.log('✅ index-render.js: handlers registered.');
+  }
+
+  let listenersAttached = false;
+
+  function attachFeedListeners() {
+    if (listenersAttached) return;
+    listenersAttached = true;
+
+    Feed.on('loaded', event => {
+      const posts = event.detail.posts || [];
+      if (state.handlers.renderInitial) {
+        state.handlers.renderInitial(posts);
+      }
+      observeVisiblePosts();
+    });
+
+    Feed.on('refreshed', event => {
+      const posts = event.detail.posts || [];
+      if (state.handlers.renderInitial) {
+        state.handlers.renderInitial(posts);
+      }
+      observeVisiblePosts();
+    });
+
+    Feed.on('page-advanced', event => {
+      const posts = event.detail.posts || [];
+      if (state.handlers.renderInitial) {
+        state.handlers.renderInitial(posts);
+      }
+      observeVisiblePosts();
+    });
+
+    Feed.on('more', event => {
+      const posts = event.detail.posts || [];
+      if (state.handlers.renderInitial) {
+        state.handlers.renderInitial(posts);
+      }
+      observeVisiblePosts();
+    });
+
+    Feed.on('post-patched', event => {
+      const post = event.detail.post;
+      if (post && state.handlers.patchPost) {
+        state.handlers.patchPost(post);
+      }
+    });
+
+    Feed.on('post-removed', event => {
+      const postId = event.detail.postId;
+      if (postId && state.handlers.removePost) {
+        state.handlers.removePost(postId);
+      }
+    });
+  }
+
+  function getContainer() {
+    if (state.handlers.getContainer) {
+      return state.handlers.getContainer();
+    }
+    return document.getElementById('feed-container') || document.body;
+  }
+
+  function ensureObserver() {
+    if (state.observer) return state.observer;
+    if (!('IntersectionObserver' in window)) return null;
+
+    state.observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        const el = entry.target;
+        const postId = el.dataset.postId;
+        if (!postId) return;
+
+        if (entry.isIntersecting && entry.intersectionRatio >= CONFIG.SEEN_VISIBILITY_THRESHOLD) {
+          startVisibilityTimer(postId);
+        } else {
+          cancelVisibilityTimer(postId);
+        }
+      });
+    }, {
+      threshold: [0, CONFIG.SEEN_VISIBILITY_THRESHOLD, 0.9]
+    });
+
+    return state.observer;
+  }
+
+  function startVisibilityTimer(postId) {
+    if (state.visibilityTimers.has(postId)) return;
+    if (Feed.getState && Algorithm_hasSeen(postId)) return;
+
+    const timer = setTimeout(() => {
+      state.visibilityTimers.delete(postId);
+      Feed.markSeen(postId);
+      if (CONFIG.VIEW_INCREMENT_ENABLED && window.PostsAPI?.incrementView) {
+        window.PostsAPI.incrementView(postId).catch(() => {});
+      }
+    }, CONFIG.SEEN_MIN_VISIBLE_MS);
+
+    state.visibilityTimers.set(postId, timer);
+  }
+
+  function cancelVisibilityTimer(postId) {
+    const timer = state.visibilityTimers.get(postId);
+    if (timer) {
+      clearTimeout(timer);
+      state.visibilityTimers.delete(postId);
+    }
+  }
+
+  function Algorithm_hasSeen(postId) {
+    return !!(window.FreeUpperAlgorithm && window.FreeUpperAlgorithm.hasSeen(postId));
+  }
+
+  function observeVisiblePosts() {
+    const observer = ensureObserver();
+    if (!observer) return;
+    const container = getContainer();
+    if (!container) return;
+    container.querySelectorAll('[data-post-id]').forEach(el => {
+      observer.observe(el);
+    });
+  }
+
+  function rescan() {
+    observeVisiblePosts();
+  }
+
+  function disconnect() {
+    if (state.observer) {
+      state.observer.disconnect();
+      state.observer = null;
+    }
+    state.visibilityTimers.forEach(timer => clearTimeout(timer));
+    state.visibilityTimers.clear();
+  }
+
+  window.IndexRender = {
+    registerHandlers,
+    rescan,
+    disconnect,
+    getState() {
+      return {
+        registered: state.registered,
+        activeTimers: state.visibilityTimers.size,
+        handlersSet: Object.keys(state.handlers).filter(k => !!state.handlers[k])
+      };
+    }
+  };
+
+  console.log('✅ index-render.js loaded.');
+})();
+</script>
+
+<!-- ===== index-interactions.js (inlined) ===== -->
+<script>
+(function () {
+  'use strict';
+
+  if (!window.FreeUpperFeed) {
+    console.error('index-interactions.js: FreeUpperFeed missing.');
+    return;
+  }
+
+  const Feed = window.FreeUpperFeed;
+
+  const TYPE_MAP = {
+    like: 'like',
+    unlike: 'unlike',
+    comment: 'comment',
+    reply: 'comment',
+    repost: 'repost',
+    unrepost: 'unlike',
+    share: 'share',
+    bookmark: 'bookmark',
+    unbookmark: 'unlike',
+    follow: 'follow_creator',
+    watch_complete: 'watch_complete',
+    watch_partial: 'watch_partial',
+    skip: 'skip',
+    hide: 'hide',
+    not_interested: 'hide'
+  };
+
+  const DUPLICATE_GUARD_MS = 400;
+
+  const state = {
+    recentNotifications: new Map(),
+    listeners: []
+  };
+
+  function isDuplicate(key) {
+    const last = state.recentNotifications.get(key);
+    const now = Date.now();
+    if (last && (now - last) < DUPLICATE_GUARD_MS) {
+      return true;
+    }
+    state.recentNotifications.set(key, now);
+    if (state.recentNotifications.size > 500) {
+      const cutoff = now - 60000;
+      for (const [k, ts] of state.recentNotifications) {
+        if (ts < cutoff) state.recentNotifications.delete(k);
+      }
+    }
+    return false;
+  }
+
+  function notify(postId, type) {
+    if (!postId || !type) return;
+    const mappedType = TYPE_MAP[type];
+    if (!mappedType) {
+      console.warn(`index-interactions.js: unknown interaction type "${type}", ignoring.`);
+      return;
+    }
+
+    const key = `${postId}:${type}`;
+    if (isDuplicate(key)) return;
+
+    Feed.registerInteraction(postId, mappedType);
+    emitLocal('interaction', { postId, type, mappedType });
+  }
+
+  function notifyCreator(userId, type) {
+    if (!userId || !type) return;
+    const mappedType = TYPE_MAP[type] || type;
+    const key = `creator:${userId}:${type}`;
+    if (isDuplicate(key)) return;
+    // For now, just log – can be extended later
+    console.log(`creator interaction: ${userId} -> ${type}`);
+    emitLocal('creator-interaction', { userId, type });
+  }
+
+  function notifyWatch(postId, percent) {
+    if (!postId || typeof percent !== 'number') return;
+    const type = percent >= 0.9 ? 'watch_complete' : (percent >= 0.3 ? 'watch_partial' : null);
+    if (!type) return;
+    notify(postId, type);
+  }
+
+  function notifySkip(postId) {
+    notify(postId, 'skip');
+  }
+
+  function notifyHide(postId) {
+    notify(postId, 'hide');
+  }
+
+  const bus = new EventTarget();
+  function emitLocal(name, detail) {
+    bus.dispatchEvent(new CustomEvent(name, { detail }));
+  }
+  function on(name, cb) { bus.addEventListener(name, cb); }
+  function off(name, cb) { bus.removeEventListener(name, cb); }
+
+  function getState() {
+    return {
+      recentNotificationCount: state.recentNotifications.size
+    };
+  }
+
+  window.IndexInteractions = {
+    notify,
+    notifyCreator,
+    notifyWatch,
+    notifySkip,
+    notifyHide,
+    on,
+    off,
+    getState
+  };
+
+  console.log('✅ index-interactions.js loaded.');
+})();
+</script>
+
+<!-- ===== onboarding.js (inlined) ===== -->
+<script>
+(function () {
+  'use strict';
+
+  async function fetchInterests() {
+    const { data, error } = await window.sb
+      .from('freeupper_interests')
+      .select('key, label, emoji, group_name, sort_order')
+      .eq('active', true)
+      .order('sort_order', { ascending: true });
+    if (error) {
+      console.error('onboarding.js: failed to fetch interests:', error);
+      return [];
+    }
+    return data || [];
+  }
+
+  async function showOnboarding() {
+    const overlay = document.getElementById('onboardingOverlay');
+    const grid = document.getElementById('interestGrid');
+    const continueBtn = document.getElementById('onboardingContinueBtn');
+    if (!overlay || !grid || !continueBtn) return;
+
+    const interests = await fetchInterests();
+    if (!interests.length) return;
+
+    const selected = new Set();
+
+    grid.innerHTML = interests.map(i => `
+      <button type="button" class="interest-chip" data-key="${i.key}">
+        <span>${i.emoji}</span> ${i.label}
+      </button>
+    `).join('');
+
+    grid.addEventListener('click', e => {
+      const chip = e.target.closest('.interest-chip');
+      if (!chip) return;
+      const key = chip.dataset.key;
+      if (selected.has(key)) {
+        selected.delete(key);
+        chip.classList.remove('active');
+      } else {
+        selected.add(key);
+        chip.classList.add('active');
+      }
+      continueBtn.disabled = selected.size < 5;
+    });
+
+    continueBtn.addEventListener('click', async () => {
+      continueBtn.disabled = true;
+      continueBtn.textContent = 'Saving…';
+      const interestsObj = {};
+      selected.forEach(key => { interestsObj[key] = 0.8; });
+
+      const saved = await window.FreeUpperFeed.saveOnboardingInterests(interestsObj);
+      overlay.style.display = 'none';
+
+      if (saved && typeof window.refreshHome === 'function') {
+        window.refreshHome();
+      }
+    }, { once: true });
+
+    overlay.style.display = 'flex';
+  }
+
+  window.FreeUpperOnboarding = { showOnboarding };
+})();
+</script>
     <!-- Keep existing scripts -->
     <script src="listings.js" defer></script>
     <script src="router.js" defer></script>
