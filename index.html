@@ -58,6 +58,7 @@
 <script src="posts.js" defer></script>
 
 <!-- ===== index-algorithm.js (inlined) ===== -->
+<!-- ===== index-algorithm.js (inlined, fixed) ===== -->
 <script>
 (function () {
   'use strict';
@@ -287,6 +288,36 @@
     }
   }
 
+  // ===== NEW: updateInterests =====
+  function updateInterests(currentInterests, post, type) {
+    const weightMap = { like: 0.2, unlike: -0.2, comment: 0.3, repost: 0.4, share: 0.3, bookmark: 0.2, skip: -0.1, hide: -0.5 };
+    const weight = weightMap[type] || 0;
+    if (weight === 0) return currentInterests;
+
+    const topics = new Set();
+    if (post.category) topics.add(post.category.toLowerCase());
+    if (Array.isArray(post.tags)) post.tags.forEach(t => topics.add(t.toLowerCase()));
+    if (topics.size === 0) topics.add('general');
+
+    const newInterests = { ...currentInterests };
+    topics.forEach(topic => {
+      const current = newInterests[topic] || 0;
+      newInterests[topic] = Math.min(1, Math.max(0, current + weight * 0.1));
+    });
+    return newInterests;
+  }
+
+  // ===== NEW: updateCreatorScore =====
+  function updateCreatorScore(creatorScores, creatorId, type) {
+    const weightMap = { like: 0.2, unlike: -0.2, comment: 0.3, repost: 0.4, share: 0.3, bookmark: 0.2, skip: -0.1, hide: -0.5 };
+    const weight = weightMap[type] || 0;
+    if (weight === 0) return creatorScores;
+    const newScores = new Map(creatorScores);
+    const current = newScores.get(creatorId) || 0;
+    newScores.set(creatorId, Math.min(1, Math.max(0, current + weight * 0.1)));
+    return newScores;
+  }
+
   function dedupe(posts) {
     const map = new Map();
     posts.forEach(post => {
@@ -320,6 +351,8 @@
     markManySeen,
     hasSeen,
     registerInteraction,
+    updateInterests,   // <-- added
+    updateCreatorScore, // <-- added
     dedupe,
     reset,
     getState() {
@@ -336,7 +369,6 @@
   console.log('✅ FreeUpperAlgorithm loaded');
 })();
 </script>
-
 <!-- ===== index-feed.js (inlined) ===== -->
 <script>
 (function () {
