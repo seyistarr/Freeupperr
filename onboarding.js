@@ -1,4 +1,3 @@
-// onboarding.js
 (function () {
   'use strict';
 
@@ -16,15 +15,27 @@
   }
 
   async function showOnboarding() {
+    if (document.getElementById('onboardingOverlay').classList.contains('open')) return;
+
     const overlay = document.getElementById('onboardingOverlay');
     const grid = document.getElementById('interestGrid');
     const continueBtn = document.getElementById('onboardingContinueBtn');
     if (!overlay || !grid || !continueBtn) return;
 
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);">Loading…</div>';
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
     const interests = await fetchInterests();
-    if (!interests.length) return; // fail silently rather than block the app
+    if (!interests.length) {
+      overlay.classList.remove('open');
+      document.body.style.overflow = '';
+      return; // fail silently rather than block the app
+    }
 
     const selected = new Set();
+    continueBtn.disabled = true;
+    continueBtn.textContent = 'Continue';
 
     grid.innerHTML = interests.map(i => `
       <button type="button" class="interest-chip" data-key="${i.key}">
@@ -32,7 +43,7 @@
       </button>
     `).join('');
 
-    grid.addEventListener('click', e => {
+    grid.onclick = (e) => {
       const chip = e.target.closest('.interest-chip');
       if (!chip) return;
       const key = chip.dataset.key;
@@ -44,23 +55,22 @@
         chip.classList.add('active');
       }
       continueBtn.disabled = selected.size < 5;
-    });
+    };
 
-    continueBtn.addEventListener('click', async () => {
+    continueBtn.onclick = async () => {
       continueBtn.disabled = true;
       continueBtn.textContent = 'Saving…';
       const interestsObj = {};
       selected.forEach(key => { interestsObj[key] = 0.8; });
 
       const saved = await window.FreeUpperFeed.saveOnboardingInterests(interestsObj);
-      overlay.style.display = 'none';
+      overlay.classList.remove('open');
+      document.body.style.overflow = '';
 
       if (saved && typeof window.refreshHome === 'function') {
         window.refreshHome();
       }
-    }, { once: true });
-
-    overlay.style.display = 'flex';
+    };
   }
 
   window.FreeUpperOnboarding = { showOnboarding };
