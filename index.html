@@ -53,7 +53,14 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="global.js" defer></script>
     <script src="auth.js" defer></script>
+    <!-- New core scripts: order matters -->
     <script src="posts.js" defer></script>
+    <script src="index-algorithm.js" defer></script>
+    <script src="index-feed.js" defer></script>
+    <script src="index-render.js" defer></script>
+    <script src="index-interactions.js" defer></script>
+    <script src="onboarding.js" defer></script>
+    <!-- Keep existing scripts -->
     <script src="listings.js" defer></script>
     <script src="router.js" defer></script>
     <script src="mentions.js" defer></script>
@@ -74,7 +81,7 @@
     </script>
 
     <style>
-        /* ===== CSS VARIABLES ===== */
+        /* ===== EXISTING CSS (unchanged) ===== */
         :root {
             --safe-bottom: env(safe-area-inset-bottom, 0px);
             --safe-top: env(safe-area-inset-top, 0px);
@@ -116,6 +123,80 @@
             --sidebg: #0f0f0f;
         }
 
+        /* ===== ONBOARDING MODAL CSS (added) ===== */
+        .onboarding-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            background: rgba(0,0,0,.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .onboarding-sheet {
+            background: var(--bg2);
+            border-radius: 24px;
+            max-width: 520px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 28px 24px;
+        }
+        .onboarding-sheet h2 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            margin-bottom: 6px;
+        }
+        .onboarding-sheet > p {
+            color: var(--muted);
+            font-size: .9rem;
+            margin-bottom: 20px;
+        }
+        .interest-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 22px;
+        }
+        .interest-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            cursor: pointer;
+            font-size: .85rem;
+            font-weight: 600;
+            color: var(--text);
+            transition: all .15s;
+        }
+        .interest-chip.active {
+            border-color: #7C3AED;
+            background: rgba(124,58,237,.12);
+            color: #7C3AED;
+        }
+        .onboarding-continue-btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 14px;
+            border: none;
+            background: #7C3AED;
+            color: #fff;
+            font-weight: 700;
+            font-size: .95rem;
+            cursor: pointer;
+        }
+        .onboarding-continue-btn:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+        }
+
+        /* ===== REST OF EXISTING CSS (unchanged) ===== */
         * {
             margin: 0;
             padding: 0;
@@ -2486,6 +2567,20 @@
     <!-- ===== SIDE NAV (shared component) ===== -->
     <side-nav show-chat></side-nav>
 
+    <!-- ===== ONBOARDING MODAL (added) ===== -->
+    <div class="onboarding-overlay" id="onboardingOverlay" style="display:none;">
+        <div class="onboarding-sheet">
+            <h2>What are you interested in?</h2>
+            <p>Choose at least 5. We'll personalize your feed.</p>
+            <div class="interest-grid" id="interestGrid">
+                <div class="interest-grid-loading">Loading interests…</div>
+            </div>
+            <button class="onboarding-continue-btn" id="onboardingContinueBtn" disabled>
+                Continue
+            </button>
+        </div>
+    </div>
+
     <!-- ===== PULL TO REFRESH ===== -->
     <div id="pull-indicator">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="pull-icon"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -2808,6 +2903,9 @@
             const INITIAL_COMMENT_DISPLAY = 3;
             const COMMENT_LOAD_MORE = 5;
 
+            // We keep a local cache of posts for rendering and interaction.
+            // The feed controller (FreeUpperFeed) owns the canonical ranked list,
+            // but we mirror it here for quick access by functions like toggleReaction.
             let allPosts = [];
             let appData = {
                 posts: [],
@@ -2880,7 +2978,7 @@
             const content = document.getElementById('user-content');
 
             // ───────────────────────────────────────────────────────────────
-            // HELPERS
+            // HELPERS (unchanged)
             // ───────────────────────────────────────────────────────────────
 
             function getCurrentUser() {
@@ -2908,14 +3006,13 @@
                 return str.length > max ? str.slice(0, max) + '…' : str;
             }
 
-            // ─── TITLE RENDER SYSTEM ────────────────────────────────────────
+            // ─── TITLE RENDER SYSTEM (unchanged) ──────────────────────────
             const EMOJI_REGEX = /[\p{Extended_Pictographic}\uFE0F\u200D]/gu;
 
             function getTitleType(title, hasMedia) {
                 const text = (title || '').trim();
                 if (!text) return 'none';
                 const withoutEmoji = text.replace(EMOJI_REGEX, '').trim();
-                // ─── if there's media, don't blow the emoji up big ───
                 if (!withoutEmoji) return hasMedia ? 'short' : 'emoji';
                 const words = text.split(/\s+/).filter(Boolean);
                 if (words.length <= 6) return 'short';
@@ -2944,11 +3041,11 @@
                 return `<div class="fu-normal-title${clampClass}">${escapeHtml(text)}</div>`;
             }
 
-            // ─── CONTENT BOLD RENDER SYSTEM (Facebook-style short posts) ───
+            // ─── CONTENT BOLD RENDER SYSTEM (unchanged) ───────────────────
             function getContentType(text, hasMedia) {
                 const t = (text || '').trim();
                 if (!t) return 'none';
-                if (hasMedia) return 'normal'; // bold treatment only for text-only posts
+                if (hasMedia) return 'normal';
                 const withoutEmoji = t.replace(EMOJI_REGEX, '').trim();
                 if (!withoutEmoji) return 'emoji';
                 const words = t.split(/\s+/).filter(Boolean);
@@ -2985,8 +3082,7 @@
                     ${isLong?`<div class="content-text full-text-${postId} hidden">${renderedContent}</div><button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm">Show more</button>`:`<div class="content-text full-text-${postId}">${renderedContent}</div>`}`;
             }
 
-            // ─── LINKIFY CONTENT WITH HASHTAGS ──────────────────────────
-
+            // ─── LINKIFY CONTENT ──────────────────────────────────────────
             function linkifyContent(text) {
                 let html = escapeHtml(text);
                 html = html.replace(/(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g, u =>
@@ -3052,7 +3148,7 @@
                 });
             }
 
-            // ─── HAPTIC & RIPPLE ──────────────────────────────────────────
+            // ─── HAPTIC & RIPPLE (unchanged) ──────────────────────────────
             function haptic(ms) { if (navigator.vibrate) navigator.vibrate(ms || 8); }
 
             function spawnRipple(el, evt) {
@@ -3130,7 +3226,7 @@
                 window.scrollTo(0, _lockedScrollY);
             }
 
-            // ─── ICONS ─────────────────────────────────────────────────────
+            // ─── ICONS (unchanged) ─────────────────────────────────────────
             function svgClock() { return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'; }
 
             function svgEye() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19V10"/><path d="M12 19V5"/><path d="M20 19V14"/></svg>'; }
@@ -3175,7 +3271,7 @@
                     </span>`;
             }
 
-            // ─── YOUTUBE PLAYER ───────────────────────────────────────────────
+            // ─── YOUTUBE PLAYER (unchanged) ──────────────────────────────
             let ytState = {};
             let ytInfo = {};
             let ytWindows = {};
@@ -3311,7 +3407,7 @@
                 return [];
             }
 
-            // ─── CAROUSEL FIXED HEIGHT (computed once, never changes on swipe) ───
+            // ─── CAROUSEL FIXED HEIGHT (unchanged) ────────────────────────
             function computeCarouselFixedHeight(carouselEl) {
                 if (!carouselEl) return;
                 const width = carouselEl.clientWidth;
@@ -3342,7 +3438,7 @@
                 });
             }
 
-            // ─── BUILD MEDIA HTML ───────────────────────────────────────────
+            // ─── BUILD MEDIA HTML (unchanged) ─────────────────────────────
             function buildMediaHTML(p, postIndex) {
                 const mediaItems = getMediaItems(p);
                 if (!mediaItems || mediaItems.length === 0) return '';
@@ -3389,7 +3485,7 @@
                 return buildCarousel(mediaItems, postIndex);
             }
 
-            // ─── CAROUSEL ───────────────────────────────────────────────────
+            // ─── CAROUSEL (unchanged) ─────────────────────────────────────
             function buildCarousel(mediaItems, postIndex) {
                 const items = mediaItems.filter(m => m.url).slice(0, 5);
                 if (items.length === 0) return '';
@@ -3578,7 +3674,7 @@
                 mo.observe(carousel, { attributes: true, attributeFilter: ['data-current'] });
             }
 
-            // ─── VIDEO AUTO-PLAY ─────────────────────────────────────────────
+            // ─── VIDEO AUTO-PLAY (unchanged) ──────────────────────────────
             let videoObserver = null;
             let currentlyPlayingVideo = null;
             let exploreVideoObserver = null;
@@ -3677,7 +3773,7 @@
                 videoEls.forEach(vid => exploreVideoObserver.observe(vid));
             }
 
-            // ─── FOLLOW, BOOKMARK, SHARE ───────────────────────────────────
+            // ─── FOLLOW, BOOKMARK, SHARE (unchanged) ────────────────────
             async function loadFollows() {
                 const user = getCurrentUser();
                 if (!user || !user.isLoggedIn) { followingSet = new Set();
@@ -3755,6 +3851,8 @@
                         await window.sb.from('bookmarks').insert({ user_id: user.id, post_id: postId });
                         bookmarksSet.add(postId);
                     }
+                    // Notify algorithm
+                    window.IndexInteractions.notify(postId, currently ? 'unbookmark' : 'bookmark');
                     return !currently;
                 } catch (err) {
                     showToast(err.message, 'r');
@@ -3776,6 +3874,7 @@
                         await window.sb.from('shares').insert({ user_id: user.id, post_id: postId });
                         sharesSet.add(postId);
                     }
+                    window.IndexInteractions.notify(postId, currently ? 'unshare' : 'share');
                     return !currently;
                 } catch (err) {
                     showToast(err.message, 'r');
@@ -3783,31 +3882,31 @@
                 }
             }
 
-            // ─── POSTS ──────────────────────────────────────────────────────
+            // ─── POSTS DATA LOADING (now using FreeUpperFeed) ────────────
             async function reloadPosts() {
                 try {
-                    // ─── FIX: filter by source 'composer' ───────────────────
-                    const feedItems = await window.PostsAPI.loadFeedWithReposts(0, 20, 'composer');
-                    const filtered = feedItems.filter(entry => {
-                        if (entry.feedType !== 'repost') return true;
-                        return entry.post.mediaType !== 'video';
-                    });
-                    const posts = filtered.map(entry => {
-                        const p = entry.post;
-                        p.is_hidden = p.is_hidden || false;
-                        return p;
-                    });
-                    allPosts = posts;
-                    appData.posts = posts;
-                    appData.userReactions = {};
-                    posts.forEach(p => {
-                        p.reactions = { like: p.likes || 0 };
-                        p.shareCount = p.shareCount || 0;
-                        p.bookmarkCount = p.bookmarkCount || 0;
-                        p.is_hidden = p.is_hidden || false;
-                        if (p.likedByMe) appData.userReactions[p.id + '-like'] = true;
-                    });
-                    return posts;
+                    // The feed controller will manage ranking and pagination.
+                    // We just need to get the latest posts from the Feed's current page.
+                    // But we also need to keep allPosts in sync for local operations.
+                    // We'll listen to Feed events to update allPosts.
+                    // For now, we call loadInitial to populate the feed.
+                    // However, the actual feed loading is done via IndexRender handlers.
+                    // We'll just return the current posts from Feed's getCurrentPage.
+                    if (window.FreeUpperFeed && window.FreeUpperFeed.getCurrentPage) {
+                        const posts = window.FreeUpperFeed.getCurrentPage();
+                        allPosts = posts;
+                        appData.posts = posts;
+                        appData.userReactions = {};
+                        posts.forEach(p => {
+                            p.reactions = { like: p.likes || 0 };
+                            p.shareCount = p.shareCount || 0;
+                            p.bookmarkCount = p.bookmarkCount || 0;
+                            p.is_hidden = p.is_hidden || false;
+                            if (p.likedByMe) appData.userReactions[p.id + '-like'] = true;
+                        });
+                        return posts;
+                    }
+                    return [];
                 } catch (err) {
                     console.error('Failed to load posts:', err);
                     window.showToast('Failed to load feed. Please try again.', 'r');
@@ -3897,7 +3996,7 @@
                 unlockBodyScroll();
             }
 
-            // ─── REPOST QUOTE SHEET ─────────────────────────────────────────
+            // ─── REPOST QUOTE SHEET (unchanged) ───────────────────────────
             let repostQuoteTargetId = null;
 
             function openRepostQuoteSheet(postId) {
@@ -3973,6 +4072,8 @@
                             await window.PostsAPI.toggleRepostAPI(repostQuoteTargetId, quote);
                         const post = allPosts.find(p => p.id === repostQuoteTargetId);
                         if (post && typeof result.count === 'number') post.repostCount = result.count;
+                        // Notify algorithm of repost
+                        window.IndexInteractions.notify(repostQuoteTargetId, 'repost');
                         await reloadPosts();
                         renderUI();
                         showToast('✓ Reposted successfully');
@@ -3998,6 +4099,7 @@
                         const { count } = await window.PostsAPI.toggleRepostAPI(repostQuoteTargetId, '');
                         const post = allPosts.find(p => p.id === repostQuoteTargetId);
                         if (post) post.repostCount = count;
+                        window.IndexInteractions.notify(repostQuoteTargetId, 'unrepost');
                         await reloadPosts();
                         renderUI();
                         showToast('Repost removed');
@@ -4024,7 +4126,7 @@
                 }, { once: true });
             }
 
-            // ─── MARKETPLACE ──────────────────────────────────────────────────
+            // ─── MARKETPLACE (unchanged) ──────────────────────────────────
             async function loadMarketCategories() {
                 if (!window.CategoryAPI) return;
                 try {
@@ -4045,7 +4147,6 @@
                 }
             }
 
-            // ===== SAVED LISTINGS STATE =====
             let savedListingsSet = new Set();
             let savedListingsLoaded = false;
 
@@ -4067,7 +4168,6 @@
                 }
             }
 
-            // ===== toggleFavorite with API =====
             function toggleFavorite(btn, listingId) {
                 const user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
@@ -4167,7 +4267,7 @@
                 }
             }
 
-            // ─── SKELETON BUILDERS ──────────────────────────────────────────
+            // ─── SKELETON BUILDERS (unchanged) ──────────────────────────
             function exploreSkeletonGrid() {
                 let h = '';
                 for (let i = 0; i < 8; i++) h +=
@@ -4756,9 +4856,9 @@
                 renderMarketProducts(filtered);
             }
 
-            // ─── REACTIONS (post feed) ───────────────────────────────────────
+            // ─── REACTIONS (post feed) ──────────────────────────────────
             async function toggleReaction(postId) {
-                const post = appData.posts.find(p => p.id === postId);
+                const post = allPosts.find(p => p.id === postId);
                 if (!post) return;
                 const willLike = !post.likedByMe;
 
@@ -4777,6 +4877,8 @@
                             post.likedByMe = liked;
                             post.reactions.like = count;
                             appData.userReactions[postId + '-like'] = liked;
+                            // Notify algorithm
+                            window.IndexInteractions.notify(postId, liked ? 'like' : 'unlike');
                             updateReactionsUI(postId);
                         } catch (err) {
                             showToast(err.message, 'r');
@@ -4788,7 +4890,7 @@
             }
 
             function updateReactionsUI(postId) {
-                const post = appData.posts.find(p => p.id === postId);
+                const post = allPosts.find(p => p.id === postId);
                 if (!post) return;
                 const reacted = !!post.likedByMe;
                 const countText = formatCount(post.reactions.like || 0);
@@ -4807,7 +4909,7 @@
             }
 
             function buildReactionButton(postId) {
-                const post = appData.posts.find(p => p.id === postId);
+                const post = allPosts.find(p => p.id === postId);
                 const count = post ? post.reactions.like || 0 : 0;
                 const reacted = post ? !!post.likedByMe : false;
                 return `<button type="button" class="reaction-btn ${reacted?'reacted':''}" data-reaction="like">
@@ -4816,7 +4918,7 @@
                     </button>`;
             }
 
-            // ─── FOLLOW BUTTON ──────────────────────────────────────────────
+            // ─── FOLLOW BUTTON (unchanged) ──────────────────────────────
             function relLabel(state) {
                 if (state === 'friends') return 'Friends';
                 if (state === 'following') return 'Following';
@@ -4824,7 +4926,6 @@
                 return 'Follow';
             }
 
-            // ─── BUILD FOLLOW BUTTON (hide for 'friends' and 'following') ───
             function buildFollowButton(authorId, authorName) {
                 const cu = getCurrentUser();
                 if (!authorId || authorId === cu.id) return `<span class="follow-btn hidden-follow"></span>`;
@@ -4833,7 +4934,6 @@
                 return `<button class="follow-btn rel-${state}" data-user-id="${authorId}" data-rel-state="${state}" onclick="toggleFollowHandler(event, '${authorId}')">${relLabel(state)}</button>`;
             }
 
-            // ─── TOGGLE FOLLOW HANDLER (removes button when 'friends' or 'following') ───
             window.toggleFollowHandler = async function(e, userId) {
                 e.stopPropagation();
                 const btn = e.currentTarget;
@@ -4854,7 +4954,7 @@
                 showToast(toastMsg);
             };
 
-            // ─── ACTIONS ROW ──────────────────────────────────────────────────
+            // ─── ACTIONS ROW ─────────────────────────────────────────────
             function buildActionsRow(p) {
                 const bm = isBookmarked(p.id),
                     shared = isShared(p.id),
@@ -4871,7 +4971,7 @@
                     </div>`;
             }
 
-            // ─── REPORT ───────────────────────────────────────────────────────
+            // ─── REPORT ──────────────────────────────────────────────────
             function reportPostFromShare(postId) {
                 const reason = prompt('Please describe why you are reporting this post:');
                 if (reason && reason.trim().length > 0) {
@@ -4903,7 +5003,7 @@
                 }
             }
 
-            // ─── DELETE ───────────────────────────────────────────────────────
+            // ─── DELETE ──────────────────────────────────────────────────
             function deletePostFromShare(postId) {
                 if (!postId) { showToast('No post selected'); return; }
                 if (!confirm('Delete this post permanently?')) return;
@@ -4921,11 +5021,15 @@
                         if (uiPage === 'single-post-explore' && currentPostId === postId) {
                             closeExploreFullscreen();
                         }
+                        // Update feed
+                        if (window.FreeUpperFeed && window.FreeUpperFeed.removePost) {
+                            window.FreeUpperFeed.removePost(postId);
+                        }
                     })
                     .catch(err => showToast(err.message || 'Failed to delete post', 'r'));
             }
 
-            // ─── TOGGLE HIDE ──────────────────────────────────────────────────
+            // ─── TOGGLE HIDE ─────────────────────────────────────────────
             function toggleLockPostFromShare(postId) {
                 if (!postId) { showToast('No post selected'); return; }
                 const post = allPosts.find(p => p.id === postId);
@@ -4936,6 +5040,10 @@
                         if (error) { showToast(error.message, 'r'); return; }
                         post.is_hidden = newVal;
                         appData.posts = appData.posts.map(p => p.id === postId ? Object.assign(p, { is_hidden: newVal }) : p);
+                        // Update feed
+                        if (window.FreeUpperFeed && window.FreeUpperFeed.patchPost) {
+                            window.FreeUpperFeed.patchPost(postId, { is_hidden: newVal });
+                        }
                         showToast(newVal ? 'Post hidden — only you can see it' : 'Post is visible again', 'g');
                         closeShareModal();
                         if (uiPage === 'home' || uiPage === 'explore') renderUI();
@@ -4943,7 +5051,7 @@
                     .catch(err => showToast(err.message || 'Failed to update', 'r'));
             }
 
-            // ─── TOGGLE COMMENTS (via PostsAPI) ─────────────────────────────
+            // ─── TOGGLE COMMENTS ────────────────────────────────────────
             function toggleCommentsFromShare(postId) {
                 if (!postId) { showToast('No post selected'); return; }
                 const post = allPosts.find(p => p.id === postId);
@@ -4953,6 +5061,10 @@
                     .then(({ commentsHidden }) => {
                         post.commentsHidden = commentsHidden;
                         appData.posts = appData.posts.map(p => p.id === postId ? Object.assign(p, { commentsHidden }) : p);
+                        // Update feed
+                        if (window.FreeUpperFeed && window.FreeUpperFeed.patchPost) {
+                            window.FreeUpperFeed.patchPost(postId, { commentsHidden });
+                        }
                         document.querySelectorAll(`article[data-post-id="${postId}"] .comment-btn`).forEach(el => {
                             el.classList.toggle('comments-off', commentsHidden);
                             el.innerHTML = (commentsHidden ? svgCommentOff() : svgComment()) + el.querySelector('.comment-count').outerHTML;
@@ -4966,7 +5078,7 @@
                     .catch(err => showToast(err.message || 'Failed to update', 'r'));
             }
 
-            // ─── HIDE POST (Not Interested) ─────────────────────────────────
+            // ─── HIDE POST (Not Interested) ─────────────────────────────
             function hidePostFromFeed(postId) {
                 hiddenPostsSet.add(postId);
                 localStorage.setItem('freeupper_hidden_posts', JSON.stringify(Array.from(hiddenPostsSet)));
@@ -4981,9 +5093,14 @@
                 if (window._currentFeedPosts) {
                     window._currentFeedPosts = window._currentFeedPosts.filter(p => p.id !== postId);
                 }
+                // Notify algorithm
+                window.IndexInteractions.notifyHide(postId);
+                if (window.FreeUpperFeed && window.FreeUpperFeed.removePost) {
+                    window.FreeUpperFeed.removePost(postId);
+                }
             }
 
-            // ─── BUILD POST HTML ─────────────────────────────────────────────
+            // ─── BUILD POST HTML ────────────────────────────────────────
             function buildPostHTML(p, index) {
                 const author = window.getAuthorFromProfile(p.profile);
                 const da = truncateName(author.name, 22);
@@ -5040,62 +5157,161 @@
                       </article>`;
             }
 
-            // ─── FEED / EXPLORE RENDER ──────────────────────────────────────
+            // ─── FEED RENDERING (now driven by FreeUpperFeed + IndexRender) ──
+            // We keep renderUI as the main entry, but the actual rendering
+            // is done via IndexRender's registered handlers.
+
+            function renderUI() {
+                const co = document.getElementById('user-content');
+                if (!co) return;
+
+                if (uiPage === 'explore') {
+                    renderExploreGrid();
+                    setCommentBarVisible(false);
+                    refreshTabStates();
+                    setTimeout(() => window.scrollTo(0, tabScrollPositions.explore || 0), 80);
+                    return;
+                }
+
+                if (uiPage === 'market') {
+                    co.innerHTML = renderMarketView();
+                    setCommentBarVisible(false);
+                    refreshTabStates();
+                    requestAnimationFrame(async () => {
+                        if (!marketDataLoaded) {
+                            const fg = document.getElementById('featuredGrid');
+                            const ng = document.getElementById('newlyGrid');
+                            const mb = document.getElementById('mainCategoriesBar');
+                            if (fg) fg.innerHTML = marketSkeletonGrid();
+                            if (ng) ng.innerHTML = marketSkeletonGrid();
+                            if (mb) mb.innerHTML = categoryBarSkeleton();
+                            await Promise.all([loadMarketCategories(), loadMarketListings(), loadSavedListings()]);
+                            marketDataLoaded = true;
+                        }
+                        renderMarketCategoryBars();
+                        applyMarketFiltersAndRender();
+                        const searchInput = document.getElementById('searchInput');
+                        if (searchInput) {
+                            searchInput.oninput = function(e) { handleMarketSearch(this.value); };
+                        }
+                    });
+                    setTimeout(() => window.scrollTo(0, tabScrollPositions.market || 0), 80);
+                    return;
+                }
+
+                if (uiPage === 'single-post-explore') {
+                    if (currentPostId) {
+                        const post = allPosts.find(p => p.id === currentPostId);
+                        if (post) {
+                            document.querySelectorAll(`[data-post-reactions="${currentPostId}"] .reaction-count`)
+                                .forEach(el => el.textContent = formatCount(post.reactions ? post.reactions.like || 0 : 0));
+                            document.querySelectorAll(`#single-bookmark-${currentPostId} .bookmark-count`)
+                                .forEach(el => el.textContent = formatCount(post.bookmarkCount || 0));
+                            document.querySelectorAll(`#single-share-btn .share-count`)
+                                .forEach(el => el.textContent = formatCount(post.shareCount || 0));
+                            document.querySelectorAll(`[data-post-id="${currentPostId}"] .repost-count-num`)
+                                .forEach(el => el.textContent = formatCount(post.repostCount || 0));
+                            refreshCommentsList(currentPostId, 'comments-list');
+                            updateCommentCount(currentPostId);
+                        }
+                    }
+                    return;
+                }
+
+                // Home feed: let IndexRender handle it; we just need to ensure the container is present.
+                // IndexRender will call our registered handlers with the posts.
+                if (!document.getElementById('feed-container')) {
+                    co.innerHTML = `<div class="max-w-2xl mx-auto"><div></div><div id="feed-container" class="px-0">${renderSkeletons(3)}</div></div>`;
+                }
+                // The initial load is already triggered by FreeUpperFeed.loadInitial during init.
+                // If we switch tabs, we may need to re-render, but IndexRender events will handle that.
+                // For now, we just make sure the tab is active.
+                refreshTabStates();
+                setCommentBarVisible(false);
+                setTimeout(() => window.scrollTo(0, tabScrollPositions.home || 0), 80);
+            }
+
+            // ─── REGISTER RENDER HANDLERS WITH INDEXRENDER ─────────────
+            function registerRenderHandlers() {
+                if (!window.IndexRender) return;
+
+                window.IndexRender.registerHandlers({
+                    renderInitial: (posts) => {
+                        window._currentFeedPosts = posts;
+                        const co = document.getElementById('feed-container');
+                        if (!co) return;
+                        co.innerHTML = posts.map((p, i) => buildPostHTML(p, i)).join('');
+                        requestAnimationFrame(() => {
+                            initPlayers(co);
+                            co.querySelectorAll('article').forEach(a => setupPostEventDelegation(a));
+                            // Also update our local allPosts
+                            allPosts = posts;
+                            appData.posts = posts;
+                            appData.userReactions = {};
+                            posts.forEach(p => {
+                                p.reactions = { like: p.likes || 0 };
+                                p.shareCount = p.shareCount || 0;
+                                p.bookmarkCount = p.bookmarkCount || 0;
+                                p.is_hidden = p.is_hidden || false;
+                                if (p.likedByMe) appData.userReactions[p.id + '-like'] = true;
+                            });
+                        });
+                    },
+                    appendPosts: (posts) => {
+                        // This is called on loadNextPage; we can append to feed-container
+                        const co = document.getElementById('feed-container');
+                        if (!co) return;
+                        const sentinel = document.getElementById('sentinel');
+                        if (!sentinel) return;
+                        // Append before sentinel
+                        posts.forEach((p, i) => {
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = buildPostHTML(p, i);
+                            const article = tempDiv.firstElementChild;
+                            if (article) {
+                                co.insertBefore(article, sentinel);
+                                setupPostEventDelegation(article);
+                            }
+                        });
+                        // Update local cache
+                        allPosts = allPosts.concat(posts);
+                        appData.posts = allPosts;
+                        // Re-init players for new videos
+                        initPlayers(co);
+                    },
+                    patchPost: (post) => {
+                        // Update local cache
+                        const idx = allPosts.findIndex(p => p.id === post.id);
+                        if (idx > -1) allPosts[idx] = post;
+                        // Update DOM counters etc. – we rely on our existing updateReactionsUI and other functions
+                        // which are triggered by our own interaction handlers. For external changes (like from realtime),
+                        // we can simply re-render the single card.
+                        const card = document.querySelector(`article[data-post-id="${post.id}"]`);
+                        if (card) {
+                            // Replace with fresh HTML
+                            const temp = document.createElement('div');
+                            temp.innerHTML = buildPostHTML(post, 0);
+                            const newCard = temp.firstElementChild;
+                            if (newCard) {
+                                card.replaceWith(newCard);
+                                setupPostEventDelegation(newCard);
+                            }
+                        }
+                    },
+                    removePost: (postId) => {
+                        document.querySelectorAll(`article[data-post-id="${postId}"]`).forEach(el => el.remove());
+                        allPosts = allPosts.filter(p => p.id !== postId);
+                        appData.posts = allPosts;
+                    },
+                    getContainer: () => document.getElementById('feed-container')
+                });
+                console.log('✅ Render handlers registered with IndexRender');
+            }
+
+            // ─── USER CATEGORIES (for old filtering) ────────────────────
             function getUserCategories() { const r = localStorage.getItem(UCK); return r ? JSON.parse(r) : []; }
 
-            function getFilteredSortedPosts() {
-                const currentUser = getCurrentUser();
-                let p = [...allPosts];
-                p = p.filter(post => !hiddenPostsSet.has(post.id));
-                p = p.filter(post => !blockedSet.has(post.user_id));
-                p = p.filter(post => {
-                    if (post.user_id === currentUser.id) return true;
-                    if (post.is_hidden) return false;
-                    const profile = post.profile || {};
-                    return !profile.is_private;
-                });
-                if (currentCategoryFilter) p = p.filter(p => p.category === currentCategoryFilter);
-                if (searchQuery) {
-                    const q = searchQuery.toLowerCase();
-                    p = p.filter(p => p.title.toLowerCase().includes(q) || (p.content || '').toLowerCase()
-                        .includes(q) || (p.description || '').toLowerCase().includes(q) || (p.tags && p.tags
-                        .some(t => t.toLowerCase().includes(q))));
-                }
-                if (currentSortMethod === 'trending') p.sort((a, b) => (b.views || 0) - (a.views || 0));
-                else if (currentSortMethod === 'foryou') {
-                    if (_shuffleHomeOnce) {
-                        p = shuffleArray(p);
-                        _shuffleHomeOnce = false;
-                    } else {
-                        const uc = getUserCategories();
-                        const jitter = new Map(p.map(post => [post.id, ((hashStr(post.id + _feedShuffleSeed) % 1000) /
-                            1000) * 0.25]));
-                        p.sort((a, b) => {
-                            const score = p => {
-                                const ah = (Date.now() - new Date(p.timestamp || p.date)) / 36e5;
-                                const commentCount = Array.isArray(p.comments) ? p.comments.filter(c => c
-                                    .approved !== false).length : (p.comments || 0);
-                                const eg = (p.views || 0) + ((p.reactions.like || 0) * 2) + (commentCount *
-                                2);
-                                return (eg / Math.pow(ah + 2, 1.5)) * (1 + (jitter.get(p.id) || 0));
-                            };
-                            return (score(b) * (uc.includes(b.category) ? 1.4 : 1)) - (score(a) * (uc
-                                .includes(a.category) ? 1.4 : 1));
-                        });
-                    }
-                } else p.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
-                return p;
-            }
-
-            function renderFeedContainer() {
-                const ps = getFilteredSortedPosts(),
-                    hf = searchQuery || currentCategoryFilter;
-                const hh = hf ?
-                    `<div class="mb-4 px-4 pt-3"><h1 class="text-xl font-heading font-bold" style="color:var(--text);">${searchQuery?'Search results':currentCategoryFilter}</h1><p class="text-sm" style="color:var(--muted);">${ps.length} post(s)</p></div>` :
-                    '';
-                return `<div class="max-w-2xl mx-auto"><div>${hh}</div><div id="feed-container" class="px-0"></div></div>`;
-            }
-
+            // ─── RENDER SKELETONS ──────────────────────────────────────
             function renderSkeletons(c = 3) {
                 let h = '';
                 for (let i = 0; i < c; i++) h +=
@@ -5113,247 +5329,273 @@
                 return h;
             }
 
-            function getSentinel() { if (!sentinel) { sentinel = document.createElement('div');
-                    sentinel.id = 'sentinel';
-                    sentinel.style.height = '1px'; } return sentinel; }
-
-            function getLoader() { if (!loader) { loader = document.createElement('div');
-                    loader.id = 'feed-loader';
-                    loader.className = 'hidden';
-                    loader.innerHTML =
-                    '<div style="text-align:center;padding:20px;"><div class="spinner" style="margin:0 auto;"></div></div>'; } return loader; }
-
-            function setupSentinel() { const co = document.getElementById('feed-container'); if (co && !co.contains(
-                    getSentinel())) co.appendChild(getSentinel()); const l = getLoader(); if (co && !co.contains(l))
-                    co.insertBefore(l, getSentinel()); }
-
-            function setupInfiniteScroll() {
-                if (observer) observer.disconnect();
-                observer = new IntersectionObserver(es => { if (isTogglingContent || isLoadingMore) return; if (es[
-                        0].isIntersecting) loadMorePosts(); }, { root: null, rootMargin: '200px',
-                    threshold: 0 });
-                observer.observe(getSentinel());
-            }
-
-            function initPlayers(root) {
-                root.querySelectorAll('.ig-video-wrap video:not([data-plyr-init]), .video-container video:not([data-plyr-init]), .media-carousel-slide video:not([data-plyr-init])')
-                    .forEach(vid => {
-                        vid.dataset.plyrInit = 'true';
-                        setupPlyrPlayer(vid);
+            // ─── EXPLORE GRID ──────────────────────────────────────────
+            function renderExploreGrid() {
+                const co = document.getElementById('user-content');
+                const currentUser = getCurrentUser();
+                let p = [...allPosts]
+                    .filter(post => !hiddenPostsSet.has(post.id))
+                    .filter(post => !blockedSet.has(post.user_id))
+                    .filter(post => {
+                        if (post.user_id === currentUser.id) return true;
+                        if (post.is_hidden) return false;
+                        const profile = post.profile || {};
+                        return !profile.is_private;
                     });
-                initAllCarousels(root);
-                setTimeout(() => {
-                    setupVideoAutoplay(root);
-                    setTimeout(() => {
-                        const visibleWraps = root.querySelectorAll(
-                            '.ig-video-wrap, .video-container, .media-carousel');
-                        let firstVisible = null;
-                        for (const w of visibleWraps) {
-                            const rect = w.getBoundingClientRect();
-                            if (rect.top < window.innerHeight && rect.bottom > 0) {
-                                firstVisible = w;
-                                break;
-                            }
-                        }
-                        if (firstVisible) {
-                            const vid = firstVisible.querySelector('video');
-                            if (vid && vid.plyr) {
-                                vid.plyr.play().catch(() => {});
-                                currentlyPlayingVideo = vid;
-                            } else if (vid) {
-                                vid.play().catch(() => {});
-                                currentlyPlayingVideo = vid;
-                            }
-                            const ytIframe = firstVisible.querySelector('iframe');
-                            if (ytIframe) {
-                                const idx = ytIframe.id.replace('yt-', '');
-                                if (!ytState[idx]) ytState[idx] = { muted: true,
-                                playing: true };
-                                if (!ytState[idx].playing) {
-                                    ytPostMessage(idx, 'playVideo');
-                                    ytState[idx].playing = true;
-                                    _showYtPauseIcon(idx, true);
-                                    _updateMuteBadge(idx);
-                                    currentlyPlayingVideo = idx;
-                                }
-                            }
-                        }
-                    }, 400);
-                }, 300);
-            }
+                p.sort((a, b) => ((b.views || 0) + (b.reactions.like || 0)) - ((a.views || 0) + (a.reactions
+                    .like || 0)));
 
-            function loadInitialFeed() {
-                feedPage = 1;
-                isLoadingMore = false;
-                if (observer) observer.disconnect();
-                const co = document.getElementById('feed-container');
-                if (!co) return;
-                co.innerHTML = renderSkeletons(3);
+                co.innerHTML = `<div class="max-w-2xl mx-auto px-3 py-3">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:0 6px;">
+                          <h2 class="font-heading font-extrabold text-lg" style="color:var(--text);">Explore</h2>
+                        </div>
+                        <div class="explore-grid" id="explore-grid-content">${exploreSkeletonGrid()}</div>
+                      </div>`;
+
+                if (currentCategoryFilter) p = p.filter(post => post.category === currentCategoryFilter);
+                if (_shuffleExploreOnce) { p = shuffleArray(p);
+                    _shuffleExploreOnce = false; }
+
                 requestAnimationFrame(() => {
-                    const ps = getFilteredSortedPosts();
-                    co.innerHTML = '';
-                    if (ps.length === 0) { co.innerHTML =
-                            '<div class="flex flex-col items-center justify-center py-20 text-center"><p class="text-sm" style="color:var(--muted);">No posts yet. Create your first post!</p></div>';
-                        return; }
-                    const fb = ps.slice(0, PAGE_SIZE);
-                    co.innerHTML = fb.map((p, i) => buildPostHTML(p, i)).join('');
-                    requestAnimationFrame(() => {
-                        initPlayers(co);
-                        setupSentinel();
-                        setupInfiniteScroll();
-                        co.querySelectorAll('article').forEach(a => setupPostEventDelegation(a));
-                        window._currentFeedPosts = ps;
+                    const gc = document.getElementById('explore-grid-content');
+                    if (!gc || uiPage !== 'explore') return;
+                    if (p.length === 0) {
+                        gc.outerHTML =
+                            '<div class="flex flex-col items-center justify-center py-16 text-center col-span-2" style="grid-column:1/-1;"><p class="text-sm" style="color:var(--muted);">No posts yet. Be the first to post!</p></div>';
+                        return;
+                    }
+                    gc.innerHTML = buildExploreCards(p);
+                    gc.querySelectorAll('.explore-card').forEach(card => {
+                        card.addEventListener('click', () => { const pid = card.dataset.postId;
+                            if (pid) openExplorePost(pid, 'explore'); });
                     });
-                });
-            }
-
-            function loadMorePosts() {
-                if (isLoadingMore) return;
-                const ps = window._currentFeedPosts || getFilteredSortedPosts();
-                const start = feedPage * PAGE_SIZE,
-                    nb = ps.slice(start, start + PAGE_SIZE);
-                if (nb.length === 0) { if (observer && sentinel) observer.unobserve(sentinel); return; }
-                isLoadingMore = true;
-                const co = document.getElementById('feed-container'),
-                    s = getSentinel();
-                const t = document.createElement('div');
-                t.innerHTML = nb.map((p, i) => buildPostHTML(p, start + i)).join('');
-                while (t.firstChild) co.insertBefore(t.firstChild, s);
-                requestAnimationFrame(() => {
-                    initPlayers(co);
-                    co.querySelectorAll('article:not([data-events-set])').forEach(a => { setupPostEventDelegation(
-                            a);
-                        a.dataset.eventsSet = 'true'; });
-                    feedPage++;
-                    isLoadingMore = false;
-                });
-            }
-
-            function setupPostEventDelegation(article) {
-                article.addEventListener('click', function(e) {
-                    const t = e.target,
-                        pid = article.dataset.postId;
-
-                    const actionEl = t.closest('.post-actions-row > *');
-                    if (actionEl) spawnRipple(actionEl, e);
-
-                    if (t.classList.contains('read-more-btn')) { e.stopPropagation();
-                        toggleReadMore(article); return; }
-                    if (t.closest('.reaction-btn')) { e.stopPropagation();
-                        toggleReaction(pid); return; }
-                    if (t.closest('.bookmark-badge')) { e.stopPropagation();
-                        toggleBookmarkUI(article); return; }
-                    if (t.closest('.share-btn')) {
-                        e.stopPropagation();
-                        const btn = t.closest('.share-btn');
-                        const postId = btn.dataset.sharePost || pid;
-                        btn.classList.add('share-bounce');
-                        setTimeout(() => btn.classList.remove('share-bounce'), 450);
-                        haptic(6);
-                        openShareModal(postId);
-                        return;
-                    }
-                    if (t.closest('[data-repost-btn]')) {
-                        e.stopPropagation();
-                        const btn = t.closest('[data-repost-btn]');
-                        triggerRepostFromFeed(btn, btn.dataset.repostBtn);
-                        return;
-                    }
-                    if (t.closest('.comment-btn')) {
-                        e.stopPropagation();
-                        const btn = t.closest('.comment-btn');
-                        btn.classList.add('comment-pop');
-                        setTimeout(() => btn.classList.remove('comment-pop'), 260);
-                        haptic(6);
-                        const p = allPosts.find(x => x.id === pid);
-                        openExplorePost(pid, 'home', !(p && p.commentsHidden));
-                        return;
-                    }
-                    if (t.closest('.user-mini-avatar') || t.closest('.font-bold.text-sm')) {
-                        e.stopPropagation();
-                        const p = allPosts.find(p => p.id === pid);
-                        if (p && p.user_id) window.Router.openProfile(p.user_id);
-                        return;
-                    }
-                    if (t.closest('[data-full-img]')) {
-                        const c = t.closest('[data-full-img]');
-                        e.stopPropagation();
-                        openLightbox(c.dataset.fullImg);
-                        return;
-                    }
-                    if (t.closest('[data-extlink]')) { e.stopPropagation();
-                        openInAppWebView(decodeURIComponent(t.closest('[data-extlink]').dataset
-                        .extlink)); return; }
-                    if (t.closest('.carousel-arrow') || t.closest('.carousel-dot')) { e.stopPropagation(); return; }
-                    if (t.closest('.tag-badge')) {
-                        e.stopPropagation();
-                        const tag = t.textContent.replace('#', '').trim();
-                        if (tag) window.Router.openHashtag(tag);
-                        return;
-                    }
-                    if (t.closest('[data-repost-avatar]')) {
-                        e.stopPropagation();
-                        const uid = t.closest('[data-repost-avatar]').dataset.userId;
-                        if (uid) window.Router.openProfile(uid);
-                        return;
-                    }
-                    if (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')) {
-                        e.stopPropagation();
-                        const pid2 = (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')).dataset
-                            .postId;
-                        if (pid2) openRepostersSheet(pid2);
-                        return;
-                    }
-                    const now = Date.now(),
-                        gap = now - lastDoubleTapTime;
-                    if (gap < 300 && gap > 0) {
-                        e.preventDefault();
-                        toggleReaction(pid);
-                        lastDoubleTapTime = 0;
-                        return;
-                    }
-                    lastDoubleTapTime = now;
                     setTimeout(() => {
-                        if (lastDoubleTapTime === now) {
-                            openExplorePost(pid, 'home');
-                        }
+                        setupExploreVideoAutoplay(gc);
                     }, 300);
                 });
             }
 
-            function toggleReadMore(article) {
-                isTogglingContent = true;
-                const pid = article.dataset.postId;
-                const pv = article.querySelector(`.preview-text-${pid}`),
-                    fl = article.querySelector(`.full-text-${pid}`),
-                    b = article.querySelector('.read-more-btn');
-                if (!pv || !fl) { isTogglingContent = false; return; }
-                if (fl.classList.contains('hidden')) { pv.classList.add('hidden');
-                    fl.classList.remove('hidden');
-                    b.textContent = 'Show less'; } else { pv.classList.remove('hidden');
-                    fl.classList.add('hidden');
-                    b.textContent = 'Show more'; }
-                isTogglingContent = false;
+            function buildExploreCards(posts) {
+                return posts.map(post => {
+                    const author = window.getAuthorFromProfile(post.profile);
+                    const av = author.avatar;
+                    const au = author.name;
+                    const mediaItems = getMediaItems(post);
+                    let mh = '';
+                    if (mediaItems.length > 0) {
+                        const first = mediaItems[0];
+                        const url = first.url;
+                        const isVideo = first.type === 'video' || (url && isYouTubeUrl(url));
+                        if (url) {
+                            if (isVideo && isYouTubeUrl(url)) {
+                                const ytId = extractYouTubeId(url);
+                                if (ytId) {
+                                    mh =
+                                        `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;position:relative;background:#000;"><div class="yt-wrap" style="padding-bottom:56.25%;height:0;position:relative;width:100%;"><iframe style="pointer-events:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;" src="https://www.youtube.com/embed/${ytId}?autoplay=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0" allow="autoplay; encrypted-media" loading="lazy"></iframe></div></div>`;
+                                } else {
+                                    mh =
+                                        `<video src="${url}" muted playsinline loop preload="none" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
+                                }
+                            } else if (isVideo) {
+                                mh =
+                                    `<video src="${url}" muted playsinline loop preload="none" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
+                            } else {
+                                mh =
+                                    `<img src="${url}" class="explore-card-thumb" loading="lazy" alt="" onload="this.closest('.explore-card').classList.add('loaded')" onerror="this.closest('.explore-card').classList.add('loaded');this.outerHTML='<div class=\\'explore-card-no-media loaded\\'><div class=\\'explore-card-no-media-text\\'>${escapeHtml(post.title).replace(/'/g,"\\'")}</div></div>'">`;
+                            }
+                        } else {
+                            mh =
+                                `<div class="explore-card-no-media loaded"><div class="explore-card-no-media-text">${escapeHtml(post.title)}</div></div>`;
+                        }
+                    } else {
+                        mh =
+                            `<div class="explore-card-no-media loaded"><div class="explore-card-no-media-text">${escapeHtml(post.title)}</div></div>`;
+                    }
+
+                    const vb = mediaItems.length > 0 && (mediaItems[0].type === 'video' || (mediaItems[0].url && isYouTubeUrl(mediaItems[0].url))) ?
+                        `<div class="explore-card-badge"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>` :
+                        '';
+
+                    const ah = av ?
+                        `<img src="${av}" class="explore-card-avatar" alt="" onerror="this.style.display='none'">` :
+                        `<div class="explore-card-avatar" style="display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#9CA3AF;">${au.charAt(0).toUpperCase()}</div>`;
+                    const nl = !post.mediaUrl && mediaItems.length === 0;
+                    const cc = nl ? 'explore-card loaded' : 'explore-card';
+
+                    return `<div class="${cc}" data-post-id="${post.id}" ${mediaItems.length > 0 && mediaItems[0].type === 'video' ? 'data-video-card="true"' : ''}>
+                        <div class="explore-card-media">${mh}${vb}</div>
+                        <div class="explore-card-title">${escapeHtml(post.title)}</div>
+                        <div class="explore-card-bottom">
+                            <div class="explore-card-author">${ah}<span>${escapeHtml(au)}</span></div>
+                            <div class="explore-card-views">${svgEye()}<span>${formatCount(post.views||0)}</span></div>
+                        </div>
+                    </div>`;
+                }).join('');
             }
 
-            async function toggleBookmarkUI(article) {
-                const pid = article.dataset.postId;
-                const post = appData.posts.find(p => p.id === pid);
-                document.querySelectorAll(`[data-bookmark="${pid}"]`).forEach(el => spawnRipple(el, null));
-                haptic(8);
-                const nb = await toggleBookmark(pid);
-                if (post) post.bookmarkCount = Math.max(0, (post.bookmarkCount || 0) + (nb ? 1 : -1));
-                const countText = formatCount(post ? post.bookmarkCount : 0);
-                document.querySelectorAll(`[data-bookmark="${pid}"], #single-bookmark-${pid}`).forEach(el => {
-                    el.classList.toggle('bookmarked', nb);
-                    const iconWrap = el.querySelector('.bookmark-icon-wrap');
-                    if (iconWrap) iconWrap.innerHTML = bookmarkIcon(nb);
-                    const cnt = el.querySelector('.bookmark-count');
-                    if (cnt) animateCountRoll(cnt, countText);
-                    el.classList.add('bookmark-breathe');
-                    setTimeout(() => el.classList.remove('bookmark-breathe'), 250);
+            // ─── MARKET VIEW ─────────────────────────────────────────────
+            function renderMarketView() {
+                return `
+                        <div class="market-main-content">
+                            <div class="p-4 sm:p-6 space-y-4">
+                                <div class="flex items-center gap-2 sm:gap-3">
+                                    <div class="relative flex-1">
+                                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                            </svg>
+                                        </span>
+                                        <input type="text" id="searchInput" oninput="handleMarketSearch(this.value)" placeholder="Search title, category, subcategory..."
+                                               class="w-full pl-10 pr-4 py-3 bg-gray-100/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                                    </div>
+                                    <button onclick="openFilterModal()" class="flex items-center gap-1.5 px-4 py-3 bg-brand-50 text-brand-600 rounded-xl text-sm font-semibold hover:bg-brand-100 transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                                        </svg>
+                                        <span>Filter</span>
+                                    </button>
+                                </div>
+
+                                <div>
+                                    <div class="flex items-center gap-3 overflow-x-auto no-scrollbar py-1" id="mainCategoriesBar"></div>
+                                    <div class="hidden flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 border-t border-gray-100 mt-2" id="subCategoriesBar"></div>
+                                </div>
+                            </div>
+
+                            <div id="emptyState" class="hidden py-16 px-4 text-center flex-col items-center justify-center">
+                                <div class="w-20 h-20 bg-brand-50 rounded-3xl flex items-center justify-center text-brand-600 mb-4 shadow-sm border border-brand-100">
+                                    <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                                    </svg>
+                                </div>
+                                <h3 class="text-base font-bold text-gray-900">No products here yet</h3>
+                                <p class="text-xs text-gray-500 mt-1 max-w-xs mx-auto">Listings for this category are launching soon. Stay tuned or check back later!</p>
+                                <button onclick="selectMarketCategory('All')" class="mt-5 px-4 py-2.5 bg-brand-600 text-white font-bold rounded-xl text-xs hover:bg-brand-700 transition shadow-md shadow-brand-500/20">
+                                    Explore All Products
+                                </button>
+                            </div>
+
+                            <section id="featuredSection" class="px-4 sm:px-6 mb-8">
+                                <div class="flex justify-between items-center mb-3">
+                                    <h2 class="text-lg font-bold text-gray-900 flex items-center gap-1.5">Featured Today 🔥</h2>
+                                    <button onclick="openSeeAllModal('Featured Today 🔥', true)" class="text-sm font-semibold text-brand-600 hover:underline">See all</button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3 sm:gap-4" id="featuredGrid"></div>
+                            </section>
+
+                            <section id="newlySection" class="px-4 sm:px-6 mb-8">
+                                <div class="flex justify-between items-center mb-3">
+                                    <h2 class="text-lg font-bold text-gray-900 flex items-center gap-1.5">Newly Listed ✨</h2>
+                                    <button onclick="openSeeAllModal('Newly Listed ✨', false)" class="text-sm font-semibold text-brand-600 hover:underline">See all</button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3 sm:gap-4" id="newlyGrid"></div>
+                            </section>
+
+                            <section class="px-4 sm:px-6 mb-8">
+                                <div class="bg-brand-50 rounded-2xl p-4 flex items-center justify-between gap-3 border border-brand-100">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center flex-shrink-0">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h4 class="font-bold text-gray-900 text-sm">Buy safely on FreeUpper</h4>
+                                            <p class="text-xs text-gray-500 mt-0.5">Chat with verified sellers directly via DM or WhatsApp.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    `;
+            }
+
+            // ─── NAVIGATION & TAB MANAGEMENT ─────────────────────────────
+            function setTab(mode) {
+                const scrollY = window.scrollY;
+                if (uiPage === 'home') tabScrollPositions.home = scrollY;
+                else if (uiPage === 'explore') tabScrollPositions.explore = scrollY;
+                else if (uiPage === 'market') tabScrollPositions.market = scrollY;
+                if (exploreVideoObserver) { exploreVideoObserver.disconnect();
+                    exploreVideoObserver = null; }
+                currentCategoryFilter = '';
+                searchQuery = '';
+                feedPage = 1;
+                if (mode === 'foryou') { currentSortMethod = 'foryou';
+                    uiPage = 'home'; } else if (mode === 'explore') { currentSortMethod = 'trending';
+                    uiPage = 'explore'; } else if (mode === 'market') { uiPage = 'market'; }
+
+                bottomNavHidden = false;
+                const bottomNavEl = document.getElementById('bottomNav');
+                const chipsEl = document.getElementById('category-chips');
+                const headerEl = document.querySelector('.top-header');
+                if (bottomNavEl) bottomNavEl.classList.remove('hidden-nav');
+                if (chipsEl) chipsEl.classList.remove('chips-hidden');
+                if (headerEl) headerEl.classList.remove('header-hidden');
+
+                renderUI();
+            }
+
+            function refreshTabStates() {
+                document.querySelectorAll('.tab-pill').forEach(el => el.classList.remove('tab-pill--active'));
+                const map = { home: 'tab-foryou', explore: 'tab-explore', market: 'tab-market',
+                    'single-post-explore': null };
+                const id = map[uiPage];
+                if (id) document.getElementById(id)?.classList.add('tab-pill--active');
+            }
+
+            function navigateToProfile(uid) {
+                window.Router.openProfile(uid);
+            }
+
+            function navigateToProfileByUsername(username) {
+                if (!username || username === 'Guest') return;
+                const found = allPosts.find(p => p.profile && p.profile.username === username);
+                if (found) window.Router.openProfile(found.user_id);
+                else showToast('User not found');
+            }
+
+            function openInAppWebView(url) { window.open(url, '_blank', 'noopener,noreferrer'); }
+
+            function closeInAppWebView() { const o = document.getElementById('inapp-webview-overlay'),
+                    f = document.getElementById('inapp-webview-frame');
+                f.src = '';
+                o.classList.add('hidden');
+                document.body.style.overflow = ''; }
+
+            function openFilterDrawer() {
+                refreshDrawerCategories();
+                const d = document.getElementById('filter-drawer'),
+                    b = document.getElementById('filter-backdrop');
+                d.classList.remove('translate-y-full');
+                b.classList.remove('bg-opacity-0', 'pointer-events-none');
+                b.classList.add('bg-opacity-40', 'pointer-events-auto');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeFilterDrawer() {
+                const d = document.getElementById('filter-drawer'),
+                    b = document.getElementById('filter-backdrop');
+                d.classList.add('translate-y-full');
+                b.classList.add('bg-opacity-0', 'pointer-events-none');
+                b.classList.remove('bg-opacity-40', 'pointer-events-auto');
+                document.body.style.overflow = '';
+            }
+
+            function refreshDrawerCategories() {
+                const de = document.getElementById('drawer-categories');
+                if (!de) return;
+                const CATS = ["Technology", "Education", "Campus gist", "News & Updates", "Entertainment", "Movies",
+                    "Lifestyle", "Business & Finance", "Opinion / Thoughts", "Health & Fitness", "Travel & Culture",
+                    "Gaming", "Memes", "Science", "Fashion", "Music"
+                ];
+                de.innerHTML = CATS.map(c =>
+                    `<button class="drawer-cat-btn ${currentCategoryFilter===c?'drawer-cat-btn--active':''}" style="width:100%;text-align:left;padding:11px 14px;border-radius:10px;font-size:.875rem;font-weight:500;color:${currentCategoryFilter===c?'#7C3AED':'var(--muted)'};background:${currentCategoryFilter===c?'rgba(124,58,237,.08)':'var(--inp)'};border:1.5px solid ${currentCategoryFilter===c?'#7C3AED':'transparent'};cursor:pointer;">${escapeHtml(c)}</button>`
+                    ).join('');
+                de.querySelectorAll('button').forEach(btn => {
+                    btn.addEventListener('click', () => { closeFilterDrawer();
+                        filterCategory(btn.textContent.trim()); });
                 });
-                showToast(nb ? 'Saved' : 'Removed from saved');
             }
 
             function filterCategory(c) { currentCategoryFilter = c;
@@ -5363,7 +5605,7 @@
                 currentSortMethod = 'trending';
                 renderUI(); }
 
-            // ─── SHARE MODAL ──────────────────────────────────────────────────
+            // ─── SHARE MODAL ────────────────────────────────────────────
             let sharePostId = null;
 
             function openShareModal(postId) {
@@ -5423,6 +5665,8 @@
                                 .forEach(el => el.textContent = formatCount(count));
                             document.querySelectorAll(`#single-share-btn .share-count`)
                                 .forEach(el => el.textContent = formatCount(count));
+                            // Notify algorithm
+                            window.IndexInteractions.notify(sharePostId, 'share');
                         }).catch(err => console.warn('recordShare failed:', err));
                     }
                 }
@@ -5451,7 +5695,7 @@
                 }
             }
 
-            // ─── COMMENTS ─────────────────────────────────────────────────────
+            // ─── COMMENTS ─────────────────────────────────────────────────
             function getAllDescendants(pid, comments) { const r = [];
                 const dc = comments.filter(c => c.parentId === pid); for (const c of dc) { r.push(c);
                     r.push(...getAllDescendants(c.id, comments)); } return r; }
@@ -5592,7 +5836,7 @@
             }
 
             async function addComment(postId, parentId, message, mentions = []) {
-                const p = appData.posts.find(p => p.id === postId);
+                const p = allPosts.find(p => p.id === postId);
                 if (!p) return;
                 if (window.AuthUser && window.AuthUser.requireAuth) {
                     return new Promise((resolve, reject) => {
@@ -5612,6 +5856,8 @@
                                         postId
                                     );
                                 }
+                                // Notify algorithm
+                                window.IndexInteractions.notify(postId, 'comment');
                                 resolve(comment);
                             } catch (err) {
                                 showToast(err.message, 'r');
@@ -5635,12 +5881,13 @@
                     if (!Array.isArray(p.comments)) p.comments = [];
                     p.comments.push(comment);
                     p.commentCount = (p.commentCount || 0) + 1;
+                    window.IndexInteractions.notify(postId, 'comment');
                     return comment;
                 }
             }
 
             function refreshCommentsList(postId, listId) {
-                const p = appData.posts.find(p => p.id === postId);
+                const p = allPosts.find(p => p.id === postId);
                 if (!p) return;
                 const cl = document.getElementById(listId);
                 if (!cl) return;
@@ -5653,7 +5900,7 @@
             }
 
             function updateCommentCount(postId) {
-                const p = appData.posts.find(p => p.id === postId);
+                const p = allPosts.find(p => p.id === postId);
                 if (!p) return;
                 const cc = Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false).length : (p
                     .comments || 0);
@@ -5792,7 +6039,7 @@
                 try {
                     await addComment(currentPostId, pi, message, mentions);
                     if (pi) {
-                        const p = appData.posts.find(x => x.id === currentPostId);
+                        const p = allPosts.find(x => x.id === currentPostId);
                         const ac = p && Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false) : [];
                         const topId = findTopAncestorId(pi, ac);
                         const ds = getAllDescendants(topId, ac);
@@ -5821,7 +6068,7 @@
                 try {
                     await addComment(currentPostId, pi, message, mentions);
                     if (pi) {
-                        const p = appData.posts.find(x => x.id === currentPostId);
+                        const p = allPosts.find(x => x.id === currentPostId);
                         const ac = p && Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false) : [];
                         const topId = findTopAncestorId(pi, ac);
                         const ds = getAllDescendants(topId, ac);
@@ -5845,7 +6092,7 @@
                         if (focus) setTimeout(() => ta.focus(), 260); } } else b.classList.remove('visible');
             }
 
-            // ─── EXPLORE FULLSCREEN ──────────────────────────────────────────
+            // ─── EXPLORE FULLSCREEN ──────────────────────────────────────
             function buildCommentsOffIllustration() {
                 return `<div class="comments-off-illustration">
                         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><line x1="3" y1="21" x2="21" y2="3"/></svg>
@@ -6048,7 +6295,6 @@
                 currentPostId = null;
                 const returnPage = window._fullscreenReturnPage || 'home';
                 uiPage = returnPage;
-                // reset nav state when returning
                 bottomNavHidden = false;
                 const bottomNavEl = document.getElementById('bottomNav');
                 const chipsEl = document.getElementById('category-chips');
@@ -6130,352 +6376,7 @@
                 });
             }
 
-            // ─── EXPLORE GRID ───────────────────────────────────────────────────
-            function renderExploreGrid() {
-                const co = document.getElementById('user-content');
-                const currentUser = getCurrentUser();
-                let p = [...allPosts]
-                    .filter(post => !hiddenPostsSet.has(post.id))
-                    .filter(post => !blockedSet.has(post.user_id))
-                    .filter(post => {
-                        if (post.user_id === currentUser.id) return true;
-                        if (post.is_hidden) return false;
-                        const profile = post.profile || {};
-                        return !profile.is_private;
-                    });
-                p.sort((a, b) => ((b.views || 0) + (b.reactions.like || 0)) - ((a.views || 0) + (a.reactions
-                    .like || 0)));
-
-                co.innerHTML = `<div class="max-w-2xl mx-auto px-3 py-3">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:0 6px;">
-                          <h2 class="font-heading font-extrabold text-lg" style="color:var(--text);">Explore</h2>
-                        </div>
-                        <div class="explore-grid" id="explore-grid-content">${exploreSkeletonGrid()}</div>
-                      </div>`;
-
-                if (currentCategoryFilter) p = p.filter(post => post.category === currentCategoryFilter);
-                if (_shuffleExploreOnce) { p = shuffleArray(p);
-                    _shuffleExploreOnce = false; }
-
-                requestAnimationFrame(() => {
-                    const gc = document.getElementById('explore-grid-content');
-                    if (!gc || uiPage !== 'explore') return;
-                    if (p.length === 0) {
-                        gc.outerHTML =
-                            '<div class="flex flex-col items-center justify-center py-16 text-center col-span-2" style="grid-column:1/-1;"><p class="text-sm" style="color:var(--muted);">No posts yet. Be the first to post!</p></div>';
-                        return;
-                    }
-                    gc.innerHTML = buildExploreCards(p);
-                    gc.querySelectorAll('.explore-card').forEach(card => {
-                        card.addEventListener('click', () => { const pid = card.dataset.postId;
-                            if (pid) openExplorePost(pid, 'explore'); });
-                    });
-                    setTimeout(() => {
-                        setupExploreVideoAutoplay(gc);
-                    }, 300);
-                });
-            }
-
-            function buildExploreCards(posts) {
-                return posts.map(post => {
-                    const author = window.getAuthorFromProfile(post.profile);
-                    const av = author.avatar;
-                    const au = author.name;
-                    const mediaItems = getMediaItems(post);
-                    let mh = '';
-                    if (mediaItems.length > 0) {
-                        const first = mediaItems[0];
-                        const url = first.url;
-                        const isVideo = first.type === 'video' || (url && isYouTubeUrl(url));
-                        if (url) {
-                            if (isVideo && isYouTubeUrl(url)) {
-                                const ytId = extractYouTubeId(url);
-                                if (ytId) {
-                                    mh =
-                                        `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;position:relative;background:#000;"><div class="yt-wrap" style="padding-bottom:56.25%;height:0;position:relative;width:100%;"><iframe style="pointer-events:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;" src="https://www.youtube.com/embed/${ytId}?autoplay=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0" allow="autoplay; encrypted-media" loading="lazy"></iframe></div></div>`;
-                                } else {
-                                    mh =
-                                        `<video src="${url}" muted playsinline loop preload="none" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
-                                }
-                            } else if (isVideo) {
-                                mh =
-                                    `<video src="${url}" muted playsinline loop preload="none" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
-                            } else {
-                                mh =
-                                    `<img src="${url}" class="explore-card-thumb" loading="lazy" alt="" onload="this.closest('.explore-card').classList.add('loaded')" onerror="this.closest('.explore-card').classList.add('loaded');this.outerHTML='<div class=\\'explore-card-no-media loaded\\'><div class=\\'explore-card-no-media-text\\'>${escapeHtml(post.title).replace(/'/g,"\\'")}</div></div>'">`;
-                            }
-                        } else {
-                            mh =
-                                `<div class="explore-card-no-media loaded"><div class="explore-card-no-media-text">${escapeHtml(post.title)}</div></div>`;
-                        }
-                    } else {
-                        mh =
-                            `<div class="explore-card-no-media loaded"><div class="explore-card-no-media-text">${escapeHtml(post.title)}</div></div>`;
-                    }
-
-                    const vb = mediaItems.length > 0 && (mediaItems[0].type === 'video' || (mediaItems[0].url && isYouTubeUrl(mediaItems[0].url))) ?
-                        `<div class="explore-card-badge"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>` :
-                        '';
-
-                    const ah = av ?
-                        `<img src="${av}" class="explore-card-avatar" alt="" onerror="this.style.display='none'">` :
-                        `<div class="explore-card-avatar" style="display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#9CA3AF;">${au.charAt(0).toUpperCase()}</div>`;
-                    const nl = !post.mediaUrl && mediaItems.length === 0;
-                    const cc = nl ? 'explore-card loaded' : 'explore-card';
-
-                    return `<div class="${cc}" data-post-id="${post.id}" ${mediaItems.length > 0 && mediaItems[0].type === 'video' ? 'data-video-card="true"' : ''}>
-                        <div class="explore-card-media">${mh}${vb}</div>
-                        <div class="explore-card-title">${escapeHtml(post.title)}</div>
-                        <div class="explore-card-bottom">
-                            <div class="explore-card-author">${ah}<span>${escapeHtml(au)}</span></div>
-                            <div class="explore-card-views">${svgEye()}<span>${formatCount(post.views||0)}</span></div>
-                        </div>
-                    </div>`;
-                }).join('');
-            }
-
-            // ─── NAVIGATION & UI RENDERING ──────────────────────────────────
-            function setTab(mode) {
-                const scrollY = window.scrollY;
-                if (uiPage === 'home') tabScrollPositions.home = scrollY;
-                else if (uiPage === 'explore') tabScrollPositions.explore = scrollY;
-                else if (uiPage === 'market') tabScrollPositions.market = scrollY;
-                if (exploreVideoObserver) { exploreVideoObserver.disconnect();
-                    exploreVideoObserver = null; }
-                currentCategoryFilter = '';
-                searchQuery = '';
-                feedPage = 1;
-                if (mode === 'foryou') { currentSortMethod = 'foryou';
-                    uiPage = 'home'; } else if (mode === 'explore') { currentSortMethod = 'trending';
-                    uiPage = 'explore'; } else if (mode === 'market') { uiPage = 'market'; }
-
-                bottomNavHidden = false;
-                const bottomNavEl = document.getElementById('bottomNav');
-                const chipsEl = document.getElementById('category-chips');
-                const headerEl = document.querySelector('.top-header');
-                if (bottomNavEl) bottomNavEl.classList.remove('hidden-nav');
-                if (chipsEl) chipsEl.classList.remove('chips-hidden');
-                if (headerEl) headerEl.classList.remove('header-hidden');
-
-                renderUI();
-            }
-
-            function renderMarketView() {
-                return `
-                        <div class="market-main-content">
-                            <div class="p-4 sm:p-6 space-y-4">
-                                <div class="flex items-center gap-2 sm:gap-3">
-                                    <div class="relative flex-1">
-                                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                                            </svg>
-                                        </span>
-                                        <input type="text" id="searchInput" oninput="handleMarketSearch(this.value)" placeholder="Search title, category, subcategory..."
-                                               class="w-full pl-10 pr-4 py-3 bg-gray-100/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
-                                    </div>
-                                    <button onclick="openFilterModal()" class="flex items-center gap-1.5 px-4 py-3 bg-brand-50 text-brand-600 rounded-xl text-sm font-semibold hover:bg-brand-100 transition">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
-                                        </svg>
-                                        <span>Filter</span>
-                                    </button>
-                                </div>
-
-                                <div>
-                                    <div class="flex items-center gap-3 overflow-x-auto no-scrollbar py-1" id="mainCategoriesBar"></div>
-                                    <div class="hidden flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 border-t border-gray-100 mt-2" id="subCategoriesBar"></div>
-                                </div>
-                            </div>
-
-                            <div id="emptyState" class="hidden py-16 px-4 text-center flex-col items-center justify-center">
-                                <div class="w-20 h-20 bg-brand-50 rounded-3xl flex items-center justify-center text-brand-600 mb-4 shadow-sm border border-brand-100">
-                                    <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                                    </svg>
-                                </div>
-                                <h3 class="text-base font-bold text-gray-900">No products here yet</h3>
-                                <p class="text-xs text-gray-500 mt-1 max-w-xs mx-auto">Listings for this category are launching soon. Stay tuned or check back later!</p>
-                                <button onclick="selectMarketCategory('All')" class="mt-5 px-4 py-2.5 bg-brand-600 text-white font-bold rounded-xl text-xs hover:bg-brand-700 transition shadow-md shadow-brand-500/20">
-                                    Explore All Products
-                                </button>
-                            </div>
-
-                            <section id="featuredSection" class="px-4 sm:px-6 mb-8">
-                                <div class="flex justify-between items-center mb-3">
-                                    <h2 class="text-lg font-bold text-gray-900 flex items-center gap-1.5">Featured Today 🔥</h2>
-                                    <button onclick="openSeeAllModal('Featured Today 🔥', true)" class="text-sm font-semibold text-brand-600 hover:underline">See all</button>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3 sm:gap-4" id="featuredGrid"></div>
-                            </section>
-
-                            <section id="newlySection" class="px-4 sm:px-6 mb-8">
-                                <div class="flex justify-between items-center mb-3">
-                                    <h2 class="text-lg font-bold text-gray-900 flex items-center gap-1.5">Newly Listed ✨</h2>
-                                    <button onclick="openSeeAllModal('Newly Listed ✨', false)" class="text-sm font-semibold text-brand-600 hover:underline">See all</button>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3 sm:gap-4" id="newlyGrid"></div>
-                            </section>
-
-                            <section class="px-4 sm:px-6 mb-8">
-                                <div class="bg-brand-50 rounded-2xl p-4 flex items-center justify-between gap-3 border border-brand-100">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center flex-shrink-0">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                                            </svg>
-                                        </div>
-                                        <div>
-                                            <h4 class="font-bold text-gray-900 text-sm">Buy safely on FreeUpper</h4>
-                                            <p class="text-xs text-gray-500 mt-0.5">Chat with verified sellers directly via DM or WhatsApp.</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
-                        </div>
-                    `;
-            }
-
-            function renderUI() {
-                const co = document.getElementById('user-content');
-                if (!co) return;
-
-                if (uiPage === 'explore') {
-                    renderExploreGrid();
-                    setCommentBarVisible(false);
-                    refreshTabStates();
-                    setTimeout(() => window.scrollTo(0, tabScrollPositions.explore || 0), 80);
-                    return;
-                }
-
-                if (uiPage === 'market') {
-                    co.innerHTML = renderMarketView();
-                    setCommentBarVisible(false);
-                    refreshTabStates();
-                    requestAnimationFrame(async () => {
-                        if (!marketDataLoaded) {
-                            const fg = document.getElementById('featuredGrid');
-                            const ng = document.getElementById('newlyGrid');
-                            const mb = document.getElementById('mainCategoriesBar');
-                            if (fg) fg.innerHTML = marketSkeletonGrid();
-                            if (ng) ng.innerHTML = marketSkeletonGrid();
-                            if (mb) mb.innerHTML = categoryBarSkeleton();
-                            await Promise.all([loadMarketCategories(), loadMarketListings(), loadSavedListings()]);
-                            marketDataLoaded = true;
-                        }
-                        renderMarketCategoryBars();
-                        applyMarketFiltersAndRender();
-                        const searchInput = document.getElementById('searchInput');
-                        if (searchInput) {
-                            searchInput.oninput = function(e) { handleMarketSearch(this.value); };
-                        }
-                    });
-                    setTimeout(() => window.scrollTo(0, tabScrollPositions.market || 0), 80);
-                    return;
-                }
-
-                if (uiPage === 'single-post-explore') {
-                    if (currentPostId) {
-                        const post = allPosts.find(p => p.id === currentPostId);
-                        if (post) {
-                            document.querySelectorAll(`[data-post-reactions="${currentPostId}"] .reaction-count`)
-                                .forEach(el => el.textContent = formatCount(post.reactions ? post.reactions.like || 0 : 0));
-                            document.querySelectorAll(`#single-bookmark-${currentPostId} .bookmark-count`)
-                                .forEach(el => el.textContent = formatCount(post.bookmarkCount || 0));
-                            document.querySelectorAll(`#single-share-btn .share-count`)
-                                .forEach(el => el.textContent = formatCount(post.shareCount || 0));
-                            document.querySelectorAll(`[data-post-id="${currentPostId}"] .repost-count-num`)
-                                .forEach(el => el.textContent = formatCount(post.repostCount || 0));
-                            refreshCommentsList(currentPostId, 'comments-list');
-                            updateCommentCount(currentPostId);
-                        }
-                    }
-                    return;
-                }
-
-                co.innerHTML = renderFeedContainer();
-                loadInitialFeed();
-                setCommentBarVisible(false);
-                refreshTabStates();
-                setTimeout(() => window.scrollTo(0, tabScrollPositions.home || 0), 80);
-            }
-
-            function refreshTabStates() {
-                document.querySelectorAll('.tab-pill').forEach(el => el.classList.remove('tab-pill--active'));
-                const map = { home: 'tab-foryou', explore: 'tab-explore', market: 'tab-market',
-                    'single-post-explore': null };
-                const id = map[uiPage];
-                if (id) document.getElementById(id)?.classList.add('tab-pill--active');
-            }
-
-            function navigateToProfile(uid) {
-                window.Router.openProfile(uid);
-            }
-
-            function navigateToProfileByUsername(username) {
-                if (!username || username === 'Guest') return;
-                const found = allPosts.find(p => p.profile && p.profile.username === username);
-                if (found) window.Router.openProfile(found.user_id);
-                else showToast('User not found');
-            }
-
-            function openInAppWebView(url) { window.open(url, '_blank', 'noopener,noreferrer'); }
-
-            function closeInAppWebView() { const o = document.getElementById('inapp-webview-overlay'),
-                    f = document.getElementById('inapp-webview-frame');
-                f.src = '';
-                o.classList.add('hidden');
-                document.body.style.overflow = ''; }
-
-            function openFilterDrawer() {
-                refreshDrawerCategories();
-                const d = document.getElementById('filter-drawer'),
-                    b = document.getElementById('filter-backdrop');
-                d.classList.remove('translate-y-full');
-                b.classList.remove('bg-opacity-0', 'pointer-events-none');
-                b.classList.add('bg-opacity-40', 'pointer-events-auto');
-                document.body.style.overflow = 'hidden';
-            }
-
-            function closeFilterDrawer() {
-                const d = document.getElementById('filter-drawer'),
-                    b = document.getElementById('filter-backdrop');
-                d.classList.add('translate-y-full');
-                b.classList.add('bg-opacity-0', 'pointer-events-none');
-                b.classList.remove('bg-opacity-40', 'pointer-events-auto');
-                document.body.style.overflow = '';
-            }
-
-            function refreshDrawerCategories() {
-                const de = document.getElementById('drawer-categories');
-                if (!de) return;
-                const CATS = ["Technology", "Education", "Campus gist", "News & Updates", "Entertainment", "Movies",
-                    "Lifestyle", "Business & Finance", "Opinion / Thoughts", "Health & Fitness", "Travel & Culture",
-                    "Gaming", "Memes", "Science", "Fashion", "Music"
-                ];
-                de.innerHTML = CATS.map(c =>
-                    `<button class="drawer-cat-btn ${currentCategoryFilter===c?'drawer-cat-btn--active':''}" style="width:100%;text-align:left;padding:11px 14px;border-radius:10px;font-size:.875rem;font-weight:500;color:${currentCategoryFilter===c?'#7C3AED':'var(--muted)'};background:${currentCategoryFilter===c?'rgba(124,58,237,.08)':'var(--inp)'};border:1.5px solid ${currentCategoryFilter===c?'#7C3AED':'transparent'};cursor:pointer;">${escapeHtml(c)}</button>`
-                    ).join('');
-                de.querySelectorAll('button').forEach(btn => {
-                    btn.addEventListener('click', () => { closeFilterDrawer();
-                        filterCategory(btn.textContent.trim()); });
-                });
-            }
-
-            function showToast(msg, d = 2000) {
-                const t = document.getElementById('toast');
-                if (!t) return;
-                t.textContent = msg;
-                t.style.background = 'var(--bg3)';
-                t.style.color = 'var(--text)';
-                t.style.border = '1px solid var(--brd2)';
-                t.classList.add('opacity-100');
-                t.classList.remove('opacity-0', 'pointer-events-none');
-                clearTimeout(t._t);
-                t._t = setTimeout(() => { t.classList.add('opacity-0', 'pointer-events-none');
-                    t.classList.remove('opacity-100'); }, d);
-            }
-
+            // ─── LIGHTBOX ─────────────────────────────────────────────────
             function openLightbox(src) {
                 const modal = document.getElementById('lightbox'),
                     img = document.getElementById('lightbox-img');
@@ -6489,7 +6390,135 @@
                 document.body.style.overflow = '';
             }
 
-            // ─── PULL TO REFRESH ──────────────────────────────────────────────
+            // ─── POST EVENT DELEGATION (for feed cards) ──────────────────
+            function setupPostEventDelegation(article) {
+                article.addEventListener('click', function(e) {
+                    const t = e.target,
+                        pid = article.dataset.postId;
+
+                    const actionEl = t.closest('.post-actions-row > *');
+                    if (actionEl) spawnRipple(actionEl, e);
+
+                    if (t.classList.contains('read-more-btn')) { e.stopPropagation();
+                        toggleReadMore(article); return; }
+                    if (t.closest('.reaction-btn')) { e.stopPropagation();
+                        toggleReaction(pid); return; }
+                    if (t.closest('.bookmark-badge')) { e.stopPropagation();
+                        toggleBookmarkUI(article); return; }
+                    if (t.closest('.share-btn')) {
+                        e.stopPropagation();
+                        const btn = t.closest('.share-btn');
+                        const postId = btn.dataset.sharePost || pid;
+                        btn.classList.add('share-bounce');
+                        setTimeout(() => btn.classList.remove('share-bounce'), 450);
+                        haptic(6);
+                        openShareModal(postId);
+                        return;
+                    }
+                    if (t.closest('[data-repost-btn]')) {
+                        e.stopPropagation();
+                        const btn = t.closest('[data-repost-btn]');
+                        triggerRepostFromFeed(btn, btn.dataset.repostBtn);
+                        return;
+                    }
+                    if (t.closest('.comment-btn')) {
+                        e.stopPropagation();
+                        const btn = t.closest('.comment-btn');
+                        btn.classList.add('comment-pop');
+                        setTimeout(() => btn.classList.remove('comment-pop'), 260);
+                        haptic(6);
+                        const p = allPosts.find(x => x.id === pid);
+                        openExplorePost(pid, 'home', !(p && p.commentsHidden));
+                        return;
+                    }
+                    if (t.closest('.user-mini-avatar') || t.closest('.font-bold.text-sm')) {
+                        e.stopPropagation();
+                        const p = allPosts.find(p => p.id === pid);
+                        if (p && p.user_id) window.Router.openProfile(p.user_id);
+                        return;
+                    }
+                    if (t.closest('[data-full-img]')) {
+                        const c = t.closest('[data-full-img]');
+                        e.stopPropagation();
+                        openLightbox(c.dataset.fullImg);
+                        return;
+                    }
+                    if (t.closest('[data-extlink]')) { e.stopPropagation();
+                        openInAppWebView(decodeURIComponent(t.closest('[data-extlink]').dataset
+                        .extlink)); return; }
+                    if (t.closest('.carousel-arrow') || t.closest('.carousel-dot')) { e.stopPropagation(); return; }
+                    if (t.closest('.tag-badge')) {
+                        e.stopPropagation();
+                        const tag = t.textContent.replace('#', '').trim();
+                        if (tag) window.Router.openHashtag(tag);
+                        return;
+                    }
+                    if (t.closest('[data-repost-avatar]')) {
+                        e.stopPropagation();
+                        const uid = t.closest('[data-repost-avatar]').dataset.userId;
+                        if (uid) window.Router.openProfile(uid);
+                        return;
+                    }
+                    if (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')) {
+                        e.stopPropagation();
+                        const pid2 = (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')).dataset
+                            .postId;
+                        if (pid2) openRepostersSheet(pid2);
+                        return;
+                    }
+                    const now = Date.now(),
+                        gap = now - lastDoubleTapTime;
+                    if (gap < 300 && gap > 0) {
+                        e.preventDefault();
+                        toggleReaction(pid);
+                        lastDoubleTapTime = 0;
+                        return;
+                    }
+                    lastDoubleTapTime = now;
+                    setTimeout(() => {
+                        if (lastDoubleTapTime === now) {
+                            openExplorePost(pid, 'home');
+                        }
+                    }, 300);
+                });
+            }
+
+            function toggleReadMore(article) {
+                isTogglingContent = true;
+                const pid = article.dataset.postId;
+                const pv = article.querySelector(`.preview-text-${pid}`),
+                    fl = article.querySelector(`.full-text-${pid}`),
+                    b = article.querySelector('.read-more-btn');
+                if (!pv || !fl) { isTogglingContent = false; return; }
+                if (fl.classList.contains('hidden')) { pv.classList.add('hidden');
+                    fl.classList.remove('hidden');
+                    b.textContent = 'Show less'; } else { pv.classList.remove('hidden');
+                    fl.classList.add('hidden');
+                    b.textContent = 'Show more'; }
+                isTogglingContent = false;
+            }
+
+            async function toggleBookmarkUI(article) {
+                const pid = article.dataset.postId;
+                const post = allPosts.find(p => p.id === pid);
+                document.querySelectorAll(`[data-bookmark="${pid}"]`).forEach(el => spawnRipple(el, null));
+                haptic(8);
+                const nb = await toggleBookmark(pid);
+                if (post) post.bookmarkCount = Math.max(0, (post.bookmarkCount || 0) + (nb ? 1 : -1));
+                const countText = formatCount(post ? post.bookmarkCount : 0);
+                document.querySelectorAll(`[data-bookmark="${pid}"], #single-bookmark-${pid}`).forEach(el => {
+                    el.classList.toggle('bookmarked', nb);
+                    const iconWrap = el.querySelector('.bookmark-icon-wrap');
+                    if (iconWrap) iconWrap.innerHTML = bookmarkIcon(nb);
+                    const cnt = el.querySelector('.bookmark-count');
+                    if (cnt) animateCountRoll(cnt, countText);
+                    el.classList.add('bookmark-breathe');
+                    setTimeout(() => el.classList.remove('bookmark-breathe'), 250);
+                });
+                showToast(nb ? 'Saved' : 'Removed from saved');
+            }
+
+            // ─── PULL TO REFRESH ──────────────────────────────────────────
             function setupPullToRefresh() {
                 let sy = 0,
                     sx = 0,
@@ -6527,11 +6556,15 @@
                 });
             }
 
-            // ─── REFRESH / SHUFFLE ────────────────────────────────────────────
+            // ─── REFRESH / SHUFFLE ──────────────────────────────────────
             async function refreshHome() {
                 _feedShuffleSeed++;
                 _shuffleHomeOnce = true;
-                await reloadData();
+                // Tell Feed to refresh
+                if (window.FreeUpperFeed) {
+                    await window.FreeUpperFeed.refresh();
+                }
+                await reloadPosts();
                 currentCategoryFilter = '';
                 searchQuery = '';
                 currentSortMethod = 'foryou';
@@ -6545,7 +6578,7 @@
             async function refreshCurrentTab() {
                 if (uiPage === 'explore') {
                     _shuffleExploreOnce = true;
-                    await reloadData();
+                    await reloadPosts();
                     renderUI();
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                     showToast('Explore refreshed');
@@ -6562,7 +6595,7 @@
                 await refreshHome();
             }
 
-            // ─── KEYBOARD AVOIDANCE ──────────────────────────────────────────
+            // ─── KEYBOARD AVOIDANCE ─────────────────────────────────────
             function setupKeyboardAvoidance() {
                 if (!window.visualViewport) return;
                 const vv = window.visualViewport;
@@ -6586,7 +6619,7 @@
                 vv.addEventListener('scroll', adjust);
             }
 
-            // ─── NAV SCROLL ───────────────────────────────────────────────────
+            // ─── NAV SCROLL ──────────────────────────────────────────────
             function handleNavScroll() {
                 const currentScrollY = window.scrollY;
                 const scrollHidePages = (uiPage === 'home' || uiPage === 'explore');
@@ -6624,27 +6657,11 @@
                 }, 150);
             }
 
-            // ─── REALTIME ──────────────────────────────────────────────────────
+            // ─── REALTIME ─────────────────────────────────────────────────
             function setupRealtime() {
-                if (window.PostsAPI && window.PostsAPI.subscribe) {
-                    window.PostsAPI.subscribe((payload) => {
-                        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                            reloadPosts().then(() => {
-                                if (uiPage === 'home' || uiPage === 'single-post-explore') {
-                                    renderUI();
-                                }
-                            });
-                        }
-                    });
-                }
-
-                if (window.PostsAPI && window.PostsAPI.subscribeToAll) {
-                    window.PostsAPI.subscribeToAll(async (change) => {
-                        await reloadData();
-                        if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'single-post-explore') {
-                            renderUI();
-                        }
-                    });
+                // Use FreeUpperFeed to start realtime
+                if (window.FreeUpperFeed && window.FreeUpperFeed.startRealtime) {
+                    window.FreeUpperFeed.startRealtime();
                 }
 
                 if (window.ListingsAPI && window.ListingsAPI.subscribe) {
@@ -6661,7 +6678,7 @@
                 }
             }
 
-            // ─── LOAD DATA ─────────────────────────────────────────────────────
+            // ─── LOAD DATA ────────────────────────────────────────────────
             async function reloadData() {
                 await Promise.all([
                     reloadPosts(),
@@ -6672,26 +6689,77 @@
                 return appData;
             }
 
-            // ─── TAGS MODAL (for hashtags) ──────────────────────────────────
-            function closeTagsModal() {
-                document.getElementById('tagsModal').classList.remove('open');
-                unlockBodyScroll();
+            // ─── INIT PLAYERS ─────────────────────────────────────────────
+            function initPlayers(root) {
+                root.querySelectorAll('.ig-video-wrap video:not([data-plyr-init]), .video-container video:not([data-plyr-init]), .media-carousel-slide video:not([data-plyr-init])')
+                    .forEach(vid => {
+                        vid.dataset.plyrInit = 'true';
+                        setupPlyrPlayer(vid);
+                    });
+                initAllCarousels(root);
+                setTimeout(() => {
+                    setupVideoAutoplay(root);
+                    setTimeout(() => {
+                        const visibleWraps = root.querySelectorAll(
+                            '.ig-video-wrap, .video-container, .media-carousel');
+                        let firstVisible = null;
+                        for (const w of visibleWraps) {
+                            const rect = w.getBoundingClientRect();
+                            if (rect.top < window.innerHeight && rect.bottom > 0) {
+                                firstVisible = w;
+                                break;
+                            }
+                        }
+                        if (firstVisible) {
+                            const vid = firstVisible.querySelector('video');
+                            if (vid && vid.plyr) {
+                                vid.plyr.play().catch(() => {});
+                                currentlyPlayingVideo = vid;
+                            } else if (vid) {
+                                vid.play().catch(() => {});
+                                currentlyPlayingVideo = vid;
+                            }
+                            const ytIframe = firstVisible.querySelector('iframe');
+                            if (ytIframe) {
+                                const idx = ytIframe.id.replace('yt-', '');
+                                if (!ytState[idx]) ytState[idx] = { muted: true,
+                                playing: true };
+                                if (!ytState[idx].playing) {
+                                    ytPostMessage(idx, 'playVideo');
+                                    ytState[idx].playing = true;
+                                    _showYtPauseIcon(idx, true);
+                                    _updateMuteBadge(idx);
+                                    currentlyPlayingVideo = idx;
+                                }
+                            }
+                        }
+                    }, 400);
+                }, 300);
             }
 
-            // ─── RENDER INITIAL SKELETON ────────────────────────────────────
-            function renderInitialSkeleton() {
-                const co = document.getElementById('user-content');
-                if (!co) return;
-                co.innerHTML = `<div class="max-w-2xl mx-auto"><div></div><div id="feed-container" class="px-0">${renderSkeletons(3)}</div></div>`;
-            }
-
-            // ─── INIT ─────────────────────────────────────────────────────────
+            // ─── INIT ─────────────────────────────────────────────────────
             async function init() {
-                renderInitialSkeleton();
-                if (window.AuthUser && window.AuthUser.getCurrentUser) {} else {
-                    await new Promise(resolve => setTimeout(resolve, 300));
+                // 1. Register render handlers with IndexRender
+                registerRenderHandlers();
+
+                // 2. Wait for auth and load profile
+                if (window.AuthUser && window.AuthUser.getCurrentUser) {
+                    const user = window.AuthUser.getCurrentUser();
+                    if (user && user.isLoggedIn) {
+                        // Load profile into Feed
+                        if (window.FreeUpperFeed) {
+                            await window.FreeUpperFeed.loadProfile(user.id);
+                            // Check onboarding
+                            if (window.FreeUpperFeed.needsOnboarding && window.FreeUpperFeed.needsOnboarding()) {
+                                if (window.FreeUpperOnboarding && window.FreeUpperOnboarding.showOnboarding) {
+                                    window.FreeUpperOnboarding.showOnboarding();
+                                }
+                            }
+                        }
+                    }
                 }
 
+                // 3. Load initial data
                 updateNavAvatar();
                 if (typeof registerCurrentUserInDirectory === 'function') {
                     registerCurrentUserInDirectory();
@@ -6699,6 +6767,12 @@
                 await reloadData();
                 setupRealtime();
 
+                // 4. Load initial feed
+                if (window.FreeUpperFeed) {
+                    await window.FreeUpperFeed.loadInitial({ source: 'composer' });
+                }
+
+                // 5. Setup UI and event listeners
                 const globalComment = document.getElementById('global-comment-textarea');
                 if (globalComment && window.Mentions) {
                     window.Mentions.initMentions(globalComment);
@@ -6910,7 +6984,13 @@
                 setupKeyboardAvoidance();
             }
 
-            // ─── EXPOSE GLOBALLY ──────────────────────────────────────────────
+            // ─── TAGS MODAL ───────────────────────────────────────────────
+            function closeTagsModal() {
+                document.getElementById('tagsModal').classList.remove('open');
+                unlockBodyScroll();
+            }
+
+            // ─── EXPOSE GLOBALLY ──────────────────────────────────────────
             window.toggleReaction = toggleReaction;
             window.openExplorePost = openExplorePost;
             window.closeExploreFullscreen = closeExploreFullscreen;
