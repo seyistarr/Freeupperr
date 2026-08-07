@@ -7056,7 +7056,6 @@
             <div class="tags-body" id="tagsBody"></div>
         </div>
     </div>
-
     <!-- REPOSTED BY SHEET -->
     <div class="reposters-modal-overlay" id="repostersModalOverlay">
         <div class="reposters-sheet">
@@ -7073,5 +7072,35 @@
             <div class="reposters-body" id="repostersBody"></div>
         </div>
     </div>
+    <!-- ===== DEBUG PANEL ===== -->
+    <div id="debug-panel" style="position:fixed; bottom:80px; left:10px; background:rgba(0,0,0,0.85); color:#fff; padding:10px 14px; border-radius:12px; font-size:13px; z-index:9999; max-width:90%; pointer-events:none; font-family:monospace; box-shadow:0 4px 20px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1);">
+        <div id="debug-status">⏳ Loading feed…</div>
+        <div id="debug-count" style="font-size:11px; opacity:0.7; margin-top:4px;"></div>
+    </div>
+
+    <script>
+        (function() {
+            const statusEl = document.getElementById('debug-status');
+            const countEl = document.getElementById('debug-count');
+
+            function updateDebug() {
+                if (window.FreeUpperFeed) {
+                    const state = window.FreeUpperFeed.getState ? window.FreeUpperFeed.getState() : {};
+                    const posts = window.FreeUpperFeed.getCurrentPage ? window.FreeUpperFeed.getCurrentPage() : [];
+                    statusEl.textContent = posts.length > 0 ? `✅ ${posts.length} posts loaded` : '⚠️ No posts loaded';
+                    countEl.textContent = `raw: ${state.rawCount || 0} | ranked: ${state.rankedCount || 0}`;
+                } else {
+                    statusEl.textContent = '⏳ FreeUpperFeed not ready';
+                }
+            }
+
+            setInterval(updateDebug, 2000);
+            document.addEventListener('loaded', updateDebug);
+            document.addEventListener('refreshed', updateDebug);
+            document.addEventListener('page-advanced', updateDebug);
+            document.addEventListener('more', updateDebug);
+        })();
+    </script>
+
 </body>
 </html>
