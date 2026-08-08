@@ -2587,6 +2587,63 @@
         @view-transition {
             navigation: auto;
         }
+
+        /* ─── ITEM 4 FOLLOW BUTTON (already above) ─── */
+        /* ─── ITEM 5+6 SUGGESTED PEOPLE CSS ─── */
+        .suggested-people-section { padding: 16px 0; border-top: 8px solid var(--bg2); border-bottom: 8px solid var(--bg2); }
+        .suggested-people-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px 12px; }
+        .suggested-people-header h3 { font-size: 1rem; font-weight: 800; color: var(--text); }
+        .suggested-people-header span { font-size: .8rem; color: var(--muted); }
+        .suggested-people-scroll { display: flex; gap: 10px; overflow-x: auto; padding: 0 16px; -webkit-overflow-scrolling: touch; }
+        .suggested-person-card { flex: 0 0 150px; border: 1px solid var(--brd); border-radius: 16px; padding: 14px 12px; text-align: center; background: var(--bg2); }
+        .suggested-person-card img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; margin: 0 auto 8px; display: block; }
+        .suggested-person-name { font-size: .82rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .suggested-person-username { font-size: .72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+        .suggested-person-bio { font-size: .7rem; color: var(--muted); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 10px; min-height: 26px; }
+
+        /* ─── ITEM 8 COMMENT ACTIONS & SIMILAR POSTS ─── */
+        .comment-actions-menu, .reply-actions-menu {
+            position: fixed; z-index: 900;
+            background: var(--bg2); border: 1px solid var(--brd);
+            border-radius: 14px; overflow: hidden; min-width: 160px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.3);
+        }
+        .comment-actions-menu button, .reply-actions-menu button {
+            display: block; width: 100%; text-align: left; padding: 12px 16px;
+            background: none; border: none; font-size: .88rem; font-weight: 600;
+            color: var(--text); cursor: pointer;
+        }
+        .comment-actions-menu button:active, .reply-actions-menu button:active { background: var(--pdim); }
+        .comment-actions-menu button.danger, .reply-actions-menu button.danger { color: #ef4444; }
+        .comment-actions-menu button + button, .reply-actions-menu button + button { border-top: 1px solid var(--brd); }
+        .comment-menu-btn, .reply-menu-btn {
+            background: none; border: none; color: var(--muted); font-size: 1rem;
+            font-weight: 700; cursor: pointer; padding: 0 4px; line-height: 1;
+        }
+        .comment-pinned-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            font-size: .68rem; font-weight: 700; color: #7C3AED;
+            background: rgba(124,58,237,.12); padding: 2px 7px; border-radius: 6px;
+            margin-right: 6px;
+        }
+        .comment-edited-tag { font-size: .68rem; color: var(--muted); margin-left: 4px; }
+        .comment-edit-box textarea {
+            width: 100%; background: var(--bg3); border: 1px solid var(--brd);
+            border-radius: 10px; padding: 8px 10px; font-size: .85rem; color: var(--text);
+            resize: none; font-family: inherit;
+        }
+        .comment-edit-actions { display: flex; gap: 8px; margin-top: 6px; }
+        .comment-edit-actions button {
+            padding: 6px 14px; border-radius: 8px; border: none; font-size: .78rem; font-weight: 700; cursor: pointer;
+        }
+        .comment-edit-save { background: #7C3AED; color: #fff; }
+        .comment-edit-cancel { background: var(--bg3); color: var(--text); }
+        .similar-posts-section { padding: 12px 0 4px; border-bottom: 1px solid var(--brd); margin-bottom: 8px; }
+        .similar-posts-title { font-size: .8rem; font-weight: 700; color: var(--muted); padding: 0 0 8px; }
+        .similar-posts-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 0 0 4px; -webkit-overflow-scrolling: touch; }
+        .similar-post-card { flex: 0 0 84px; aspect-ratio: 9/16; border-radius: 10px; overflow: hidden; cursor: pointer; background: var(--bg3); }
+        .similar-post-card img { width: 100%; height: 100%; object-fit: cover; }
+
     </style>
 </head>
 <body>
@@ -5310,13 +5367,14 @@ carouselEl._cleanup = function() {
                 return p;
             }
 
+            // ─── ITEM 5+6: add slot for suggested people ──────────────────
             function renderFeedContainer() {
                 const ps = getFilteredSortedPosts(),
                     hf = searchQuery || currentCategoryFilter;
                 const hh = hf ?
                     `<div class="mb-4 px-4 pt-3"><h1 class="text-xl font-heading font-bold" style="color:var(--text);">${searchQuery?'Search results':currentCategoryFilter}</h1><p class="text-sm" style="color:var(--muted);">${ps.length} post(s)</p></div>` :
                     '';
-                return `<div class="max-w-2xl mx-auto"><div>${hh}</div><div id="feed-container" class="px-0"></div></div>`;
+                return `<div class="max-w-2xl mx-auto"><div>${hh}</div><div id="suggested-people-slot"></div><div id="feed-container" class="px-0"></div></div>`;
             }
 
             function renderSkeletons(c = 3) {
@@ -5732,11 +5790,19 @@ carouselEl._cleanup = function() {
                 return h;
             }
 
+            // ─── ITEM 8: updated renderCommentThread with menu & pin ────
             function renderCommentThread(c, allComments, postId) {
                 const author = window.getAuthorFromProfile(c.profile);
                 const username = truncateName(author.name, 16);
                 const avatar = author.avatar;
                 const verifiedStatus = author.verified_status;
+                const cu = getCurrentUser();
+                const post = appData.posts.find(p => p.id === postId);
+                const isMine = cu && cu.id === c.userId;
+                const isPostOwner = post && cu && post.user_id === cu.id;
+                const isPinned = !!c.pinned;
+                const pinnedBadgeHtml = isPinned ? '<span class="comment-pinned-badge">📌 Pinned</span>' : '';
+                const editedTagHtml = c.edited ? '<span class="comment-edited-tag">(edited)</span>' : '';
 
                 const ds = getAllDescendants(c.id, allComments),
                     hr = ds.length > 0,
@@ -5768,8 +5834,8 @@ carouselEl._cleanup = function() {
                 return `<div class="comment-item" data-comment-id="${c.id}">
                         <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
                         <div class="comment-body">
-                          <div class="comment-username">${escapeHtml(username)} ${badgeHtml}</div>
-                          <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${renderedMsg}</div>
+                          <div class="comment-username">${pinnedBadgeHtml}${escapeHtml(username)} ${badgeHtml}</div>
+                          <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${renderedMsg}${editedTagHtml}</div>
                           ${il?`<button class="comment-show-more">Show more</button>`:''}
                           <div class="comment-meta">
                             <span class="comment-time">${formatRelativeTime(c.time)}</span>
@@ -5778,16 +5844,23 @@ carouselEl._cleanup = function() {
                               <svg viewBox="0 0 24 24" fill="${isLiked?'#DC2626':'none'}" stroke="${isLiked?'#DC2626':'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                               <span class="like-count">${likeCount>0?likeCount:''}</span>
                             </button>
+                            <button class="comment-menu-btn" onclick="openCommentActionsMenu(event, '${c.id}', ${isMine}, ${isPostOwner}, ${isPinned})">⋯</button>
                           </div>
                         </div>
                       </div>${rh}`;
             }
 
+            // ─── ITEM 8: updated renderReplyItem with menu ──────────────
             function renderReplyItem(r, allComments, postId) {
                 const author = window.getAuthorFromProfile(r.profile);
                 const username = truncateName(author.name, 16);
                 const avatar = author.avatar;
                 const verifiedStatus = author.verified_status;
+                const cu = getCurrentUser();
+                const post = appData.posts.find(p => p.id === postId);
+                const isMine = cu && cu.id === r.userId;
+                const isPostOwner = post && cu && post.user_id === cu.id;
+                const editedTagHtml = r.edited ? '<span class="comment-edited-tag">(edited)</span>' : '';
 
                 const pc = allComments.find(c => c.id === r.parentId),
                     ru = pc ? (pc.profile ? pc.profile.display_name : '') : '';
@@ -5808,7 +5881,7 @@ carouselEl._cleanup = function() {
                         <div class="${avatarClass}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
                         <div class="reply-body">
                           <div class="reply-username">${escapeHtml(username)} ${badgeHtml}</div>
-                          <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${renderedMsg}</div>
+                          <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${renderedMsg}${editedTagHtml}</div>
                           ${il?`<button class="comment-show-more">Show more</button>`:''}
                           <div class="reply-meta">
                             <span class="reply-time">${formatRelativeTime(r.time)}</span>
@@ -5817,11 +5890,156 @@ carouselEl._cleanup = function() {
                               <svg viewBox="0 0 24 24" fill="${isLiked?'#DC2626':'none'}" stroke="${isLiked?'#DC2626':'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                               <span class="like-count">${likeCount>0?likeCount:''}</span>
                             </button>
+                            <button class="reply-menu-btn" onclick="openCommentActionsMenu(event, '${r.id}', ${isMine}, ${isPostOwner}, false)">⋯</button>
                           </div>
                         </div>
                       </div>`;
             }
 
+            // ─── ITEM 8: comment action functions ──────────────────────────
+            window.openCommentActionsMenu = function(event, commentId, isMine, isPostOwner, isPinned) {
+                event.stopPropagation();
+                document.querySelectorAll('.comment-actions-menu, .reply-actions-menu').forEach(m => m.remove());
+                const menu = document.createElement('div');
+                menu.className = 'comment-actions-menu';
+                let buttonsHtml = '';
+                if (isMine) buttonsHtml += '<button data-action="edit">Edit</button>';
+                if (isMine || isPostOwner) buttonsHtml += '<button data-action="delete" class="danger">Delete</button>';
+                if (isPostOwner) buttonsHtml += '<button data-action="pin">' + (isPinned ? 'Unpin' : 'Pin comment') + '</button>';
+                if (!isMine) buttonsHtml += '<button data-action="report" class="danger">Report</button>';
+                menu.innerHTML = buttonsHtml;
+                document.body.appendChild(menu);
+                const rect = event.target.getBoundingClientRect();
+                const menuWidth = 170;
+                let left = rect.left - menuWidth + rect.width;
+                if (left < 8) left = 8;
+                if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+                menu.style.left = left + 'px';
+                menu.style.top = (rect.bottom + 6) + 'px';
+                menu.querySelectorAll('button').forEach(btn => {
+                    btn.onclick = () => {
+                        const action = btn.dataset.action;
+                        menu.remove();
+                        if (action === 'edit') startEditComment(commentId);
+                        else if (action === 'delete') confirmDeleteComment(commentId);
+                        else if (action === 'pin') togglePinCommentUI(commentId);
+                        else if (action === 'report') reportCommentUI(commentId);
+                    };
+                });
+                setTimeout(() => {
+                    document.addEventListener('pointerdown', function closeMenu(ev) {
+                        if (!menu.contains(ev.target)) {
+                            menu.remove();
+                            document.removeEventListener('pointerdown', closeMenu);
+                        }
+                    }, { capture: true, once: true });
+                }, 0);
+            };
+
+            function startEditComment(commentId) {
+                const el = document.querySelector('.comment-text[data-cid="' + commentId + '"]');
+                if (!el) return;
+                const originalHtml = el.innerHTML;
+                const originalText = el.textContent;
+                el.innerHTML =
+                    '<div class="comment-edit-box">' +
+                    '<textarea rows="2">' + escapeHtml(originalText) + '</textarea>' +
+                    '<div class="comment-edit-actions">' +
+                    '<button class="comment-edit-save">Save</button>' +
+                    '<button class="comment-edit-cancel">Cancel</button>' +
+                    '</div></div>';
+                const textarea = el.querySelector('textarea');
+                textarea.focus();
+                textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                el.querySelector('.comment-edit-cancel').onclick = () => { el.innerHTML = originalHtml; };
+                el.querySelector('.comment-edit-save').onclick = async () => {
+                    const newText = textarea.value.trim();
+                    if (!newText) return showToast('Comment cannot be empty.', 'o');
+                    try {
+                        await window.PostsAPI.editComment(commentId, newText);
+                        showToast('Comment updated', 'g');
+                        refreshCommentsList(currentPostId, 'comments-list');
+                    } catch (err) {
+                        showToast(err.message || 'Failed to edit comment', 'r');
+                        el.innerHTML = originalHtml;
+                    }
+                };
+            }
+
+            function confirmDeleteComment(commentId) {
+                if (!confirm('Delete this comment? This cannot be undone.')) return;
+                window.PostsAPI.deleteComment(commentId)
+                    .then(() => {
+                        showToast('Comment deleted', 'g');
+                        const p = appData.posts.find(p => p.id === currentPostId);
+                        if (p && typeof p.comments === 'number') p.comments = Math.max(0, p.comments - 1);
+                        updateCommentCount(currentPostId);
+                        refreshCommentsList(currentPostId, 'comments-list');
+                    })
+                    .catch(err => showToast(err.message || 'Failed to delete comment', 'r'));
+            }
+
+            function togglePinCommentUI(commentId) {
+                window.PostsAPI.togglePinComment(commentId)
+                    .then(({ pinned }) => {
+                        showToast(pinned ? 'Comment pinned' : 'Comment unpinned', 'g');
+                        refreshCommentsList(currentPostId, 'comments-list');
+                    })
+                    .catch(err => showToast(err.message || 'Failed to pin comment', 'r'));
+            }
+
+            function reportCommentUI(commentId) {
+                const reason = prompt('Why are you reporting this comment?', 'Inappropriate content');
+                if (reason === null) return;
+                window.PostsAPI.reportComment(commentId, reason || 'Inappropriate content')
+                    .then(() => showToast('Comment reported', 'g'))
+                    .catch(err => showToast(err.message || 'Failed to report comment', 'r'));
+            }
+
+            // ─── ITEM 8: load similar posts ──────────────────────────────
+            async function loadSimilarPosts(postId) {
+                const section = document.getElementById('similarPostsSection-' + postId);
+                const scroll = document.getElementById('similarPostsScroll-' + postId);
+                if (!section || !scroll || !window.PostsAPI || typeof window.PostsAPI.findSimilarPosts !== 'function') return;
+                try {
+                    const similar = await window.PostsAPI.findSimilarPosts(postId, 8);
+                    if (!similar.length) { section.style.display = 'none'; return; }
+                    scroll.innerHTML = similar.map(p =>
+                        '<div class="similar-post-card" onclick="openSinglePost(\'' + p.id + '\')">' +
+                        '<img src="' + (p.thumbnailUrl || '') + '" alt="" loading="lazy">' +
+                        '</div>'
+                    ).join('');
+                    section.style.display = 'block';
+                } catch (err) {
+                    console.warn('loadSimilarPosts failed:', err);
+                    section.style.display = 'none';
+                }
+            }
+
+            // ─── COMMENTS HELPERS (continued) ──────────────────────────────
+            // ─── ITEM 1: refreshCommentsList async ────────────────────────
+            async function refreshCommentsList(postId, listId) {
+                const p = appData.posts.find(p => p.id === postId);
+                if (!p) return;
+                const cl = document.getElementById(listId);
+                if (!cl) return;
+                cl.innerHTML = commentSkeletons(3);
+                try {
+                    const comments = await window.PostsAPI.loadComments(postId);
+                    p.comments = comments;
+                    const sorted = [...comments].sort((a, b) => {
+                        if (!!b.pinned !== !!a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+                        return new Date(a.time) - new Date(b.time);
+                    });
+                    const vc = getVisibleComments(postId);
+                    cl.innerHTML = renderCommentsHTML(sorted, postId, vc);
+                } catch (err) {
+                    console.error('refreshCommentsList failed:', err);
+                    cl.innerHTML = '<p style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Could not load comments.</p>';
+                }
+            }
+
+            // ─── ITEM 1: addComment stores only comment count ──────────────
             async function addComment(postId, parentId, message, mentions = []) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
@@ -5830,9 +6048,8 @@ carouselEl._cleanup = function() {
                         window.AuthUser.requireAuth(async () => {
                             try {
                                 const comment = await window.PostsAPI.addComment(postId, parentId, message, mentions);
-                                if (!Array.isArray(p.comments)) p.comments = [];
-                                p.comments.push(comment);
-                                p.commentCount = (p.commentCount || 0) + 1;
+                                // ─── store as number, not array ──────────
+                                p.comments = (typeof p.comments === 'number') ? p.comments + 1 : 1;
                                 const user = getCurrentUser();
                                 if (comment.id && mentions.length > 0 && window.Mentions) {
                                     window.Mentions.notifyMentionedUsers(
@@ -5865,33 +6082,18 @@ carouselEl._cleanup = function() {
                         likeCount: 0,
                         likedByMe: false,
                     };
-                    if (!Array.isArray(p.comments)) p.comments = [];
-                    p.comments.push(comment);
-                    p.commentCount = (p.commentCount || 0) + 1;
+                    // ─── store as number ──────────────────────────────────
+                    p.comments = (typeof p.comments === 'number') ? p.comments + 1 : 1;
                     // ─── NOTIFY: comment ──────────────────────────────
                     window.IndexInteractions?.notify(postId, 'comment');
                     return comment;
                 }
             }
 
-            function refreshCommentsList(postId, listId) {
-                const p = appData.posts.find(p => p.id === postId);
-                if (!p) return;
-                const cl = document.getElementById(listId);
-                if (!cl) return;
-                const ac = Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false) : [],
-                    vc = getVisibleComments(postId);
-                cl.innerHTML = commentSkeletons(3);
-                requestAnimationFrame(() => {
-                    cl.innerHTML = renderCommentsHTML(ac, postId, vc);
-                });
-            }
-
             function updateCommentCount(postId) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
-                const cc = Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false).length : (p
-                    .comments || 0);
+                const cc = (typeof p.comments === 'number') ? p.comments : 0;
                 document.querySelectorAll(`article[data-post-id="${postId}"] .comment-btn .comment-count`).forEach(el =>
                     el.textContent = formatCount(cc));
                 const h3 = document.querySelector(`#comments-count-${postId}`);
@@ -6027,13 +6229,7 @@ carouselEl._cleanup = function() {
                 try {
                     await addComment(currentPostId, pi, message, mentions);
                     if (pi) {
-                        const p = appData.posts.find(x => x.id === currentPostId);
-                        const ac = p && Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false) : [];
-                        const topId = findTopAncestorId(pi, ac);
-                        const ds = getAllDescendants(topId, ac);
-                        expandedThreads.set(topId, ds.length);
-                    }
-                    if (document.getElementById('comments-list')) {
+                        // reload comments via refreshCommentsList
                         refreshCommentsList(currentPostId, 'comments-list');
                     }
                     updateCommentCount(currentPostId);
@@ -6055,13 +6251,6 @@ carouselEl._cleanup = function() {
                 updateExploreReplyContextUI();
                 try {
                     await addComment(currentPostId, pi, message, mentions);
-                    if (pi) {
-                        const p = appData.posts.find(x => x.id === currentPostId);
-                        const ac = p && Array.isArray(p.comments) ? p.comments.filter(c => c.approved !== false) : [];
-                        const topId = findTopAncestorId(pi, ac);
-                        const ds = getAllDescendants(topId, ac);
-                        expandedThreads.set(topId, ds.length);
-                    }
                     refreshCommentsList(currentPostId, 'comments-list');
                     updateCommentCount(currentPostId);
                     showToast(pi ? 'Reply posted' : 'Reply posted');
@@ -6089,6 +6278,7 @@ carouselEl._cleanup = function() {
                       </div>`;
             }
 
+            // ─── ITEM 4: updated buildSinglePostHTML (follow inline, similar posts) ───
             function buildSinglePostHTML(post) {
                 if (!post) return '<div class="p-8 text-center" style="color:var(--muted);">Post not found</div>';
                 const author = window.getAuthorFromProfile(post.profile);
@@ -6099,8 +6289,8 @@ carouselEl._cleanup = function() {
                 const mediaCount = getMediaItems(post).length;
                 const hasMedia = mediaCount > 0;
                 const bm = isBookmarked(post.id);
-                const comments = Array.isArray(post.comments) ? post.comments.filter(c => c.approved !== false) : [],
-                    vc = getVisibleComments(post.id);
+                const comments = [];
+                const vc = getVisibleComments(post.id);
                 const followBtn = buildFollowButton(post.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
 
@@ -6118,22 +6308,22 @@ carouselEl._cleanup = function() {
 
                 return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
                         <article>
-                          <div class="flex items-center gap-2 mb-2">
+                          <div class="flex items-center gap-2 mb-2" style="width:100%;">
                             <img data-author-avatar src="${aa}" class="w-10 h-10 rounded-full object-cover cursor-pointer" style="flex-shrink:0;">
-                            <div>
-                              <div class="flex items-center gap-1.5 flex-wrap">
+                            <div style="flex:1;min-width:0;">
+                              <div class="flex items-center gap-1.5 flex-wrap" style="width:100%;">
                                 <span data-author-name class="font-bold text-sm cursor-pointer hover:underline" style="color:var(--text);">${escapeHtml(da)}</span>
                                 <span data-author-badge-wrapper>${badgeHtml}</span>
+                                ${followBtn}
                               </div>
                               <div class="text-xs flex items-center gap-1" style="color:var(--muted);">${svgClock()} ${formatRelativeTime(post.timestamp || post.date)}</div>
-                              ${followBtn}
                             </div>
                           </div>
                           ${topDotsHtml}
                           ${mh}
                         </article>
                         <div class="post-actions-row" style="max-width:100%;justify-content:space-between;padding:0 4px;" data-post-reactions="${post.id}">
-                          <span class="comment-btn ${post.commentsHidden?'comments-off':''}">${post.commentsHidden?svgCommentOff():svgComment()}<span class="comment-count" id="comments-count-${post.id}">${formatCount(comments.length)}</span></span>
+                          <span class="comment-btn ${post.commentsHidden?'comments-off':''}">${post.commentsHidden?svgCommentOff():svgComment()}<span class="comment-count" id="comments-count-${post.id}">${formatCount(0)}</span></span>
                           ${buildReactionButton(post.id)}
                           <span class="views-count">${svgEye()}<span>${formatCount(post.views||0)}</span></span>
                           <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}<span class="bookmark-count">${formatCount(post.bookmarkCount||0)}</span></span>
@@ -6146,9 +6336,15 @@ carouselEl._cleanup = function() {
                           ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true })}</div>` : ''}
                         </div>` : ''}
                         <hr class="my-4" style="border-color:var(--brd);">
+
+                        <div id="similarPostsSection-${post.id}" class="similar-posts-section" style="display:none;">
+                          <div class="similar-posts-title">More like this</div>
+                          <div class="similar-posts-scroll" id="similarPostsScroll-${post.id}"></div>
+                        </div>
+
                         <div class="mt-1">
                           <h3 class="font-heading font-bold text-base mb-3" style="color:var(--text);">Replies</h3>
-                          <div id="comments-list">${renderCommentsHTML(comments,post.id,vc)}</div>
+                          <div id="comments-list">${commentSkeletons(3)}</div>
                           ${post.commentsHidden ? buildCommentsOffIllustration() : ''}
                         </div>
                       </div>`;
@@ -6199,7 +6395,9 @@ carouselEl._cleanup = function() {
                 const catNameEl = document.getElementById('explore-category-name');
                 if (catNameEl) catNameEl.textContent = post ? (post.title || 'Post') : 'Post';
 
-                if (post && !Array.isArray(post.comments)) post.comments = [];
+                // ─── ensure comments is a number for the view ──────────
+                if (post && typeof post.comments !== 'number') post.comments = 0;
+
                 fc.innerHTML = buildSinglePostHTML(post);
                 initExternalCarouselDots(fc);
 
@@ -6251,6 +6449,7 @@ carouselEl._cleanup = function() {
                         const cl = document.getElementById('comments-list');
                         if (cl) cl.innerHTML = commentSkeletons(3);
                         window.PostsAPI.loadComments(id).then(comments => {
+                            // store as array for rendering
                             post.comments = comments;
                             if (uiPage === 'single-post-explore' && currentPostId === id) {
                                 refreshCommentsList(id, 'comments-list');
@@ -6258,6 +6457,12 @@ carouselEl._cleanup = function() {
                             }
                         }).catch(err => console.error('Failed to load comments:', err));
                     }
+                }
+
+                // ─── ITEM 8: load similar posts ──────────────────────────
+                if (post && !post.commentsHidden) {
+                    refreshCommentsList(id, 'comments-list');
+                    loadSimilarPosts(id);
                 }
 
                 if (focusComment) {
@@ -6283,7 +6488,6 @@ carouselEl._cleanup = function() {
                 currentPostId = null;
                 const returnPage = window._fullscreenReturnPage || 'home';
                 uiPage = returnPage;
-                // reset nav state when returning
                 bottomNavHidden = false;
                 const bottomNavEl = document.getElementById('bottomNav');
                 const chipsEl = document.getElementById('category-chips');
@@ -6331,7 +6535,6 @@ carouselEl._cleanup = function() {
                                     el.classList.add('bookmark-breathe');
                                     setTimeout(() => el.classList.remove('bookmark-breathe'), 250);
                                 });
-                            // ─── NOTIFY: bookmark/unbookmark ──────────
                             window.IndexInteractions?.notify(postId, nb ? 'bookmark' : 'unbookmark');
                             showToast(nb ? 'Saved' : 'Removed from saved');
                         });
@@ -6571,6 +6774,50 @@ carouselEl._cleanup = function() {
                             </section>
                         </div>
                     `;
+            }
+
+            // ─── ITEM 5+6: suggested people functions ─────────────────────
+            function truncateBio(bio, max = 60) {
+                bio = bio || '';
+                return bio.length > max ? bio.slice(0, max).trim() + '…' : bio;
+            }
+
+            async function loadSuggestedPeople() {
+                const cu = getCurrentUser();
+                if (!cu || !cu.isLoggedIn) return [];
+                const followingIds = Object.keys(appData.follows || {});
+                let query = window.sb
+                    .from('profiles')
+                    .select('id, display_name, username, avatar_url, bio, verified_status')
+                    .neq('id', cu.id)
+                    .limit(15);
+                if (followingIds.length) {
+                    query = query.not('id', 'in', `(${followingIds.join(',')})`);
+                }
+                const { data, error } = await query;
+                if (error) { console.warn('loadSuggestedPeople error:', error); return []; }
+                return data || [];
+            }
+
+            function buildSuggestedPeopleHTML(people) {
+                if (!people.length) return '';
+                const cards = people.map(p => {
+                    const name = truncateName(p.display_name || 'User', 18);
+                    const username = truncateName(p.username || '', 20);
+                    const bio = truncateBio(p.bio, 55);
+                    const avatar = p.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.id}`;
+                    return `<div class="suggested-person-card" data-user-id="${p.id}">
+                        <img src="${avatar}" alt="" onclick="goToProfile('${p.id}')" style="cursor:pointer;">
+                        <div class="suggested-person-name" onclick="goToProfile('${p.id}')" style="cursor:pointer;">${escapeHtml(name)}</div>
+                        <div class="suggested-person-username">@${escapeHtml(username)}</div>
+                        <div class="suggested-person-bio">${escapeHtml(bio)}</div>
+                        <button class="follow-btn rel-none" style="width:100%;margin-left:0;" data-user-id="${p.id}" onclick="toggleFollowHandler(event, '${p.id}')">Follow</button>
+                    </div>`;
+                }).join('');
+                return `<div class="suggested-people-section">
+                    <div class="suggested-people-header"><h3>People you may know</h3><span>Suggested</span></div>
+                    <div class="suggested-people-scroll">${cards}</div>
+                </div>`;
             }
 
             function renderUI() {
@@ -6861,7 +7108,7 @@ carouselEl._cleanup = function() {
                 }, 150);
             }
 
-            // ─── REALTIME ──────────────────────────────────────────────────────
+            // ─── ITEM 2: realtime debounced with scroll preservation ──────
             function setupRealtime() {
                 if (window.PostsAPI && window.PostsAPI.subscribe) {
                     window.PostsAPI.subscribe((payload) => {
@@ -6876,11 +7123,18 @@ carouselEl._cleanup = function() {
                 }
 
                 if (window.PostsAPI && window.PostsAPI.subscribeToAll) {
-                    window.PostsAPI.subscribeToAll(async (change) => {
-                        await reloadData();
-                        if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'single-post-explore') {
-                            renderUI();
-                        }
+                    let _realtimeDebounceTimer = null;
+                    window.PostsAPI.subscribeToAll((change) => {
+                        if (change.table !== 'posts' || change.event !== 'INSERT') return;
+                        clearTimeout(_realtimeDebounceTimer);
+                        _realtimeDebounceTimer = setTimeout(async () => {
+                            const scrollY = window.scrollY;
+                            await reloadData();
+                            if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'single-post-explore') {
+                                renderUI();
+                                window.scrollTo(0, scrollY);
+                            }
+                        }, 8000);
                     });
                 }
 
@@ -6922,7 +7176,7 @@ carouselEl._cleanup = function() {
                 co.innerHTML = `<div class="max-w-2xl mx-auto"><div></div><div id="feed-container" class="px-0">${renderSkeletons(3)}</div></div>`;
             }
 
-            // ─── INIT ─────────────────────────────────────────────────────────
+            // ─── ITEM 5+6: inject suggested people in init ──────────────────
             async function init() {
                 renderInitialSkeleton();
                 if (window.AuthUser && window.AuthUser.getCurrentUser) {} else {
@@ -7139,6 +7393,12 @@ carouselEl._cleanup = function() {
                         .subscribe();
                 }
 
+                // ─── ITEM 5+6: load suggested people after data ────────────
+                loadSuggestedPeople().then(people => {
+                    const slot = document.getElementById('suggested-people-slot');
+                    if (slot && people.length) slot.innerHTML = buildSuggestedPeopleHTML(people);
+                });
+
                 const urlParams = new URLSearchParams(window.location.search);
                 const postIdParam = urlParams.get('post');
                 const productIdParam = urlParams.get('product');
@@ -7188,6 +7448,12 @@ carouselEl._cleanup = function() {
             window.closeRepostersSheet = closeRepostersSheet;
             window.toggleLockPostFromShare = toggleLockPostFromShare;
             window.toggleCommentsFromShare = toggleCommentsFromShare;
+            window.openCommentActionsMenu = openCommentActionsMenu;
+            window.startEditComment = startEditComment;
+            window.confirmDeleteComment = confirmDeleteComment;
+            window.togglePinCommentUI = togglePinCommentUI;
+            window.reportCommentUI = reportCommentUI;
+            window.loadSimilarPosts = loadSimilarPosts;
 
             window.selectMarketCategory = selectMarketCategory;
             window.selectMarketSubcategory = selectMarketSubcategory;
