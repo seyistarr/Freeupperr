@@ -128,6 +128,31 @@
   }
 
   // ===================================================================
+  // AVERAGE MULTIPLE EMBEDDINGS INTO ONE
+  // -------------------------------------------------------------
+  // When a post has multiple images, we compute an embedding for each
+  // one, then average them element-wise into a single 1024-dim vector.
+  // This gives pgvector one combined "visual fingerprint" per post
+  // instead of needing to store/compare arrays of vectors.
+  // ===================================================================
+  function averageEmbeddings(vectors) {
+    const valid = (vectors || []).filter(v => Array.isArray(v) && v.length);
+    if (!valid.length) return null;
+    if (valid.length === 1) return valid[0];
+
+    const length = valid[0].length;
+    const sum = new Array(length).fill(0);
+
+    valid.forEach(vec => {
+      for (let i = 0; i < length; i++) {
+        sum[i] += vec[i];
+      }
+    });
+
+    return sum.map(v => v / valid.length);
+  }
+
+  // ===================================================================
   // PUBLIC API
   // ===================================================================
   window.ImageEmbedding = {
@@ -135,7 +160,8 @@
     loadModel,
     getImageEmbedding,
     getEmbeddingFromFile,
-    cosineSimilarity
+    cosineSimilarity,
+    averageEmbeddings   // ← new
   };
 
   console.log('✅ image-embedding.js v1.0.0 loaded.');
