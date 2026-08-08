@@ -58,6 +58,16 @@
     <script src="https://vjs.zencdn.net/8.6.1/video.min.js">
     </script>
 
+    <!-- ══════════════════════════════════════════
+    IMAGE EMBEDDING — for visual similarity
+    ══════════════════════════════════════════ -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js">
+    </script>
+    <script src="image-embedding.js" defer>
+    </script>
+
     <style>
         /* ── all existing styles from original create.html, minus duplicate nav rules ── */
         *,
@@ -1719,6 +1729,28 @@
             });
         }
 
+        // ──────────────────────────────────────────────────────────────
+        // IMAGE EMBEDDING — compute from uploaded image files
+        // ──────────────────────────────────────────────────────────────
+        async function computeImageEmbedding(file) {
+            if (!window.ImageEmbedding || typeof window.ImageEmbedding.getEmbeddingFromFile !== 'function') {
+                console.warn('[Embedding] ImageEmbedding not available');
+                return null;
+            }
+            try {
+                console.log('[Embedding] Computing embedding for', file.name);
+                const embedding = await window.ImageEmbedding.getEmbeddingFromFile(file);
+                console.log('[Embedding] Done (length:', embedding ? embedding.length : 0, ')');
+                return embedding;
+            } catch (err) {
+                console.warn('[Embedding] Failed:', err);
+                return null;
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // handlePostUpload – now with embedding computation
+        // ──────────────────────────────────────────────────────────────
         async function handlePostUpload(event) {
             const files = Array.from(event.target.files);
             if (!files.length) return;
@@ -1766,6 +1798,9 @@
             const progress = document.getElementById('postProgress');
             const bar = document.getElementById('postProgressBar');
 
+            // Keep track of the first image file for embedding
+            let firstImageFile = null;
+
             for (const file of toUpload) {
                 const isVideo = file.type.startsWith('video');
                 const isImage = file.type.startsWith('image');
@@ -1787,6 +1822,11 @@
                         showToast(`Video must be ${MAX_VIDEO_DURATION_SECONDS/60} mins or less`, 'o');
                         continue;
                     }
+                }
+
+                // Store first image file for embedding (only if it's an image and we haven't stored one yet)
+                if (isImage && !firstImageFile) {
+                    firstImageFile = file;
                 }
 
                 const localUrl = URL.createObjectURL(file);
@@ -1826,6 +1866,16 @@
 
             progress.style.display = 'none';
             event.target.value = '';
+
+            // ── Compute embedding from the first image (if any) ──
+            if (firstImageFile) {
+                const embedding = await computeImageEmbedding(firstImageFile);
+                window._pendingPostEmbedding = embedding;
+                console.log('[Embedding] Stored for post:', embedding ? '✅' : '❌');
+            } else {
+                // If no image was uploaded (only video or failed), clear any previous embedding
+                window._pendingPostEmbedding = null;
+            }
         }
 
         function removePostImage(idx) {
@@ -1841,6 +1891,8 @@
                 input.style.color = '';
                 input.style.fontWeight = '';
                 input.placeholder = 'Paste image or YouTube link...';
+                // Also clear embedding if no media left
+                window._pendingPostEmbedding = null;
             }
             showToast('Media removed', 'o');
         }
@@ -2240,7 +2292,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT POST – with Mentions + Notifications + commentsHidden flag + source: 'composer'
+        // SUBMIT POST – with Mentions + Notifications + commentsHidden flag + source: 'composer' + image embedding
         // ──────────────────────────────────────────────────────────────
         async function submitPost() {
             console.log('[DEBUG] submitPost called');
@@ -2299,6 +2351,9 @@
             }));
             const firstItem = media[0] || {};
 
+            // ── Retrieve computed embedding (if any) ──
+            const imageEmbedding = window._pendingPostEmbedding || null;
+
             try {
                 const result = await PostsAPI.createPost({
                     title,
@@ -2309,7 +2364,8 @@
                     mediaType: firstItem.type || '',
                     mentions: mentions,
                     commentsHidden: hideComments,
-                    source: 'composer'   // <── explicit source
+                    source: 'composer',   // <── explicit source
+                    imageEmbedding: imageEmbedding  // <── include embedding
                 });
 
                 console.log('[DEBUG] Post created successfully:', result);
@@ -2342,6 +2398,8 @@
                 renderPostImageGrid();
                 postTags = [];
                 renderPostTags();
+                // Clear embedding
+                window._pendingPostEmbedding = null;
 
                 showToast('Post published! 🎉', 'g');
                 btn.textContent = originalText;
@@ -2565,7 +2623,16 @@
                 setTimeout(loadCategories, 500);
             }
 
-            console.log('[DEBUG] create.html: multi‑image support, source: composer, up to 10 images');
+            // ── Preload the image embedding model in background ──
+            if (window.ImageEmbedding && typeof window.ImageEmbedding.preloadModel === 'function') {
+                window.ImageEmbedding.preloadModel()
+                    .then(() => console.log('[Embedding] Model preloaded successfully'))
+                    .catch(e => console.warn('[Embedding] Preload error:', e));
+            } else {
+                console.warn('[Embedding] ImageEmbedding not available for preload');
+            }
+
+            console.log('[DEBUG] create.html: multi‑image support, source: composer, up to 10 images, with image embedding');
         }
 
         if (document.readyState === 'loading') {
