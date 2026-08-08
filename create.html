@@ -1211,9 +1211,9 @@
                             </div>
                         </div>
 
-                        <!-- Media – multi‑image / video (up to 10 images) -->
+                        <!-- Media – multi‑image / video (up to 20 images) -->
                         <div class="form-group">
-                            <label class="form-lbl">Media <span style="font-weight:400;color:var(--muted2);">(up to 10 images, or 1 video max 100MB/3 mins)</span></label>
+                            <label class="form-lbl">Media <span style="font-weight:400;color:var(--muted2);">(up to 20 images, or 1 video max 100MB/3 mins)</span></label>
                             <div class="upload-row">
                                 <input class="form-inp" id="postMediaUrlInput" type="text" placeholder="Paste image or YouTube link..." oninput="previewPostMedia()">
                                 <button class="upload-btn" onclick="document.getElementById('postFileInput').click()">
@@ -1404,10 +1404,14 @@
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
         const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
         const MAX_VIDEO_DURATION_SECONDS = 180;
-        const MAX_POST_IMAGES = 10; // ─── up to 10 images ───
+        // ── CHANGE #2: bumped from 10 to 20 ──
+        const MAX_POST_IMAGES = 20; // ─── up to 20 images ───
 
         let postTags = [];
+        // ── CHANGE #3: parallel array for per-image embeddings ──
         let postMedia = [];          // array of {url, type, public_id, uploading}
+        let postImageEmbeddings = []; // parallel array, same index as postMedia — embedding vector or null per slot
+
         let marketImages = [];
         let marketLat = null;
         let marketLng = null;
@@ -1680,6 +1684,8 @@
                     public_id: 'youtube_' + ytMatch[1],
                     uploading: false
                 }];
+                // Keep postImageEmbeddings in sync
+                postImageEmbeddings = [null];
                 input.value = '🎬 Video linked';
                 input.style.color = 'var(--pl)';
                 input.style.fontWeight = '600';
@@ -1701,12 +1707,14 @@
                     input.value = '';
                     return;
                 }
+                const idx = postMedia.length;
                 postMedia.push({
                     url: url,
                     type: 'image',
                     public_id: 'external_' + Date.now(),
                     uploading: false
                 });
+                postImageEmbeddings.push(null); // placeholder – no embedding for external URLs
                 input.value = '';
                 renderPostImageGrid();
                 showToast('Image added', 'p');
@@ -1743,13 +1751,13 @@
                 console.log('[Embedding] Done (length:', embedding ? embedding.length : 0, ')');
                 return embedding;
             } catch (err) {
-                console.warn('[Embedding] Failed:', err);
+                console.warn('[Embedding] Failed for', file.name, ':', err);
                 return null;
             }
         }
 
         // ──────────────────────────────────────────────────────────────
-        // handlePostUpload – now with embedding computation
+        // handlePostUpload – with per-image embedding (non-blocking)
         // ──────────────────────────────────────────────────────────────
         async function handlePostUpload(event) {
             const files = Array.from(event.target.files);
@@ -1798,9 +1806,7 @@
             const progress = document.getElementById('postProgress');
             const bar = document.getElementById('postProgressBar');
 
-            // Keep track of the first image file for embedding
-            let firstImageFile = null;
-
+            // ── CHANGE #4: per-image loop now handles embeddings individually ──
             for (const file of toUpload) {
                 const isVideo = file.type.startsWith('video');
                 const isImage = file.type.startsWith('image');
@@ -1824,11 +1830,6 @@
                     }
                 }
 
-                // Store first image file for embedding (only if it's an image and we haven't stored one yet)
-                if (isImage && !firstImageFile) {
-                    firstImageFile = file;
-                }
-
                 const localUrl = URL.createObjectURL(file);
                 const idx = postMedia.length;
                 postMedia.push({
@@ -1837,6 +1838,7 @@
                     public_id: '',
                     uploading: true
                 });
+                postImageEmbeddings.push(null); // placeholder – filled in after embedding computes below
                 renderPostImageGrid();
 
                 progress.style.display = 'block';
@@ -1855,9 +1857,19 @@
                     };
                     renderPostImageGrid();
                     showToast('Uploaded!', 'g');
+
+                    // ── Compute this image's embedding now, keyed to the same index ──
+                    // Runs after upload so it never blocks or delays the Cloudinary transfer.
+                    if (isImage) {
+                        computeImageEmbedding(file).then(embedding => {
+                            postImageEmbeddings[idx] = embedding;
+                            console.log(`[Embedding] Slot ${idx} done:`, embedding ? '✅' : '❌ (skipped)');
+                        });
+                    }
                 } catch (e) {
                     URL.revokeObjectURL(localUrl);
                     postMedia.splice(idx, 1);
+                    postImageEmbeddings.splice(idx, 1);
                     renderPostImageGrid();
                     showToast('Upload failed: ' + e.message, 'r');
                     console.error('[Upload Error]', e);
@@ -1866,23 +1878,15 @@
 
             progress.style.display = 'none';
             event.target.value = '';
-
-            // ── Compute embedding from the first image (if any) ──
-            if (firstImageFile) {
-                const embedding = await computeImageEmbedding(firstImageFile);
-                window._pendingPostEmbedding = embedding;
-                console.log('[Embedding] Stored for post:', embedding ? '✅' : '❌');
-            } else {
-                // If no image was uploaded (only video or failed), clear any previous embedding
-                window._pendingPostEmbedding = null;
-            }
         }
 
+        // ── CHANGE #5: keep postImageEmbeddings in sync on removal ──
         function removePostImage(idx) {
             if (postMedia[idx]?.url?.startsWith('blob:')) {
                 URL.revokeObjectURL(postMedia[idx].url);
             }
             postMedia.splice(idx, 1);
+            postImageEmbeddings.splice(idx, 1); // keep indexes aligned with postMedia
             renderPostImageGrid();
             // If no media, reset the input placeholder
             if (postMedia.length === 0) {
@@ -1891,8 +1895,8 @@
                 input.style.color = '';
                 input.style.fontWeight = '';
                 input.placeholder = 'Paste image or YouTube link...';
-                // Also clear embedding if no media left
-                window._pendingPostEmbedding = null;
+                // Also clear embeddings
+                postImageEmbeddings = [];
             }
             showToast('Media removed', 'o');
         }
@@ -2292,7 +2296,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT POST – with Mentions + Notifications + commentsHidden flag + source: 'composer' + image embedding
+        // SUBMIT POST – with Mentions + Notifications + commentsHidden flag + source: 'composer' + image embedding (averaged)
         // ──────────────────────────────────────────────────────────────
         async function submitPost() {
             console.log('[DEBUG] submitPost called');
@@ -2351,8 +2355,12 @@
             }));
             const firstItem = media[0] || {};
 
-            // ── Retrieve computed embedding (if any) ──
-            const imageEmbedding = window._pendingPostEmbedding || null;
+            // ── CHANGE #6: average all per-image embeddings into one combined vector ──
+            const validEmbeddings = postImageEmbeddings.filter(e => Array.isArray(e) && e.length);
+            const imageEmbedding = (window.ImageEmbedding && typeof window.ImageEmbedding.averageEmbeddings === 'function' && validEmbeddings.length)
+                ? window.ImageEmbedding.averageEmbeddings(validEmbeddings)
+                : null;
+            console.log(`[Embedding] Averaging ${validEmbeddings.length}/${postImageEmbeddings.length} image(s) for this post.`);
 
             try {
                 const result = await PostsAPI.createPost({
@@ -2365,7 +2373,7 @@
                     mentions: mentions,
                     commentsHidden: hideComments,
                     source: 'composer',   // <── explicit source
-                    imageEmbedding: imageEmbedding  // <── include embedding
+                    imageEmbedding: imageEmbedding  // <── combined averaged embedding
                 });
 
                 console.log('[DEBUG] Post created successfully:', result);
@@ -2387,7 +2395,7 @@
                     }
                 }
 
-                // Reset form
+                // ── CHANGE #7: reset postMedia and postImageEmbeddings ──
                 document.getElementById('postTitle').value = '';
                 document.getElementById('postContent').value = '';
                 document.getElementById('postHideComments').checked = false;
@@ -2395,11 +2403,10 @@
                 // Clear media
                 postMedia.forEach(m => { if (m.url?.startsWith('blob:')) URL.revokeObjectURL(m.url); });
                 postMedia = [];
+                postImageEmbeddings = [];
                 renderPostImageGrid();
                 postTags = [];
                 renderPostTags();
-                // Clear embedding
-                window._pendingPostEmbedding = null;
 
                 showToast('Post published! 🎉', 'g');
                 btn.textContent = originalText;
@@ -2632,7 +2639,7 @@
                 console.warn('[Embedding] ImageEmbedding not available for preload');
             }
 
-            console.log('[DEBUG] create.html: multi‑image support, source: composer, up to 10 images, with image embedding');
+            console.log('[DEBUG] create.html: multi‑image support, source: composer, up to 20 images, with per-image embedding averaging');
         }
 
         if (document.readyState === 'loading') {
