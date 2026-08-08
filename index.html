@@ -3666,8 +3666,8 @@
 
                 let current = 0;
                 const total = slides.length;
-                let autoTimer = null;
                 let arrowTimeout = null;
+
 
                 function goToSlide(idx) {
     current = (idx + total) % total;
@@ -3679,11 +3679,6 @@
 
                 function nextSlide() { goToSlide(current + 1); }
 
-                function resetAutoTimer() {
-                    if (autoTimer) { clearInterval(autoTimer);
-                        autoTimer = null; }
-                    autoTimer = setInterval(nextSlide, 3000);
-                }
 
                 dots.forEach((dot, i) => {
                     dot.addEventListener('click', (e) => {
@@ -3734,19 +3729,35 @@
                     if (Math.abs(diff) > 30) {
                         if (diff > 0) goToSlide(current + 1);
                         else goToSlide(current - 1);
-                        showArrowsTemporarily();
-                    }
-                }, { passive: true });
+                                showArrowsTemporarily();
+    }
+}, { passive: true });
 
-                computeCarouselFixedHeight(carouselEl);
-                window.addEventListener('resize', () => computeCarouselFixedHeight(carouselEl));
+computeCarouselFixedHeight(carouselEl);
+window.addEventListener('resize', () => computeCarouselFixedHeight(carouselEl));
 
-                resetAutoTimer();
+// ─── ONE-TIME SWIPE HINT ───────────────────────────────
+setTimeout(() => {
+    track.style.transition = 'transform 0.35s ease';
+    track.style.transform = 'translateX(-18%)';
+    setTimeout(() => {
+        track.style.transform = 'translateX(0%)';
+        setTimeout(() => {
+            track.style.transition = ''; // restore normal swipe transition
+        }, 350);
+    }, 450);
+}, 700);
 
-                carouselEl._cleanup = function() {
-                    if (autoTimer) clearInterval(autoTimer);
-                    if (arrowTimeout) clearTimeout(arrowTimeout);
-                };
+carouselEl._cleanup = function() {
+    if (arrowTimeout) clearTimeout(arrowTimeout);
+};
+                
+window.addEventListener('resize', () => computeCarouselFixedHeight(carouselEl));
+
+carouselEl._cleanup = function() {
+    if (arrowTimeout) clearTimeout(arrowTimeout);
+};
+
             }
 
             function initAllCarousels(scope) {
