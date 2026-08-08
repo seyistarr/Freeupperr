@@ -1057,7 +1057,8 @@
       comments_hidden: !!fields.commentsHidden,
       sound_id: fields.sound_id || null,
       source: fields.source || CONFIG.DEFAULT_SOURCE,
-      text_template_id: fields.textTemplateId || null
+      text_template_id: fields.textTemplateId || null,
+      image_embedding: fields.imageEmbedding || null  // ← NEW: store embedding
     };
 
     const { data, error } = await sb
@@ -1069,6 +1070,44 @@
     if (error) throw error;
 
     return mapPost(data, { likedByMe: false, bookmarkedByMe: false, myRepost: null });
+  }
+
+  // ===================================================================
+  // NEW: find visually similar posts to a given post
+  // ===================================================================
+  async function findSimilarPosts(postId, limit = 10) {
+    const { data, error } = await sb.rpc('find_similar_posts', {
+      p_post_id: postId,
+      p_limit: limit
+    });
+
+    if (error) {
+      console.error('findSimilarPosts error:', error);
+      return [];
+    }
+
+    if (!data || !data.length) return [];
+
+    const ids = data.map(row => row.id);
+    const { data: posts, error: postsError } = await sb
+      .from('posts')
+      .select(POST_SELECT)
+      .in('id', ids)
+      .eq('is_hidden', false);
+
+    if (postsError) {
+      console.error('findSimilarPosts postgres error:', postsError);
+      return [];
+    }
+
+    const mapped = await mapPostsWithInteractionState(posts || []);
+    const similarityById = new Map(data.map(row => [row.id, row.similarity]));
+
+    // Preserve the similarity-ranked order from the RPC, not Supabase's
+    // arbitrary .in() ordering.
+    return mapped
+      .map(post => ({ ...post, similarityScore: similarityById.get(post.id) || 0 }))
+      .sort((a, b) => b.similarityScore - a.similarityScore);
   }
 
   // ===================================================================
@@ -1242,8 +1281,11 @@
     // Realtime
     subscribe,
     subscribeToAll,
-    unsubscribe
+    unsubscribe,
+
+    // NEW: visual similarity
+    findSimilarPosts   // ← added to public API
   };
 
-  console.log('✅ FreeUpper PostsAPI v4.1.0 loaded — full comment system (add/edit/delete/like/pin/report), reply counts, ownership-checked RPCs.');
+  console.log('✅ FreeUpper PostsAPI v4.1.0 loaded — full comment system (add/edit/delete/like/pin/report), reply counts, ownership-checked RPCs, and similarity search.');
 })();
