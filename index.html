@@ -6046,9 +6046,12 @@ carouselEl._cleanup = function() {
                         <button class="action-sheet-cancel" data-action="cancel">Cancel</button>
                     </div>`;
                     document.body.appendChild(backdrop);
-                    requestAnimationFrame(() => backdrop.classList.add('open'));
-
                     const sheet = backdrop.querySelector('.action-sheet');
+                    requestAnimationFrame(() => {
+                        backdrop.classList.add('open');
+                        sheet.classList.add('open');
+                    });
+
                     backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeActionSheet(); });
 
                     sheet.querySelectorAll('button').forEach(btn => {
@@ -6078,6 +6081,8 @@ carouselEl._cleanup = function() {
                 const el = window._activeActionSheet;
                 if (!el) return;
                 el.classList.remove('open');
+                const sheet = el.querySelector('.action-sheet');
+                if (sheet) sheet.classList.remove('open');
                 setTimeout(() => el.remove(), 200);
                 window._activeActionSheet = null;
             }
@@ -6133,25 +6138,35 @@ carouselEl._cleanup = function() {
 
                 backdrop.querySelector('.confirm-modal-confirm').onclick = () => {
                     close();
-                    window.PostsAPI.deleteComment(commentId)
-                        .then(() => {
-                            showToast('Comment deleted', 'g');
-                            const p = appData.posts.find(p => p.id === currentPostId);
-                            if (p && typeof p.comments === 'number') p.comments = Math.max(0, p.comments - 1);
-                            updateCommentCount(currentPostId);
-                            refreshCommentsList(currentPostId, 'comments-list');
-                        })
-                        .catch(err => showToast(err.message || 'Failed to delete comment', 'r'));
+                    try {
+                        window.PostsAPI.deleteComment(commentId)
+                            .then(() => {
+                                showToast('Comment deleted', 'g');
+                                const p = appData.posts.find(p => p.id === currentPostId);
+                                if (p && typeof p.comments === 'number') p.comments = Math.max(0, p.comments - 1);
+                                updateCommentCount(currentPostId);
+                                refreshCommentsList(currentPostId, 'comments-list');
+                            })
+                            .catch(err => showToast(err.message || 'Failed to delete comment', 'r'));
+                    } catch (err) {
+                        console.error('deleteComment failed:', err);
+                        showToast('Could not delete comment', 'r');
+                    }
                 };
             }
 
             function togglePinCommentUI(commentId) {
-                window.PostsAPI.togglePinComment(commentId)
-                    .then(({ pinned }) => {
-                        showToast(pinned ? 'Comment pinned' : 'Comment unpinned', 'g');
-                        refreshCommentsList(currentPostId, 'comments-list');
-                    })
-                    .catch(err => showToast(err.message || 'Failed to pin comment', 'r'));
+                try {
+                    window.PostsAPI.togglePinComment(commentId)
+                        .then(({ pinned }) => {
+                            showToast(pinned ? 'Comment pinned' : 'Comment unpinned', 'g');
+                            refreshCommentsList(currentPostId, 'comments-list');
+                        })
+                        .catch(err => showToast(err.message || 'Failed to pin comment', 'r'));
+                } catch (err) {
+                    console.error('togglePinComment failed:', err);
+                    showToast('Could not pin comment', 'r');
+                }
             }
 
             // ─── reportCommentUI with reason picker ─────────────────────
@@ -6185,9 +6200,14 @@ carouselEl._cleanup = function() {
                 submitBtn.onclick = () => {
                     if (!selected) return;
                     close();
-                    window.PostsAPI.reportComment(commentId, selected)
-                        .then(() => showToast('Comment reported', 'g'))
-                        .catch(err => showToast(err.message || 'Failed to report comment', 'r'));
+                    try {
+                        window.PostsAPI.reportComment(commentId, selected)
+                            .then(() => showToast('Comment reported', 'g'))
+                            .catch(err => showToast(err.message || 'Failed to report comment', 'r'));
+                    } catch (err) {
+                        console.error('reportComment failed:', err);
+                        showToast('Could not report comment', 'r');
+                    }
                 };
             }
 
@@ -7015,7 +7035,7 @@ carouselEl._cleanup = function() {
                     const avatarHtml = p.avatar_url
                         ? `<img src="${p.avatar_url}" alt="">`
                         : `<div class="suggested-person-avatar-fallback"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8.5" r="3.3"/><path d="M4.8 19c.6-4 3.6-6.3 7.2-6.3s6.6 2.3 7.2 6.3c-2 1.8-4.6 2.8-7.2 2.8s-5.2-1-7.2-2.8z"/></svg></div>`;
-                    return `<div class="suggested-person-card" data-user-id="${p.id}" onclick="goToProfile('${p.id}')">
+                    return `<div class="suggested-person-card" data-user-id="${p.id}" onclick="window.Router.openProfile('${p.id}')">
                         <div class="suggested-person-cancel" onclick="dismissSuggestedPerson(event, '${p.id}')"><i class="ri-close-line"></i></div>
                         ${avatarHtml}
                         <div class="suggested-person-name">${escapeHtml(name)}</div>
@@ -7190,18 +7210,28 @@ carouselEl._cleanup = function() {
                 });
             }
 
-            function showToast(msg, d = 2000) {
+            // ─── FIX: showToast with color support ───────────────────────
+            function showToast(msg, type) {
                 const t = document.getElementById('toast');
                 if (!t) return;
                 t.textContent = msg;
-                t.style.background = 'var(--bg3)';
-                t.style.color = 'var(--text)';
-                t.style.border = '1px solid var(--brd2)';
+                const palette = {
+                    r: { bg: 'rgba(220,38,38,.12)', c: '#DC2626', b: '#DC2626' },
+                    g: { bg: 'rgba(22,163,74,.12)', c: '#16A34A', b: '#16A34A' },
+                    o: { bg: 'rgba(234,179,8,.12)', c: '#CA8A04', b: '#CA8A04' },
+                    p: { bg: 'rgba(124,58,237,.12)', c: '#7C3AED', b: '#7C3AED' },
+                };
+                const p = palette[type];
+                t.style.background = p ? p.bg : 'var(--bg3)';
+                t.style.color = p ? p.c : 'var(--text)';
+                t.style.border = '1px solid ' + (p ? p.b : 'var(--brd2)');
                 t.classList.add('opacity-100');
                 t.classList.remove('opacity-0', 'pointer-events-none');
                 clearTimeout(t._t);
-                t._t = setTimeout(() => { t.classList.add('opacity-0', 'pointer-events-none');
-                    t.classList.remove('opacity-100'); }, d);
+                t._t = setTimeout(() => {
+                    t.classList.add('opacity-0', 'pointer-events-none');
+                    t.classList.remove('opacity-100');
+                }, 2200);
             }
 
             function openLightbox(src) {
