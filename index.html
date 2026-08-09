@@ -2730,21 +2730,7 @@
         }
         .report-modal-submit:disabled { opacity: .4; }
 
-        /* ─── COMMENT ACTION MENUS (legacy, can be removed but kept for safety) ─── */
-        .comment-actions-menu, .reply-actions-menu {
-            position: fixed; z-index: 900;
-            background: var(--bg2); border: 1px solid var(--brd);
-            border-radius: 14px; overflow: hidden; min-width: 160px;
-            box-shadow: 0 8px 24px rgba(0,0,0,.3);
-        }
-        .comment-actions-menu button, .reply-actions-menu button {
-            display: block; width: 100%; text-align: left; padding: 12px 16px;
-            background: none; border: none; font-size: .88rem; font-weight: 600;
-            color: var(--text); cursor: pointer;
-        }
-        .comment-actions-menu button:active, .reply-actions-menu button:active { background: var(--pdim); }
-        .comment-actions-menu button.danger, .reply-actions-menu button.danger { color: #ef4444; }
-        .comment-actions-menu button + button, .reply-actions-menu button + button { border-top: 1px solid var(--brd); }
+        /* ─── COMMENT TRIGGER BUTTON & PINNED BADGE ─── */
         .comment-menu-btn, .reply-menu-btn {
             background: none; border: none; color: var(--muted); font-size: 1rem;
             font-weight: 700; cursor: pointer; padding: 0 4px; line-height: 1;
@@ -2755,6 +2741,7 @@
             background: rgba(124,58,237,.12); padding: 2px 7px; border-radius: 6px;
             margin-right: 6px;
         }
+        .comment-pinned-badge svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.2; }
         .comment-edited-tag { font-size: .68rem; color: var(--muted); margin-left: 4px; }
         .comment-edit-box textarea {
             width: 100%; background: var(--bg3); border: 1px solid var(--brd);
@@ -5934,7 +5921,7 @@ carouselEl._cleanup = function() {
                 const isMine = cu && cu.id === c.userId;
                 const isPostOwner = post && cu && post.user_id === cu.id;
                 const isPinned = !!c.pinned;
-                const pinnedBadgeHtml = isPinned ? '<span class="comment-pinned-badge">📌 Pinned</span>' : '';
+                const pinnedBadgeHtml = isPinned ? '<span class="comment-pinned-badge"><svg viewBox="0 0 24 24" width="11" height="11"><path d="M12 17v5"/><path d="M9 3h6l1 6-2 2v3H8v-3L6 9Z"/></svg> Pinned</span>' : '';
                 const editedTagHtml = c.edited ? '<span class="comment-edited-tag">(edited)</span>' : '';
 
                 const ds = getAllDescendants(c.id, allComments),
@@ -6030,49 +6017,61 @@ carouselEl._cleanup = function() {
                       </div>`;
             }
 
-            // ─── ITEM 8: comment action functions (with bottom sheets) ──
+            // ─── ITEM 8: comment action functions (with robust try/catch) ──
             function openCommentActionsMenu(event, commentId, isMine, isPostOwner, isPinned) {
-                event.stopPropagation();
-                closeActionSheet();
+                try {
+                    event.stopPropagation();
+                    closeActionSheet();
 
-                const icons = {
-                    edit: '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
-                    delete: '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
-                    pin: '<svg viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 3h6l1 6-2 2v3H8v-3L6 9Z"/></svg>',
-                    report: '<svg viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>'
-                };
-
-                let buttons = '';
-                if (isMine) buttons += `<button data-action="edit">${icons.edit} Edit comment</button>`;
-                if (isMine || isPostOwner) buttons += `<button data-action="delete" class="danger">${icons.delete} Delete comment</button>`;
-                if (isPostOwner) buttons += `<button data-action="pin">${icons.pin} ${isPinned ? 'Unpin comment' : 'Pin comment'}</button>`;
-                if (!isMine) buttons += `<button data-action="report" class="danger">${icons.report} Report comment</button>`;
-
-                const backdrop = document.createElement('div');
-                backdrop.className = 'action-sheet-backdrop';
-                backdrop.innerHTML = `<div class="action-sheet">
-                    <div class="action-sheet-handle"></div>
-                    ${buttons}
-                    <button class="action-sheet-cancel" data-action="cancel">Cancel</button>
-                </div>`;
-                document.body.appendChild(backdrop);
-                requestAnimationFrame(() => backdrop.classList.add('open'));
-
-                const sheet = backdrop.querySelector('.action-sheet');
-                backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeActionSheet(); });
-
-                sheet.querySelectorAll('button').forEach(btn => {
-                    btn.onclick = () => {
-                        const action = btn.dataset.action;
-                        closeActionSheet();
-                        if (action === 'edit') startEditComment(commentId);
-                        else if (action === 'delete') confirmDeleteComment(commentId);
-                        else if (action === 'pin') togglePinCommentUI(commentId);
-                        else if (action === 'report') reportCommentUI(commentId);
+                    const icons = {
+                        edit: '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+                        delete: '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
+                        pin: '<svg viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 3h6l1 6-2 2v3H8v-3L6 9Z"/></svg>',
+                        report: '<svg viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>'
                     };
-                });
 
-                window._activeActionSheet = backdrop;
+                    let buttons = '';
+                    if (isMine) buttons += `<button data-action="edit">${icons.edit} Edit comment</button>`;
+                    if (isMine || isPostOwner) buttons += `<button data-action="delete" class="danger">${icons.delete} Delete comment</button>`;
+                    if (isPostOwner) buttons += `<button data-action="pin">${icons.pin} ${isPinned ? 'Unpin comment' : 'Pin comment'}</button>`;
+                    if (!isMine) buttons += `<button data-action="report" class="danger">${icons.report} Report comment</button>`;
+
+                    if (!buttons) { showToast("Nothing to do here", "o"); return; }
+
+                    const backdrop = document.createElement('div');
+                    backdrop.className = 'action-sheet-backdrop';
+                    backdrop.innerHTML = `<div class="action-sheet">
+                        <div class="action-sheet-handle"></div>
+                        ${buttons}
+                        <button class="action-sheet-cancel" data-action="cancel">Cancel</button>
+                    </div>`;
+                    document.body.appendChild(backdrop);
+                    requestAnimationFrame(() => backdrop.classList.add('open'));
+
+                    const sheet = backdrop.querySelector('.action-sheet');
+                    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeActionSheet(); });
+
+                    sheet.querySelectorAll('button').forEach(btn => {
+                        btn.onclick = () => {
+                            try {
+                                const action = btn.dataset.action;
+                                closeActionSheet();
+                                if (action === 'edit') startEditComment(commentId);
+                                else if (action === 'delete') confirmDeleteComment(commentId);
+                                else if (action === 'pin') togglePinCommentUI(commentId);
+                                else if (action === 'report') reportCommentUI(commentId);
+                            } catch (innerErr) {
+                                console.error('Comment action failed:', innerErr);
+                                showToast('Something went wrong, try again', 'r');
+                            }
+                        };
+                    });
+
+                    window._activeActionSheet = backdrop;
+                } catch (err) {
+                    console.error('openCommentActionsMenu failed:', err);
+                    showToast('Could not open menu', 'r');
+                }
             }
 
             function closeActionSheet() {
@@ -7031,7 +7030,7 @@ carouselEl._cleanup = function() {
                             <h3>People you may know</h3>
                             <p>Follow more people to see their posts.</p>
                         </div>
-                        <button class="suggestions-link" onclick="goToDiscoverPeople()">Suggestions</button>
+                        <button class="suggestions-link" onclick="goToDiscoverPeople()"></button>
                     </div>
                     <div class="suggested-people-scroll" id="suggested-people-scroll">${cards}</div>
                 </div>`;
