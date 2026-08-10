@@ -1,6 +1,6 @@
 // =====================================================================
 // onboarding.js
-// FreeUpper Onboarding — v3.1.0 (SVG icon pill grid, purple theme)
+// FreeUpper Onboarding — v3.1.1 (SVG icons + grid overflow fix)
 // =====================================================================
 
 (function () {
@@ -11,7 +11,7 @@
 
   const MIN_SELECT = 3;
 
-  // ─── SVG ICONS (stroke="currentColor" so they inherit the badge color) ───
+  // ─── SVG ICONS ────────────────────────────────────────────────────────────
   const ICONS = {
     comedy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>',
     entertainment_culture: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
@@ -30,10 +30,22 @@
     diy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
   };
 
-  const FALLBACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1.5"/></svg>';
+  const FALLBACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/></svg>';
 
+  // Keys that should span two columns (wide layout)
   const WIDE_KEYS = new Set(['comedy', 'entertainment_culture', 'travel', 'motivation_advice', 'science_education']);
 
+  // ─── KEY NORMALIZER ────────────────────────────────────────────────────────
+  function normalizeKey(k) {
+    return (k || '')
+      .toString()
+      .toLowerCase()
+      .trim()
+      .replace(/[\s&-]+/g, '_')
+      .replace(/_+/g, '_');
+  }
+
+  // ─── SUPABASE HELPER ──────────────────────────────────────────────────────
   function waitForSupabase(timeoutMs = 8000) {
     return new Promise((resolve, reject) => {
       if (window.sb) return resolve(window.sb);
@@ -71,6 +83,7 @@
     }
   }
 
+  // ─── SHOW ONBOARDING ──────────────────────────────────────────────────────
   async function showOnboarding() {
     const overlay = document.getElementById('onboardingOverlay');
     const grid = document.getElementById('interestGrid');
@@ -85,6 +98,7 @@
     }
     if (overlay.classList.contains('open')) return;
 
+    // Show loading state
     grid.innerHTML = '<div style="grid-column:span 2;text-align:center;padding:40px 0;color:#999;">Loading…</div>';
     nextBtn.disabled = true;
     nextBtn.textContent = 'Next (0)';
@@ -101,10 +115,20 @@
 
     const selected = new Set();
 
+    // ─── Fix layout overflow ─────────────────────────────────────────────
+    grid.style.overflow = 'hidden';
+    grid.style.maxWidth = '100%';
+
+    // Build the pill buttons with normalized key lookup
     grid.innerHTML = interests.map(i => {
-      const icon = ICONS[i.key] || FALLBACK_ICON;
-      const wideClass = WIDE_KEYS.has(i.key) ? ' wide' : '';
-      return `<button type="button" class="interest-pill${wideClass}" data-key="${i.key}">
+      const nk = normalizeKey(i.key);
+      const icon = ICONS[nk] || FALLBACK_ICON;
+      if (!ICONS[nk]) {
+        LOG('No icon match for key:', JSON.stringify(i.key), '→ normalized:', nk);
+      }
+      const wideClass = WIDE_KEYS.has(nk) ? ' wide' : '';
+      // Adding style="min-width:0;" ensures the grid can shrink the column
+      return `<button type="button" class="interest-pill${wideClass}" data-key="${i.key}" style="min-width:0;">
         <span class="pill-icon-badge">${icon}</span>
         <span class="pill-label">${i.label}</span>
         <span class="pill-plus">+</span>
