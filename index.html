@@ -5263,35 +5263,65 @@ carouselEl._cleanup = function() {
 
             // ─── REPORT ───────────────────────────────────────────────────────
             function reportPostFromShare(postId) {
-                const reason = prompt('Please describe why you are reporting this post:');
-                if (reason && reason.trim().length > 0) {
-                    if (window.PostsAPI && typeof window.PostsAPI.reportPost === 'function') {
-                        window.PostsAPI.reportPost(postId, reason)
-                            .then(() => {
-                                showToast('Report submitted. Thank you for helping keep FreeUpper safe.', 'p');
-                                closeShareModal();
-                            })
-                            .catch(err => showToast(err.message, 'r'));
-                    } else {
-                        const user = getCurrentUser();
-                        if (!user || !user.isLoggedIn) { showToast('Please sign in', 'o'); return; }
-                        window.sb.from('reports').insert({
-                            reporter_id: user.id,
-                            target_type: 'post',
-                            target_id: postId,
-                            reason: reason,
-                            status: 'pending',
-                            created_at: new Date().toISOString()
-                        }).then(({ error }) => {
-                            if (error) showToast('Error: ' + error.message, 'r');
-                            else { showToast('Report submitted', 'p');
-                                closeShareModal(); }
-                        });
+                if (!postId) { showToast('No post selected'); return; }
+                closeShareModal();
+
+                const reasons = ['Spam', 'Harassment or bullying', 'Hate speech', 'Inappropriate content', 'False information', 'Something else'];
+                let selected = null;
+
+                const backdrop = document.createElement('div');
+                backdrop.className = 'report-modal-backdrop';
+                backdrop.innerHTML = `<div class="report-modal">
+                    <h3>Report post</h3>
+                    ${reasons.map(r => `<div class="report-reason-option" data-reason="${escapeHtml(r)}"><span>${escapeHtml(r)}</span><span class="dot"></span></div>`).join('')}
+                    <button class="report-modal-submit" disabled>Submit report</button>
+                </div>`;
+                document.body.appendChild(backdrop);
+                requestAnimationFrame(() => backdrop.classList.add('open'));
+
+                const close = () => { backdrop.classList.remove('open'); setTimeout(() => backdrop.remove(), 200); };
+                backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+                const submitBtn = backdrop.querySelector('.report-modal-submit');
+                backdrop.querySelectorAll('.report-reason-option').forEach(opt => {
+                    opt.onclick = () => {
+                        backdrop.querySelectorAll('.report-reason-option').forEach(o => o.classList.remove('selected'));
+                        opt.classList.add('selected');
+                        selected = opt.dataset.reason;
+                        submitBtn.disabled = false;
+                    };
+                });
+
+                submitBtn.onclick = () => {
+                    if (!selected) return;
+                    close();
+                    try {
+                        if (window.PostsAPI && typeof window.PostsAPI.reportPost === 'function') {
+                            window.PostsAPI.reportPost(postId, selected)
+                                .then(() => showToast('Report submitted. Thank you for helping keep FreeUpper safe.', 'g'))
+                                .catch(err => showToast(err.message || 'Failed to report post', 'r'));
+                        } else {
+                            const user = getCurrentUser();
+                            if (!user || !user.isLoggedIn) { showToast('Please sign in', 'o'); return; }
+                            window.sb.from('reports').insert({
+                                reporter_id: user.id,
+                                target_type: 'post',
+                                target_id: postId,
+                                reason: selected,
+                                status: 'pending',
+                                created_at: new Date().toISOString()
+                            }).then(({ error }) => {
+                                if (error) showToast('Error: ' + error.message, 'r');
+                                else showToast('Report submitted', 'g');
+                            });
+                        }
+                    } catch (err) {
+                        console.error('reportPost failed:', err);
+                        showToast('Could not report post', 'r');
                     }
-                } else {
-                    showToast('Report cancelled', 'o');
-                }
+                };
             }
+
 
             // ─── DELETE ───────────────────────────────────────────────────────
             function deletePostFromShare(postId) {
