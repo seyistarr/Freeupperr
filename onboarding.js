@@ -1,6 +1,6 @@
 // =====================================================================
 // onboarding.js
-// FreeUpper Onboarding — v1.1.0 (defensive rewrite)
+// FreeUpper Onboarding — v2.0.0 (pill picker, TikTok-style)
 // =====================================================================
 
 (function () {
@@ -9,15 +9,11 @@
   const LOG = (...args) => console.log('[onboarding.js]', ...args);
   const ERR = (...args) => console.error('[onboarding.js]', ...args);
 
-  // ===================================================================
-  // Wait for window.sb to exist before doing anything. This handles
-  // any script-load-order race condition where onboarding.js runs
-  // before your Supabase client is initialized.
-  // ===================================================================
+  const MIN_SELECT = 3; // set to 5 if you want a hard minimum before "Next" enables
+
   function waitForSupabase(timeoutMs = 8000) {
     return new Promise((resolve, reject) => {
       if (window.sb) return resolve(window.sb);
-
       const start = Date.now();
       const interval = setInterval(() => {
         if (window.sb) {
@@ -31,18 +27,12 @@
     });
   }
 
-  // ===================================================================
-  // FETCH INTERESTS
-  // ===================================================================
   async function fetchInterests() {
     try {
       const sb = await waitForSupabase();
-
-      LOG('Fetching interests from freeupper_interests...');
-
       const { data, error } = await sb
         .from('freeupper_interests')
-        .select('key, label, emoji, group_name, sort_order')
+        .select('key, label, group_name, sort_order')
         .eq('active', true)
         .order('sort_order', { ascending: true });
 
@@ -50,7 +40,6 @@
         ERR('Supabase query error:', error.message, error);
         return [];
       }
-
       LOG(`Fetched ${data ? data.length : 0} interests.`);
       return data || [];
     } catch (err) {
@@ -59,103 +48,98 @@
     }
   }
 
-  // ===================================================================
-  // SHOW ONBOARDING
-  // ===================================================================
   async function showOnboarding() {
     const overlay = document.getElementById('onboardingOverlay');
     const grid = document.getElementById('interestGrid');
-    const continueBtn = document.getElementById('onboardingContinueBtn');
+    const nextBtn = document.getElementById('onboardingContinueBtn');
+    const skipBtn = document.getElementById('onboardingSkipBtn');
 
-    if (!overlay || !grid || !continueBtn) {
+    if (!overlay || !grid || !nextBtn || !skipBtn) {
       ERR('Required DOM elements missing.', {
-        overlay: !!overlay,
-        grid: !!grid,
-        continueBtn: !!continueBtn
+        overlay: !!overlay, grid: !!grid, nextBtn: !!nextBtn, skipBtn: !!skipBtn
       });
       return;
     }
+    if (overlay.classList.contains('open')) return;
 
-    if (overlay.classList.contains('open')) {
-      LOG('Overlay already open, skipping.');
-      return;
-    }
-
-    LOG('Opening onboarding overlay...');
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted,#888);">Loading…</div>';
-    continueBtn.disabled = true;
-    continueBtn.textContent = 'Continue';
+    grid.innerHTML = '<div style="width:100%;text-align:center;padding:40px 0;color:#999;">Loading…</div>';
+    nextBtn.disabled = true;
+    nextBtn.textContent = 'Next (0)';
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
 
     const interests = await fetchInterests();
 
     if (!interests.length) {
-      ERR('No interests returned — check console above for the real cause (query error, empty table, or RLS).');
-      grid.innerHTML = `
-        <div style="grid-column:1/-1;text-align:center;padding:20px;color:#e55;">
-          Couldn't load interests. Please try again shortly.
-        </div>`;
-      // Don't auto-close — let the user see the error instead of it
-      // silently vanishing, which was the original confusing symptom.
+      ERR('No interests returned — check freeupper_interests table/RLS.');
+      grid.innerHTML = '<div style="width:100%;text-align:center;padding:40px 0;color:#e55;">Couldn\'t load interests. Please try again shortly.</div>';
       return;
     }
 
     const selected = new Set();
 
     grid.innerHTML = interests.map(i => `
-      <button type="button" class="interest-chip" data-key="${i.key}">
-        <span>${i.emoji || ''}</span> ${i.label}
+      <button type="button" class="interest-pill" data-key="${i.key}">
+        <span>${i.label}</span>
+        <span class="pill-icon">+</span>
       </button>
     `).join('');
 
+    function updateNextBtn() {
+      nextBtn.textContent = `Next (${selected.size})`;
+      nextBtn.disabled = selected.size < MIN_SELECT;
+    }
+    updateNextBtn();
+
     grid.onclick = (e) => {
-      const chip = e.target.closest('.interest-chip');
-      if (!chip) return;
-      const key = chip.dataset.key;
+      const pill = e.target.closest('.interest-pill');
+      if (!pill) return;
+      const key = pill.dataset.key;
       if (selected.has(key)) {
         selected.delete(key);
-        chip.classList.remove('active');
+        pill.classList.remove('selected');
       } else {
         selected.add(key);
-        chip.classList.add('active');
+        pill.classList.add('selected');
       }
-      continueBtn.disabled = selected.size < 5;
+      updateNextBtn();
     };
 
-    continueBtn.onclick = async () => {
-      if (selected.size < 5) return;
-
-      continueBtn.disabled = true;
-      continueBtn.textContent = 'Saving…';
-
-      const interestsObj = {};
-      selected.forEach(key => { interestsObj[key] = 0.8; });
-
+    async function finishOnboarding(interestsObj) {
       try {
         if (!window.FreeUpperFeed || typeof window.FreeUpperFeed.saveOnboardingInterests !== 'function') {
-          throw new Error('FreeUpperFeed.saveOnboardingInterests is not available. Check that index-feed.js loaded before onboarding.js.');
+          throw new Error('FreeUpperFeed.saveOnboardingInterests is not available.');
         }
-
         const saved = await window.FreeUpperFeed.saveOnboardingInterests(interestsObj);
-
         overlay.classList.remove('open');
         document.body.style.overflow = '';
-
         if (saved && typeof window.refreshHome === 'function') {
           window.refreshHome();
         }
-
-        LOG('Onboarding saved successfully:', interestsObj);
+        LOG('Onboarding finished:', interestsObj);
       } catch (err) {
         ERR('Failed to save onboarding interests:', err);
-        continueBtn.disabled = false;
-        continueBtn.textContent = 'Continue';
         alert('Something went wrong saving your interests. Please try again.');
       }
+    }
+
+    nextBtn.onclick = () => {
+      if (selected.size < MIN_SELECT) return;
+      nextBtn.disabled = true;
+      nextBtn.textContent = 'Saving…';
+      const interestsObj = {};
+      selected.forEach(key => { interestsObj[key] = 0.8; });
+      finishOnboarding(interestsObj);
     };
 
-    LOG('Onboarding rendered successfully with', interests.length, 'options.');
+    skipBtn.onclick = () => {
+      // Skipping still marks onboarding complete (with an empty interest
+      // vector) so the modal never reappears — the algorithm just falls
+      // back to pure freshness+engagement ranking for this user.
+      finishOnboarding({});
+    };
+
+    LOG('Onboarding rendered with', interests.length, 'options.');
   }
 
   window.FreeUpperOnboarding = { showOnboarding };
