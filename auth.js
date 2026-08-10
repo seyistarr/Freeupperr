@@ -264,13 +264,6 @@
     }
   });
 
-  sb.auth.getSession().then(({ data }) => {
-    if (data.session) {
-      syncSessionToLocal(data.session);
-      registerSessionLocation();
-    }
-  });
-
   // ─── AUTH MODAL ──────────────────────────────────────────────
   let mode = 'signup';
   let pendingAction = null;
@@ -394,6 +387,7 @@
       return;
     }
 
+    // ─── MODAL STYLES (includes "Maybe later" style) ──────
     const modalCSS = `
     #fu-auth-overlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.7);
       backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;
@@ -432,8 +426,13 @@
       background:transparent;color:var(--text,#fff);font-weight:700;font-size:13.5px;cursor:pointer;
       display:flex;align-items:center;justify-content:center;gap:8px}
     .fu-btn-google svg{flex-shrink:0}
+    /* ─── Updated switch and "Maybe later" styles ─── */
     #fu-auth-switch{text-align:center;font-size:13px;color:var(--muted,rgba(255,255,255,.55));margin-top:16px}
     #fu-auth-switch button{background:none;border:none;color:#a78bfa;font-weight:700;cursor:pointer;font-size:13px}
+    #fu-auth-maybe-later{display:block;width:100%;text-align:center;background:none;border:none;
+      color:var(--muted2,rgba(255,255,255,.4));font-size:12.5px;font-weight:600;cursor:pointer;
+      margin-top:12px;padding:4px;text-decoration:underline;text-underline-offset:2px}
+    #fu-auth-maybe-later:hover{color:var(--text,#fff)}
     `;
 
     if (!document.getElementById('fu-auth-styles')) {
@@ -443,6 +442,7 @@
       document.head.appendChild(style);
     }
 
+    // ─── MODAL MARKUP (includes "Maybe later" button) ──────
     const overlay = document.createElement('div');
     overlay.id = 'fu-auth-overlay';
     overlay.innerHTML = `
@@ -499,14 +499,18 @@
           Continue with Google
         </button>
         <div id="fu-auth-switch">Already have an account? <button id="fu-switch-btn" type="button">Sign In</button></div>
+        <button id="fu-auth-maybe-later" type="button">Maybe later</button>
       </div>
     `;
     document.body.appendChild(overlay);
 
+    // ─── EVENT LISTENERS ────────────────────────────────────
     document.getElementById('fu-auth-close').addEventListener('click', closeModal);
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) closeModal();
     });
+    const maybeLaterBtn = document.getElementById('fu-auth-maybe-later');
+    if (maybeLaterBtn) maybeLaterBtn.addEventListener('click', closeModal);
 
     document.getElementById('fu-submit-btn').addEventListener('click', handleAuthSubmit);
     document.getElementById('fu-google-btn').addEventListener('click', handleGoogleAuth);
@@ -697,6 +701,20 @@
     document.dispatchEvent(new CustomEvent('profileUpdated', { detail: { user: guest } }));
   }
 
+  // ─── FIRST-VISIT PROMPT (auto-show once) ──────────────────
+  const FIRST_VISIT_KEY = 'freeupper_seen_signup_prompt';
+  function maybeShowFirstVisitPrompt() {
+    try {
+      const user = getCurrentUser();
+      if (user && user.isLoggedIn) return;
+      if (localStorage.getItem(FIRST_VISIT_KEY)) return;
+      localStorage.setItem(FIRST_VISIT_KEY, '1');
+      setTimeout(function () { openModal('signup', null); }, 600);
+    } catch (e) {
+      console.warn('maybeShowFirstVisitPrompt failed:', e);
+    }
+  }
+
   // ─── INIT ──────────────────────────────────────────────────
   function initAuth() {
     if (document.readyState === 'loading') {
@@ -722,6 +740,16 @@
   window.getCurrentUser = getCurrentUser; // backward compatibility
 
   initAuth();
+
+  // ─── SESSION CHECK & FIRST-VISIT TRIGGER ──────────────────
+  sb.auth.getSession().then(({ data }) => {
+    if (data.session) {
+      syncSessionToLocal(data.session).then(maybeShowFirstVisitPrompt);
+      registerSessionLocation();
+    } else {
+      maybeShowFirstVisitPrompt();
+    }
+  });
 
   console.log('AuthUser is ready:', window.AuthUser);
 })();
