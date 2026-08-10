@@ -30,15 +30,12 @@
   'use strict';
 
   // ===================================================================
-  // 1. TOPIC TAXONOMY (your 30-interest list)
+  // 1. TOPIC TAXONOMY (your 15-interest list)
   // ===================================================================
   const TAXONOMY = [
-    'trending','entertainment','comedy','lifestyle','relationships','motivation','stories',
-    'football','basketball','tennis','boxing','other_sports',
-    'music','movies','celebrities','gaming','anime',
-    'technology','ai','programming','business','entrepreneurship','finance','career','education',
-    'fashion','food','travel','fitness','photography','art','african_culture','news',
-    'faith','family','personal_dev','community'
+    'comedy', 'entertainment_culture', 'music', 'food_drink', 'sports',
+    'beauty_style', 'travel', 'motivation_advice', 'life_hacks', 'dance',
+    'science_education', 'gaming', 'fitness_health', 'daily_life', 'diy'
   ];
 
   // ===================================================================
@@ -51,42 +48,21 @@
   // without changing anything downstream.
   // ===================================================================
   const KEYWORD_MAP = {
-    football: ['football','soccer','goal','messi','ronaldo','arsenal','chelsea','man utd','man city','liverpool','premier league','la liga','uefa','champions league','epl','naija football'],
-    basketball: ['basketball','nba','dunk','lebron','curry','playoffs'],
-    tennis: ['tennis','wimbledon','grand slam','djokovic','nadal'],
-    boxing: ['boxing','mma','ufc','knockout','fight night','sparring'],
-    other_sports: ['athletics','olympics','marathon','cricket','rugby'],
-    music: ['music','song','album','beat','afrobeat','amapiano','lyrics','concert','remix','singer','rapper','producer'],
-    movies: ['movie','film','netflix','cinema','trailer','tv series','nollywood','hollywood'],
-    celebrities: ['celebrity','celeb','famous','red carpet','paparazzi'],
-    gaming: ['gaming','gamer','ps5','xbox','fortnite','valorant','call of duty','esports','fifa game'],
-    anime: ['anime','manga','naruto','one piece','otaku','waifu'],
-    technology: ['tech','gadget','iphone','android','software','app','device','smartphone'],
-    ai: ['ai','artificial intelligence','chatgpt','machine learning','llm','openai','gemini'],
-    programming: ['code','coding','javascript','python','developer','programming','github','api','frontend','backend'],
-    business: ['business','startup','company','market','brand','ceo'],
-    entrepreneurship: ['entrepreneur','hustle','founder','side hustle','startup idea'],
-    finance: ['finance','money','stocks','crypto','bitcoin','investing','naira','forex','savings'],
-    career: ['job','career','interview','resume','cv','hiring','linkedin','promotion'],
-    education: ['school','university','exam','lecture','study','jamb','waec','student','campus','lasu','unilag'],
-    fashion: ['fashion','outfit','style','makeup','skincare','beauty','ankara','fit check'],
-    food: ['food','recipe','cooking','chef','jollof','meal','restaurant','amala'],
-    travel: ['travel','trip','vacation','flight','tourist','japa','abroad'],
-    fitness: ['gym','workout','fitness','training','abs','cardio'],
-    photography: ['photo','camera','photography','photoshoot','lens'],
-    art: ['art','drawing','painting','design','creative','artist','sketch'],
-    faith: ['god','pray','church','jesus','faith','bible','quran','sermon','worship','ministry'],
-    comedy: ['lol','funny','comedy','skit','meme','joke','laugh','hilarious'],
-    relationships: ['relationship','love','crush','breakup','dating','marriage','situationship','heartbreak'],
-    news: ['breaking','news','politics','government','election','tinubu','senate'],
-    african_culture: ['naija','nigeria','africa','culture','tribal','yoruba','igbo','hausa','ankara','owambe'],
-    family: ['family','mom','dad','sibling','kids','parent'],
-    motivation: ['motivation','inspire','mindset','discipline','grind','success story'],
-    lifestyle: ['lifestyle','vlog','daily life','routine','aesthetic'],
-    stories: ['storytime','my story','true story','confession'],
-    personal_dev: ['self improvement','growth','habits','productivity','journaling'],
-    community: ['community','together','support each other','giveback'],
-    trending: ['trending','viral','fyp','challenge']
+    comedy: ['lol', 'funny', 'comedy', 'skit', 'meme', 'joke', 'laugh', 'hilarious', 'prank'],
+    entertainment_culture: ['entertainment', 'movie', 'film', 'netflix', 'cinema', 'trailer', 'tv series', 'nollywood', 'hollywood', 'celebrity', 'celeb', 'famous', 'anime', 'manga', 'naruto', 'one piece', 'culture', 'naija', 'nigeria', 'africa', 'tribal', 'yoruba', 'igbo', 'hausa', 'owambe'],
+    music: ['music', 'song', 'album', 'beat', 'afrobeat', 'amapiano', 'lyrics', 'concert', 'remix', 'singer', 'rapper', 'producer'],
+    food_drink: ['food', 'recipe', 'cooking', 'chef', 'jollof', 'meal', 'restaurant', 'amala', 'drink', 'cocktail', 'coffee', 'wine'],
+    sports: ['football', 'soccer', 'goal', 'messi', 'ronaldo', 'arsenal', 'chelsea', 'premier league', 'la liga', 'uefa', 'epl', 'basketball', 'nba', 'dunk', 'lebron', 'curry', 'tennis', 'wimbledon', 'boxing', 'mma', 'ufc', 'knockout', 'olympics', 'athletics', 'match', 'tournament'],
+    beauty_style: ['fashion', 'outfit', 'style', 'makeup', 'skincare', 'beauty', 'ankara', 'fit check', 'hairstyle', 'nails'],
+    travel: ['travel', 'trip', 'vacation', 'flight', 'tourist', 'japa', 'abroad', 'destination'],
+    motivation_advice: ['motivation', 'inspire', 'mindset', 'discipline', 'grind', 'success story', 'advice', 'self improvement', 'growth', 'habits', 'productivity'],
+    life_hacks: ['hack', 'life hack', 'trick', 'tip', 'shortcut', 'save time', 'save money'],
+    dance: ['dance', 'dancing', 'choreography', 'dancer', 'moves'],
+    science_education: ['school', 'university', 'exam', 'lecture', 'study', 'jamb', 'waec', 'student', 'campus', 'science', 'technology', 'tech', 'gadget', 'ai', 'artificial intelligence', 'chatgpt', 'programming', 'code', 'coding', 'developer', 'business', 'finance', 'money', 'investing', 'career', 'job'],
+    gaming: ['gaming', 'gamer', 'ps5', 'xbox', 'fortnite', 'valorant', 'call of duty', 'esports'],
+    fitness_health: ['gym', 'workout', 'fitness', 'training', 'abs', 'cardio', 'health', 'wellness', 'diet'],
+    daily_life: ['lifestyle', 'vlog', 'daily life', 'routine', 'family', 'relationship', 'love', 'dating', 'faith', 'pray', 'church', 'storytime', 'my story'],
+    diy: ['diy', 'craft', 'build', 'homemade', 'tutorial', 'how to make', 'handmade']
   };
 
   // ===================================================================
