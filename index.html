@@ -2001,8 +2001,59 @@
                 transform: rotate(360deg);
             }
         }
-        #toast {
-            transition: all .3s cubic-bezier(.68, -.55, .265, 1.55);
+
+        /* ─── TOAST (SaaS card style) ─── */
+        .fu-toast {
+            position: fixed;
+            left: 50%;
+            bottom: calc(var(--bottom-nav-height) + 24px);
+            transform: translateX(-50%) translateY(10px);
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: min(360px, calc(100vw - 32px));
+            padding: 13px 16px;
+            border-radius: 14px;
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            box-shadow: 0 14px 34px rgba(0, 0, 0, .3), 0 2px 8px rgba(0, 0, 0, .14);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .22s ease, transform .22s cubic-bezier(.34, 1.56, .64, 1);
+        }
+        .fu-toast.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(-50%) translateY(0);
+        }
+        .fu-toast-icon {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fu-toast-icon svg {
+            width: 12px;
+            height: 12px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .fu-toast-icon.t-g { background: #16A34A; }
+        .fu-toast-icon.t-r { background: #DC2626; }
+        .fu-toast-icon.t-o { background: #CA8A04; }
+        .fu-toast-icon.t-p { background: #7C3AED; }
+        .fu-toast-message {
+            font-size: .86rem;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.4;
         }
 
         /* ─── RIPPLE & HEART PARTICLES ─── */
@@ -2827,8 +2878,11 @@
         <div class="spinner"></div><span class="text-xs font-medium" style="color:var(--muted);">Refreshing feed...</span>
     </div>
 
-    <!-- ===== TOAST ===== -->
-    <div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-full shadow-lg text-sm font-medium opacity-0 pointer-events-none transition-all duration-300" style="background:var(--bg3);color:var(--text);border:1px solid var(--brd2);"></div>
+    <!-- ===== TOAST (SaaS card style) ===== -->
+    <div id="toast" class="fu-toast">
+        <span id="toast-icon" class="fu-toast-icon"></span>
+        <span id="toast-message" class="fu-toast-message"></span>
+    </div>
 
     <!-- ===== LIGHTBOX ===== -->
     <div class="lightbox-modal" id="lightbox">
@@ -3850,11 +3904,11 @@
 
 
                 function goToSlide(idx) {
-    current = (idx + total) % total;
-    carouselEl.dataset.current = current;
-    track.style.transform = `translateX(-${current * 100}%)`;
-    dots.forEach((d, i) => d.classList.toggle('active', i === current));
-}
+                    current = (idx + total) % total;
+                    carouselEl.dataset.current = current;
+                    track.style.transform = `translateX(-${current * 100}%)`;
+                    dots.forEach((d, i) => d.classList.toggle('active', i === current));
+                }
 
 
                 function nextSlide() { goToSlide(current + 1); }
@@ -3909,34 +3963,34 @@
                     if (Math.abs(diff) > 30) {
                         if (diff > 0) goToSlide(current + 1);
                         else goToSlide(current - 1);
-                                showArrowsTemporarily();
-    }
-}, { passive: true });
+                        showArrowsTemporarily();
+                    }
+                }, { passive: true });
 
-computeCarouselFixedHeight(carouselEl);
-window.addEventListener('resize', () => computeCarouselFixedHeight(carouselEl));
+                computeCarouselFixedHeight(carouselEl);
+                window.addEventListener('resize', () => computeCarouselFixedHeight(carouselEl));
 
-// ─── ONE-TIME SWIPE HINT ───────────────────────────────
-setTimeout(() => {
-    track.style.transition = 'transform 0.35s ease';
-    track.style.transform = 'translateX(-18%)';
-    setTimeout(() => {
-        track.style.transform = 'translateX(0%)';
-        setTimeout(() => {
-            track.style.transition = ''; // restore normal swipe transition
-        }, 350);
-    }, 450);
-}, 700);
+                // ─── ONE-TIME SWIPE HINT ───────────────────────────────
+                setTimeout(() => {
+                    track.style.transition = 'transform 0.35s ease';
+                    track.style.transform = 'translateX(-18%)';
+                    setTimeout(() => {
+                        track.style.transform = 'translateX(0%)';
+                        setTimeout(() => {
+                            track.style.transition = ''; // restore normal swipe transition
+                        }, 350);
+                    }, 450);
+                }, 700);
 
-carouselEl._cleanup = function() {
-    if (arrowTimeout) clearTimeout(arrowTimeout);
-};
-                
-window.addEventListener('resize', () => computeCarouselFixedHeight(carouselEl));
+                carouselEl._cleanup = function() {
+                    if (arrowTimeout) clearTimeout(arrowTimeout);
+                };
 
-carouselEl._cleanup = function() {
-    if (arrowTimeout) clearTimeout(arrowTimeout);
-};
+                window.addEventListener('resize', () => computeCarouselFixedHeight(carouselEl));
+
+                carouselEl._cleanup = function() {
+                    if (arrowTimeout) clearTimeout(arrowTimeout);
+                };
 
             }
 
@@ -4106,9 +4160,14 @@ carouselEl._cleanup = function() {
                 return 'follow';
             }
 
+            // ─── FIX: guest action → open modal ──────────────────────────────
             async function toggleFollowUser(userId) {
                 const user = getCurrentUser();
-                if (!user || !user.isLoggedIn) { showToast('Please sign in to follow', 'o'); return false; }
+                if (!user || !user.isLoggedIn) {
+                    if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
+                    else showToast('Please sign in to follow', 'o');
+                    return false;
+                }
                 const currently = isFollowedByMe(userId);
                 try {
                     if (currently) {
@@ -4127,9 +4186,14 @@ carouselEl._cleanup = function() {
 
             function isBookmarked(postId) { return bookmarksSet.has(postId); }
 
+            // ─── FIX: guest action → open modal ──────────────────────────────
             async function toggleBookmark(postId) {
                 const user = getCurrentUser();
-                if (!user || !user.isLoggedIn) { showToast('Please sign in to bookmark', 'o'); return false; }
+                if (!user || !user.isLoggedIn) {
+                    if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
+                    else showToast('Please sign in to bookmark', 'o');
+                    return false;
+                }
                 const currently = isBookmarked(postId);
                 try {
                     if (currently) {
@@ -4148,9 +4212,14 @@ carouselEl._cleanup = function() {
 
             function isShared(postId) { return sharesSet.has(postId); }
 
+            // ─── FIX: guest action → open modal ──────────────────────────────
             async function toggleShare(postId) {
                 const user = getCurrentUser();
-                if (!user || !user.isLoggedIn) { showToast('Please sign in to share', 'o'); return false; }
+                if (!user || !user.isLoggedIn) {
+                    if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
+                    else showToast('Please sign in to share', 'o');
+                    return false;
+                }
                 const currently = isShared(postId);
                 try {
                     if (currently) {
@@ -5099,17 +5168,9 @@ carouselEl._cleanup = function() {
                 document.getElementById('seeAllModal').classList.add('flex');
             }
 
+            // ─── FIX: triggerToast uses showToast ─────────────────────────────
             function triggerToast(title, sub) {
-                const toast = document.getElementById('toast');
-                if (!toast) return;
-                toast.textContent = title + (sub ? ' — ' + sub : '');
-                toast.classList.add('opacity-100');
-                toast.classList.remove('opacity-0', 'pointer-events-none');
-                clearTimeout(toast._t);
-                toast._t = setTimeout(() => {
-                    toast.classList.add('opacity-0', 'pointer-events-none');
-                    toast.classList.remove('opacity-100');
-                }, 3000);
+                showToast(title + (sub ? ' — ' + sub : ''), 'p');
             }
 
             function applyFilters() {
@@ -7244,24 +7305,25 @@ carouselEl._cleanup = function() {
             function showToast(msg, type) {
                 const t = document.getElementById('toast');
                 if (!t) return;
-                t.textContent = msg;
-                const palette = {
-                    r: { bg: 'rgba(220,38,38,.12)', c: '#DC2626', b: '#DC2626' },
-                    g: { bg: 'rgba(22,163,74,.12)', c: '#16A34A', b: '#16A34A' },
-                    o: { bg: 'rgba(234,179,8,.12)', c: '#CA8A04', b: '#CA8A04' },
-                    p: { bg: 'rgba(124,58,237,.12)', c: '#7C3AED', b: '#7C3AED' },
+                const iconEl = document.getElementById('toast-icon');
+                const msgEl = document.getElementById('toast-message');
+                const icons = {
+                    g: '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>',
+                    r: '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+                    o: '<svg viewBox="0 0 24 24"><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#fff" stroke="none"/></svg>',
+                    p: '<svg viewBox="0 0 24 24"><line x1="12" y1="8" x2="12" y2="13"/><circle cx="12" cy="16.5" r="1" fill="#fff" stroke="none"/></svg>'
                 };
-                const p = palette[type];
-                t.style.background = p ? p.bg : 'var(--bg3)';
-                t.style.color = p ? p.c : 'var(--text)';
-                t.style.border = '1px solid ' + (p ? p.b : 'var(--brd2)');
-                t.classList.add('opacity-100');
-                t.classList.remove('opacity-0', 'pointer-events-none');
+                const validType = icons[type] ? type : 'p';
+                if (msgEl) msgEl.textContent = msg;
+                if (iconEl) {
+                    iconEl.className = 'fu-toast-icon t-' + validType;
+                    iconEl.innerHTML = icons[validType];
+                }
+                t.classList.add('show');
                 clearTimeout(t._t);
                 t._t = setTimeout(() => {
-                    t.classList.add('opacity-0', 'pointer-events-none');
-                    t.classList.remove('opacity-100');
-                }, 2200);
+                    t.classList.remove('show');
+                }, 2600);
             }
 
             function openLightbox(src) {
