@@ -26,8 +26,8 @@
     try {
       const meta = document.getElementById('theme-color-meta') || document.querySelector('meta[name="theme-color"]');
       if (!meta) return;
-      const bg2 = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim();
-      if (bg2) meta.setAttribute('content', bg2);
+      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      if (bg) meta.setAttribute('content', bg);
     } catch (_) {
       // Silently fail – status bar colour will just stay as-is
     }
