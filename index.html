@@ -5292,14 +5292,20 @@ carouselEl._cleanup = function() {
                     };
                 });
 
-                submitBtn.onclick = () => {
-                    if (!selected) return;
+                                submitBtn.onclick = () => {
+                    if (!selected) { showToast('Please select a reason first', 'o'); return; }
+                    const chosenReason = selected;
                     close();
                     try {
                         if (window.PostsAPI && typeof window.PostsAPI.reportPost === 'function') {
-                            window.PostsAPI.reportPost(postId, selected)
-                                .then(() => showToast('Report submitted. Thank you for helping keep FreeUpper safe.', 'g'))
-                                .catch(err => showToast(err.message || 'Failed to report post', 'r'));
+                            window.PostsAPI.reportPost(postId, chosenReason)
+                                .then(() => {
+                                    showToast('Report submitted. Thank you for helping keep FreeUpper safe.', 'g');
+                                })
+                                .catch(err => {
+                                    console.error('reportPost rejected:', err);
+                                    showToast((err && err.message) || 'Failed to report post', 'r');
+                                });
                         } else {
                             const user = getCurrentUser();
                             if (!user || !user.isLoggedIn) { showToast('Please sign in', 'o'); return; }
@@ -5307,20 +5313,24 @@ carouselEl._cleanup = function() {
                                 reporter_id: user.id,
                                 target_type: 'post',
                                 target_id: postId,
-                                reason: selected,
+                                reason: chosenReason,
                                 status: 'pending',
                                 created_at: new Date().toISOString()
                             }).then(({ error }) => {
-                                if (error) showToast('Error: ' + error.message, 'r');
-                                else showToast('Report submitted', 'g');
+                                if (error) {
+                                    console.error('reports insert error:', error);
+                                    showToast('Error: ' + error.message, 'r');
+                                } else {
+                                    showToast('Report submitted', 'g');
+                                }
                             });
                         }
                     } catch (err) {
-                        console.error('reportPost failed:', err);
+                        console.error('reportPost threw synchronously:', err);
                         showToast('Could not report post', 'r');
                     }
                 };
-            }
+
 
 
             // ─── DELETE ───────────────────────────────────────────────────────
