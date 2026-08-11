@@ -1,6 +1,6 @@
 // =====================================================================
 // index-algorithm.js
-// FreeUpper Ranking Engine — v4.0.0
+// FreeUpper Ranking Engine — v5.0.0
 // =====================================================================
 //
 // PURPOSE
@@ -20,6 +20,24 @@
 //   - avoid showing too many posts from the same creator in a row
 //   - remember what's already been shown (seen penalty)
 //
+// v5.0.0 CHANGES FROM v4.0.0
+// -----------------------------------------------------------------
+//   - TAXONOMY expanded from 15 to 36 global categories
+//   - KEYWORD_MAP is now two-tier per topic: { strong: [...], phrases: [...] }
+//       strong   -> word-boundary matched, safe as standalone signals
+//       phrases  -> exact substring matched, only safe as compound phrases
+//     (this is what keeps e.g. "Nigeria won the match" out of
+//     culture_language, while "Nigerian culture" still matches it)
+//   - inferTopicsFromText normalizes hyphens/underscores/apostrophes
+//     before matching, so "side-hustle" / "side_hustle" / "side hustle"
+//     all resolve the same way
+//   - profile.interests entries are now objects: { sources: [...], strength }
+//     instead of bare numbers. sources tracks whether a topic came from
+//     onboarding, behavior, or both; strength (0-1) is the actual ranking
+//     value. Old flat-number entries from before this change are still
+//     read correctly (see normalizeInterestEntry) — no data migration
+//     required.
+//
 // DEPENDENCIES: none. Pure functions + one small internal state object.
 // It does not touch window.sb directly — index-feed.js / index.html
 // will pass in the profile and persist any changes.
@@ -30,39 +48,67 @@
   'use strict';
 
   // ===================================================================
-  // 1. TOPIC TAXONOMY (your 15-interest list)
+  // 1. TOPIC TAXONOMY (36-category global taxonomy)
   // ===================================================================
   const TAXONOMY = [
-    'comedy', 'entertainment_culture', 'music', 'food_drink', 'sports',
-    'beauty_style', 'travel', 'motivation_advice', 'life_hacks', 'dance',
-    'science_education', 'gaming', 'fitness_health', 'daily_life', 'diy'
+    'comedy', 'music', 'dance', 'movies_tv', 'gaming', 'esports', 'sports',
+    'politics', 'news_current_events', 'fashion_beauty', 'food_drink',
+    'food_culture', 'travel', 'lifestyle', 'relationships', 'family_parenting',
+    'health_fitness', 'education', 'science_technology', 'business_finance',
+    'careers_jobs', 'art_creativity', 'diy_crafts', 'automotive',
+    'pets_animals', 'religion_spirituality', 'self_improvement',
+    'culture_language', 'history', 'books_writing', 'photography',
+    'nature_outdoors', 'home_garden', 'shopping_products',
+    'celebrity_pop_culture', 'podcasts'
   ];
 
   // ===================================================================
-  // 2. KEYWORD → TOPIC MAP (Layer 1/2 content understanding)
+  // 2. KEYWORD -> TOPIC MAP (Layer 1/2 content understanding)
   // ===================================================================
-  // This is intentionally simple and fast — pure string matching,
-  // runs client-side, costs nothing. It's the thing that lets a post
-  // with NO category field still get correctly routed to interested
-  // users. This can later be swapped for a real NLP/vision model
-  // without changing anything downstream.
+  // Two tiers per topic:
+  //   strong   - reliable on their own (word-boundary matched)
+  //   phrases  - only reliable as a compound phrase (substring matched)
+  // Deliberate rule: no bare country/demonym names anywhere in this map.
+  // "Nigeria", "Korean", "American" etc. are too ambiguous standalone —
+  // they only count when part of an explicit phrase (see culture_language).
   // ===================================================================
   const KEYWORD_MAP = {
-    comedy: ['lol', 'funny', 'comedy', 'skit', 'meme', 'joke', 'laugh', 'hilarious', 'prank'],
-    entertainment_culture: ['entertainment', 'movie', 'film', 'netflix', 'cinema', 'trailer', 'tv series', 'nollywood', 'hollywood', 'celebrity', 'celeb', 'famous', 'anime', 'manga', 'naruto', 'one piece', 'culture', 'naija', 'nigeria', 'africa', 'tribal', 'yoruba', 'igbo', 'hausa', 'owambe'],
-    music: ['music', 'song', 'album', 'beat', 'afrobeat', 'amapiano', 'lyrics', 'concert', 'remix', 'singer', 'rapper', 'producer'],
-    food_drink: ['food', 'recipe', 'cooking', 'chef', 'jollof', 'meal', 'restaurant', 'amala', 'drink', 'cocktail', 'coffee', 'wine'],
-    sports: ['football', 'soccer', 'goal', 'messi', 'ronaldo', 'arsenal', 'chelsea', 'premier league', 'la liga', 'uefa', 'epl', 'basketball', 'nba', 'dunk', 'lebron', 'curry', 'tennis', 'wimbledon', 'boxing', 'mma', 'ufc', 'knockout', 'olympics', 'athletics', 'match', 'tournament'],
-    beauty_style: ['fashion', 'outfit', 'style', 'makeup', 'skincare', 'beauty', 'ankara', 'fit check', 'hairstyle', 'nails'],
-    travel: ['travel', 'trip', 'vacation', 'flight', 'tourist', 'japa', 'abroad', 'destination'],
-    motivation_advice: ['motivation', 'inspire', 'mindset', 'discipline', 'grind', 'success story', 'advice', 'self improvement', 'growth', 'habits', 'productivity'],
-    life_hacks: ['hack', 'life hack', 'trick', 'tip', 'shortcut', 'save time', 'save money'],
-    dance: ['dance', 'dancing', 'choreography', 'dancer', 'moves'],
-    science_education: ['school', 'university', 'exam', 'lecture', 'study', 'jamb', 'waec', 'student', 'campus', 'science', 'technology', 'tech', 'gadget', 'ai', 'artificial intelligence', 'chatgpt', 'programming', 'code', 'coding', 'developer', 'business', 'finance', 'money', 'investing', 'career', 'job'],
-    gaming: ['gaming', 'gamer', 'ps5', 'xbox', 'fortnite', 'valorant', 'call of duty', 'esports'],
-    fitness_health: ['gym', 'workout', 'fitness', 'training', 'abs', 'cardio', 'health', 'wellness', 'diet'],
-    daily_life: ['lifestyle', 'vlog', 'daily life', 'routine', 'family', 'relationship', 'love', 'dating', 'faith', 'pray', 'church', 'storytime', 'my story'],
-    diy: ['diy', 'craft', 'build', 'homemade', 'tutorial', 'how to make', 'handmade']
+    comedy: { strong: ['comedy', 'skit', 'funny', 'lol', 'meme', 'joke', 'prank', 'hilarious', 'standup', 'satire', 'parody', 'roast'] },
+    music: { strong: ['music', 'song', 'album', 'singer', 'rapper', 'producer', 'afrobeats', 'amapiano', 'hip hop', 'r&b', 'reggae', 'dancehall', 'gospel music', 'k pop', 'jazz', 'lyrics', 'remix', 'concert', 'dj'] },
+    dance: { strong: ['dance', 'dancing', 'choreography', 'dancer', 'dance challenge'] },
+    movies_tv: { strong: ['movie', 'film', 'cinema', 'netflix', 'trailer', 'actor', 'actress', 'nollywood', 'hollywood', 'bollywood', 'anime', 'manga', 'documentary', 'tv series'], phrases: ['tv show'] },
+    gaming: { strong: ['gaming', 'gamer', 'ps5', 'ps4', 'xbox', 'playstation', 'nintendo', 'fortnite', 'valorant', 'minecraft', 'roblox', 'fifa', 'efootball'], phrases: ['call of duty'] },
+    esports: { strong: ['esports', 'esport', 'pro gamer'], phrases: ['gaming tournament'] },
+    sports: { strong: ['football', 'soccer', 'messi', 'ronaldo', 'arsenal', 'chelsea', 'liverpool', 'basketball', 'nba', 'wnba', 'lebron', 'tennis', 'wimbledon', 'boxing', 'mma', 'ufc', 'athletics', 'cricket', 'rugby', 'golf', 'volleyball', 'baseball'], phrases: ['premier league', 'la liga', 'champions league', 'formula 1'] },
+    politics: { strong: ['politics', 'political', 'election', 'elections', 'president', 'presidential', 'parliament', 'senate', 'senator', 'congress', 'government', 'democracy', 'politician', 'campaign', 'ballot', 'voting', 'legislation', 'governor', 'mayor', 'minister', 'prime minister', 'candidate', 'opposition'], phrases: ['general election', 'political debate', 'voter registration'] },
+    news_current_events: { strong: ['headline', 'headlines'], phrases: ['breaking news', 'current events', 'news update'] },
+    fashion_beauty: { strong: ['fashion', 'outfit', 'style', 'makeup', 'skincare', 'beauty', 'ankara', 'hairstyle', 'nails', 'haircare'], phrases: ['fit check'] },
+    food_drink: { strong: ['food', 'recipe', 'cooking', 'chef', 'jollof', 'amala', 'restaurant', 'cocktail', 'coffee', 'wine', 'baking'] },
+    food_culture: { strong: ['street food'], phrases: ['food culture', 'traditional cuisine', 'food history', 'tea ceremony'] },
+    travel: { strong: ['travel', 'trip', 'vacation', 'flight', 'tourist', 'destination', 'backpacking'], phrases: ['places to visit'] },
+    lifestyle: { strong: ['lifestyle', 'vlog', 'routine', 'storytime'], phrases: ['daily life', 'my story', 'get ready with me'] },
+    relationships: { strong: ['relationship', 'dating', 'boyfriend', 'girlfriend', 'breakup', 'situationship'], phrases: ['my partner'] },
+    family_parenting: { strong: ['parenting', 'toddler', 'newborn', 'mom life', 'dad life'], phrases: ['my kids', 'my family'] },
+    health_fitness: { strong: ['gym', 'workout', 'fitness', 'training', 'cardio', 'wellness', 'nutrition', 'mental health'] },
+    education: { strong: ['school', 'university', 'exam', 'lecture', 'jamb', 'waec', 'student', 'campus', 'scholarship', 'tutorial'] },
+    science_technology: { strong: ['science', 'technology', 'gadget', 'chatgpt', 'programming', 'coding', 'developer', 'software', 'space', 'physics'], phrases: ['artificial intelligence'] },
+    business_finance: { strong: ['business', 'finance', 'investing', 'entrepreneur', 'startup', 'stocks', 'crypto', 'side hustle'], phrases: ['personal finance'] },
+    careers_jobs: { strong: ['job', 'jobs', 'resume', 'hiring'], phrases: ['job search', 'interview tips'] },
+    art_creativity: { strong: ['art', 'painting', 'drawing', 'illustration', 'sketch', 'sculpture', 'design'] },
+    diy_crafts: { strong: ['diy', 'craft', 'handmade', 'woodworking'], phrases: ['how to make'] },
+    automotive: { strong: ['car', 'cars', 'engine', 'suv', 'motorbike', 'motorcycle'], phrases: ['test drive'] },
+    pets_animals: { strong: ['dog', 'cat', 'puppy', 'kitten', 'pet', 'animal', 'wildlife', 'vet'] },
+    religion_spirituality: { strong: ['church', 'sermon', 'prayer', 'faith', 'quran', 'bible', 'mosque', 'meditation', 'spirituality', 'diwali', 'eid', 'hanukkah', 'kwanzaa'] },
+    self_improvement: { strong: ['motivation', 'discipline', 'mindset', 'productivity', 'habits', 'goals'], phrases: ['self improvement', 'success story'] },
+    culture_language: { strong: ['yoruba', 'igbo', 'hausa', 'swahili', 'mandarin', 'owambe', 'heritage', 'folklore', 'diaspora', 'indigenous', 'ancestral'], phrases: ['nigerian culture', 'african culture', 'american culture', 'european culture', 'asian culture', 'latin culture', 'indian culture', 'korean culture', 'japanese culture', 'chinese culture', 'arab culture', 'cultural heritage', 'traditional attire', 'cultural festival'] },
+    history: { strong: ['history', 'historical', 'archaeology', 'historic'], phrases: ['world war'] },
+    books_writing: { strong: ['book', 'books', 'novel', 'author', 'writing', 'poetry', 'poem'], phrases: ['book review', 'book club'] },
+    photography: { strong: ['photography', 'photographer', 'photoshoot'], phrases: ['camera gear'] },
+    nature_outdoors: { strong: ['hiking', 'camping', 'nature', 'outdoors', 'forest', 'mountains'], phrases: ['national park'] },
+    home_garden: { strong: ['gardening', 'garden', 'houseplants'], phrases: ['home decor', 'interior design'] },
+    shopping_products: { strong: ['unboxing', 'haul', 'shopping'], phrases: ['product review'] },
+    celebrity_pop_culture: { strong: ['celebrity', 'celeb', 'influencer', 'paparazzi'], phrases: ['pop culture', 'red carpet', 'award show', 'celebrity news', 'celebrity gossip'] },
+    podcasts: { strong: ['podcast', 'podcaster'], phrases: ['podcast episode'] }
   };
 
   // ===================================================================
@@ -83,20 +129,16 @@
     LEARNING_RATE: 0.08,       // how fast behavior shifts the interest vector
     DECAY: 0.995,              // slow forgetting so old interests don't get stuck forever
     MIN_INTEREST: 0,
-    MAX_INTEREST: 1
+    MAX_INTEREST: 1,
+    NEW_TOPIC_SEED: 0.3        // starting strength when behavior discovers a topic with no prior entry
   };
 
   // ===================================================================
   // 4. INTERNAL SESSION STATE
   // ===================================================================
-  // This lives only in memory for the current page session. The
-  // *persisted* interest vector lives on profile.interests (Supabase),
-  // and index-feed.js is responsible for loading/saving that — this
-  // file just operates on whatever object it's handed.
-  // ===================================================================
   const session = {
     seenIds: new Set(),
-    recentCreators: []   // rolling window used for repeat-creator penalty
+    recentCreators: []
   };
 
   // ===================================================================
@@ -112,7 +154,6 @@
   }
 
   function getLikeCount(post) {
-    // Your index.html sometimes reads post.likes, sometimes post.reactions.like
     if (post.reactions && typeof post.reactions.like === 'number') {
       return post.reactions.like;
     }
@@ -120,7 +161,6 @@
   }
 
   function getCommentCount(post) {
-    // Some places you store an array of comment objects, others a number
     if (Array.isArray(post.comments)) {
       return post.comments.filter(c => c.approved !== false).length;
     }
@@ -134,31 +174,70 @@
   }
 
   // ===================================================================
+  // 5b. INTEREST ENTRY HELPERS
+  // ===================================================================
+  // Handles both the current shape ({ sources, strength }) and the
+  // legacy flat-number shape from before v5.0.0, so no DB migration
+  // is required for existing users.
+  // ===================================================================
+  function normalizeInterestEntry(entry) {
+    if (entry === undefined || entry === null) return { sources: [], strength: 0 };
+    if (typeof entry === 'number') return { sources: ['onboarding'], strength: entry };
+    return {
+      sources: Array.isArray(entry.sources) ? entry.sources : [],
+      strength: typeof entry.strength === 'number' ? entry.strength : 0
+    };
+  }
+
+  function getStrength(interests, topic) {
+    return normalizeInterestEntry(interests[topic]).strength;
+  }
+
+  // ===================================================================
   // 6. TOPIC INFERENCE
   // ===================================================================
-  // Combines title + content + description + explicit tags into one
-  // blob and matches against KEYWORD_MAP. Explicit tags (if the user
-  // did type one) are trusted directly if they match a taxonomy key.
-  // ===================================================================
+  function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  const _keywordRegexCache = new Map();
+  function getKeywordRegex(keyword) {
+    if (_keywordRegexCache.has(keyword)) return _keywordRegexCache.get(keyword);
+    const re = new RegExp('\\b' + escapeRegex(keyword) + '\\b', 'i');
+    _keywordRegexCache.set(keyword, re);
+    return re;
+  }
+
+  function normalizeText(text) {
+    return String(text)
+      .toLowerCase()
+      .replace(/[’']/g, '')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function inferTopicsFromText(text) {
     if (!text) return [];
-    const lower = String(text).toLowerCase();
+    const lower = normalizeText(text);
     const found = [];
     for (const topic in KEYWORD_MAP) {
-      const keywords = KEYWORD_MAP[topic];
-      for (let i = 0; i < keywords.length; i++) {
-        if (lower.includes(keywords[i])) {
-          found.push(topic);
-          break;
+      const { strong = [], phrases = [] } = KEYWORD_MAP[topic];
+      let matched = false;
+      for (let i = 0; i < strong.length && !matched; i++) {
+        if (getKeywordRegex(strong[i]).test(lower)) matched = true;
+      }
+      if (!matched) {
+        for (let i = 0; i < phrases.length && !matched; i++) {
+          if (lower.includes(phrases[i])) matched = true;
         }
       }
+      if (matched) found.push(topic);
     }
     return found;
   }
 
   function getPostTopics(post) {
-    // Cache on the post object itself so we don't re-run regex matching
-    // every time the feed re-sorts (e.g. on realtime updates).
     if (post._topics) return post._topics;
 
     const textParts = [
@@ -169,8 +248,6 @@
 
     let topics = inferTopicsFromText(textParts);
 
-    // Trust explicit tags too, if the tag text matches a known topic key
-    // or partially matches a taxonomy label.
     if (Array.isArray(post.tags)) {
       post.tags.forEach(tag => {
         const clean = String(tag).toLowerCase().replace(/^#/, '').trim();
@@ -180,8 +257,6 @@
       });
     }
 
-    // Legacy: if a post still has a category field set to something
-    // useful, fold it in too (backward compatible, never required).
     if (post.category && typeof post.category === 'string') {
       const cat = post.category.toLowerCase().trim();
       if (TAXONOMY.includes(cat) && !topics.includes(cat)) {
@@ -220,8 +295,8 @@
   function affinityScore(post, interests) {
     const topics = getPostTopics(post);
     if (!topics.length) return 0;
-    const total = topics.reduce((sum, t) => sum + (interests[t] || 0), 0);
-    return total / topics.length; // average interest across matched topics, 0–1
+    const total = topics.reduce((sum, t) => sum + getStrength(interests, t), 0);
+    return total / topics.length;
   }
 
   function creatorAffinityScore(post, creatorScores) {
@@ -246,10 +321,6 @@
   // ===================================================================
   // 8. MAIN SCORE FUNCTION
   // ===================================================================
-  // interests       -> { football: 0.9, music: 0.4, ... } from profile.interests
-  // creatorScores   -> Map<userId, number 0-1> built from past interactions
-  // hasSignal       -> whether the user has ANY interest/behavior data yet
-  // ===================================================================
   function scorePost(post, index, windowPosts, interests, creatorScores, hasSignal) {
     if (!post || !post.id) return -Infinity;
     if (post.is_hidden) return -Infinity;
@@ -258,9 +329,6 @@
     score += freshnessScore(post) * CONFIG.FRESHNESS_WEIGHT;
     score += engagementScore(post);
 
-    // Cold start: brand-new users with zero interest data and zero
-    // interaction history get a purely freshness + engagement feed —
-    // NOT a flat/broken affinity multiplier that silently does nothing.
     if (hasSignal) {
       score += affinityScore(post, interests) * CONFIG.AFFINITY_WEIGHT;
       score += creatorAffinityScore(post, creatorScores) * CONFIG.CREATOR_AFFINITY_WEIGHT;
@@ -277,11 +345,7 @@
   }
 
   // ===================================================================
-  // 9. RANK — the function index.html / index-feed.js will call
-  // ===================================================================
-  // posts        -> array of post objects (already loaded from posts.js)
-  // profile      -> { interests: {...} } or null/undefined for guests
-  // creatorScores-> optional Map<userId, number>, defaults to empty
+  // 9. RANK
   // ===================================================================
   function rank(posts, profile, creatorScores) {
     if (!Array.isArray(posts) || !posts.length) return [];
@@ -308,11 +372,6 @@
   // ===================================================================
   // 10. BEHAVIORAL LEARNING
   // ===================================================================
-  // Call this whenever the user does something meaningful with a post.
-  // It mutates and RETURNS a new interests object — it does NOT write
-  // to Supabase itself. index-interactions.js / index-feed.js decides
-  // when/how to persist it (e.g. debounced).
-  // ===================================================================
   const INTERACTION_WEIGHTS = {
     like: 1,
     unlike: -0.6,
@@ -320,13 +379,19 @@
     share: 2,
     repost: 2,
     bookmark: 1.5,
-    watch_complete: 1.2,   // finished watching a video
-    watch_partial: 0.3,    // watched some of it
-    skip: -0.5,            // scrolled past very fast
-    hide: -1.5,             // "not interested"
+    watch_complete: 1.2,
+    watch_partial: 0.3,
+    skip: -0.5,
+    hide: -1.5,
     follow_creator: 1.8
   };
 
+  // Mutates nothing in place — returns a new interests object.
+  // Every touched topic ends up as { sources, strength }: sources gains
+  // 'behavior' the first time real engagement confirms it, strength
+  // decays slightly before the new delta is applied so a topic that
+  // keeps getting interacted with trends up, and one that stops trends
+  // back down over time.
   function updateInterests(existingInterests, post, interactionType) {
     const interests = { ...(existingInterests || {}) };
     const weight = INTERACTION_WEIGHTS[interactionType] || 0;
@@ -338,9 +403,17 @@
     const delta = weight * CONFIG.LEARNING_RATE;
 
     topics.forEach(topic => {
-      const current = interests[topic] !== undefined ? interests[topic] : 0.3;
-      const decayed = current * CONFIG.DECAY;
-      interests[topic] = clamp(decayed + delta, CONFIG.MIN_INTEREST, CONFIG.MAX_INTEREST);
+      const hadExisting = Object.prototype.hasOwnProperty.call(interests, topic);
+      const current = normalizeInterestEntry(interests[topic]);
+      const baseStrength = hadExisting ? current.strength : CONFIG.NEW_TOPIC_SEED;
+      const decayed = baseStrength * CONFIG.DECAY;
+      const nextStrength = clamp(decayed + delta, CONFIG.MIN_INTEREST, CONFIG.MAX_INTEREST);
+
+      const sources = current.sources.includes('behavior')
+        ? current.sources
+        : [...current.sources, 'behavior'];
+
+      interests[topic] = { sources, strength: nextStrength };
     });
 
     return interests;
@@ -348,10 +421,6 @@
 
   // ===================================================================
   // 11. CREATOR AFFINITY LEARNING
-  // ===================================================================
-  // Tracks how much the user engages with specific creators, separate
-  // from topic-level interest. Kept in-memory per session; index-feed.js
-  // can persist this too if you want it to survive reloads.
   // ===================================================================
   function updateCreatorScore(creatorScores, userId, interactionType) {
     if (!userId) return creatorScores;
@@ -392,8 +461,6 @@
   // ===================================================================
   // 13. UTILITY — inspect why a post scored the way it did
   // ===================================================================
-  // Useful for debugging in console: FreeUpperAlgorithm.explain(post, profile)
-  // ===================================================================
   function explain(post, profile, creatorScores) {
     const interests = (profile && profile.interests) ? profile.interests : {};
     const scores = creatorScores || new Map();
@@ -427,5 +494,5 @@
     explain
   };
 
-  console.log('✅ FreeUpper Algorithm v4.0.0 loaded — category-independent, topic-inferring, cold-start-aware.');
+  console.log('✅ FreeUpper Algorithm v5.0.0 loaded — 36-category taxonomy, sourced interest strengths, cold-start-aware.');
 })();
