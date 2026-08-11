@@ -134,8 +134,10 @@
 
     const selected = new Set();
 
-    grid.style.overflow = 'hidden';
+        // ─── Fix layout overflow (horizontal only — vertical scroll must stay enabled) ──
+    grid.style.overflowX = 'hidden';
     grid.style.maxWidth = '100%';
+
 
     // No WIDE_KEYS — every pill is the same size; long labels wrap via CSS
     // (.pill-label needs white-space: normal; overflow-wrap: break-word;)
