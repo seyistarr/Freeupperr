@@ -1,6 +1,6 @@
 // =====================================================================
 // posts.js
-// FreeUpper Data/API Layer — v4.1.0 (FINAL)
+// FreeUpper Data/API Layer — v4.1.1 (FIXED repost subscription)
 // =====================================================================
 //
 // PURPOSE
@@ -12,7 +12,7 @@
 //                            (except profiles.interests — owned elsewhere)
 //   index-render.js      → never queries anything, pure coordinator
 //   index-interactions.js→ never queries anything, pure notifier
-//   index.html            → calls index-feed.js, which calls this file
+//   index.html           → calls index-feed.js, which calls this file
 //
 // FEATURE CHECKLIST (everything discussed, confirmed present below):
 // -----------------------------------------------------------------
@@ -1193,7 +1193,7 @@
   }
 
   // ===================================================================
-  // LEGACY REPOST-ONLY SUBSCRIPTION (backward compatible)
+  // LEGACY REPOST-ONLY SUBSCRIPTION (FIXED: payload is now passed)
   // ===================================================================
   let repostChannel = null;
   let repostCallbacks = [];
@@ -1206,11 +1206,15 @@
 
     repostChannel = sb
       .channel('posts_reposts_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reposts' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reposts' }, payload => {
         clearFeedContext();
         repostCallbacks.forEach(fn => {
           try {
-            fn();
+            fn({
+              eventType: payload.eventType,
+              new: payload.new || null,
+              old: payload.old || null
+            });
           } catch (error) {
             console.warn('Repost callback error:', error);
           }
@@ -1284,8 +1288,8 @@
     unsubscribe,
 
     // NEW: visual similarity
-    findSimilarPosts   // ← added to public API
+    findSimilarPosts
   };
 
-  console.log('✅ FreeUpper PostsAPI v4.1.0 loaded — full comment system (add/edit/delete/like/pin/report), reply counts, ownership-checked RPCs, and similarity search.');
+  console.log('✅ FreeUpper PostsAPI v4.1.1 loaded — repost subscription now passes payload.');
 })();
