@@ -3254,7 +3254,7 @@
             let pendingLikes = new Set();
             let pendingBookmarks = new Set();
 
-            // ─── FIX 13: viewed posts persistence ───────────────────────────
+            // ─── FIX 13+15: viewed posts persistence ─────────────────────────
             const VIEWED_POSTS_KEY = 'freeupper_viewed_posts';
             let viewedPostsSet = new Set(JSON.parse(localStorage.getItem(VIEWED_POSTS_KEY) || '[]'));
             function persistViewedPosts() {
@@ -6589,6 +6589,7 @@
                 updateExploreReplyContextUI(); const ta = document.getElementById('explore-comment-textarea'); if (
                     ta) ta.value = ''; }
 
+            // ─── FIX 16: submitCommentFromBar now always refreshes + bumps visibility ──
             async function submitCommentFromBar() {
                 const ta = document.getElementById('global-comment-textarea');
                 const message = ta.value.trim();
@@ -6601,16 +6602,29 @@
                 updateReplyContextUI();
                 try {
                     await addComment(currentPostId, pi, message, mentions);
-                    if (pi) {
-                        refreshCommentsList(currentPostId, 'comments-list');
+                    // ─── FIX: this used to only refresh the list for replies,
+                    // so a top-level comment (pi === null) was saved to the
+                    // database but never re-rendered — it looked like it
+                    // vanished. We also bump the visible-comments / expanded-
+                    // replies count so the just-posted comment isn't hidden
+                    // behind a "View more" pagination cutoff ────────────────
+                    if (!pi) {
+                        setCommentsVisible(currentPostId, getVisibleComments(currentPostId) + 1);
+                    } else {
+                        const currentPost = appData.posts.find(p => p.id === currentPostId);
+                        const existingComments = Array.isArray(currentPost?.comments) ? currentPost.comments : [];
+                        const topAncestorId = findTopAncestorId(pi, existingComments) || pi;
+                        expandedThreads.set(topAncestorId, (expandedThreads.get(topAncestorId) || 0) + 1);
                     }
+                    await refreshCommentsList(currentPostId, 'comments-list');
                     updateCommentCount(currentPostId);
-                    showToast(pi ? 'Reply posted' : 'Reply posted');
+                    showToast(pi ? 'Reply posted' : 'Comment posted');
                 } catch (err) {
                     showToast(err.message || 'Failed to post reply', 'r');
                 }
             }
 
+            // ─── FIX 17: submitExploreComment with same visibility bump ──
             async function submitExploreComment() {
                 const ta = document.getElementById('explore-comment-textarea');
                 const message = ta.value.trim();
@@ -6623,9 +6637,22 @@
                 updateExploreReplyContextUI();
                 try {
                     await addComment(currentPostId, pi, message, mentions);
-                    refreshCommentsList(currentPostId, 'comments-list');
+                    // ─── FIX: new comments sort to the END of the thread, but
+                    // only the first 3 top-level comments (or 0 replies of an
+                    // unexpanded thread) render by default. Without this, a
+                    // freshly posted comment is saved correctly but sits below
+                    // the pagination cutoff and looks like it never posted ────
+                    if (!pi) {
+                        setCommentsVisible(currentPostId, getVisibleComments(currentPostId) + 1);
+                    } else {
+                        const currentPost = appData.posts.find(p => p.id === currentPostId);
+                        const existingComments = Array.isArray(currentPost?.comments) ? currentPost.comments : [];
+                        const topAncestorId = findTopAncestorId(pi, existingComments) || pi;
+                        expandedThreads.set(topAncestorId, (expandedThreads.get(topAncestorId) || 0) + 1);
+                    }
+                    await refreshCommentsList(currentPostId, 'comments-list');
                     updateCommentCount(currentPostId);
-                    showToast(pi ? 'Reply posted' : 'Reply posted');
+                    showToast(pi ? 'Reply posted' : 'Comment posted');
                 } catch (err) {
                     showToast(err.message || 'Failed to post reply', 'r');
                 }
@@ -6736,7 +6763,7 @@
                     updateExploreReplyContextUI(); }
             }
 
-            // ─── FIX 13: views only count once per user ─────────────────────
+            // ─── FIX 15: view increment only after server success ──────────
             async function openExplorePost(id, returnPage, focusComment) {
                 const _guardPost = allPosts.find(p => p.id === id);
                 const _cu = getCurrentUser();
@@ -6816,18 +6843,25 @@
                 updateExploreReplyContextUI();
 
                 if (post) {
-                    // ─── FIX 13: count this as a view only the first time
-                    // THIS user ever opens THIS post. Reopening the same
-                    // post again (by the same person) no longer inflates
-                    // the count, and the number shown always matches what
-                    // the server actually has ─────────────────────────────
-                    if (!viewedPostsSet.has(id)) {
-                        viewedPostsSet.add(id);
-                        persistViewedPosts();
-                        if (window.PostsAPI && window.PostsAPI.incrementView) window.PostsAPI.incrementView(id);
-                        post.views = (post.views || 0) + 1;
-                        document.querySelectorAll(`[data-post-reactions="${id}"] .views-count span, [data-post-id="${id}"] .views-count span`)
-                            .forEach(el => el.textContent = formatCount(post.views));
+                    // ─── FIX 15: only mark this post as "viewed" in localStorage
+                    // AFTER the server call actually succeeds. Previously we
+                    // marked it viewed immediately — if incrementView failed
+                    // for any reason (network blip, RLS, etc.) the view was
+                    // lost forever and could never be retried, which is why
+                    // counting looked broken. Also uses the server's real
+                    // count when it returns one, instead of guessing +1. ────
+                    if (!viewedPostsSet.has(id) && window.PostsAPI && window.PostsAPI.incrementView) {
+                        window.PostsAPI.incrementView(id).then(result => {
+                            const ok = result && (result.success === true || result === true);
+                            if (!ok) return; // leave unmarked so it retries next time this post is opened
+                            viewedPostsSet.add(id);
+                            persistViewedPosts();
+                            post.views = (result && typeof result.views === 'number')
+                                ? result.views
+                                : (post.views || 0) + 1;
+                            document.querySelectorAll(`[data-post-reactions="${id}"] .views-count span, [data-post-id="${id}"] .views-count span`)
+                                .forEach(el => el.textContent = formatCount(post.views));
+                        }).catch(() => { /* leave unmarked — will retry on next open */ });
                     }
                     if (window.PostsAPI && window.PostsAPI.loadComments) {
                         const cl = document.getElementById('comments-list');
