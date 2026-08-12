@@ -7483,8 +7483,9 @@
                 }, 150);
             }
 
-            // ─── ITEM 2: realtime debounced with scroll preservation ──────
+            // ─── ITEM 2: realtime (FIXED) ────────────────────────────────────
             function setupRealtime() {
+                // ── legacy repost subscription (fixed in posts.js, but we keep the wrapper) ──
                 if (window.PostsAPI && window.PostsAPI.subscribe) {
                     window.PostsAPI.subscribe((payload) => {
                         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -7497,19 +7498,43 @@
                     });
                 }
 
+                // ── NEW: subscribeToAll with full handling ──
                 if (window.PostsAPI && window.PostsAPI.subscribeToAll) {
-                    let _realtimeDebounceTimer = null;
+                    let _newPostDebounceTimer = null;
+
                     window.PostsAPI.subscribeToAll((change) => {
-                        if (change.table !== 'posts' || change.event !== 'INSERT') return;
-                        clearTimeout(_realtimeDebounceTimer);
-                        _realtimeDebounceTimer = setTimeout(async () => {
-                            const scrollY = window.scrollY;
-                            await reloadData();
-                            if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'single-post-explore') {
-                                renderUI();
-                                window.scrollTo(0, scrollY);
-                            }
-                        }, 8000);
+                        // New posts appearing — batch these, no need to be instant
+                        if (change.table === 'posts' && change.event === 'INSERT') {
+                            clearTimeout(_newPostDebounceTimer);
+                            _newPostDebounceTimer = setTimeout(async () => {
+                                const scrollY = window.scrollY;
+                                await reloadData();
+                                if (uiPage === 'home' || uiPage === 'explore' || uiPage === 'single-post-explore') {
+                                    renderUI();
+                                    window.scrollTo(0, scrollY);
+                                }
+                            }, 4000);
+                            return;
+                        }
+
+                        // Counts changed (like/comment/bookmark/share/repost/view) — apply instantly
+                        if (change.table === 'posts' && change.event === 'UPDATE' && change.new) {
+                            applyLivePostCounts(change.new);
+                            return;
+                        }
+
+                        // Someone liked/unliked a comment on the post you're currently viewing
+                        if (change.table === 'comment_likes' && uiPage === 'single-post-explore' && currentPostId) {
+                            refreshCommentsList(currentPostId, 'comments-list');
+                            return;
+                        }
+
+                        // A new top-level comment/reply landed on the post you're currently viewing
+                        if (change.table === 'comments' && change.event === 'INSERT' &&
+                            uiPage === 'single-post-explore' && currentPostId &&
+                            change.new && change.new.post_id === currentPostId) {
+                            refreshCommentsList(currentPostId, 'comments-list');
+                        }
                     });
                 }
 
@@ -7525,6 +7550,39 @@
                         }
                     });
                 }
+            }
+
+            // ─── NEW: applyLivePostCounts (helper) ──────────────────────────
+            function applyLivePostCounts(row) {
+                if (!row || !row.id) return;
+                const post = allPosts.find(p => p.id === row.id) || appData.posts.find(p => p.id === row.id);
+                if (!post) return;
+
+                post.views = (typeof row.views === 'number') ? row.views : post.views;
+                post.reactions = post.reactions || {};
+                if (typeof row.like_count === 'number') { post.reactions.like = row.like_count; post.likes = row.like_count; }
+                if (typeof row.comment_count === 'number') post.comments = row.comment_count;
+                if (typeof row.bookmark_count === 'number') post.bookmarkCount = row.bookmark_count;
+                if (typeof row.share_count === 'number') post.shareCount = row.share_count;
+                if (typeof row.repost_count === 'number') post.repostCount = row.repost_count;
+
+                document.querySelectorAll(`[data-post-id="${row.id}"] .reaction-count, [data-post-reactions="${row.id}"] .reaction-count`)
+                    .forEach(el => animateCountRoll(el, formatCount(post.reactions.like || 0)));
+
+                document.querySelectorAll(`[data-post-id="${row.id}"] .views-count span, [data-post-reactions="${row.id}"] .views-count span`)
+                    .forEach(el => el.textContent = formatCount(post.views || 0));
+
+                document.querySelectorAll(`[data-post-id="${row.id}"] .comment-count, #comments-count-${row.id}`)
+                    .forEach(el => el.textContent = formatCount(post.comments || 0));
+
+                document.querySelectorAll(`[data-bookmark="${row.id}"] .bookmark-count, #single-bookmark-${row.id} .bookmark-count`)
+                    .forEach(el => animateCountRoll(el, formatCount(post.bookmarkCount || 0)));
+
+                document.querySelectorAll(`[data-share-post="${row.id}"] .share-count`)
+                    .forEach(el => el.textContent = formatCount(post.shareCount || 0));
+
+                document.querySelectorAll(`[data-post-id="${row.id}"] .repost-count-num`)
+                    .forEach(el => animateCountRoll(el, formatCount(post.repostCount || 0)));
             }
 
             // ─── LOAD DATA ─────────────────────────────────────────────────────
