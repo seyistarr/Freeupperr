@@ -4195,55 +4195,14 @@
 
             function isBookmarked(postId) { return bookmarksSet.has(postId); }
 
-            // ─── FIX: guest action → open modal ──────────────────────────────
-            async function toggleBookmark(postId) {
-                const user = getCurrentUser();
-                if (!user || !user.isLoggedIn) {
-                    if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
-                    else showToast('Please sign in to bookmark', 'o');
-                    return false;
-                }
-                const currently = isBookmarked(postId);
-                try {
-                    if (currently) {
-                        await window.sb.from('bookmarks').delete().eq('user_id', user.id).eq('post_id', postId);
-                        bookmarksSet.delete(postId);
-                    } else {
-                        await window.sb.from('bookmarks').insert({ user_id: user.id, post_id: postId });
-                        bookmarksSet.add(postId);
-                    }
-                    return !currently;
-                } catch (err) {
-                    showToast(err.message, 'r');
-                    return currently;
-                }
-            }
+            // ─── FIX 1: REMOVED duplicate toggleBookmark() ──────────────────
+            // (The correct toggleBookmark lives in posts.js — this was the
+            //  bypass version and has been deleted entirely.)
 
             function isShared(postId) { return sharesSet.has(postId); }
 
-            // ─── FIX: guest action → open modal ──────────────────────────────
-            async function toggleShare(postId) {
-                const user = getCurrentUser();
-                if (!user || !user.isLoggedIn) {
-                    if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
-                    else showToast('Please sign in to share', 'o');
-                    return false;
-                }
-                const currently = isShared(postId);
-                try {
-                    if (currently) {
-                        await window.sb.from('shares').delete().eq('user_id', user.id).eq('post_id', postId);
-                        sharesSet.delete(postId);
-                    } else {
-                        await window.sb.from('shares').insert({ user_id: user.id, post_id: postId });
-                        sharesSet.add(postId);
-                    }
-                    return !currently;
-                } catch (err) {
-                    showToast(err.message, 'r');
-                    return currently;
-                }
-            }
+            // ─── FIX 2: REMOVED dead toggleShare() ──────────────────────────
+            // (This unused function bypassed PostsAPI and has been deleted.)
 
             // ─── POSTS ──────────────────────────────────────────────────────
             async function reloadPosts() {
@@ -5841,14 +5800,33 @@
                 isTogglingContent = false;
             }
 
+            // ─── FIX 3: toggleBookmarkUI uses PostsAPI ──────────────────────
             async function toggleBookmarkUI(article) {
                 const pid = article.dataset.postId;
                 const post = appData.posts.find(p => p.id === pid);
                 document.querySelectorAll(`[data-bookmark="${pid}"]`).forEach(el => spawnRipple(el, null));
                 haptic(8);
-                const nb = await toggleBookmark(pid);
-                if (post) post.bookmarkCount = Math.max(0, (post.bookmarkCount || 0) + (nb ? 1 : -1));
-                const countText = formatCount(post ? post.bookmarkCount : 0);
+
+                const user = getCurrentUser();
+                if (!user || !user.isLoggedIn) {
+                    if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
+                    else showToast('Please sign in to bookmark', 'o');
+                    return;
+                }
+
+                let nb, count;
+                try {
+                    const result = await window.PostsAPI.toggleBookmark(pid);
+                    nb = result.bookmarked;
+                    count = result.count;
+                } catch (err) {
+                    showToast(err.message || 'Failed to update bookmark', 'r');
+                    return;
+                }
+
+                if (nb) bookmarksSet.add(pid); else bookmarksSet.delete(pid);
+                if (post) post.bookmarkCount = count;
+                const countText = formatCount(count);
                 document.querySelectorAll(`[data-bookmark="${pid}"], #single-bookmark-${pid}`).forEach(el => {
                     el.classList.toggle('bookmarked', nb);
                     const iconWrap = el.querySelector('.bookmark-icon-wrap');
@@ -6217,7 +6195,7 @@
                 };
             }
 
-            // ─── confirmDeleteComment with modal ────────────────────────
+            // ─── FIX 7: confirmDeleteComment with safe decrement ────────────
             function confirmDeleteComment(commentId) {
                 const backdrop = document.createElement('div');
                 backdrop.className = 'confirm-modal-backdrop';
@@ -6243,7 +6221,8 @@
                             .then(() => {
                                 showToast('Comment deleted', 'g');
                                 const p = appData.posts.find(p => p.id === currentPostId);
-                                if (p && typeof p.comments === 'number') p.comments = Math.max(0, p.comments - 1);
+                                // ─── FIX 7: safe decrement ──────────────────
+                                if (p) p.comments = Math.max(0, getCommentCount(p) - 1);
                                 updateCommentCount(currentPostId);
                                 refreshCommentsList(currentPostId, 'comments-list');
                             })
@@ -6353,7 +6332,16 @@
                 }
             }
 
-            // ─── ITEM 1: addComment stores only comment count ──────────────
+            // ─── FIX 5: getCommentCount helper ─────────────────────────────
+            function getCommentCount(post) {
+                if (!post) return 0;
+                if (Array.isArray(post.comments)) {
+                    return post.comments.filter(c => c.approved !== false).length;
+                }
+                return typeof post.comments === 'number' ? post.comments : 0;
+            }
+
+            // ─── FIX 6: addComment stores only comment count ──────────────
             async function addComment(postId, parentId, message, mentions = []) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
@@ -6362,8 +6350,8 @@
                         window.AuthUser.requireAuth(async () => {
                             try {
                                 const comment = await window.PostsAPI.addComment(postId, parentId, message, mentions);
-                                // ─── store as number, not array ──────────
-                                p.comments = (typeof p.comments === 'number') ? p.comments + 1 : 1;
+                                // ─── FIX 6: safe increment ────────────────
+                                p.comments = getCommentCount(p) + 1;
                                 const user = getCurrentUser();
                                 if (comment.id && mentions.length > 0 && window.Mentions) {
                                     window.Mentions.notifyMentionedUsers(
@@ -6396,18 +6384,19 @@
                         likeCount: 0,
                         likedByMe: false,
                     };
-                    // ─── store as number ──────────────────────────────────
-                    p.comments = (typeof p.comments === 'number') ? p.comments + 1 : 1;
+                    // ─── FIX 6: safe increment ────────────────────────────
+                    p.comments = getCommentCount(p) + 1;
                     // ─── NOTIFY: comment ──────────────────────────────
                     window.IndexInteractions?.notify(postId, 'comment');
                     return comment;
                 }
             }
 
+            // ─── FIX 8: updateCommentCount uses getCommentCount ───────────
             function updateCommentCount(postId) {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
-                const cc = (typeof p.comments === 'number') ? p.comments : 0;
+                const cc = getCommentCount(p);
                 document.querySelectorAll(`article[data-post-id="${postId}"] .comment-btn .comment-count`).forEach(el =>
                     el.textContent = formatCount(cc));
                 const h3 = document.querySelector(`#comments-count-${postId}`);
@@ -6827,6 +6816,7 @@
                 }, 400);
             }
 
+            // ─── FIX 4: bookmark handler in setupExploreEventDelegation ────
             function setupExploreEventDelegation(container, postId) {
                 container.addEventListener('click', function(e) {
                     const t = e.target;
@@ -6844,9 +6834,18 @@
                         const post = allPosts.find(p => p.id === postId);
                         spawnRipple(btn, e);
                         haptic(8);
-                        toggleBookmark(postId).then(nb => {
-                            if (post) post.bookmarkCount = Math.max(0, (post.bookmarkCount || 0) + (nb ? 1 : -1));
-                            const countText = formatCount(post ? post.bookmarkCount : 0);
+
+                        const user = getCurrentUser();
+                        if (!user || !user.isLoggedIn) {
+                            if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
+                            else showToast('Please sign in to bookmark', 'o');
+                            return;
+                        }
+
+                        window.PostsAPI.toggleBookmark(postId).then(({ bookmarked: nb, count }) => {
+                            if (nb) bookmarksSet.add(postId); else bookmarksSet.delete(postId);
+                            if (post) post.bookmarkCount = count;
+                            const countText = formatCount(count);
                             document.querySelectorAll(`article[data-post-id="${postId}"] .bookmark-badge, #single-bookmark-${postId}`)
                                 .forEach(el => {
                                     el.classList.toggle('bookmarked', nb);
@@ -6859,7 +6858,7 @@
                                 });
                             window.IndexInteractions?.notify(postId, nb ? 'bookmark' : 'unbookmark');
                             showToast(nb ? 'Saved' : 'Removed from saved');
-                        });
+                        }).catch(err => showToast(err.message || 'Failed to update bookmark', 'r'));
                         return;
                     }
                     if (t.closest('.reaction-btn')) { toggleReaction(postId); return; }
