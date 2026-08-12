@@ -1,6 +1,6 @@
 // =====================================================================
 // posts.js
-// FreeUpper Data/API Layer — v4.1.1 (FIXED repost subscription)
+// FreeUpper Data/API Layer — v4.1.1 (FIXED repost subscription + view tracking)
 // =====================================================================
 //
 // PURPOSE
@@ -969,25 +969,36 @@
 
   // ===================================================================
   // VIEW — index-render.js calls this from its visibility observer
+  // ─── FIX: returns a result object instead of a bare boolean so the
+  // caller can (a) know for certain whether the write succeeded, and
+  // (b) use the server's authoritative view count if the RPC returns
+  // one, instead of blindly guessing "+1" on the client. Still truthy
+  // like before, so any existing `.then(ok => if (ok) ...)` caller
+  // keeps working unchanged. ─────────────────────────────────────────
   // ===================================================================
   async function incrementView(postId) {
     try {
       const sessionId = localStorage.getItem('freeupper_session_id') || null;
+      const user = await getCurrentUser();
 
-      const { error } = await sb.rpc('add_view', {
+      const { data, error } = await sb.rpc('add_view', {
         p_post_id: postId,
-        p_user_id: null, // supports guest view tracking
+        p_user_id: user ? user.id : null, // logged-in users dedupe by user id, guests by session
         p_session_id: sessionId
       });
 
       if (error) {
         console.error('incrementView error:', error);
-        return false;
+        return { success: false, views: null };
       }
-      return true;
+
+      const row = Array.isArray(data) ? data[0] : data;
+      const views = (row && typeof row.views === 'number') ? row.views
+                  : (typeof row === 'number' ? row : null);
+      return { success: true, views };
     } catch (error) {
       console.error('incrementView exception:', error);
-      return false;
+      return { success: false, views: null };
     }
   }
 
