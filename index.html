@@ -3250,6 +3250,17 @@
                 marketItems: [],
             };
 
+            // ─── FIX 9: request-in-flight locks ──────────────────────────────
+            let pendingLikes = new Set();
+            let pendingBookmarks = new Set();
+
+            // ─── FIX 13: viewed posts persistence ───────────────────────────
+            const VIEWED_POSTS_KEY = 'freeupper_viewed_posts';
+            let viewedPostsSet = new Set(JSON.parse(localStorage.getItem(VIEWED_POSTS_KEY) || '[]'));
+            function persistViewedPosts() {
+                localStorage.setItem(VIEWED_POSTS_KEY, JSON.stringify(Array.from(viewedPostsSet)));
+            }
+
             let followingSet = new Set();
             let followerSet = new Set();
             let bookmarksSet = new Set();
@@ -3341,6 +3352,11 @@
             function truncateName(str, max) {
                 str = str || '';
                 return str.length > max ? str.slice(0, max) + '…' : str;
+            }
+
+            // ─── FIX 9: duplicate-key helper ─────────────────────────────────
+            function isDuplicateKeyError(err) {
+                return !!(err && err.message && /duplicate key value violates unique constraint/i.test(err.message));
             }
 
             // ─── TITLE RENDER SYSTEM ────────────────────────────────────────
@@ -5177,6 +5193,11 @@
             async function toggleReaction(postId) {
                 const post = appData.posts.find(p => p.id === postId);
                 if (!post) return;
+
+                // ─── FIX 10: ignore rapid re-taps while a like request for
+                // this exact post is already in flight ─────────────────────
+                if (pendingLikes.has(postId)) return;
+
                 const willLike = !post.likedByMe;
 
                 document.querySelectorAll(`[data-post-id="${postId}"] .reaction-btn, [data-post-reactions="${postId}"] .reaction-btn`)
@@ -5189,6 +5210,7 @@
 
                 if (window.AuthUser && window.AuthUser.requireAuth) {
                     window.AuthUser.requireAuth(async () => {
+                        pendingLikes.add(postId);
                         try {
                             const { liked, count } = await window.PostsAPI.toggleLike(postId);
                             post.likedByMe = liked;
@@ -5198,7 +5220,22 @@
                             // ─── NOTIFY: like/unlike ────────────────────
                             window.IndexInteractions?.notify(postId, liked ? 'like' : 'unlike');
                         } catch (err) {
-                            showToast(err.message, 'r');
+                            // ─── FIX 10: recover quietly from a duplicate-key
+                            // race instead of surfacing a raw DB error ────────
+                            if (isDuplicateKeyError(err)) {
+                                try {
+                                    const refreshed = await window.PostsAPI.loadPostById(postId);
+                                    if (refreshed) {
+                                        post.likedByMe = refreshed.likedByMe;
+                                        post.reactions.like = refreshed.likes;
+                                        updateReactionsUI(postId);
+                                    }
+                                } catch (_) {}
+                            } else {
+                                showToast(err.message, 'r');
+                            }
+                        } finally {
+                            pendingLikes.delete(postId);
                         }
                     });
                 } else {
@@ -5800,10 +5837,14 @@
                 isTogglingContent = false;
             }
 
-            // ─── FIX 3: toggleBookmarkUI uses PostsAPI ──────────────────────
+            // ─── FIX 11: toggleBookmarkUI now locks + recovers from races ──
             async function toggleBookmarkUI(article) {
                 const pid = article.dataset.postId;
                 const post = appData.posts.find(p => p.id === pid);
+
+                // ─── ignore rapid re-taps for this exact post ──────────────
+                if (pendingBookmarks.has(pid)) return;
+
                 document.querySelectorAll(`[data-bookmark="${pid}"]`).forEach(el => spawnRipple(el, null));
                 haptic(8);
 
@@ -5814,14 +5855,33 @@
                     return;
                 }
 
+                pendingBookmarks.add(pid);
                 let nb, count;
                 try {
                     const result = await window.PostsAPI.toggleBookmark(pid);
                     nb = result.bookmarked;
                     count = result.count;
                 } catch (err) {
-                    showToast(err.message || 'Failed to update bookmark', 'r');
-                    return;
+                    if (isDuplicateKeyError(err)) {
+                        // ─── resync from server instead of showing a raw DB error ──
+                        try {
+                            const refreshed = await window.PostsAPI.loadPostById(pid);
+                            if (refreshed) {
+                                nb = refreshed.bookmarkedByMe;
+                                count = refreshed.bookmarkCount;
+                            } else {
+                                pendingBookmarks.delete(pid);
+                                return;
+                            }
+                        } catch (_) {
+                            pendingBookmarks.delete(pid);
+                            return;
+                        }
+                    } else {
+                        showToast(err.message || 'Failed to update bookmark', 'r');
+                        pendingBookmarks.delete(pid);
+                        return;
+                    }
                 }
 
                 if (nb) bookmarksSet.add(pid); else bookmarksSet.delete(pid);
@@ -5839,6 +5899,7 @@
                 // ─── NOTIFY: bookmark/unbookmark ──────────────────
                 window.IndexInteractions?.notify(pid, nb ? 'bookmark' : 'unbookmark');
                 showToast(nb ? 'Saved' : 'Removed from saved');
+                pendingBookmarks.delete(pid);
             }
 
             function filterCategory(c) { currentCategoryFilter = c;
@@ -6675,6 +6736,7 @@
                     updateExploreReplyContextUI(); }
             }
 
+            // ─── FIX 13: views only count once per user ─────────────────────
             async function openExplorePost(id, returnPage, focusComment) {
                 const _guardPost = allPosts.find(p => p.id === id);
                 const _cu = getCurrentUser();
@@ -6754,8 +6816,19 @@
                 updateExploreReplyContextUI();
 
                 if (post) {
-                    if (window.PostsAPI && window.PostsAPI.incrementView) window.PostsAPI.incrementView(id);
-                    post.views = (post.views || 0) + 1;
+                    // ─── FIX 13: count this as a view only the first time
+                    // THIS user ever opens THIS post. Reopening the same
+                    // post again (by the same person) no longer inflates
+                    // the count, and the number shown always matches what
+                    // the server actually has ─────────────────────────────
+                    if (!viewedPostsSet.has(id)) {
+                        viewedPostsSet.add(id);
+                        persistViewedPosts();
+                        if (window.PostsAPI && window.PostsAPI.incrementView) window.PostsAPI.incrementView(id);
+                        post.views = (post.views || 0) + 1;
+                        document.querySelectorAll(`[data-post-reactions="${id}"] .views-count span, [data-post-id="${id}"] .views-count span`)
+                            .forEach(el => el.textContent = formatCount(post.views));
+                    }
                     if (window.PostsAPI && window.PostsAPI.loadComments) {
                         const cl = document.getElementById('comments-list');
                         if (cl) cl.innerHTML = commentSkeletons(3);
@@ -6816,7 +6889,7 @@
                 }, 400);
             }
 
-            // ─── FIX 4: bookmark handler in setupExploreEventDelegation ────
+            // ─── FIX 12: bookmark handler in setupExploreEventDelegation with lock ──
             function setupExploreEventDelegation(container, postId) {
                 container.addEventListener('click', function(e) {
                     const t = e.target;
@@ -6832,6 +6905,10 @@
                     if (t.closest('.bookmark-badge')) {
                         const btn = t.closest('.bookmark-badge');
                         const post = allPosts.find(p => p.id === postId);
+
+                        // ─── FIX 12: ignore rapid re-taps for this post ─────
+                        if (pendingBookmarks.has(postId)) return;
+
                         spawnRipple(btn, e);
                         haptic(8);
 
@@ -6842,6 +6919,7 @@
                             return;
                         }
 
+                        pendingBookmarks.add(postId);
                         window.PostsAPI.toggleBookmark(postId).then(({ bookmarked: nb, count }) => {
                             if (nb) bookmarksSet.add(postId); else bookmarksSet.delete(postId);
                             if (post) post.bookmarkCount = count;
@@ -6858,7 +6936,28 @@
                                 });
                             window.IndexInteractions?.notify(postId, nb ? 'bookmark' : 'unbookmark');
                             showToast(nb ? 'Saved' : 'Removed from saved');
-                        }).catch(err => showToast(err.message || 'Failed to update bookmark', 'r'));
+                        }).catch(err => {
+                            if (isDuplicateKeyError(err)) {
+                                window.PostsAPI.loadPostById(postId).then(refreshed => {
+                                    if (!refreshed || !post) return;
+                                    post.bookmarkCount = refreshed.bookmarkCount;
+                                    if (refreshed.bookmarkedByMe) bookmarksSet.add(postId); else bookmarksSet.delete(postId);
+                                    const countText = formatCount(refreshed.bookmarkCount);
+                                    document.querySelectorAll(`article[data-post-id="${postId}"] .bookmark-badge, #single-bookmark-${postId}`)
+                                        .forEach(el => {
+                                            el.classList.toggle('bookmarked', refreshed.bookmarkedByMe);
+                                            const iconWrap = el.querySelector('.bookmark-icon-wrap');
+                                            if (iconWrap) iconWrap.innerHTML = bookmarkIcon(refreshed.bookmarkedByMe);
+                                            const cnt = el.querySelector('.bookmark-count');
+                                            if (cnt) animateCountRoll(cnt, countText);
+                                        });
+                                }).catch(() => {});
+                            } else {
+                                showToast(err.message || 'Failed to update bookmark', 'r');
+                            }
+                        }).finally(() => {
+                            pendingBookmarks.delete(postId);
+                        });
                         return;
                     }
                     if (t.closest('.reaction-btn')) { toggleReaction(postId); return; }
