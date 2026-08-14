@@ -3254,12 +3254,11 @@
             let pendingLikes = new Set();
             let pendingBookmarks = new Set();
 
-            // ─── FIX 13: viewed posts persistence ───────────────────────────
-            const VIEWED_POSTS_KEY = 'freeupper_viewed_posts';
-            let viewedPostsSet = new Set(JSON.parse(localStorage.getItem(VIEWED_POSTS_KEY) || '[]'));
-            function persistViewedPosts() {
-                localStorage.setItem(VIEWED_POSTS_KEY, JSON.stringify(Array.from(viewedPostsSet)));
-            }
+            // ─── FIX 21: REMOVED permanent client-side viewed posts blacklist ──
+            // The VIEWED_POSTS_KEY, viewedPostsSet, and persistViewedPosts
+            // functions have been deleted entirely. The view tracking now
+            // relies purely on the server's rolling 24-hour dedup window.
+            // The client no longer stores a list of "viewed" posts locally.
 
             let followingSet = new Set();
             let followerSet = new Set();
@@ -6763,7 +6762,7 @@
                     updateExploreReplyContextUI(); }
             }
 
-            // ─── FIX 15: views only count after server succeeds ─────────────
+            // ─── FIX 22: openExplorePost — call incrementView every time, trust server ──
             async function openExplorePost(id, returnPage, focusComment) {
                 const _guardPost = allPosts.find(p => p.id === id);
                 const _cu = getCurrentUser();
@@ -6843,25 +6842,31 @@
                 updateExploreReplyContextUI();
 
                 if (post) {
-                    // ─── FIX 15: only mark this post as "viewed" in localStorage
-                    // AFTER the server call actually succeeds. Previously we
-                    // marked it viewed immediately — if incrementView failed
-                    // for any reason (network blip, RLS, etc.) the view was
-                    // lost forever and could never be retried, which is why
-                    // counting looked broken. Also uses the server's real
-                    // count when it returns one, instead of guessing +1. ────
-                    if (!viewedPostsSet.has(id) && window.PostsAPI && window.PostsAPI.incrementView) {
+                    // ─── FIX 22: call incrementView every time the post is
+                    // opened and trust the server's response. The RPC
+                    // enforces its own rolling 24-hour dedup window per
+                    // viewer (auth.uid() for logged-in users, anonymous
+                    // guest ID for guests) — the client has no business
+                    // making that decision anymore. `counted` tells us
+                    // whether this open actually bumped the count (fresh
+                    // view) or was deduped as a repeat within the window;
+                    // either way `views` is the server's real, current
+                    // number, so we always sync the UI to it. ─────────────
+                    if (window.PostsAPI && window.PostsAPI.incrementView) {
                         window.PostsAPI.incrementView(id).then(result => {
-                            const ok = result && (result.success === true || result === true);
-                            if (!ok) return; // leave unmarked so it retries next time this post is opened
-                            viewedPostsSet.add(id);
-                            persistViewedPosts();
-                            post.views = (result && typeof result.views === 'number')
-                                ? result.views
-                                : (post.views || 0) + 1;
-                            document.querySelectorAll(`[data-post-reactions="${id}"] .views-count span, [data-post-id="${id}"] .views-count span`)
-                                .forEach(el => el.textContent = formatCount(post.views));
-                        }).catch(() => { /* leave unmarked — will retry on next open */ });
+                            if (!result || !result.success) return;
+                            if (typeof result.views === 'number') {
+                                post.views = result.views;
+                                document.querySelectorAll(`[data-post-reactions="${id}"] .views-count span, [data-post-id="${id}"] .views-count span`)
+                                    .forEach(el => el.textContent = formatCount(post.views));
+                            } else if (result.counted) {
+                                // Server didn't return a count but did confirm
+                                // this was a fresh view — fall back to +1.
+                                post.views = (post.views || 0) + 1;
+                                document.querySelectorAll(`[data-post-reactions="${id}"] .views-count span, [data-post-id="${id}"] .views-count span`)
+                                    .forEach(el => el.textContent = formatCount(post.views));
+                            }
+                        }).catch(() => {});
                     }
                     if (window.PostsAPI && window.PostsAPI.loadComments) {
                         const cl = document.getElementById('comments-list');
