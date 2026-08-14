@@ -69,7 +69,6 @@
 <script src="onboarding.js" defer></script>
 <!-- ──────────────────────────────────────────────────────── -->
 
-<script src="listings.js" defer></script>
 <script src="router.js" defer></script>
 <script src="mentions.js" defer></script>
 <script src="hashtags.js" defer></script>
@@ -156,9 +155,7 @@
         body.single-post-open nav.sticky,
         body.single-post-open #category-chips,
         body.explore-open nav.sticky,
-        body.explore-open #category-chips,
-        body.market-fullscreen-open nav.sticky,
-        body.market-fullscreen-open #category-chips {
+        body.explore-open #category-chips {
             display: none !important;
         }
 
@@ -929,39 +926,10 @@
             animation: shimmer 1.4s infinite;
         }
 
-        /* ─── MARKETPLACE SKELETONS ─── */
-        .market-skeleton-thumb {
-            aspect-ratio: 1 / 1;
-            border-radius: 16px;
-        }
-        .category-pill-skeleton {
-            height: 34px;
-            border-radius: 12px;
-            flex-shrink: 0;
-            margin-right: 10px;
-        }
-
-        /* ─── MARKETPLACE ─── */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        .heart-icon {
-            transition: fill 0.2s ease, color 0.2s ease;
-        }
-        .heart-icon.liked {
-            fill: #ef4444;
-            color: #ef4444;
-        }
-        .product-card {
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-            cursor: pointer;
-        }
-        .product-card:active {
-            transform: scale(0.97);
+        /* ─── FEED SKELETON (post loading state) ─── */
+        [data-theme="dark"] .skeleton {
+            background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+            background-size: 200% 100%;
         }
         .skeleton {
             background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
@@ -975,15 +943,6 @@
             100% {
                 background-position: 200% 0;
             }
-        }
-        .market-main-content {
-            display: block;
-        }
-
-        /* ─── FEED SKELETON (post loading state) ─── */
-        [data-theme="dark"] .skeleton {
-            background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
-            background-size: 200% 100%;
         }
         .skeleton-post {
             padding: 16px 0;
@@ -1490,9 +1449,7 @@
         }
 
         /* ─── EXPLORE FULLSCREEN ─── */
-        .explore-fullscreen,
-        .market-fullscreen,
-        .market-filter-modal {
+        .explore-fullscreen {
             position: fixed;
             inset: 0;
             background: var(--bg);
@@ -1501,25 +1458,13 @@
             transform: translateY(100%);
             transition: transform .35s cubic-bezier(.4, 0, .2, 1);
             padding-top: var(--safe-top);
-        }
-        .explore-fullscreen {
             z-index: 80;
             overflow: hidden !important;
         }
-        .market-fullscreen {
-            z-index: 85;
-        }
-        .market-filter-modal {
-            z-index: 86;
-        }
-        .explore-fullscreen.open,
-        .market-fullscreen.open,
-        .market-filter-modal.open {
+        .explore-fullscreen.open {
             transform: translateY(0);
         }
-        .explore-fullscreen-header,
-        .market-fullscreen-header,
-        .market-filter-header {
+        .explore-fullscreen-header {
             position: relative;
             z-index: 10;
             background: var(--bg2);
@@ -1529,8 +1474,6 @@
             align-items: center;
             gap: 12px;
             flex-shrink: 0;
-        }
-        .explore-fullscreen-header {
             justify-content: space-between;
         }
         .explore-fullscreen-header .explore-category-name {
@@ -1549,16 +1492,6 @@
             overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
             padding-bottom: 20px;
-        }
-        .market-fullscreen-body {
-            flex: 1;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-        .market-filter-body {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
         }
 
         /* ─── SHARE MODAL ─── */
@@ -2632,22 +2565,6 @@
             width: 100%;
         }
 
-        /* ─── MARKETPLACE SPECIFIC OVERLAYS ─── */
-        #filterModal,
-        #seeAllModal,
-        #productModal {
-            z-index: 100;
-        }
-        #productModal {
-            z-index: 101;
-        }
-        #seeAllModal {
-            z-index: 100;
-        }
-        #filterModal {
-            z-index: 99;
-        }
-
         /* ─── TAGS MODAL (reused for reposters sheet) ─── */
         .tags-modal {
             position: fixed;
@@ -2920,7 +2837,6 @@
             <div id="chips-container">
                 <button class="tab-pill tab-pill--active" id="tab-foryou">For You</button>
                 <button class="tab-pill" id="tab-explore">Explore</button>
-                <button class="tab-pill" id="tab-market">Market</button>
             </div>
         </div>
     </div>
@@ -3073,129 +2989,6 @@
         </div>
     </div>
 
-    <!-- ===== MARKETPLACE MODALS ===== -->
-    <div id="seeAllModal" class="fixed inset-0 bg-white z-50 hidden flex-col overflow-y-auto" style="z-index:100;">
-        <div class="sticky top-0 bg-white/90 backdrop-blur-md px-4 py-3 border-b border-gray-100 flex items-center justify-between z-10">
-            <button onclick="closeSeeAllModal()" class="p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-            </button>
-            <span id="seeAllTitle" class="font-bold text-gray-900 text-base"></span>
-            <div class="w-8"></div>
-        </div>
-        <div class="max-w-4xl mx-auto w-full p-4 sm:p-6">
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4" id="seeAllGrid"></div>
-        </div>
-    </div>
-
-    <div id="productModal" class="fixed inset-0 bg-white z-40 hidden flex-col overflow-y-auto" style="z-index:101;">
-        <div class="sticky top-0 bg-white/90 backdrop-blur-md px-4 py-3 border-b border-gray-100 flex items-center justify-between z-20">
-            <button onclick="closeProductModal()" class="p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-            <span class="font-bold text-gray-900 text-base">Item Details</span>
-            <button onclick="shareCurrentProduct()" class="p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-            </button>
-        </div>
-        <div class="max-w-2xl mx-auto w-full p-4 sm:p-6 space-y-6">
-            <div class="relative aspect-square w-full rounded-3xl overflow-hidden bg-gray-900 shadow-md group touch-pan-y cursor-zoom-in" id="modalCarouselTrack" onclick="openFullscreenLightbox()">
-                <div id="modalSlidesContainer" class="flex w-full h-full transition-transform duration-300 ease-out"></div>
-                <div class="absolute top-3 left-3 bg-black/50 backdrop-blur-md text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10 flex items-center gap-1 border border-white/10 pointer-events-none">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path></svg>
-                    <span>Tap to expand</span>
-                </div>
-                <div id="modalImageBadge" class="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1 rounded-full z-10 border border-white/10 pointer-events-none">1 / 1</div>
-                <button id="prevSlideBtn" onclick="event.stopPropagation(); prevModalSlide();" class="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200 z-10 hover:bg-black/60">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
-                </button>
-                <button id="nextSlideBtn" onclick="event.stopPropagation(); nextModalSlide();" class="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200 z-10 hover:bg-black/60">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
-                </button>
-                <div id="modalDots" class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full z-10"></div>
-            </div>
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 id="modalTitle" class="text-2xl font-black text-gray-900"></h1>
-                    <div class="flex items-center gap-2 mt-1">
-                        <span id="modalCategoryBadge" class="px-2.5 py-1 bg-brand-50 text-brand-600 rounded-lg text-xs font-bold"></span>
-                        <span id="modalSubcategoryBadge" class="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold"></span>
-                    </div>
-                </div>
-                <div id="modalPrice" class="text-2xl font-black text-brand-600"></div>
-            </div>
-            <div class="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-100">
-                <div class="flex items-center gap-3">
-                    <img id="modalSellerImg" class="w-12 h-12 rounded-full object-cover" src="" alt="Seller">
-                    <div>
-                        <div id="modalSellerName" class="font-bold text-gray-900 flex items-center gap-1"></div>
-                        <span id="modalLocationText" class="text-xs text-gray-500"></span>
-                    </div>
-                </div>
-                <button onclick="openSellerProfile()" class="px-4 py-2 bg-brand-50 text-brand-600 font-bold rounded-xl text-xs hover:bg-brand-100">View Profile</button>
-            </div>
-            <div>
-                <h3 class="font-bold text-gray-900 text-sm mb-2">Description</h3>
-                <p id="modalDesc" class="text-gray-600 text-sm leading-relaxed">High quality verified listing on FreeUpper platform.</p>
-            </div>
-            <div class="flex items-center gap-3 pt-2">
-                <button onclick="triggerToast('In-App DM Coming Soon 🚀', 'Reach the seller instantly via WhatsApp!')" class="flex-1 py-4 bg-brand-600 text-white font-bold rounded-xl shadow-lg shadow-brand-500/30 hover:bg-brand-700 transition flex items-center justify-center gap-2 text-sm">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-                    <span>Chat in DM</span>
-                </button>
-                <a id="whatsappBtn" href="#" target="_blank" class="py-4 px-5 bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition flex items-center justify-center gap-2 text-sm">
-                    <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
-                    <span>WhatsApp</span>
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <div id="fullscreenLightbox" class="fixed inset-0 bg-black/95 z-50 hidden flex-col justify-between items-center select-none touch-none">
-        <div class="w-full px-4 py-4 flex items-center justify-between text-white z-20 bg-gradient-to-b from-black/80 to-transparent">
-            <div class="flex items-center gap-2">
-                <span id="lightboxBadge" class="text-xs font-bold bg-white/20 px-3 py-1 rounded-full backdrop-blur-md">1 / 1</span>
-                <span class="text-[10px] text-gray-400 hidden sm:inline">Double-tap or pinch to zoom</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <button onclick="resetZoom()" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition">Reset Zoom</button>
-                <button onclick="closeFullscreenLightbox()" class="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-            </div>
-        </div>
-        <div class="relative w-full h-full flex items-center justify-center overflow-hidden" id="lightboxTrack">
-            <div id="lightboxSlidesContainer" class="flex w-full h-full transition-transform duration-300 ease-out"></div>
-            <button id="lightboxPrevBtn" onclick="prevLightboxSlide()" class="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/30 backdrop-blur-md transition z-20">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
-            </button>
-            <button id="lightboxNextBtn" onclick="nextLightboxSlide()" class="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/30 backdrop-blur-md transition z-20">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
-            </button>
-        </div>
-        <div id="lightboxDots" class="pb-6 flex items-center gap-2 z-20"></div>
-    </div>
-
-    <div id="filterModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center">
-        <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-6 space-y-6">
-            <div class="flex justify-between items-center border-b pb-3">
-                <h3 class="text-lg font-bold text-gray-900">Filter Products</h3>
-                <button onclick="closeFilterModal()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-gray-700 uppercase mb-2">Max Price (₦)</label>
-                    <input type="number" id="filterMaxPrice" placeholder="e.g. 100000" class="w-full p-3 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                </div>
-            </div>
-            <div class="flex gap-3 pt-2">
-                <button onclick="resetFilters()" class="w-1/2 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl text-sm">Reset</button>
-                <button onclick="applyFilters()" class="w-1/2 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-500/20">Apply Filters</button>
-            </div>
-        </div>
-    </div>
-
     <!-- ===== BOTTOM NAV ===== -->
     <bottom-nav></bottom-nav>
 
@@ -3247,18 +3040,11 @@
             let appData = {
                 posts: [],
                 userReactions: {},
-                marketItems: [],
             };
 
             // ─── FIX 9: request-in-flight locks ──────────────────────────────
             let pendingLikes = new Set();
             let pendingBookmarks = new Set();
-
-            // ─── FIX 21: REMOVED permanent client-side viewed posts blacklist ──
-            // The VIEWED_POSTS_KEY, viewedPostsSet, and persistViewedPosts
-            // functions have been deleted entirely. The view tracking now
-            // relies purely on the server's rolling 24-hour dedup window.
-            // The client no longer stores a list of "viewed" posts locally.
 
             let followingSet = new Set();
             let followerSet = new Set();
@@ -3282,45 +3068,20 @@
                 exploreReplyTarget = null,
                 expandedThreads = new Map(),
                 lastDoubleTapTime = 0;
-            const tabScrollPositions = { home: 0, explore: 0, market: 0 };
+            const tabScrollPositions = { home: 0, explore: 0 };
             let lastScrollY = 0,
                 bottomNavHidden = false;
 
             // Shuffle / refresh state
             let _feedShuffleSeed = 0;
             let _shuffleExploreOnce = false;
-            let _shuffleMarketOnce = false;
             let _shuffleHomeOnce = false;
-
-            // Marketplace state
-            let marketCategories = [];
-            let marketSubcategories = [];
-            let marketListings = [];
-            let activeMarketCategory = 'All';
-            let activeMarketSubcategory = 'All';
-            let maxPriceFilter = null;
-            let currentProductId = null;
-            let currentImageIndexMap = {};
-            let marketDataLoaded = false;
 
             // Scroll lock
             let _lockedScrollY = 0;
 
             // Video autoplay safety
             let _scrollSafetyTimer = null;
-
-            // Lightbox zoom state
-            let currentZoomScale = 1;
-            let initialPinchDistance = 0;
-            let lastTapTime = 0;
-
-            // Modal carousel state
-            let modalActiveSlideIndex = 0;
-            let lightboxActiveIndex = 0;
-            let currentActiveProduct = null;
-
-            let touchStartX = 0;
-            let touchEndX = 0;
 
             const content = document.getElementById('user-content');
 
@@ -4464,728 +4225,12 @@
                 }, { once: true });
             }
 
-            // ─── MARKETPLACE ──────────────────────────────────────────────────
-            async function loadMarketCategories() {
-                if (!window.CategoryAPI) return;
-                try {
-                    marketCategories = await window.CategoryAPI.loadCategories();
-                } catch (e) {
-                    console.error('Error loading market categories:', e);
-                    marketCategories = [];
-                }
-            }
-
-            async function loadMarketSubcategoriesForCategory(categoryId) {
-                if (!window.CategoryAPI) return [];
-                try {
-                    return await window.CategoryAPI.loadSubcategories(categoryId);
-                } catch (e) {
-                    console.error('Error loading subcategories:', e);
-                    return [];
-                }
-            }
-
-            // ===== SAVED LISTINGS STATE =====
-            let savedListingsSet = new Set();
-            let savedListingsLoaded = false;
-
-            async function loadSavedListings() {
-                if (!window.ListingsAPI) return;
-                const user = getCurrentUser();
-                if (!user || !user.isLoggedIn) {
-                    savedListingsSet = new Set();
-                    savedListingsLoaded = true;
-                    return;
-                }
-                try {
-                    const saved = await window.ListingsAPI.getSavedListings({ limit: 200 });
-                    savedListingsSet = new Set(saved.map(item => item.id));
-                } catch (e) {
-                    console.warn('loadSavedListings error:', e);
-                } finally {
-                    savedListingsLoaded = true;
-                }
-            }
-
-            // ===== toggleFavorite with API =====
-            function toggleFavorite(btn, listingId) {
-                const user = getCurrentUser();
-                if (!user || !user.isLoggedIn) {
-                    triggerToast('Please sign in', 'Sign in to save items');
-                    return;
-                }
-                const svg = btn.querySelector('.heart-icon');
-                const wasSaved = savedListingsSet.has(listingId);
-                if (svg) {
-                    if (wasSaved) {
-                        svg.classList.remove('liked');
-                        svg.setAttribute('fill', 'none');
-                    } else {
-                        svg.classList.add('liked');
-                        svg.setAttribute('fill', 'currentColor');
-                    }
-                }
-                try {
-                    if (wasSaved) {
-                        window.ListingsAPI.unsaveListing(listingId);
-                        savedListingsSet.delete(listingId);
-                        triggerToast('Removed from Saved');
-                    } else {
-                        window.ListingsAPI.saveListing(listingId);
-                        savedListingsSet.add(listingId);
-                        triggerToast('Saved ✓', 'View it in your profile Market tab');
-                    }
-                } catch (err) {
-                    if (svg) {
-                        if (wasSaved) {
-                            svg.classList.add('liked');
-                            svg.setAttribute('fill', 'currentColor');
-                        } else {
-                            svg.classList.remove('liked');
-                            svg.setAttribute('fill', 'none');
-                        }
-                    }
-                    triggerToast('Error', err.message || 'Could not update saved items');
-                }
-            }
-
-            async function loadMarketListings() {
-                if (!window.ListingsAPI) return;
-                try {
-                    const result = await window.ListingsAPI.getListings({ status: 'active', limit: 100 });
-                    marketListings = result.data.map(item => {
-                        let images = [];
-                        if (Array.isArray(item.images)) {
-                            images = item.images.map(img => {
-                                return typeof img === 'object' && img !== null ? (img.url || '') :
-                                String(img);
-                            }).filter(Boolean);
-                        } else if (typeof item.images === 'string') {
-                            try {
-                                const parsed = JSON.parse(item.images);
-                                if (Array.isArray(parsed)) {
-                                    images = parsed.map(img => typeof img === 'object' && img !== null ? (img
-                                        .url || '') : String(img)).filter(Boolean);
-                                } else {
-                                    images = [item.images];
-                                }
-                            } catch (e) {
-                                images = [item.images];
-                            }
-                        } else {
-                            images = [];
-                        }
-                        const verifiedStatus = item.profiles ? (item.profiles.verified_status || (item
-                            .profiles.verified ? 'verified' : 'none')) : 'none';
-                        return {
-                            id: item.id,
-                            title: item.title,
-                            price: item.price,
-                            priceFormatted: '₦' + Number(item.price).toLocaleString(),
-                            category: item.market_categories ? item.market_categories.name : 'General',
-                            subcategory: item.market_subcategories ? item.market_subcategories.name :
-                            'General',
-                            seller: item.profiles ? (item.profiles.display_name || item.profiles.username) :
-                                'Unknown',
-                            sellerImg: item.profiles ? (item.profiles.avatar_url || '') : '',
-                            sellerId: item.seller_id,
-                            sellerVerified: verifiedStatus,
-                            images: images,
-                            location: item.location || 'Nigeria',
-                            featured: item.featured || false,
-                            description: item.description || '',
-                            created_at: item.created_at,
-                            whatsapp: item.whatsapp || '',
-                            profiles: item.profiles || {},
-                            market_categories: item.market_categories || {},
-                            market_subcategories: item.market_subcategories || {},
-                        };
-                    });
-                } catch (e) {
-                    console.error('Error loading market listings:', e);
-                    marketListings = [];
-                }
-            }
-
             // ─── SKELETON BUILDERS ──────────────────────────────────────────
             function exploreSkeletonGrid() {
                 let h = '';
                 for (let i = 0; i < 8; i++) h +=
                     '<div class="explore-skeleton-card"><div class="explore-skeleton-thumb"></div></div>';
                 return h;
-            }
-
-            function marketSkeletonGrid(c = 6) {
-                let h = '';
-                for (let i = 0; i < c; i++) {
-                    h += `<div class="explore-skeleton-card">
-                                <div class="skeleton market-skeleton-thumb"></div>
-                                <div class="skeleton skeleton-line" style="width:70%;height:12px;margin:8px 0 6px;"></div>
-                                <div class="skeleton skeleton-line" style="width:45%;height:10px;margin-bottom:0;"></div>
-                              </div>`;
-                }
-                return h;
-            }
-
-            function categoryBarSkeleton(c = 5) {
-                let h = '';
-                for (let i = 0; i < c; i++) {
-                    h += `<div class="skeleton category-pill-skeleton" style="width:${64 + (i % 3) * 16}px;"></div>`;
-                }
-                return h;
-            }
-
-            function renderMarketCategoryBars() {
-                const mainBar = document.getElementById('mainCategoriesBar');
-                if (!mainBar) return;
-                let html = `
-                    <button onclick="selectMarketCategory('All')" class="px-4 py-2 rounded-xl text-xs font-bold flex-shrink-0 transition ${activeMarketCategory === 'All' ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
-                        All Items
-                    </button>
-                `;
-                marketCategories.forEach(cat => {
-                    const isSelected = activeMarketCategory === cat.name;
-                    html += `
-                        <button onclick="selectMarketCategory('${cat.name.replace(/'/g, "\\'")}')" class="px-4 py-2 rounded-xl text-xs font-bold flex-shrink-0 transition ${isSelected ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
-                            ${cat.name}
-                        </button>
-                    `;
-                });
-                mainBar.innerHTML = html;
-
-                const subBar = document.getElementById('subCategoriesBar');
-                if (!subBar) return;
-                if (activeMarketCategory === 'All') {
-                    subBar.classList.add('hidden');
-                    subBar.innerHTML = '';
-                    return;
-                }
-                const cat = marketCategories.find(c => c.name === activeMarketCategory);
-                if (!cat) { subBar.classList.add('hidden'); return; }
-                const subcats = marketSubcategories.filter(s => s.category_id === cat.id);
-                subBar.classList.remove('hidden');
-                let subHtml = `
-                    <button onclick="selectMarketSubcategory('All')" class="px-3 py-1.5 rounded-lg text-xs font-bold flex-shrink-0 transition ${activeMarketSubcategory === 'All' ? 'bg-brand-100 text-brand-600' : 'bg-gray-100 text-gray-600'}">
-                        All ${activeMarketCategory}
-                    </button>
-                `;
-                subcats.forEach(sub => {
-                    const isSelected = activeMarketSubcategory === sub.name;
-                    subHtml += `
-                        <button onclick="selectMarketSubcategory('${sub.name.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 transition ${isSelected ? 'bg-brand-100 text-brand-600 font-bold' : 'bg-gray-100 text-gray-600'}">
-                            ${sub.name}
-                        </button>
-                    `;
-                });
-                subBar.innerHTML = subHtml;
-            }
-
-            function selectMarketCategory(cat) {
-                activeMarketCategory = cat;
-                activeMarketSubcategory = 'All';
-                renderMarketCategoryBars();
-                applyMarketFiltersAndRender();
-                if (cat !== 'All') {
-                    const catObj = marketCategories.find(c => c.name === cat);
-                    if (catObj) {
-                        loadMarketSubcategoriesForCategory(catObj.id).then(subs => {
-                            marketSubcategories = subs;
-                            renderMarketCategoryBars();
-                            applyMarketFiltersAndRender();
-                        });
-                    }
-                } else {
-                    marketSubcategories = [];
-                    renderMarketCategoryBars();
-                    applyMarketFiltersAndRender();
-                }
-            }
-
-            function selectMarketSubcategory(sub) {
-                activeMarketSubcategory = sub;
-                renderMarketCategoryBars();
-                applyMarketFiltersAndRender();
-            }
-
-            function applyMarketFiltersAndRender() {
-                let filtered = [...marketListings];
-                if (activeMarketCategory !== 'All') {
-                    filtered = filtered.filter(p => p.category === activeMarketCategory);
-                    if (activeMarketSubcategory !== 'All') {
-                        filtered = filtered.filter(p => p.subcategory === activeMarketSubcategory);
-                    }
-                }
-                if (maxPriceFilter !== null && !isNaN(maxPriceFilter) && maxPriceFilter > 0) {
-                    filtered = filtered.filter(p => p.price <= maxPriceFilter);
-                }
-                if (_shuffleMarketOnce) { filtered = shuffleArray(filtered);
-                    _shuffleMarketOnce = false; }
-                renderMarketProducts(filtered);
-            }
-
-            function renderMarketProducts(items) {
-                const featuredGrid = document.getElementById('featuredGrid');
-                const newlyGrid = document.getElementById('newlyGrid');
-                const emptyState = document.getElementById('emptyState');
-                const featuredSection = document.getElementById('featuredSection');
-                const newlySection = document.getElementById('newlySection');
-
-                if (!featuredGrid || !newlyGrid) return;
-
-                featuredGrid.innerHTML = '';
-                newlyGrid.innerHTML = '';
-
-                if (items.length === 0) {
-                    emptyState.classList.remove('hidden');
-                    emptyState.classList.add('flex');
-                    featuredSection.classList.add('hidden');
-                    newlySection.classList.add('hidden');
-                    return;
-                }
-
-                emptyState.classList.add('hidden');
-                emptyState.classList.remove('flex');
-                featuredSection.classList.remove('hidden');
-                newlySection.classList.remove('hidden');
-
-                const featuredItems = items.filter(i => i.featured);
-                const newItems = items.filter(i => !i.featured);
-
-                featuredItems.forEach(item => {
-                    featuredGrid.innerHTML += createMarketCardHTML(item);
-                });
-                newItems.forEach(item => {
-                    newlyGrid.innerHTML += createMarketCardHTML(item);
-                });
-            }
-
-            function createMarketCardHTML(item) {
-                if (!(item.id in currentImageIndexMap)) {
-                    currentImageIndexMap[item.id] = 0;
-                }
-                const activeIdx = currentImageIndexMap[item.id];
-                const images = (item.images && Array.isArray(item.images) && item.images.length > 0) ? item.images : [''];
-
-                let dotsHTML = '';
-                if (images.length > 1) {
-                    dotsHTML = `<div class="absolute bottom-14 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full z-10">`;
-                    images.forEach((_, idx) => {
-                        dotsHTML +=
-                            `<button onclick="event.stopPropagation(); changeMarketImage('${item.id}', ${idx}, this)" class="h-1.5 rounded-full transition-all ${idx === activeIdx ? 'bg-white w-3' : 'bg-white/50 w-1.5'}"></button>`;
-                    });
-                    dotsHTML += `</div>`;
-                }
-
-                let sellerChip = `<div class="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full text-[11px] max-w-full">`;
-                sellerChip +=
-                    `<img src="${item.sellerImg}" class="w-3.5 h-3.5 rounded-full object-cover flex-shrink-0" alt="${item.seller}" onerror="this.style.display='none'">`;
-                sellerChip += `<span class="font-medium truncate">${item.seller}</span>`;
-                if (window.getVerifiedBadgeHTML) {
-                    sellerChip += window.getVerifiedBadgeHTML(item.sellerVerified);
-                }
-                sellerChip += `</div>`;
-
-                const isSaved = savedListingsSet.has(item.id);
-
-                return `
-                    <div onclick="window.openProductModal('${item.id}')" class="group cursor-pointer product-card">
-                        <div class="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 mb-2">
-                            <img id="market-card-img-${item.id}" src="${images[activeIdx]}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-                            ${dotsHTML}
-                            <button onclick="event.stopPropagation(); toggleFavorite(this, '${item.id}')" class="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-black/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-black/40 transition">
-                                <svg class="w-4 h-4 heart-icon ${isSaved ? 'liked' : ''}" fill="${isSaved ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
-                                </svg>
-                            </button>
-                            <div class="absolute bottom-0 inset-x-0 p-2.5 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col items-start gap-1 text-white">
-                                ${sellerChip}
-                                <span class="font-black text-sm sm:text-base text-white tracking-tight">${item.priceFormatted}</span>
-                            </div>
-                        </div>
-                        <h3 class="font-bold text-gray-900 text-sm truncate">${item.title}</h3>
-                        <div class="flex items-center gap-1.5 text-[11px] text-gray-500 mt-0.5">
-                            <span class="font-semibold text-brand-600">${item.category}</span>
-                            <span>•</span>
-                            <span>${item.subcategory}</span>
-                        </div>
-                    </div>
-                `;
-            }
-
-            function changeMarketImage(productId, imageIdx, btnEl) {
-                currentImageIndexMap[productId] = imageIdx;
-                const product = marketListings.find(p => p.id === productId);
-                if (!product || !product.images || !product.images[imageIdx]) return;
-                const imgEl = document.getElementById(`market-card-img-${productId}`);
-                if (imgEl) imgEl.src = product.images[imageIdx];
-                const parent = btnEl ? btnEl.parentElement : null;
-                if (parent) {
-                    const dots = parent.querySelectorAll('button');
-                    dots.forEach((dot, idx) => {
-                        dot.className = idx === imageIdx ? 'h-1.5 rounded-full transition-all bg-white w-3' :
-                            'h-1.5 rounded-full transition-all bg-white/50 w-1.5';
-                    });
-                }
-            }
-
-            function openProductModal(id) {
-                const product = marketListings.find(p => p.id === id);
-                if (!product) return;
-                currentActiveProduct = product;
-                currentProductId = id;
-                modalActiveSlideIndex = 0;
-
-                document.getElementById('modalTitle').textContent = product.title;
-                document.getElementById('modalPrice').textContent = product.priceFormatted;
-                document.getElementById('modalCategoryBadge').textContent = product.category;
-                document.getElementById('modalSubcategoryBadge').textContent = product.subcategory;
-                if (window.getVerifiedBadgeHTML) {
-                    document.getElementById('modalSellerName').innerHTML =
-                        `${escapeHtml(product.seller)} ${window.getVerifiedBadgeHTML(product.sellerVerified)}`;
-                } else {
-                    document.getElementById('modalSellerName').textContent = product.seller;
-                }
-                document.getElementById('modalSellerImg').src = product.sellerImg || '';
-                document.getElementById('modalLocationText').textContent = product.location + ' • Active Today';
-                document.getElementById('modalDesc').textContent = product.description || 'No description provided.';
-
-                const whatsappNumber = product.whatsapp || product.profiles?.phone || '';
-                if (whatsappNumber) {
-                    const cleanNumber = whatsappNumber.replace(/\D/g, '');
-                    const message = encodeURIComponent(
-                        `Hello ${product.seller}, I saw your listing for "${product.title}" (${product.priceFormatted}) under ${product.category} -> ${product.subcategory} on FreeUpper. Is it available?`
-                    );
-                    document.getElementById('whatsappBtn').href = `https://wa.me/${cleanNumber}?text=${message}`;
-                    document.getElementById('whatsappBtn').style.display = 'flex';
-                } else {
-                    document.getElementById('whatsappBtn').style.display = 'none';
-                }
-
-                renderModalCarousel();
-
-                document.getElementById('productModal').classList.remove('hidden');
-                document.getElementById('productModal').classList.add('flex');
-                document.body.classList.add('market-fullscreen-open');
-            }
-
-            function closeProductModal() {
-                document.getElementById('productModal').classList.add('hidden');
-                document.getElementById('productModal').classList.remove('flex');
-                document.body.classList.remove('market-fullscreen-open');
-            }
-
-            function renderModalCarousel() {
-                if (!currentActiveProduct) return;
-                const images = currentActiveProduct.images || [];
-
-                const slidesContainer = document.getElementById('modalSlidesContainer');
-                const dotsContainer = document.getElementById('modalDots');
-                const badge = document.getElementById('modalImageBadge');
-                const prevBtn = document.getElementById('prevSlideBtn');
-                const nextBtn = document.getElementById('nextSlideBtn');
-
-                slidesContainer.innerHTML = '';
-                dotsContainer.innerHTML = '';
-
-                images.forEach((img) => {
-                    slidesContainer.innerHTML += `
-                        <div class="w-full h-full flex-none shrink-0 flex items-center justify-center bg-gray-900 overflow-hidden">
-                            <img src="${img}" class="w-full h-full object-cover select-none pointer-events-none" alt="Product Slide">
-                        </div>
-                    `;
-                });
-
-                if (images.length > 1) {
-                    dotsContainer.parentElement.classList.remove('hidden');
-                    badge.classList.remove('hidden');
-                    prevBtn.classList.remove('hidden');
-                    nextBtn.classList.remove('hidden');
-
-                    images.forEach((_, idx) => {
-                        dotsContainer.innerHTML += `
-                            <button onclick="event.stopPropagation(); goToModalSlide(${idx})" class="h-1.5 rounded-full transition-all ${idx === modalActiveSlideIndex ? 'bg-white w-3' : 'bg-white/40 w-1.5'}"></button>
-                        `;
-                    });
-                } else {
-                    dotsContainer.parentElement.classList.add('hidden');
-                    badge.classList.add('hidden');
-                    prevBtn.classList.add('hidden');
-                    nextBtn.classList.add('hidden');
-                }
-
-                updateModalSlidePosition();
-            }
-
-            function updateModalSlidePosition() {
-                if (!currentActiveProduct) return;
-                const images = currentActiveProduct.images || [];
-                const container = document.getElementById('modalSlidesContainer');
-                const badge = document.getElementById('modalImageBadge');
-
-                container.style.transform = `translateX(-${modalActiveSlideIndex * 100}%)`;
-                badge.textContent = `${modalActiveSlideIndex + 1} / ${images.length}`;
-
-                const dots = document.getElementById('modalDots').querySelectorAll('button');
-                dots.forEach((dot, idx) => {
-                    dot.className = idx === modalActiveSlideIndex ? 'h-1.5 rounded-full transition-all bg-white w-3' : 'h-1.5 rounded-full transition-all bg-white/40 w-1.5';
-                });
-            }
-
-            function nextModalSlide() {
-                if (!currentActiveProduct) return;
-                const images = currentActiveProduct.images || [];
-                modalActiveSlideIndex = (modalActiveSlideIndex + 1) % images.length;
-                updateModalSlidePosition();
-            }
-
-            function prevModalSlide() {
-                if (!currentActiveProduct) return;
-                const images = currentActiveProduct.images || [];
-                modalActiveSlideIndex = (modalActiveSlideIndex - 1 + images.length) % images.length;
-                updateModalSlidePosition();
-            }
-
-            function goToModalSlide(idx) {
-                modalActiveSlideIndex = idx;
-                updateModalSlidePosition();
-            }
-
-            function openFullscreenLightbox() {
-                if (!currentActiveProduct) return;
-                lightboxActiveIndex = modalActiveSlideIndex;
-                renderLightbox();
-                document.getElementById('fullscreenLightbox').classList.remove('hidden');
-                document.getElementById('fullscreenLightbox').classList.add('flex');
-                lockBodyScroll();
-            }
-
-            function closeFullscreenLightbox() {
-                resetZoom();
-                document.getElementById('fullscreenLightbox').classList.add('hidden');
-                document.getElementById('fullscreenLightbox').classList.remove('flex');
-                unlockBodyScroll();
-            }
-
-            function renderLightbox() {
-                if (!currentActiveProduct) return;
-                const images = currentActiveProduct.images || [];
-
-                const container = document.getElementById('lightboxSlidesContainer');
-                const dotsContainer = document.getElementById('lightboxDots');
-                const prevBtn = document.getElementById('lightboxPrevBtn');
-                const nextBtn = document.getElementById('lightboxNextBtn');
-
-                container.innerHTML = '';
-                dotsContainer.innerHTML = '';
-
-                images.forEach((img, idx) => {
-                    container.innerHTML += `
-                        <div class="w-full h-full flex-none shrink-0 flex items-center justify-center p-2">
-                            <img id="lightbox-img-${idx}" src="${img}" class="max-w-full max-h-full object-contain rounded-xl select-none transition-transform duration-200 cursor-zoom-in" alt="Full Image View">
-                        </div>
-                    `;
-                });
-
-                if (images.length > 1) {
-                    prevBtn.classList.remove('hidden');
-                    nextBtn.classList.remove('hidden');
-                    dotsContainer.classList.remove('hidden');
-
-                    images.forEach((_, idx) => {
-                        dotsContainer.innerHTML += `
-                            <button onclick="goToLightboxSlide(${idx})" class="h-2 rounded-full transition-all ${idx === lightboxActiveIndex ? 'bg-white w-4' : 'bg-white/30 w-2'}"></button>
-                        `;
-                    });
-                } else {
-                    prevBtn.classList.add('hidden');
-                    nextBtn.classList.add('hidden');
-                    dotsContainer.classList.add('hidden');
-                }
-
-                updateLightboxPosition();
-            }
-
-            function updateLightboxPosition() {
-                if (!currentActiveProduct) return;
-                resetZoom();
-                const images = currentActiveProduct.images || [];
-                const container = document.getElementById('lightboxSlidesContainer');
-                const badge = document.getElementById('lightboxBadge');
-
-                container.style.transform = `translateX(-${lightboxActiveIndex * 100}%)`;
-                badge.textContent = `${lightboxActiveIndex + 1} / ${images.length}`;
-
-                const dots = document.getElementById('lightboxDots').querySelectorAll('button');
-                dots.forEach((dot, idx) => {
-                    dot.className = idx === lightboxActiveIndex ? 'h-2 rounded-full transition-all bg-white w-4' : 'h-2 rounded-full transition-all bg-white/30 w-2';
-                });
-
-                modalActiveSlideIndex = lightboxActiveIndex;
-                updateModalSlidePosition();
-            }
-
-            function nextLightboxSlide() {
-                if (!currentActiveProduct) return;
-                const images = currentActiveProduct.images || [];
-                lightboxActiveIndex = (lightboxActiveIndex + 1) % images.length;
-                updateLightboxPosition();
-            }
-
-            function prevLightboxSlide() {
-                if (!currentActiveProduct) return;
-                const images = currentActiveProduct.images || [];
-                lightboxActiveIndex = (lightboxActiveIndex - 1 + images.length) % images.length;
-                updateLightboxPosition();
-            }
-
-            function goToLightboxSlide(idx) {
-                lightboxActiveIndex = idx;
-                updateLightboxPosition();
-            }
-
-            function applyImageZoom(scale) {
-                currentZoomScale = Math.min(Math.max(1, scale), 3.5);
-                const activeImg = document.getElementById(`lightbox-img-${lightboxActiveIndex}`);
-                if (activeImg) {
-                    activeImg.style.transform = `scale(${currentZoomScale})`;
-                }
-            }
-
-            function resetZoom() {
-                currentZoomScale = 1;
-                const activeImg = document.getElementById(`lightbox-img-${lightboxActiveIndex}`);
-                if (activeImg) {
-                    activeImg.style.transform = `scale(1)`;
-                }
-            }
-
-            const lightboxTrack = document.getElementById('lightboxTrack');
-
-            lightboxTrack.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 2) {
-                    initialPinchDistance = Math.hypot(
-                        e.touches[0].pageX - e.touches[1].pageX,
-                        e.touches[0].pageY - e.touches[1].pageY
-                    );
-                } else if (e.touches.length === 1) {
-                    touchStartX = e.changedTouches[0].screenX;
-                    const now = new Date().getTime();
-                    if (now - lastTapTime < 300) {
-                        if (currentZoomScale > 1) resetZoom();
-                        else applyImageZoom(2.2);
-                    }
-                    lastTapTime = now;
-                }
-            }, { passive: true });
-
-            lightboxTrack.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 2) {
-                    const currentDist = Math.hypot(
-                        e.touches[0].pageX - e.touches[1].pageX,
-                        e.touches[0].pageY - e.touches[1].pageY
-                    );
-                    const zoomFactor = currentDist / initialPinchDistance;
-                    applyImageZoom(currentZoomScale * zoomFactor);
-                    initialPinchDistance = currentDist;
-                }
-            }, { passive: true });
-
-            lightboxTrack.addEventListener('touchend', (e) => {
-                if (e.changedTouches.length === 1 && currentZoomScale === 1) {
-                    touchEndX = e.changedTouches[0].screenX;
-                    if (touchStartX - touchEndX > 40) nextLightboxSlide();
-                    else if (touchEndX - touchStartX > 40) prevLightboxSlide();
-                }
-            }, { passive: true });
-
-            const carouselTrack = document.getElementById('modalCarouselTrack');
-            carouselTrack.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
-            carouselTrack.addEventListener('touchend', (e) => {
-                touchEndX = e.changedTouches[0].screenX;
-                if (touchStartX - touchEndX > 40) nextModalSlide();
-                else if (touchEndX - touchStartX > 40) prevModalSlide();
-            }, { passive: true });
-
-            function shareCurrentProduct() {
-                if (!currentActiveProduct) return;
-                const productUrl = window.location.origin + '/?product=' + currentActiveProduct.id;
-                const shareData = {
-                    title: currentActiveProduct.title,
-                    text: `Check out ${currentActiveProduct.title} (${currentActiveProduct.priceFormatted}) on FreeUpper!`,
-                    url: productUrl,
-                };
-
-                if (navigator.share) {
-                    navigator.share(shareData)
-                        .then(() => triggerToast('Link Shared 🎉', 'Product shared successfully!'))
-                        .catch(() => {});
-                } else {
-                    copyTextToClipboard(productUrl);
-                    triggerToast('Link Copied 🔗', 'Product URL copied to clipboard!');
-                }
-            }
-
-            function openSellerProfile() {
-                if (!currentActiveProduct) return;
-                const sellerId = currentActiveProduct.sellerId;
-                if (sellerId) {
-                    window.Router.openProfile(sellerId);
-                } else {
-                    triggerToast('Profile not found', 'Seller information unavailable.');
-                }
-            }
-
-            function openFilterModal() { document.getElementById('filterModal').classList.remove('hidden'); }
-            function closeFilterModal() { document.getElementById('filterModal').classList.add('hidden'); }
-            function closeSeeAllModal() { document.getElementById('seeAllModal').classList.add('hidden'); document.getElementById('seeAllModal').classList.remove('flex'); }
-
-            function openSeeAllModal(title, isFeatured) {
-                document.getElementById('seeAllTitle').textContent = title;
-                const grid = document.getElementById('seeAllGrid');
-                grid.innerHTML = '';
-                const items = marketListings.filter(p => isFeatured ? p.featured : !p.featured);
-                items.forEach(item => {
-                    grid.innerHTML += createMarketCardHTML(item);
-                });
-                document.getElementById('seeAllModal').classList.remove('hidden');
-                document.getElementById('seeAllModal').classList.add('flex');
-            }
-
-            // ─── FIX: triggerToast uses showToast ─────────────────────────────
-            function triggerToast(title, sub) {
-                showToast(title + (sub ? ' — ' + sub : ''), 'p');
-            }
-
-            function applyFilters() {
-                const val = parseFloat(document.getElementById('filterMaxPrice').value);
-                maxPriceFilter = (!isNaN(val) && val > 0) ? val : null;
-                applyMarketFiltersAndRender();
-                closeFilterModal();
-                if (maxPriceFilter) {
-                    triggerToast('Filter Applied 🎯', `Showing items priced up to ₦${maxPriceFilter.toLocaleString()}`);
-                }
-            }
-
-            function resetFilters() {
-                document.getElementById('filterMaxPrice').value = '';
-                maxPriceFilter = null;
-                applyMarketFiltersAndRender();
-                closeFilterModal();
-            }
-
-            function handleMarketSearch(query) {
-                const clean = query.toLowerCase().trim();
-                if (!clean) {
-                    applyMarketFiltersAndRender();
-                    return;
-                }
-                const filtered = marketListings.filter(p =>
-                    p.title.toLowerCase().includes(clean) ||
-                    p.category.toLowerCase().includes(clean) ||
-                    p.subcategory.toLowerCase().includes(clean) ||
-                    p.seller.toLowerCase().includes(clean)
-                );
-                renderMarketProducts(filtered);
             }
 
             // ─── REACTIONS (post feed) ───────────────────────────────────────
@@ -6784,7 +5829,6 @@
                 window._fullscreenReturnPage = originPage;
                 if (originPage === 'home') tabScrollPositions.home = window.scrollY;
                 else if (originPage === 'explore') tabScrollPositions.explore = window.scrollY;
-                else if (originPage === 'market') tabScrollPositions.market = window.scrollY;
                 currentPostId = id;
                 uiPage = 'single-post-explore';
                 exploreReplyTarget = null;
@@ -7138,7 +6182,6 @@
                 const scrollY = window.scrollY;
                 if (uiPage === 'home') tabScrollPositions.home = scrollY;
                 else if (uiPage === 'explore') tabScrollPositions.explore = scrollY;
-                else if (uiPage === 'market') tabScrollPositions.market = scrollY;
                 if (exploreVideoObserver) { exploreVideoObserver.disconnect();
                     exploreVideoObserver = null; }
                 currentCategoryFilter = '';
@@ -7146,7 +6189,7 @@
                 feedPage = 1;
                 if (mode === 'foryou') { currentSortMethod = 'foryou';
                     uiPage = 'home'; } else if (mode === 'explore') { currentSortMethod = 'trending';
-                    uiPage = 'explore'; } else if (mode === 'market') { uiPage = 'market'; }
+                    uiPage = 'explore'; }
 
                 bottomNavHidden = false;
                 const bottomNavEl = document.querySelector('.bottom-nav');
@@ -7159,168 +6202,6 @@
                 renderUI();
             }
 
-            function renderMarketView() {
-                return `
-                        <div class="market-main-content">
-                            <div class="p-4 sm:p-6 space-y-4">
-                                <div class="flex items-center gap-2 sm:gap-3">
-                                    <div class="relative flex-1">
-                                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                                            </svg>
-                                        </span>
-                                        <input type="text" id="searchInput" oninput="handleMarketSearch(this.value)" placeholder="Search title, category, subcategory..."
-                                               class="w-full pl-10 pr-4 py-3 bg-gray-100/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
-                                    </div>
-                                    <button onclick="openFilterModal()" class="flex items-center gap-1.5 px-4 py-3 bg-brand-50 text-brand-600 rounded-xl text-sm font-semibold hover:bg-brand-100 transition">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
-                                        </svg>
-                                        <span>Filter</span>
-                                    </button>
-                                </div>
-
-                                <div>
-                                    <div class="flex items-center gap-3 overflow-x-auto no-scrollbar py-1" id="mainCategoriesBar"></div>
-                                    <div class="hidden flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 border-t border-gray-100 mt-2" id="subCategoriesBar"></div>
-                                </div>
-                            </div>
-
-                            <div id="emptyState" class="hidden py-16 px-4 text-center flex-col items-center justify-center">
-                                <div class="w-20 h-20 bg-brand-50 rounded-3xl flex items-center justify-center text-brand-600 mb-4 shadow-sm border border-brand-100">
-                                    <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                                    </svg>
-                                </div>
-                                <h3 class="text-base font-bold text-gray-900">No products here yet</h3>
-                                <p class="text-xs text-gray-500 mt-1 max-w-xs mx-auto">Listings for this category are launching soon. Stay tuned or check back later!</p>
-                                <button onclick="selectMarketCategory('All')" class="mt-5 px-4 py-2.5 bg-brand-600 text-white font-bold rounded-xl text-xs hover:bg-brand-700 transition shadow-md shadow-brand-500/20">
-                                    Explore All Products
-                                </button>
-                            </div>
-
-                            <section id="featuredSection" class="px-4 sm:px-6 mb-8">
-                                <div class="flex justify-between items-center mb-3">
-                                    <h2 class="text-lg font-bold text-gray-900 flex items-center gap-1.5">Featured Today 🔥</h2>
-                                    <button onclick="openSeeAllModal('Featured Today 🔥', true)" class="text-sm font-semibold text-brand-600 hover:underline">See all</button>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3 sm:gap-4" id="featuredGrid"></div>
-                            </section>
-
-                            <section id="newlySection" class="px-4 sm:px-6 mb-8">
-                                <div class="flex justify-between items-center mb-3">
-                                    <h2 class="text-lg font-bold text-gray-900 flex items-center gap-1.5">Newly Listed ✨</h2>
-                                    <button onclick="openSeeAllModal('Newly Listed ✨', false)" class="text-sm font-semibold text-brand-600 hover:underline">See all</button>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3 sm:gap-4" id="newlyGrid"></div>
-                            </section>
-
-                            <section class="px-4 sm:px-6 mb-8">
-                                <div class="bg-brand-50 rounded-2xl p-4 flex items-center justify-between gap-3 border border-brand-100">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center flex-shrink-0">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                                            </svg>
-                                        </div>
-                                        <div>
-                                            <h4 class="font-bold text-gray-900 text-sm">Buy safely on FreeUpper</h4>
-                                            <p class="text-xs text-gray-500 mt-0.5">Chat with verified sellers directly via DM or WhatsApp.</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
-                        </div>
-                    `;
-            }
-
-            // ─── ITEM 5+6: suggested people functions (patched) ─────────
-            function truncateBio(bio, max = 60) {
-                bio = bio || '';
-                return bio.length > max ? bio.slice(0, max).trim() + '…' : bio;
-            }
-
-            // ─── loadSuggestedPeople excludes dismissed ──────────────────
-            async function loadSuggestedPeople() {
-                const cu = getCurrentUser();
-                if (!cu || !cu.isLoggedIn) return [];
-                const followingIds = Object.keys(appData.follows || {});
-                let dismissed = [];
-                try { dismissed = JSON.parse(localStorage.getItem('freeupper_dismissed_suggestions') || '[]'); } catch (_) {}
-                const excludeIds = [...new Set([...followingIds, ...dismissed])];
-                let query = window.sb
-                    .from('profiles')
-                    .select('id, display_name, username, avatar_url, bio, verified_status')
-                    .neq('id', cu.id)
-                    .limit(15);
-                if (excludeIds.length) {
-                    query = query.not('id', 'in', `(${excludeIds.join(',')})`);
-                }
-                const { data, error } = await query;
-                if (error) { console.warn('loadSuggestedPeople error:', error); return []; }
-                return data || [];
-            }
-
-            // ─── buildSuggestedPeopleHTML with new design ───────────────
-            function buildSuggestedPeopleHTML(people) {
-                if (!people.length) return '';
-                const cards = people.map(p => {
-                    const name = truncateName(p.display_name || 'User', 14);
-                    const username = truncateName(p.username || '', 16);
-                    const bio = truncateBio(p.bio, 40);
-                    const avatarHtml = p.avatar_url
-                        ? `<img src="${p.avatar_url}" alt="">`
-                        : `<div class="suggested-person-avatar-fallback"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8.5" r="3.3"/><path d="M4.8 19c.6-4 3.6-6.3 7.2-6.3s6.6 2.3 7.2 6.3c-2 1.8-4.6 2.8-7.2 2.8s-5.2-1-7.2-2.8z"/></svg></div>`;
-                    return `<div class="suggested-person-card" data-user-id="${p.id}" onclick="window.Router.openProfile('${p.id}')">
-                        <div class="suggested-person-cancel" onclick="dismissSuggestedPerson(event, '${p.id}')"><i class="ri-close-line"></i></div>
-                        ${avatarHtml}
-                        <div class="suggested-person-name">${escapeHtml(name)}</div>
-                        <div class="suggested-person-username">@${escapeHtml(username)}</div>
-                        <div class="suggested-person-bio">${escapeHtml(bio)}</div>
-                        <button class="follow-btn rel-none" data-user-id="${p.id}" onclick="toggleSuggestedFollowHandler(event, '${p.id}')">Follow</button>
-                    </div>`;
-                }).join('');
-                return `<div class="suggested-people-section">
-                    <div class="suggested-people-header">
-                        <div class="suggested-people-header-text">
-                            <h3>People you may know</h3>
-                            <p>Follow more people to see their posts.</p>
-                        </div>
-                        <button class="suggestions-link" onclick="goToDiscoverPeople()"></button>
-                    </div>
-                    <div class="suggested-people-scroll" id="suggested-people-scroll">${cards}</div>
-                </div>`;
-            }
-
-            window.dismissSuggestedPerson = function(e, userId) {
-                e.stopPropagation();
-                let dismissed = [];
-                try { dismissed = JSON.parse(localStorage.getItem('freeupper_dismissed_suggestions') || '[]'); } catch (_) {}
-                if (!dismissed.includes(userId)) dismissed.push(userId);
-                localStorage.setItem('freeupper_dismissed_suggestions', JSON.stringify(dismissed));
-                const card = document.querySelector(`.suggested-person-card[data-user-id="${userId}"]`);
-                if (!card) return;
-                card.classList.add('dismissing');
-                setTimeout(() => card.remove(), 200);
-            };
-
-            window.toggleSuggestedFollowHandler = async function(e, userId) {
-                e.stopPropagation();
-                const btn = e.currentTarget;
-                await toggleFollowUser(userId);
-                const newState = getRelationshipState(userId);
-                btn.textContent = (newState === 'following' || newState === 'friends') ? 'Following' : relLabel(newState);
-                btn.className = `follow-btn rel-${newState}`;
-                showToast(newState === 'following' || newState === 'friends' ? 'Following ✓' : 'Unfollowed');
-            };
-
-            function goToDiscoverPeople() {
-                // placeholder – can navigate to people discovery page later
-                showToast('Coming soon!');
-            }
-
-            // ─── renderUI handles home/explore/market ────────────────────
             function renderUI() {
                 const co = document.getElementById('user-content');
                 if (!co) return;
@@ -7330,32 +6211,6 @@
                     setCommentBarVisible(false);
                     refreshTabStates();
                     setTimeout(() => window.scrollTo(0, tabScrollPositions.explore || 0), 80);
-                    return;
-                }
-
-                if (uiPage === 'market') {
-                    co.innerHTML = renderMarketView();
-                    setCommentBarVisible(false);
-                    refreshTabStates();
-                    requestAnimationFrame(async () => {
-                        if (!marketDataLoaded) {
-                            const fg = document.getElementById('featuredGrid');
-                            const ng = document.getElementById('newlyGrid');
-                            const mb = document.getElementById('mainCategoriesBar');
-                            if (fg) fg.innerHTML = marketSkeletonGrid();
-                            if (ng) ng.innerHTML = marketSkeletonGrid();
-                            if (mb) mb.innerHTML = categoryBarSkeleton();
-                            await Promise.all([loadMarketCategories(), loadMarketListings(), loadSavedListings()]);
-                            marketDataLoaded = true;
-                        }
-                        renderMarketCategoryBars();
-                        applyMarketFiltersAndRender();
-                        const searchInput = document.getElementById('searchInput');
-                        if (searchInput) {
-                            searchInput.oninput = function(e) { handleMarketSearch(this.value); };
-                        }
-                    });
-                    setTimeout(() => window.scrollTo(0, tabScrollPositions.market || 0), 80);
                     return;
                 }
 
@@ -7387,8 +6242,7 @@
 
             function refreshTabStates() {
                 document.querySelectorAll('.tab-pill').forEach(el => el.classList.remove('tab-pill--active'));
-                const map = { home: 'tab-foryou', explore: 'tab-explore', market: 'tab-market',
-                    'single-post-explore': null };
+                const map = { home: 'tab-foryou', explore: 'tab-explore', 'single-post-explore': null };
                 const id = map[uiPage];
                 if (id) document.getElementById(id)?.classList.add('tab-pill--active');
             }
@@ -7547,14 +6401,6 @@
                     showToast('Explore refreshed');
                     return;
                 }
-                if (uiPage === 'market') {
-                    _shuffleMarketOnce = true;
-                    marketDataLoaded = false;
-                    renderUI();
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                    showToast('Marketplace refreshed');
-                    return;
-                }
                 await refreshHome();
             }
 
@@ -7585,7 +6431,7 @@
             // ─── NAV SCROLL ───────────────────────────────────────────────────
             function handleNavScroll() {
                 const currentScrollY = window.scrollY;
-                const scrollHidePages = (uiPage === 'home' || uiPage === 'explore' || uiPage === 'market');
+                const scrollHidePages = (uiPage === 'home' || uiPage === 'explore');
                 const bottomNavEl = document.querySelector('.bottom-nav');
                 const chipsEl = document.getElementById('category-chips');
                 const headerEl = document.querySelector('.top-header');
@@ -7671,19 +6517,6 @@
                             uiPage === 'single-post-explore' && currentPostId &&
                             change.new && change.new.post_id === currentPostId) {
                             refreshCommentsList(currentPostId, 'comments-list');
-                        }
-                    });
-                }
-
-                if (window.ListingsAPI && window.ListingsAPI.subscribe) {
-                    window.ListingsAPI.subscribe((payload) => {
-                        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' ||
-                            payload.eventType === 'DELETE') {
-                            if (uiPage === 'market') {
-                                loadMarketListings().then(() => {
-                                    applyMarketFiltersAndRender();
-                                });
-                            }
                         }
                     });
                 }
@@ -7801,7 +6634,6 @@
 
                 document.getElementById('tab-foryou').addEventListener('click', () => setTab('foryou'));
                 document.getElementById('tab-explore').addEventListener('click', () => setTab('explore'));
-                document.getElementById('tab-market').addEventListener('click', () => setTab('market'));
 
                 const bottomHome = document.getElementById('bottomHomeBtn');
                 if (bottomHome) {
@@ -7909,11 +6741,7 @@
                         if (document.getElementById('explore-fullscreen').classList.contains(
                             'open')) closeExploreFullscreen();
                         closeFilterDrawer();
-                        closeProductModal();
-                        closeSeeAllModal();
-                        closeFilterModal();
                         closeTagsModal();
-                        closeFullscreenLightbox();
                         closeRepostersSheet();
                         closeRepostQuoteModal();
                     }
@@ -7924,8 +6752,7 @@
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'visible') {
                         reloadData().then(() => {
-                            if (uiPage === 'home' || uiPage === 'explore' || uiPage ===
-                                'market') {
+                            if (uiPage === 'home' || uiPage === 'explore') {
                                 renderUI();
                             } else if (uiPage === 'single-post-explore' && currentPostId) {
                                 const post = allPosts.find(p => p.id === currentPostId);
@@ -7971,24 +6798,12 @@
 
                 const urlParams = new URLSearchParams(window.location.search);
                 const postIdParam = urlParams.get('post');
-                const productIdParam = urlParams.get('product');
                 const fromProfile = urlParams.get('from') === 'profile';
                 window._openedFromProfile = fromProfile;
 
                 if (postIdParam && allPosts.some(p => p.id === postIdParam)) {
                     openExplorePost(postIdParam, 'home');
                     history.replaceState({}, '', window.location.pathname);
-                } else if (productIdParam) {
-                    uiPage = 'market';
-                    renderUI();
-                    setTimeout(async () => {
-                        if (!marketDataLoaded) {
-                            await Promise.all([loadMarketCategories(), loadMarketListings(), loadSavedListings()]);
-                            marketDataLoaded = true;
-                        }
-                        openProductModal(productIdParam);
-                        history.replaceState({}, '', window.location.pathname);
-                    }, 500);
                 } else {
                     renderUI();
                 }
@@ -8028,35 +6843,8 @@
             window.toggleSuggestedFollowHandler = toggleSuggestedFollowHandler;
             window.goToDiscoverPeople = goToDiscoverPeople;
 
-            window.selectMarketCategory = selectMarketCategory;
-            window.selectMarketSubcategory = selectMarketSubcategory;
-            window.openProductModal = openProductModal;
-            window.closeProductModal = closeProductModal;
-            window.shareCurrentProduct = shareCurrentProduct;
-            window.openSellerProfile = openSellerProfile;
-            window.openFilterModal = openFilterModal;
-            window.closeFilterModal = closeFilterModal;
-            window.applyFilters = applyFilters;
-            window.resetFilters = resetFilters;
-            window.openSeeAllModal = openSeeAllModal;
-            window.closeSeeAllModal = closeSeeAllModal;
-            window.handleMarketSearch = handleMarketSearch;
-            window.toggleFavorite = toggleFavorite;
-            window.changeMarketImage = changeMarketImage;
-            window.triggerToast = triggerToast;
-
             window.reportPostFromShare = reportPostFromShare;
             window.deletePostFromShare = deletePostFromShare;
-
-            window.openFullscreenLightbox = openFullscreenLightbox;
-            window.closeFullscreenLightbox = closeFullscreenLightbox;
-            window.nextLightboxSlide = nextLightboxSlide;
-            window.prevLightboxSlide = prevLightboxSlide;
-            window.goToLightboxSlide = goToLightboxSlide;
-            window.resetZoom = resetZoom;
-            window.nextModalSlide = nextModalSlide;
-            window.prevModalSlide = prevModalSlide;
-            window.goToModalSlide = goToModalSlide;
 
             if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
             else init();
