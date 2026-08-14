@@ -58,7 +58,19 @@
   const CONFIG = {
     SEEN_VISIBILITY_THRESHOLD: 0.55,   // % of card visible before counting as "seen"
     SEEN_MIN_VISIBLE_MS: 600,          // must stay visible this long before it counts
-    VIEW_INCREMENT_ENABLED: true       // whether this file also triggers PostsAPI.incrementView
+    // ─── FIX 25: disabled. index.html's openExplorePost() is the single
+    // source of truth for view counting (fires once, explicitly, when a
+    // user actually opens a post). This file's own visibility-based
+    // increment used to fire INDEPENDENTLY of that call — since the feed
+    // post never leaves the DOM behind the fullscreen overlay, both paths
+    // could call PostsAPI.incrementView() for the same physical view. If
+    // auth hadn't finished hydrating yet when this timer fired, its call
+    // would resolve as a guest instead of the real user, so the two calls
+    // landed as two DISTINCT viewer identities in post_views — each
+    // legitimately passing the server's dedup check, producing +2 per
+    // view instead of +1. markSeen() below (for the ranking algorithm)
+    // is unaffected and still fires normally. ───────────────────────────
+    VIEW_INCREMENT_ENABLED: false
   };
 
   // ===================================================================
@@ -228,11 +240,14 @@
       state.visibilityTimers.delete(postId);
       Feed.markSeen(postId);
 
-      if (CONFIG.VIEW_INCREMENT_ENABLED && window.PostsAPI?.incrementView) {
-        window.PostsAPI.incrementView(postId).catch(() => {
-          // View tracking should never break the feed — swallow silently
-        });
-      }
+      // ─── FIX 25: view increment disabled ─────────────────────────────
+      // The original code had:
+      //   if (CONFIG.VIEW_INCREMENT_ENABLED && window.PostsAPI?.incrementView) {
+      //     window.PostsAPI.incrementView(postId).catch(() => {});
+      //   }
+      // Now VIEW_INCREMENT_ENABLED = false, so this block never runs.
+      // The ranking algorithm still gets markSeen() above.
+      // ──────────────────────────────────────────────────────────────────
     }, CONFIG.SEEN_MIN_VISIBLE_MS);
 
     state.visibilityTimers.set(postId, timer);
