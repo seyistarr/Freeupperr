@@ -7205,7 +7205,13 @@
                 updateExploreReplyContextUI();
 
                 if (post) {
-                    if (window.PostsAPI && window.PostsAPI.incrementView) {
+                    // ─── FIX 23: guard against duplicate incrementView calls ──
+                    if (window.IndexRender && typeof window.IndexRender.pause === 'function') {
+                        window.IndexRender.pause();
+                    }
+                    if (window.PostsAPI && window.PostsAPI.incrementView && !window._viewInFlight?.has(id)) {
+                        window._viewInFlight = window._viewInFlight || new Set();
+                        window._viewInFlight.add(id);
                         window.PostsAPI.incrementView(id).then(result => {
                             if (!result || !result.success) return;
                             if (typeof result.views === 'number') {
@@ -7217,7 +7223,9 @@
                                 document.querySelectorAll(`[data-post-reactions="${id}"] .views-count span, [data-post-id="${id}"] .views-count span`)
                                     .forEach(el => el.textContent = formatCount(post.views));
                             }
-                        }).catch(() => {});
+                        }).catch(() => {}).finally(() => {
+                            window._viewInFlight.delete(id);
+                        });
                     }
                     if (window.PostsAPI && window.PostsAPI.loadComments) {
                         const cl = document.getElementById('comments-list');
@@ -7243,7 +7251,14 @@
                 }
             }
 
+            // ─── FIX 24: closeExploreFullscreen resumes view observer ──────
             function closeExploreFullscreen() {
+                // ─── FIX 24: resume the feed's view-tracking observer once
+                // the fullscreen post view closes, matching the pause() in
+                // Fix 23 ────────────────────────────────────────────────────
+                if (window.IndexRender && typeof window.IndexRender.resume === 'function') {
+                    window.IndexRender.resume();
+                }
                 if (window._openedFromProfile) {
                     window._openedFromProfile = false;
                     pauseAllVideos();
