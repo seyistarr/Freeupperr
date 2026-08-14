@@ -1,6 +1,6 @@
 // =====================================================================
 // posts.js
-// FreeUpper Data/API Layer — v4.1.1 (FIXED repost subscription + view tracking)
+// FreeUpper Data/API Layer — v4.1.2 (FIXED guest view dedup + server-authoritative counting)
 // =====================================================================
 //
 // PURPOSE
@@ -89,6 +89,28 @@
       throw new Error('You must be logged in to perform this action.');
     }
     return user;
+  }
+
+  // ===================================================================
+  // GUEST VIEW ID
+  // -------------------------------------------------------------
+  // Gives every non-authenticated browser a stable anonymous ID.
+  // This is NOT a user account and contains no personal information.
+  // Used only for view deduplication so guests get the same 24-hour
+  // "1 view per viewer per post" rule that logged-in users get.
+  // ===================================================================
+  function getGuestViewId() {
+    try {
+      let guestId = localStorage.getItem('freeupper_guest_view_id');
+      if (!guestId) {
+        guestId = crypto.randomUUID();
+        localStorage.setItem('freeupper_guest_view_id', guestId);
+      }
+      return guestId;
+    } catch (error) {
+      console.warn('Could not create guest view ID:', error);
+      return null;
+    }
   }
 
   // ===================================================================
@@ -969,36 +991,50 @@
 
   // ===================================================================
   // VIEW — index-render.js calls this from its visibility observer
-  // ─── FIX: returns a result object instead of a bare boolean so the
-  // caller can (a) know for certain whether the write succeeded, and
-  // (b) use the server's authoritative view count if the RPC returns
-  // one, instead of blindly guessing "+1" on the client. Still truthy
-  // like before, so any existing `.then(ok => if (ok) ...)` caller
-  // keeps working unchanged. ─────────────────────────────────────────
+  // -------------------------------------------------------------
+  // Server-authoritative dedup: logged-in users are identified by
+  // auth.uid() inside the RPC (p_user_id is sent but the database
+  // ignores it as an identity claim — see add_view SQL), guests by a
+  // stable anonymous browser ID (getGuestViewId). The RPC decides
+  // whether this counts as a new view within its rolling 24-hour
+  // window — the client never makes that decision itself.
+  // `counted` tells the caller whether the view actually incremented
+  // (true) or was deduped as a repeat view within the window (false);
+  // `views` is always the server's current authoritative count either
+  // way, so the UI can safely display it without guessing "+1". ──────
   // ===================================================================
   async function incrementView(postId) {
     try {
-      const sessionId = localStorage.getItem('freeupper_session_id') || null;
+      if (!postId) {
+        return { success: false, counted: false, views: null };
+      }
+
       const user = await getCurrentUser();
+      const guestId = user ? null : getGuestViewId();
 
       const { data, error } = await sb.rpc('add_view', {
         p_post_id: postId,
-        p_user_id: user ? user.id : null, // logged-in users dedupe by user id, guests by session
-        p_session_id: sessionId
+        p_user_id: user?.id || null,
+        p_session_id: guestId
       });
 
       if (error) {
         console.error('incrementView error:', error);
-        return { success: false, views: null };
+        return { success: false, counted: false, views: null };
       }
 
       const row = Array.isArray(data) ? data[0] : data;
       const views = (row && typeof row.views === 'number') ? row.views
                   : (typeof row === 'number' ? row : null);
-      return { success: true, views };
+
+      return {
+        success: true,
+        counted: !!row?.counted,
+        views
+      };
     } catch (error) {
       console.error('incrementView exception:', error);
-      return { success: false, views: null };
+      return { success: false, counted: false, views: null };
     }
   }
 
@@ -1302,5 +1338,5 @@
     findSimilarPosts
   };
 
-  console.log('✅ FreeUpper PostsAPI v4.1.1 loaded — repost subscription now passes payload.');
+  console.log('✅ FreeUpper PostsAPI v4.1.2 loaded — guest view dedup and server-authoritative counting fixed.');
 })();
