@@ -6888,12 +6888,12 @@
                 }
             }
 
-            function toggleCommentExpand(btn, commentId) {
-                const el = document.querySelector(`.comment-text[data-cid="${commentId}"]`);
-                if (!el) return;
-                const collapsed = el.classList.toggle('collapsed');
-                btn.textContent = collapsed ? 'Show more' : 'Show less';
-            }
+            function toggleCommentExpand(btn, textEl) {
+    if (!textEl) return;
+    const collapsed = textEl.classList.toggle('collapsed');
+    btn.textContent = collapsed ? 'Show more' : 'Show less';
+}
+
 
             function expandReplies(commentId, postId) { expandedThreads.set(commentId, (expandedThreads.get(
                     commentId) || 0) + REPLY_BATCH);
@@ -6924,11 +6924,15 @@
                         return;
                     }
                     if (t.closest('.comment-show-more')) {
-                        const btn = t.closest('.comment-show-more');
-                        const ci = btn.parentElement.querySelector('.comment-text')?.dataset.cid;
-                        if (ci) toggleCommentExpand(btn, ci);
-                        return;
-                    }
+    e.stopPropagation();
+    const btn = t.closest('.comment-show-more');
+    const textEl = btn.previousElementSibling;
+    if (textEl && textEl.classList.contains('comment-text')) {
+        toggleCommentExpand(btn, textEl);
+    }
+    return;
+}
+
                     if (t.closest('.expand-replies-btn')) { const ci = t.closest('.expand-replies-btn')
                             .dataset.commentId; if (ci) expandReplies(ci, postId); return; }
                     if (t.closest('.collapse-replies-btn')) { const ci = t.closest('.collapse-replies-btn')
