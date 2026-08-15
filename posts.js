@@ -886,16 +886,12 @@
   // ===================================================================
   async function toggleLike(postId) {
     const user = await requireUser();
-
     const { data, error } = await sb.rpc('toggle_post_like', {
-      p_post_id: postId,
-      p_user_id: user.id
+      p_post_id: postId
     });
-
     if (error) throw error;
-
     const row = Array.isArray(data) ? data[0] : data;
-    return { liked: !!row?.liked, count: safeNumber(row?.count) };
+    return { liked: !!row?.liked, count: safeNumber(row?.new_count) };
   }
 
   // ===================================================================
