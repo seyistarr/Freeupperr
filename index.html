@@ -179,10 +179,12 @@
             opacity: 0;
             pointer-events: none;
         }
+        /* FIX 2: Brand bigger/bolder */
         .top-header .brand {
             font-family: 'Poppins', 'Inter', sans-serif;
             font-weight: 900;
-            font-size: 1.25rem;
+            font-size: 1.65rem;
+            letter-spacing: -0.02em;
             cursor: pointer;
             color: var(--text);
             display: flex;
@@ -710,11 +712,12 @@
             word-break: break-word;
             overflow-wrap: anywhere;
         }
+        /* FIX 6: Stronger Facebook-style boldness for short text posts */
         .fu-short-title {
             font-family: 'Poppins', 'Inter', sans-serif;
-            font-weight: 800;
-            font-size: 1.25rem;
-            line-height: 1.35;
+            font-weight: 900;
+            font-size: 1.45rem;
+            line-height: 1.3;
             color: var(--text);
             overflow: hidden;
             display: -webkit-box;
@@ -754,11 +757,12 @@
         }
 
         /* ─── CONTENT BOLD RENDER SYSTEM (Facebook-style short posts) ─── */
+        /* FIX 6: Stronger Facebook-style boldness */
         .fu-content-bold {
             font-family: 'Poppins', 'Inter', sans-serif;
-            font-weight: 700;
-            font-size: 1.3rem;
-            line-height: 1.45;
+            font-weight: 800;
+            font-size: 1.5rem;
+            line-height: 1.4;
             color: var(--text);
             white-space: pre-wrap;
             word-break: break-word;
@@ -1061,12 +1065,14 @@
             min-width: 0;
             overflow: hidden;
         }
+        /* FIX 3: Bold display names in comments (weight 700, cursor pointer) */
         .comment-username {
             font-family: "Inter", "SF Pro Text", "Segoe UI", "Roboto", "Noto Sans", sans-serif;
             font-size: .88rem;
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text);
             margin-bottom: 2px;
+            cursor: pointer;
         }
         .comment-text {
             font-family: "Inter", "SF Pro Text", "Segoe UI", "Roboto", "Noto Sans", sans-serif;
@@ -1208,12 +1214,14 @@
             min-width: 0;
             overflow: hidden;
         }
+        /* FIX 3: Bold display names in replies (weight 700, cursor pointer) */
         .reply-username {
             font-family: "Inter", "SF Pro Text", "Segoe UI", "Roboto", "Noto Sans", sans-serif;
             font-size: .82rem;
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text);
             margin-bottom: 1px;
+            cursor: pointer;
         }
         .reply-text {
             font-family: "Inter", "SF Pro Text", "Segoe UI", "Roboto", "Noto Sans", sans-serif;
@@ -2429,8 +2437,9 @@
 
         /* ─── RESPONSIVE TWEAKS ─── */
         @media (max-width: 640px) {
+            /* FIX 2: Mobile brand size */
             .top-header .brand {
-                font-size: 1.05rem;
+                font-size: 1.4rem;
             }
             .top-header .header-actions .msg-btn {
                 width: 34px;
@@ -3714,11 +3723,15 @@
                 loader = null,
                 isTogglingContent = false,
                 isLoadingMore = false;
+
+            /* FIX 4: openPostTimer for cancellable full-post opening */
             let currentPostId = null,
                 replyTarget = null,
                 exploreReplyTarget = null,
                 expandedThreads = new Map(),
-                lastDoubleTapTime = 0;
+                lastDoubleTapTime = 0,
+                openPostTimer = null;
+
             const tabScrollPositions = { home: 0, explore: 0, market: 0 };
             let lastScrollY = 0,
                 bottomNavHidden = false;
@@ -6118,10 +6131,15 @@
                 });
             }
 
+            /* FIX 4: setupPostEventDelegation with cancellable timer */
             function setupPostEventDelegation(article) {
                 article.addEventListener('click', function(e) {
                     const t = e.target,
                         pid = article.dataset.postId;
+
+                    /* FIX 4: clear any pending open-post timer when any click occurs on the article */
+                    if (openPostTimer) { clearTimeout(openPostTimer);
+                        openPostTimer = null; }
 
                     const actionEl = t.closest('.post-actions-row > *');
                     if (actionEl) spawnRipple(actionEl, e);
@@ -6202,7 +6220,9 @@
                         return;
                     }
                     lastDoubleTapTime = now;
-                    setTimeout(() => {
+                    /* FIX 4: store timer so it can be cleared on subsequent clicks */
+                    openPostTimer = setTimeout(() => {
+                        openPostTimer = null;
                         if (lastDoubleTapTime === now) {
                             openExplorePost(pid, 'home');
                         }
@@ -6474,10 +6494,11 @@
                 const likeCount = c.likeCount || 0;
                 const isLiked = !!c.likedByMe;
 
+                /* FIX 5: add data-user-id to comment-username */
                 return `<div class="comment-item" data-comment-id="${c.id}">
                         <div class="${avatarClass}" data-user-id="${c.userId}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
                         <div class="comment-body">
-                          <div class="comment-username">${pinnedBadgeHtml}${escapeHtml(username)} ${badgeHtml}</div>
+                          <div class="comment-username" data-user-id="${c.userId}">${pinnedBadgeHtml}${escapeHtml(username)} ${badgeHtml}</div>
                           <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${renderedMsg}${editedTagHtml}</div>
                           ${il?`<button class="comment-show-more">Show more</button>`:''}
                           <div class="comment-meta">
@@ -6520,10 +6541,11 @@
                 const likeCount = r.likeCount || 0;
                 const isLiked = !!r.likedByMe;
 
+                /* FIX 5: add data-user-id to reply-username */
                 return `<div class="reply-item" data-comment-id="${r.id}">
                         <div class="${avatarClass}" data-user-id="${r.userId}" data-username="${escapeHtml(username)}">${avatarHtml}</div>
                         <div class="reply-body">
-                          <div class="reply-username">${escapeHtml(username)} ${badgeHtml}</div>
+                          <div class="reply-username" data-user-id="${r.userId}">${escapeHtml(username)} ${badgeHtml}</div>
                           <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${renderedMsg}${editedTagHtml}</div>
                           ${il?`<button class="comment-show-more">Show more</button>`:''}
                           <div class="reply-meta">
@@ -6884,6 +6906,7 @@
                     COMMENT_LOAD_MORE);
                 refreshCommentsList(postId, 'comments-list'); }
 
+            /* FIX 5: setupCommentListDelegation with username click support */
             function setupCommentListDelegation(container, postId) {
                 container.addEventListener('click', function(e) {
                     const t = e.target;
@@ -6911,8 +6934,9 @@
                     if (t.closest('.collapse-replies-btn')) { const ci = t.closest('.collapse-replies-btn')
                             .dataset.commentId; if (ci) collapseReplies(ci, postId); return; }
                     if (t.closest('.load-more-comments-btn')) { loadMoreComments(postId); return; }
-                    if (t.closest('.comment-avatar') || t.closest('.reply-avatar-dot')) {
-                        const el = t.closest('.comment-avatar') || t.closest('.reply-avatar-dot');
+                    /* FIX 5: also handle comment-username and reply-username clicks */
+                    if (t.closest('.comment-avatar') || t.closest('.reply-avatar-dot') || t.closest('.comment-username') || t.closest('.reply-username')) {
+                        const el = t.closest('.comment-avatar') || t.closest('.reply-avatar-dot') || t.closest('.comment-username') || t.closest('.reply-username');
                         const uid = el.dataset.userId;
                         if (uid) window.Router.openProfile(uid);
                         else showToast('User not found');
@@ -7040,7 +7064,7 @@
                       </div>`;
             }
 
-            // ─── buildSinglePostHTML ──────────────────────────────────────────
+            /* FIX 1: buildSinglePostHTML with actions row AFTER caption */
             function buildSinglePostHTML(post) {
                 if (!post) return '<div class="p-8 text-center" style="color:var(--muted);">Post not found</div>';
                 const author = window.getAuthorFromProfile(post.profile);
@@ -7068,6 +7092,7 @@
 
                 const hasCaption = (post.title && post.title.trim()) || (post.description && post.description.trim()) || (post.content && post.content.trim());
 
+                /* FIX 1: actions row moved AFTER caption (right before <hr>) */
                 return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
                         <article>
                           <div class="flex items-center gap-2 mb-2" style="width:100%;">
@@ -7084,6 +7109,11 @@
                           ${topDotsHtml}
                           ${mh}
                         </article>
+                        ${hasCaption ? `<div class="mt-2">
+                          ${renderPostTitle(post.title, { noClamp: true, hasMedia })}
+                          ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
+                          ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true })}</div>` : ''}
+                        </div>` : ''}
                         <div class="post-actions-row" style="max-width:100%;justify-content:space-between;padding:0 4px;" data-post-reactions="${post.id}">
                           <span class="comment-btn ${post.commentsHidden?'comments-off':''}">${post.commentsHidden?svgCommentOff():svgComment()}<span class="comment-count" id="comments-count-${post.id}">${formatCount(0)}</span></span>
                           ${buildReactionButton(post.id)}
@@ -7092,11 +7122,6 @@
                           <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}<span class="share-count">${formatCount(post.shareCount||0)}</span></span>
                           ${repostCountBadge(post)}
                         </div>
-                        ${hasCaption ? `<div class="mt-2">
-                          ${renderPostTitle(post.title, { noClamp: true, hasMedia })}
-                          ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
-                          ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true })}</div>` : ''}
-                        </div>` : ''}
                         <hr class="my-4" style="border-color:var(--brd);">
 
                         <div id="similarPostsSection-${post.id}" class="similar-posts-section" style="display:none;">
@@ -7205,7 +7230,6 @@
                 updateExploreReplyContextUI();
 
                 if (post) {
-                    // ─── FIX 23: guard against duplicate incrementView calls ──
                     if (window.IndexRender && typeof window.IndexRender.pause === 'function') {
                         window.IndexRender.pause();
                     }
@@ -7251,11 +7275,7 @@
                 }
             }
 
-            // ─── FIX 24: closeExploreFullscreen resumes view observer ──────
             function closeExploreFullscreen() {
-                // ─── FIX 24: resume the feed's view-tracking observer once
-                // the fullscreen post view closes, matching the pause() in
-                // Fix 23 ────────────────────────────────────────────────────
                 if (window.IndexRender && typeof window.IndexRender.resume === 'function') {
                     window.IndexRender.resume();
                 }
@@ -7384,7 +7404,6 @@
                         openLightbox(c.dataset.fullImg); return; }
                     if (t.closest('[data-extlink]')) { openInAppWebView(decodeURIComponent(t.closest(
                         '[data-extlink]').dataset.extlink)); return; }
-                    // ─── FIX: avatar + name both open profile ──────────────
                     if (t.closest('[data-author-avatar]') || t.closest('.font-bold.text-sm')) {
                         const p = allPosts.find(p => p.id === postId);
                         if (p && p.user_id) window.Router.openProfile(p.user_id);
