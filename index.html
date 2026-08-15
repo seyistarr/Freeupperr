@@ -4665,6 +4665,21 @@
                         p.is_hidden = p.is_hidden || false;
                         if (p.likedByMe) appData.userReactions[p.id + '-like'] = true;
                     });
+
+                    // ─── FIX 1: keep FreeUpperFeed's internal candidate pool in sync
+                    // with what's actually rendered. Without this, registerInteraction()
+                    // (fired on every like/comment/bookmark/share/repost via
+                    // IndexInteractions.notify) looks up the post in a pool that was
+                    // only ever populated once at app-start, goes stale, and silently
+                    // drops the interest/creator-affinity signal for any post not in
+                    // that original snapshot. Fire-and-forget: never block the
+                    // visible feed on this.
+                    const _cuSync = getCurrentUser();
+                    if (_cuSync && _cuSync.isLoggedIn && window.FreeUpperFeed) {
+                        window.FreeUpperFeed.loadInitial({ userId: _cuSync.id, source: 'composer' })
+                            .catch(err => console.warn('FreeUpperFeed sync failed:', err));
+                    }
+
                     return posts;
                 } catch (err) {
                     console.error('Failed to load posts:', err);
@@ -5809,6 +5824,8 @@
                     .then(() => {
                         allPosts = allPosts.filter(p => p.id !== postId);
                         appData.posts = appData.posts.filter(p => p.id !== postId);
+                        // ─── FIX 3: keep pools in sync ────────────────────
+                        window.FreeUpperFeed?.removePost(postId);
                         document.querySelectorAll(`article[data-post-id="${postId}"]`).forEach(el => el.remove());
                         showToast('Post deleted');
                         closeShareModal();
@@ -5867,6 +5884,8 @@
                 localStorage.setItem('freeupper_hidden_posts', JSON.stringify(Array.from(hiddenPostsSet)));
                 allPosts = allPosts.filter(p => p.id !== postId);
                 appData.posts = appData.posts.filter(p => p.id !== postId);
+                // ─── FIX 2: keep pools in sync ────────────────────────────
+                window.FreeUpperFeed?.removePost(postId);
                 document.querySelectorAll(`article[data-post-id="${postId}"]`).forEach(el => {
                     el.style.transition = 'opacity .25s ease, transform .25s ease';
                     el.style.opacity = '0';
@@ -5963,7 +5982,11 @@
                         _shuffleHomeOnce = false;
                     } else if (window.FreeUpperAlgorithm && window.FreeUpperFeed) {
                         const profile = window.FreeUpperFeed.getProfile();
-                        p = window.FreeUpperAlgorithm.rank(p, profile, new Map());
+                        // FIX 4: use real creatorScores from Feed instead of new Map()
+                        const creatorScores = window.FreeUpperFeed.getCreatorScores
+                            ? window.FreeUpperFeed.getCreatorScores()
+                            : new Map();
+                        p = window.FreeUpperAlgorithm.rank(p, profile, creatorScores);
                     } else {
                         const uc = getUserCategories();
                         const jitter = new Map(p.map(post => [post.id, ((hashStr(post.id + _feedShuffleSeed) % 1000) /
@@ -6889,11 +6912,10 @@
             }
 
             function toggleCommentExpand(btn, textEl) {
-    if (!textEl) return;
-    const collapsed = textEl.classList.toggle('collapsed');
-    btn.textContent = collapsed ? 'Show more' : 'Show less';
-}
-
+                if (!textEl) return;
+                const collapsed = textEl.classList.toggle('collapsed');
+                btn.textContent = collapsed ? 'Show more' : 'Show less';
+            }
 
             function expandReplies(commentId, postId) { expandedThreads.set(commentId, (expandedThreads.get(
                     commentId) || 0) + REPLY_BATCH);
@@ -6924,15 +6946,14 @@
                         return;
                     }
                     if (t.closest('.comment-show-more')) {
-    e.stopPropagation();
-    const btn = t.closest('.comment-show-more');
-    const textEl = btn.previousElementSibling;
-    if (textEl && textEl.classList.contains('comment-text')) {
-        toggleCommentExpand(btn, textEl);
-    }
-    return;
-}
-
+                        e.stopPropagation();
+                        const btn = t.closest('.comment-show-more');
+                        const textEl = btn.previousElementSibling;
+                        if (textEl && textEl.classList.contains('comment-text')) {
+                            toggleCommentExpand(btn, textEl);
+                        }
+                        return;
+                    }
                     if (t.closest('.expand-replies-btn')) { const ci = t.closest('.expand-replies-btn')
                             .dataset.commentId; if (ci) expandReplies(ci, postId); return; }
                     if (t.closest('.collapse-replies-btn')) { const ci = t.closest('.collapse-replies-btn')
