@@ -1,6 +1,6 @@
 // =====================================================================
 // index-render.js
-// FreeUpper Render Coordinator — v4.0.0
+// FreeUpper Render Coordinator — v4.1.0
 // =====================================================================
 //
 // PURPOSE
@@ -88,7 +88,8 @@
     },
     observer: null,
     visibilityTimers: new Map(),
-    registered: false
+    registered: false,
+    paused: false           // whether observation is temporarily paused
   };
 
   // ===================================================================
@@ -214,6 +215,9 @@
     if (!('IntersectionObserver' in window)) return null;
 
     state.observer = new IntersectionObserver(entries => {
+      // If paused, ignore all incoming events — no new timers, no marks.
+      if (state.paused) return;
+
       entries.forEach(entry => {
         const el = entry.target;
         const postId = el.dataset.postId;
@@ -269,6 +273,9 @@
   // sure newly-added cards get observed. Safe to call repeatedly —
   // re-observing an already-observed element is a no-op in the spec.
   function observeVisiblePosts() {
+    // If paused, do not start observing anything new.
+    if (state.paused) return;
+
     const observer = ensureObserver();
     if (!observer) return;
     const container = getContainer();
@@ -290,6 +297,40 @@
   }
 
   // ===================================================================
+  // PAUSE / RESUME
+  // -------------------------------------------------------------
+  // Call pause() when the background feed is covered by something
+  // else (e.g. the fullscreen post overlay) and should stop generating
+  // "seen" signals for the ranking algorithm. Call resume() when it's
+  // visible again.
+  //
+  // Unlike disconnect(), pause() does NOT clear the observer instance
+  // or forget which elements it was watching — it just stops it from
+  // firing, and cancels any in-flight dwell timers so nothing counts
+  // as "seen" while paused. resume() re-observes whatever's currently
+  // in the DOM, since content may have changed while paused (e.g. the
+  // fullscreen post's own comments loaded, or the feed re-rendered).
+  // ===================================================================
+  function pause() {
+    if (state.paused) return;
+    state.paused = true;
+    if (state.observer) {
+      state.observer.disconnect();
+    }
+    // Cancel any dwell timers currently counting down — a card that
+    // was mid-timer when we paused should not silently become "seen"
+    // while the user's attention is elsewhere.
+    state.visibilityTimers.forEach(timer => clearTimeout(timer));
+    state.visibilityTimers.clear();
+  }
+
+  function resume() {
+    if (!state.paused) return;
+    state.paused = false;
+    observeVisiblePosts();
+  }
+
+  // ===================================================================
   // CLEANUP
   // ===================================================================
   function disconnect() {
@@ -299,6 +340,7 @@
     }
     state.visibilityTimers.forEach(timer => clearTimeout(timer));
     state.visibilityTimers.clear();
+    state.paused = false;
   }
 
   // ===================================================================
@@ -307,16 +349,19 @@
   window.IndexRender = {
     registerHandlers,
     rescan,
+    pause,
+    resume,
     disconnect,
     // exposed for debugging in console
     getState() {
       return {
         registered: state.registered,
         activeTimers: state.visibilityTimers.size,
-        handlersSet: Object.keys(state.handlers).filter(k => !!state.handlers[k])
+        handlersSet: Object.keys(state.handlers).filter(k => !!state.handlers[k]),
+        paused: state.paused
       };
     }
   };
 
-  console.log('✅ index-render.js v4.0.0 loaded — coordinator only, no DOM building.');
+  console.log('✅ index-render.js v4.1.0 loaded — coordinator only, no DOM building.');
 })();
