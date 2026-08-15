@@ -539,6 +539,18 @@
     };
   }
 
+  // ─── FIX: expose the live creatorScores Map ──────────────────────
+  // index.html's own ranking call (getFilteredSortedPosts -> 'foryou'
+  // branch) currently passes `new Map()` to FreeUpperAlgorithm.rank()
+  // instead of the real, learned creator-affinity scores, because
+  // there was previously no way to read them out of this module.
+  // Returns the SAME Map instance (not a copy) so it always reflects
+  // the latest state without index.html having to re-fetch it after
+  // every interaction.
+  function getCreatorScores() {
+    return state.creatorScores;
+  }
+
   function explainPost(postId) {
     const post = state.rawPosts.find(p => p.id === postId);
     if (!post) return null;
@@ -584,7 +596,10 @@
 
     // debug
     getState,
-    explainPost
+    explainPost,
+
+    // FIX: real creator-affinity map, for index.html's ranking call
+    getCreatorScores
   };
 
   console.log('✅ FreeUpper Feed Controller v4.0.0 loaded.');
