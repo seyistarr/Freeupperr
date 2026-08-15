@@ -203,44 +203,32 @@
     }
 
     /**
-     * Render content with clickable mention links.
-     * @param {string} text - The raw text.
-     * @param {Array} mentions - Array of mention objects.
-     * @returns {string} HTML string with <a> tags for mentions.
+     * Render mentions as clickable, bold, highlighted links.
+     * IMPORTANT: call this AFTER escapeHtml() has already run on the text
+     * (same contract as Hashtags.hashifyHtml). It matches "@username"
+     * patterns in the given HTML string and only turns a match into a
+     * link when that username exists in the supplied mentions array —
+     * so plain "@word" text that was never an actual tagged mention
+     * doesn't get linked by accident.
+     * @param {string} html - Already-escaped HTML string.
+     * @param {Array} mentions - Array of mention objects with .username, .userId, .verified.
+     * @returns {string} HTML string with mentions wrapped in clickable, styled links.
      */
-    function renderMentions(text, mentions) {
-        if (!mentions || mentions.length === 0) return escapeHtml(text);
+    function renderMentions(html, mentions) {
+        if (!html || !mentions || !mentions.length) return html;
 
-        // Sort mentions by start position (descending to avoid index shifts)
-        const sorted = [...mentions].sort((a, b) => b.start - a.start);
-
-        let result = text;
-        sorted.forEach(m => {
-            const username = m.username || 'user';
-            const displayName = m.displayName || username;
-            const verifiedBadge = m.verified ? getVerifiedBadgeHTML() : '';
-            const link = `<a href="/profile?uid=${m.userId}" class="mention-link" data-userid="${m.userId}" data-username="${username}" style="color:var(--p);font-weight:600;text-decoration:none;">@${username}${verifiedBadge}</a>`;
-            // Replace the substring with the link
-            const before = result.substring(0, m.start);
-            const after = result.substring(m.end + 1); // m.end is inclusive? We'll use end as the index after the last char.
-            // We need to store end as the exclusive index in our data (like substring end).
-            // Our insertMention uses start and end where end = start + mentionText.length - 1 (inclusive).
-            // For safety, let's use inclusive start/end and substring.
-            // We'll recalc with a more robust method: locate the username in the text.
-            // Simpler: use a placeholder approach.
-            // We'll rebuild by finding the @username substring.
-            const mentionStr = `@${username}`;
-            // Find the occurrence at the given start
-            const sliceStart = before.lastIndexOf(mentionStr);
-            if (sliceStart !== -1) {
-                const sliceEnd = sliceStart + mentionStr.length;
-                const beforePart = result.substring(0, sliceStart);
-                const afterPart = result.substring(sliceEnd);
-                result = beforePart + link + afterPart;
-            }
+        const byUsername = new Map();
+        mentions.forEach(m => {
+            if (m && m.username) byUsername.set(m.username.toLowerCase(), m);
         });
+        if (!byUsername.size) return html;
 
-        return result;
+        return html.replace(/@([A-Za-z0-9_]{1,30})/g, (match, uname) => {
+            const m = byUsername.get(uname.toLowerCase());
+            if (!m) return match;
+            const verifiedBadge = m.verified ? getVerifiedBadgeHTML() : '';
+            return `<a href="javascript:void(0)" class="mention-link" data-userid="${m.userId}" data-username="${escapeHtml(uname)}">@${escapeHtml(uname)}${verifiedBadge}</a>`;
+        });
     }
 
     /**
@@ -423,8 +411,8 @@
                 color: var(--muted);
             }
             .mention-link {
-                color: var(--p);
-                font-weight: 600;
+                color: var(--pl, #A78BFA);
+                font-weight: 800;
                 text-decoration: none;
             }
             .mention-link:hover {
