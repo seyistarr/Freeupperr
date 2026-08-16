@@ -550,7 +550,9 @@
             background: var(--inp);
             margin-bottom: 16px;
         }
-        .toggle-row-text { min-width: 0; }
+        .toggle-row-text {
+            min-width: 0;
+        }
         .toggle-row-title {
             font-size: 14px;
             font-weight: 700;
@@ -582,7 +584,7 @@
             transition: background .2s;
             border: 1.5px solid var(--brd);
         }
-        .toggle input:checked + .track {
+        .toggle input:checked+.track {
             background: var(--p);
             border-color: var(--p);
         }
@@ -598,7 +600,7 @@
             transition: transform .2s cubic-bezier(.34, 1.4, .64, 1);
             box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
         }
-        .toggle input:checked + .track::after {
+        .toggle input:checked+.track::after {
             transform: translateX(20px);
         }
 
@@ -1090,12 +1092,45 @@
             width: 0;
         }
 
+        /* ─── FIX: mention highlight now matches index.html's mention-link style ───
+           bold, light-purple text, no background pill */
         .mention-highlight {
-            background: var(--pdim);
             color: var(--pl);
-            border-radius: 4px;
-            padding: 0 2px;
-            font-weight: 600;
+            font-weight: 800;
+        }
+
+        /* ─── Mention live-highlight overlay for the Content textarea ───
+           A textarea can't style parts of its own text, so we stack a
+           read-only "backdrop" div behind a transparent-text textarea.
+           The backdrop mirrors what's typed and bolds/colors @mentions;
+           the textarea itself only shows the caret and selection. */
+        .mention-textarea-wrap {
+            position: relative;
+        }
+        .mention-backdrop {
+            position: absolute;
+            inset: 0;
+            margin: 0;
+            padding: 12px 16px;
+            border: 1.5px solid transparent;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+            font-family: inherit;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow: hidden;
+            color: var(--text);
+            pointer-events: none;
+        }
+        .mention-textarea {
+            position: relative;
+            background: transparent;
+            color: transparent;
+            caret-color: var(--text);
+        }
+        .mention-textarea::placeholder {
+            color: var(--muted2);
         }
         .mention-suggestions {
             background: var(--bg3);
@@ -1193,10 +1228,13 @@
                             <span class="char-c" id="postTitleCount">0 / 100</span>
                         </div>
 
-                        <!-- Content (optional) -->
+                        <!-- Content (optional) — with mention live-highlight overlay -->
                         <div class="form-group" style="position:relative;">
                             <label class="form-lbl">Content <span style="font-weight:400;color:var(--muted2);">(optional)</span></label>
-                            <textarea class="form-inp" id="postContent" placeholder="Write your post content... Use @ to mention someone" rows="6"></textarea>
+                            <div class="mention-textarea-wrap">
+                                <div class="mention-backdrop" id="postContentBackdrop" aria-hidden="true"></div>
+                                <textarea class="form-inp mention-textarea" id="postContent" placeholder="Write your post content... Use @ to mention someone" rows="6"></textarea>
+                            </div>
                             <div class="mention-suggestions" id="mentionSuggestions"></div>
                             <span class="char-c" id="postContentCount">0 characters</span>
                         </div>
@@ -1397,19 +1435,17 @@
         // ── CONFIG (your original Cloudinary settings) ──
         const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
         // ─── SEPARATE PRESETS FOR EACH MEDIA TYPE ───
-        const CLOUDINARY_IMAGE_UPLOAD_PRESET = 'image_upload';      // for images
-        const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload';      // for videos (must be configured)
-        const CLOUDINARY_MARKET_UPLOAD_PRESET = 'market_upload';    // for marketplace images
+        const CLOUDINARY_IMAGE_UPLOAD_PRESET = 'image_upload'; // for images
+        const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload'; // for videos (must be configured)
+        const CLOUDINARY_MARKET_UPLOAD_PRESET = 'market_upload'; // for marketplace images
 
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
         const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
         const MAX_VIDEO_DURATION_SECONDS = 180;
-        // ── CHANGE #2: bumped from 10 to 20 ──
         const MAX_POST_IMAGES = 20; // ─── up to 20 images ───
 
         let postTags = [];
-        // ── CHANGE #3: parallel array for per-image embeddings ──
-        let postMedia = [];          // array of {url, type, public_id, uploading}
+        let postMedia = []; // array of {url, type, public_id, uploading}
         let postImageEmbeddings = []; // parallel array, same index as postMedia — embedding vector or null per slot
 
         let marketImages = [];
@@ -1446,6 +1482,46 @@
         }
 
         // ──────────────────────────────────────────────────────────────
+        // MENTION HIGHLIGHT OVERLAY (Content textarea)
+        // Mirrors the textarea's text into a backdrop div, wrapping any
+        // @username that matches a real captured mention (from
+        // mentions.js's el._mentions) in bold, light-purple styling —
+        // the same look it gets once the post renders on index.html.
+        // ──────────────────────────────────────────────────────────────
+        function escapeHtmlForMentions(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+
+        function syncMentionBackdrop(textareaEl, backdropEl) {
+            if (!textareaEl || !backdropEl) return;
+            const text = textareaEl.value;
+            const mentions = textareaEl._mentions || [];
+            const usernames = new Set(mentions.map(m => (m.username || '').toLowerCase()));
+            let html = escapeHtmlForMentions(text);
+            if (usernames.size) {
+                html = html.replace(/@([A-Za-z0-9_]{1,30})/g, (match, uname) =>
+                    usernames.has(uname.toLowerCase()) ? `<span class="mention-highlight">@${uname}</span>` : match
+                );
+            }
+            // Preserve a trailing newline so the backdrop's height doesn't
+            // fall a line short of the textarea's.
+            backdropEl.innerHTML = html + (text.endsWith('\n') ? '<br>&nbsp;' : '');
+            backdropEl.scrollTop = textareaEl.scrollTop;
+        }
+
+        function initMentionBackdrop() {
+            const textareaEl = document.getElementById('postContent');
+            const backdropEl = document.getElementById('postContentBackdrop');
+            if (!textareaEl || !backdropEl || textareaEl._backdropWired) return;
+            textareaEl._backdropWired = true;
+            textareaEl.addEventListener('input', () => syncMentionBackdrop(textareaEl, backdropEl));
+            textareaEl.addEventListener('scroll', () => { backdropEl.scrollTop = textareaEl.scrollTop; });
+            syncMentionBackdrop(textareaEl, backdropEl);
+        }
+
+        // ──────────────────────────────────────────────────────────────
         // TABS
         // ──────────────────────────────────────────────────────────────
         function switchTab(el, tab) {
@@ -1460,6 +1536,7 @@
                     if (textarea && window.Mentions) {
                         window.Mentions.initMentions(textarea);
                     }
+                    initMentionBackdrop();
                 }, 200);
             }
         }
@@ -1579,10 +1656,9 @@
                 const isVideo = file.type.startsWith('video');
                 const resourceType = isVideo ? 'video' : 'image';
 
-                // Select the correct preset based on mode and file type
                 let preset;
                 if (mode === 'market') {
-                    preset = CLOUDINARY_MARKET_UPLOAD_PRESET; // only images
+                    preset = CLOUDINARY_MARKET_UPLOAD_PRESET;
                 } else if (isVideo) {
                     preset = CLOUDINARY_VIDEO_UPLOAD_PRESET;
                 } else {
@@ -1598,7 +1674,7 @@
 
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', url);
-                xhr.timeout = 300000; // 5 minutes
+                xhr.timeout = 300000;
 
                 if (onProgress) {
                     xhr.upload.addEventListener('progress', (e) => {
@@ -1661,7 +1737,6 @@
             const input = document.getElementById('postMediaUrlInput');
             const url = input.value.trim();
             if (!url) {
-                // Just clear input placeholder – no removal
                 input.placeholder = 'Paste image or YouTube link...';
                 return;
             }
@@ -1671,7 +1746,6 @@
             'imgur.com');
 
             if (ytMatch) {
-                // YouTube video – only one video allowed
                 if (postMedia.length > 0) {
                     showToast('Remove existing media before adding a video', 'o');
                     input.value = '';
@@ -1684,7 +1758,6 @@
                     public_id: 'youtube_' + ytMatch[1],
                     uploading: false
                 }];
-                // Keep postImageEmbeddings in sync
                 postImageEmbeddings = [null];
                 input.value = '🎬 Video linked';
                 input.style.color = 'var(--pl)';
@@ -1714,7 +1787,7 @@
                     public_id: 'external_' + Date.now(),
                     uploading: false
                 });
-                postImageEmbeddings.push(null); // placeholder – no embedding for external URLs
+                postImageEmbeddings.push(null);
                 input.value = '';
                 renderPostImageGrid();
                 showToast('Image added', 'p');
@@ -1763,11 +1836,9 @@
             const files = Array.from(event.target.files);
             if (!files.length) return;
 
-            // Check if any video is being uploaded
             const hasVideo = files.some(f => f.type.startsWith('video'));
             const hasMultiple = files.length > 1;
 
-            // If there's a video, it must be the only file and no existing media
             if (hasVideo) {
                 if (postMedia.length > 0) {
                     showToast('Remove existing media before adding a video', 'o');
@@ -1780,7 +1851,6 @@
                     return;
                 }
             } else {
-                // Images only – check if we already have a video
                 if (postMedia.some(m => m.type === 'video')) {
                     showToast('Remove the video before adding images', 'o');
                     event.target.value = '';
@@ -1806,7 +1876,6 @@
             const progress = document.getElementById('postProgress');
             const bar = document.getElementById('postProgressBar');
 
-            // ── CHANGE #4: per-image loop now handles embeddings individually ──
             for (const file of toUpload) {
                 const isVideo = file.type.startsWith('video');
                 const isImage = file.type.startsWith('image');
@@ -1838,7 +1907,7 @@
                     public_id: '',
                     uploading: true
                 });
-                postImageEmbeddings.push(null); // placeholder – filled in after embedding computes below
+                postImageEmbeddings.push(null);
                 renderPostImageGrid();
 
                 progress.style.display = 'block';
@@ -1858,8 +1927,6 @@
                     renderPostImageGrid();
                     showToast('Uploaded!', 'g');
 
-                    // ── Compute this image's embedding now, keyed to the same index ──
-                    // Runs after upload so it never blocks or delays the Cloudinary transfer.
                     if (isImage) {
                         computeImageEmbedding(file).then(embedding => {
                             postImageEmbeddings[idx] = embedding;
@@ -1880,22 +1947,19 @@
             event.target.value = '';
         }
 
-        // ── CHANGE #5: keep postImageEmbeddings in sync on removal ──
         function removePostImage(idx) {
             if (postMedia[idx]?.url?.startsWith('blob:')) {
                 URL.revokeObjectURL(postMedia[idx].url);
             }
             postMedia.splice(idx, 1);
-            postImageEmbeddings.splice(idx, 1); // keep indexes aligned with postMedia
+            postImageEmbeddings.splice(idx, 1);
             renderPostImageGrid();
-            // If no media, reset the input placeholder
             if (postMedia.length === 0) {
                 const input = document.getElementById('postMediaUrlInput');
                 input.value = '';
                 input.style.color = '';
                 input.style.fontWeight = '';
                 input.placeholder = 'Paste image or YouTube link...';
-                // Also clear embeddings
                 postImageEmbeddings = [];
             }
             showToast('Media removed', 'o');
@@ -1944,9 +2008,7 @@
             counter.textContent = `${idx + 1} / ${images.length}`;
             viewer.classList.add('open');
             document.body.style.overflow = 'hidden';
-            // Store for navigation
             viewer._fullscreenData = { images: postFullscreenImages, current: idx };
-            // Reuse existing fullscreen close/esc logic via global closeFullscreen
         }
 
         // Override closeFullscreen to handle both market and post
@@ -1964,7 +2026,6 @@
             if (viewer._keyHandler) document.removeEventListener('keydown', viewer._keyHandler);
             viewer._fullscreenData = null;
         };
-        // Re-attach keyboard handler for navigation in fullscreen
         document.addEventListener('keydown', function(e) {
             const viewer = document.getElementById('fullscreenViewer');
             if (!viewer.classList.contains('open')) return;
@@ -2095,7 +2156,6 @@
                 '';
 
             grid.innerHTML = thumbHtml + addBtn;
-            // Update fullscreen data for market
             fullscreenImages = marketImages.filter(i => i.isUploaded).map(i => i.url);
         }
 
@@ -2136,7 +2196,6 @@
                 }
                 categoriesLoaded = true;
 
-                // Enable category picker
                 document.getElementById('categoryPickerBtn').disabled = false;
 
                 if (selectedCategoryId) {
@@ -2153,7 +2212,7 @@
             if (!categoryId) {
                 document.getElementById('subcategoryPickerBtn').disabled = true;
                 document.getElementById('subcategoryPickerBtn').querySelector('.placeholder').textContent =
-                'Select category first';
+                    'Select category first';
                 document.getElementById('itemSubcategoryId').value = '';
                 selectedSubcategoryId = '';
                 return;
@@ -2219,7 +2278,6 @@
                 }
             }
 
-            // Reset search
             search.value = '';
             renderPickerItems(pickerData);
             modal.classList.add('open');
@@ -2259,7 +2317,6 @@
                 if (cat) {
                     document.getElementById('categoryPickerBtn').querySelector('.placeholder').textContent = cat.name;
                     document.getElementById('itemCategoryId').value = id;
-                    // Load subcategories
                     selectedSubcategoryId = '';
                     document.getElementById('subcategoryPickerBtn').querySelector('.placeholder').textContent =
                         'Select subcategory';
@@ -2275,7 +2332,6 @@
                 }
             }
             closePickerModal();
-            // Update active state in list
             renderPickerItems(pickerData);
         }
 
@@ -2319,7 +2375,6 @@
             const content = document.getElementById('postContent').value.trim();
             const hideComments = document.getElementById('postHideComments').checked;
 
-            // Title is optional — just block a totally empty post
             if (!title && !content && postMedia.length === 0) {
                 showToast('Please add a title, content or media', 'o');
                 return;
@@ -2328,13 +2383,11 @@
                 showToast('Max 5 tags allowed', 'o');
                 return;
             }
-            // Check if any media is still uploading
             if (postMedia.some(m => m.uploading)) {
                 showToast('Please wait for media to finish uploading', 'o');
                 return;
             }
 
-            // Extract mentions
             const textarea = document.getElementById('postContent');
             let mentions = [];
             if (window.Mentions && typeof window.Mentions.extractMentions === 'function') {
@@ -2347,7 +2400,6 @@
             btn.textContent = 'Publishing...';
             btn.disabled = true;
 
-            // Build media array from postMedia
             const media = postMedia.map(m => ({
                 url: m.url,
                 type: m.type,
@@ -2355,11 +2407,11 @@
             }));
             const firstItem = media[0] || {};
 
-            // ── CHANGE #6: average all per-image embeddings into one combined vector ──
             const validEmbeddings = postImageEmbeddings.filter(e => Array.isArray(e) && e.length);
-            const imageEmbedding = (window.ImageEmbedding && typeof window.ImageEmbedding.averageEmbeddings === 'function' && validEmbeddings.length)
-                ? window.ImageEmbedding.averageEmbeddings(validEmbeddings)
-                : null;
+            const imageEmbedding = (window.ImageEmbedding && typeof window.ImageEmbedding.averageEmbeddings === 'function' &&
+                validEmbeddings.length) ?
+                window.ImageEmbedding.averageEmbeddings(validEmbeddings) :
+                null;
             console.log(`[Embedding] Averaging ${validEmbeddings.length}/${postImageEmbeddings.length} image(s) for this post.`);
 
             try {
@@ -2372,8 +2424,8 @@
                     mediaType: firstItem.type || '',
                     mentions: mentions,
                     commentsHidden: hideComments,
-                    source: 'composer',   // <── explicit source
-                    imageEmbedding: imageEmbedding  // <── combined averaged embedding
+                    source: 'composer',
+                    imageEmbedding: imageEmbedding
                 });
 
                 console.log('[DEBUG] Post created successfully:', result);
@@ -2395,12 +2447,13 @@
                     }
                 }
 
-                // ── CHANGE #7: reset postMedia and postImageEmbeddings ──
+                // ── Reset form ──
                 document.getElementById('postTitle').value = '';
                 document.getElementById('postContent').value = '';
+                document.getElementById('postContent')._mentions = [];
+                syncMentionBackdrop(document.getElementById('postContent'), document.getElementById('postContentBackdrop'));
                 document.getElementById('postHideComments').checked = false;
                 document.getElementById('postMediaUrlInput').value = '';
-                // Clear media
                 postMedia.forEach(m => { if (m.url?.startsWith('blob:')) URL.revokeObjectURL(m.url); });
                 postMedia = [];
                 postImageEmbeddings = [];
@@ -2500,7 +2553,6 @@
                 })
                 .then(function(result) {
                     console.log('[DEBUG] Item listed successfully:', result);
-                    // Reset form
                     document.getElementById('itemTitle').value = '';
                     document.getElementById('itemPrice').value = '';
                     document.getElementById('itemDescription').value = '';
@@ -2582,6 +2634,8 @@
                     contentCount.classList.remove('warn');
                 }
             });
+
+            initMentionBackdrop();
         });
 
         // ──────────────────────────────────────────────────────────────
@@ -2613,16 +2667,15 @@
                 document.documentElement.setAttribute('data-theme', e.detail.theme);
             });
 
-            // Init mentions on post content
             const postContent = document.getElementById('postContent');
             if (postContent) {
                 if (window.Mentions && typeof window.Mentions.initMentions === 'function') {
                     window.Mentions.initMentions(postContent);
                     console.log('[DEBUG] Mentions initialised on post content');
                 }
+                initMentionBackdrop();
             }
 
-            // Load categories for sell panel
             const activePanel = document.querySelector('.panel.active');
             if (activePanel && activePanel.id === 'panel-sell') {
                 loadCategories();
@@ -2630,7 +2683,6 @@
                 setTimeout(loadCategories, 500);
             }
 
-            // ── Preload the image embedding model in background ──
             if (window.ImageEmbedding && typeof window.ImageEmbedding.preloadModel === 'function') {
                 window.ImageEmbedding.preloadModel()
                     .then(() => console.log('[Embedding] Model preloaded successfully'))
@@ -2639,7 +2691,7 @@
                 console.warn('[Embedding] ImageEmbedding not available for preload');
             }
 
-            console.log('[DEBUG] create.html: multi‑image support, source: composer, up to 20 images, with per-image embedding averaging');
+            console.log('[DEBUG] create.html: multi‑image support, source: composer, up to 20 images, with per-image embedding averaging, mention live-highlight');
         }
 
         if (document.readyState === 'loading') {
