@@ -151,6 +151,12 @@
 
   // ─── DATA HELPERS ──────────────────────────────────────────────
   async function fetchTrendingHashtags(limit = 10) {
+    // Backed by post_hashtags (relational source of truth) via
+    // hashtags.js's shared implementation, falling back to the old
+    // posts.tags scan only if hashtags.js hasn't loaded for some reason.
+    if (window.Hashtags && typeof window.Hashtags.fetchTrendingHashtags === 'function') {
+      return window.Hashtags.fetchTrendingHashtags(limit);
+    }
     const { data, error } = await window.sb.from('posts').select('tags').not('tags', 'is', null).limit(500);
     if (error || !data) return [];
     const counts = {};
@@ -216,17 +222,43 @@
     return data || [];
   }
   async function searchHashtagsOnly(q, offset = 0) {
+    // Relational search via hashtags.js. Offset/pagination is applied
+    // client-side here since searchHashtags already caps results;
+    // for a small hashtag table this is fine — revisit if it grows large.
+    if (window.Hashtags && typeof window.Hashtags.searchHashtags === 'function') {
+      const results = await window.Hashtags.searchHashtags(q, 50);
+      return results.slice(offset, offset + PAGE_SIZE).map(r => r.tag);
+    }
     const { data, error } = await window.sb.from('posts').select('tags').contains('tags', [q]).range(offset, offset + PAGE_SIZE - 1);
     if (error || !data) return [];
     const allTags = data.flatMap(p => p.tags || []).filter(t => t.toLowerCase().includes(q.toLowerCase()));
     return [...new Set(allTags)];
   }
+
   async function searchHashtagPosts(tag, sort, offset = 0) {
+    // Relational path: get post_ids from post_hashtags, then load full
+    // post rows filtered to that set, sorted the same way as before.
+    if (window.Hashtags && typeof window.Hashtags.fetchHashtagPostIds === 'function') {
+      const postIds = await window.Hashtags.fetchHashtagPostIds(tag);
+      if (!postIds.length) return [];
+      const { data, error } = await window.sb
+        .from('posts')
+        .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
+        .in('id', postIds)
+        .order(sort === 'latest' ? 'created_at' : 'views', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+      return error ? [] : (data || []);
+    }
     const { data, error } = await window.sb.from('posts').select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
       .contains('tags', [tag]).order(sort === 'latest' ? 'created_at' : 'views', { ascending: false }).range(offset, offset + PAGE_SIZE - 1);
     return error ? [] : (data || []);
   }
+
   async function getHashtagCount(tag) {
+    if (window.Hashtags && typeof window.Hashtags.fetchHashtagPostIds === 'function') {
+      const postIds = await window.Hashtags.fetchHashtagPostIds(tag);
+      return postIds.length;
+    }
     const { count, error } = await window.sb.from('posts').select('id', { count: 'exact', head: true }).contains('tags', [tag]);
     return error ? 0 : (count || 0);
   }
