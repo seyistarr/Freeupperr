@@ -1198,6 +1198,106 @@
             font-weight: 800;
             font-size: 18px;
         }
+
+        /* ─── FORMATTING TOOLBAR (Unicode Bold/Italic/Monospace) ─── */
+        .fmt-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            padding: 6px 8px;
+            border: 1.5px solid var(--brd);
+            border-bottom: none;
+            border-radius: 12px 12px 0 0;
+            background: var(--inp);
+        }
+        .fmt-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .12s;
+        }
+        .fmt-btn:hover {
+            background: var(--pdim);
+        }
+        .fmt-btn.italic-btn { font-style: italic; font-weight: 600; }
+        .fmt-btn.mono-btn { font-family: monospace; }
+        .fmt-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
+        .fmt-divider {
+            width: 1px;
+            height: 18px;
+            background: var(--brd2);
+            margin: 0 4px;
+            flex-shrink: 0;
+        }
+        .fmt-hint {
+            font-size: 11px;
+            color: var(--muted2);
+            padding: 6px 2px 0;
+        }
+        /* The wrap now sits directly under the toolbar, so square off its top corners */
+        .fmt-toolbar + .mention-textarea-wrap .form-inp,
+        .fmt-toolbar + .mention-textarea-wrap .mention-backdrop {
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+
+        /* ─── HASHTAG SUGGESTIONS (mirrors .mention-suggestions) ─── */
+        .hashtag-suggestions {
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            border-radius: 12px;
+            max-height: 220px;
+            overflow-y: auto;
+            position: absolute;
+            z-index: 60;
+            width: 100%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+            display: none;
+            padding: 6px 0;
+        }
+        .hashtag-suggestions .h-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            transition: background .1s;
+            font-size: 14px;
+        }
+        .hashtag-suggestions .h-item:hover,
+        .hashtag-suggestions .h-item.active {
+            background: var(--pdim);
+        }
+        .hashtag-suggestions .h-name {
+            font-weight: 700;
+            color: var(--pl);
+        }
+        .hashtag-suggestions .h-count {
+            font-size: 12px;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+        .hashtag-suggestions .h-count.h-new {
+            color: var(--ok);
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -1246,25 +1346,26 @@
                             <span class="char-c" id="postTitleCount">0 / 100</span>
                         </div>
 
-                        <!-- Content (optional) — with mention live-highlight overlay -->
+                        <!-- Content (optional) — formatting toolbar + mention/hashtag live overlay -->
                         <div class="form-group" style="position:relative;">
                             <label class="form-lbl">Content <span style="font-weight:400;color:var(--muted2);">(optional)</span></label>
+                            <div class="fmt-toolbar">
+                                <button type="button" class="fmt-btn" onclick="applyUnicodeFormat('bold')" title="Bold">B</button>
+                                <button type="button" class="fmt-btn italic-btn" onclick="applyUnicodeFormat('italic')" title="Italic">I</button>
+                                <button type="button" class="fmt-btn mono-btn" onclick="applyUnicodeFormat('mono')" title="Monospace">S</button>
+                                <button type="button" class="fmt-btn" onclick="applyUnicodeFormat('normal')" title="Remove formatting" style="font-size:11px;">Aa</button>
+                                <span class="fmt-divider"></span>
+                                <button type="button" class="fmt-btn" onclick="insertAtCursor('@')" title="Mention someone">@</button>
+                                <button type="button" class="fmt-btn" onclick="insertAtCursor('#')" title="Add hashtag">#</button>
+                            </div>
                             <div class="mention-textarea-wrap">
                                 <div class="mention-backdrop" id="postContentBackdrop" aria-hidden="true"></div>
-                                <textarea class="form-inp mention-textarea" id="postContent" placeholder="Write your post content... Use @ to mention someone" rows="6"></textarea>
+                                <textarea class="form-inp mention-textarea" id="postContent" placeholder="Write your post content... Use @ to mention someone, # for hashtags" rows="6"></textarea>
                             </div>
                             <div class="mention-suggestions" id="mentionSuggestions"></div>
+                            <div class="hashtag-suggestions" id="hashtagSuggestions"></div>
                             <span class="char-c" id="postContentCount">0 characters</span>
-                        </div>
-
-                        <!-- Tags (max 5) -->
-                        <div class="form-group">
-                            <label class="form-lbl">Tags <span style="font-weight:400;color:var(--muted2);">(max 5)</span></label>
-                            <div class="tag-pills" id="postTags"></div>
-                            <div class="tag-input-row">
-                                <input class="form-inp" id="postTagInput" type="text" placeholder="Add a tag..." maxlength="20" onkeydown="if(event.key==='Enter'){event.preventDefault();addPostTag();}">
-                                <button onclick="addPostTag()">Add</button>
-                            </div>
+                            <div class="fmt-hint">Select text, then tap B / I / S to format it — hashtags and mentions are never affected.</div>
                         </div>
 
                         <!-- Media – multi‑image / video (up to 20 images) -->
@@ -1462,8 +1563,8 @@
         const MAX_VIDEO_DURATION_SECONDS = 180;
         const MAX_POST_IMAGES = 20; // ─── up to 20 images ───
 
-        let postTags = [];
         let postMedia = []; // array of {url, type, public_id, uploading}
+        let extractedHashtags = []; // last-known set of #tags found in content, kept in sync live
         let postImageEmbeddings = []; // parallel array, same index as postMedia — embedding vector or null per slot
 
         let marketImages = [];
@@ -1529,14 +1630,234 @@
             backdropEl.scrollTop = textareaEl.scrollTop;
         }
 
+        // ──────────────────────────────────────────────────────────────
+        // HASHTAG EXTRACTION
+        // Hashtags are no longer a separate field — they're extracted
+        // straight from postContent's text whenever it changes, and
+        // again (authoritatively) at submit time. ASCII-only \w+ is
+        // intentional: the Unicode formatter below always leaves
+        // #tokens untouched, so a real hashtag never contains bold/
+        // italic/monospace codepoints for this regex to miss.
+        // ──────────────────────────────────────────────────────────────
+        function extractHashtagsFromText(text) {
+            const matches = (text || '').match(/#(\w{1,50})/g) || [];
+            const seen = new Set();
+            const out = [];
+            matches.forEach(m => {
+                const tag = m.slice(1);
+                const key = tag.toLowerCase();
+                if (!seen.has(key)) { seen.add(key); out.push(tag); }
+            });
+            return out;
+        }
+
         function initMentionBackdrop() {
             const textareaEl = document.getElementById('postContent');
             const backdropEl = document.getElementById('postContentBackdrop');
             if (!textareaEl || !backdropEl || textareaEl._backdropWired) return;
             textareaEl._backdropWired = true;
-            textareaEl.addEventListener('input', () => syncMentionBackdrop(textareaEl, backdropEl));
+            textareaEl.addEventListener('input', () => {
+                syncMentionBackdrop(textareaEl, backdropEl);
+                extractedHashtags = extractHashtagsFromText(textareaEl.value);
+                handleHashtagTyping(textareaEl);
+            });
             textareaEl.addEventListener('scroll', () => { backdropEl.scrollTop = textareaEl.scrollTop; });
             syncMentionBackdrop(textareaEl, backdropEl);
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // UNICODE TEXT FORMATTING (Bold / Italic / Monospace)
+        // -------------------------------------------------------------
+        // Converts the CURRENT SELECTION in #postContent to Unicode
+        // Mathematical Alphanumeric characters. This is real text, not
+        // markup — index.html needs zero changes to render it.
+        //
+        // Safety: hashtags and mentions inside the selection are left
+        // completely untouched. If a selection spans "Hello #FreeUpper
+        // @john", only "Hello " gets formatted; "#FreeUpper" and
+        // "@john" pass through byte-for-byte. This is what keeps
+        // hashtags.js's and mentions.js's ASCII-only regexes working.
+        // ──────────────────────────────────────────────────────────────
+        const UNI_RANGES = {
+            bold:   { upper: 0x1D400, lower: 0x1D41A, digit: 0x1D7CE },
+            italic: { upper: 0x1D434, lower: 0x1D44E, digit: null   }, // digits: italic has none, left as-is
+            mono:   { upper: 0x1D670, lower: 0x1D68A, digit: 0x1D7F6 }
+        };
+        // Known exceptions in the italic block (math already assigned these codepoints elsewhere)
+        const ITALIC_EXCEPTIONS = { h: '\u210E' }; // planck constant symbol stands in for italic h
+
+        function buildUnicodeMap(kind) {
+            const range = UNI_RANGES[kind];
+            const map = {};
+            for (let i = 0; i < 26; i++) {
+                const upperChar = String.fromCharCode(65 + i);
+                const lowerChar = String.fromCharCode(97 + i);
+                map[upperChar] = String.fromCodePoint(range.upper + i);
+                map[lowerChar] = (kind === 'italic' && lowerChar === 'h')
+                    ? ITALIC_EXCEPTIONS.h
+                    : String.fromCodePoint(range.lower + i);
+            }
+            if (range.digit !== null) {
+                for (let i = 0; i < 10; i++) {
+                    map[String(i)] = String.fromCodePoint(range.digit + i);
+                }
+            }
+            return map;
+        }
+
+        const FORMAT_MAPS = {
+            bold: buildUnicodeMap('bold'),
+            italic: buildUnicodeMap('italic'),
+            mono: buildUnicodeMap('mono')
+        };
+
+        // Reverse map: any styled char -> its plain ASCII original, across all three maps
+        const REVERSE_FORMAT_MAP = {};
+        Object.values(FORMAT_MAPS).forEach(map => {
+            Object.entries(map).forEach(([plain, styled]) => { REVERSE_FORMAT_MAP[styled] = plain; });
+        });
+
+        // Splits text into segments, marking which ones are protected
+        // (#hashtag or @mention tokens) so formatting skips them.
+        function splitProtectedSegments(text) {
+            const tokenRe = /([#@]\w{1,50})/g;
+            const segments = [];
+            let lastIndex = 0;
+            let m;
+            while ((m = tokenRe.exec(text)) !== null) {
+                if (m.index > lastIndex) segments.push({ text: text.slice(lastIndex, m.index), protected: false });
+                segments.push({ text: m[0], protected: true });
+                lastIndex = m.index + m[0].length;
+            }
+            if (lastIndex < text.length) segments.push({ text: text.slice(lastIndex), protected: false });
+            return segments;
+        }
+
+        function transformText(text, kind) {
+            const segments = splitProtectedSegments(text);
+            return segments.map(seg => {
+                if (seg.protected) return seg.text;
+                if (kind === 'normal') {
+                    return [...seg.text].map(ch => REVERSE_FORMAT_MAP[ch] || ch).join('');
+                }
+                const map = FORMAT_MAPS[kind];
+                return [...seg.text].map(ch => map[ch] || ch).join('');
+            }).join('');
+        }
+
+        function applyUnicodeFormat(kind) {
+            const ta = document.getElementById('postContent');
+            if (!ta) return;
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            if (start === end) {
+                showToast('Select some text first', 'o');
+                return;
+            }
+            const before = ta.value.slice(0, start);
+            const selected = ta.value.slice(start, end);
+            const after = ta.value.slice(end);
+            const transformed = transformText(selected, kind);
+            ta.value = before + transformed + after;
+            const newEnd = start + transformed.length;
+            ta.focus();
+            ta.setSelectionRange(start, newEnd);
+            // Fire the same pipeline a manual keystroke would: backdrop sync,
+            // hashtag re-extraction, character counter.
+            ta.dispatchEvent(new Event('input'));
+        }
+
+        function insertAtCursor(char) {
+            const ta = document.getElementById('postContent');
+            if (!ta) return;
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            ta.value = ta.value.slice(0, start) + char + ta.value.slice(end);
+            ta.focus();
+            ta.setSelectionRange(start + 1, start + 1);
+            ta.dispatchEvent(new Event('input'));
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // HASHTAG AUTOCOMPLETE
+        // Mirrors mentions.js's suggestion-box pattern. Detects an
+        // in-progress "#word" at the caret, queries hashtags.searchHashtags()
+        // (post_hashtags-backed, live counts), and lets the user tap a
+        // result to complete the tag inline.
+        // ──────────────────────────────────────────────────────────────
+        let hashtagSearchTimer = null;
+        let hashtagTriggerStart = -1;
+
+        function handleHashtagTyping(ta) {
+            const cursor = ta.selectionStart;
+            const text = ta.value;
+            const hashStart = text.lastIndexOf('#', cursor - 1);
+            if (hashStart === -1) { closeHashtagSuggestions(); return; }
+            const between = text.slice(hashStart + 1, cursor);
+            if (/\s/.test(between) || between.length > 50) { closeHashtagSuggestions(); return; }
+
+            hashtagTriggerStart = hashStart;
+            const query = between;
+
+            clearTimeout(hashtagSearchTimer);
+            hashtagSearchTimer = setTimeout(async () => {
+                if (!window.Hashtags || typeof window.Hashtags.searchHashtags !== 'function') return;
+                const results = await window.Hashtags.searchHashtags(query);
+                renderHashtagSuggestions(results, query, ta);
+            }, 250);
+        }
+
+        function renderHashtagSuggestions(results, query, ta) {
+            const box = document.getElementById('hashtagSuggestions');
+            if (!box) return;
+
+            const items = [...results];
+            const exists = items.some(r => r.tag.toLowerCase() === query.toLowerCase());
+            if (query && !exists) {
+                items.push({ tag: query, count: 0, isNew: true });
+            }
+            if (!items.length) { box.style.display = 'none'; return; }
+
+            box.innerHTML = items.map(r => `
+                <div class="h-item" data-tag="${escapeHtmlForMentions(r.tag)}">
+                    <span class="h-name">#${escapeHtmlForMentions(r.tag)}</span>
+                    <span class="h-count ${r.isNew ? 'h-new' : ''}">${r.isNew ? 'New hashtag' : formatHashtagCount(r.count) + ' posts'}</span>
+                </div>
+            `).join('');
+            box.style.display = 'block';
+
+            box.querySelectorAll('.h-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    insertHashtagCompletion(ta, el.dataset.tag);
+                });
+            });
+        }
+
+        function formatHashtagCount(n) {
+            n = Number(n) || 0;
+            if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+            return String(n);
+        }
+
+        function insertHashtagCompletion(ta, tag) {
+            if (hashtagTriggerStart === -1) return;
+            const cursor = ta.selectionStart;
+            const before = ta.value.slice(0, hashtagTriggerStart);
+            const after = ta.value.slice(cursor);
+            const insertion = '#' + tag + ' ';
+            ta.value = before + insertion + after;
+            const newPos = before.length + insertion.length;
+            ta.focus();
+            ta.setSelectionRange(newPos, newPos);
+            closeHashtagSuggestions();
+            ta.dispatchEvent(new Event('input'));
+        }
+
+        function closeHashtagSuggestions() {
+            const box = document.getElementById('hashtagSuggestions');
+            if (box) box.style.display = 'none';
+            hashtagTriggerStart = -1;
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -1557,32 +1878,6 @@
                     initMentionBackdrop();
                 }, 200);
             }
-        }
-
-        // ──────────────────────────────────────────────────────────────
-        // POST TAGS (max 5)
-        // ──────────────────────────────────────────────────────────────
-        function addPostTag() {
-            const input = document.getElementById('postTagInput');
-            const tag = input.value.trim();
-            if (!tag) return;
-            if (postTags.length >= 5) { showToast('Max 5 tags allowed', 'o'); return; }
-            if (postTags.includes(tag)) { showToast('Tag already added', 'o'); return; }
-            postTags.push(tag);
-            input.value = '';
-            renderPostTags();
-        }
-
-        function removePostTag(idx) {
-            postTags.splice(idx, 1);
-            renderPostTags();
-        }
-
-        function renderPostTags() {
-            const container = document.getElementById('postTags');
-            container.innerHTML = postTags.map((t, i) =>
-                `<span class="tag-pill">${t}<button onclick="removePostTag(${i})">×</button></span>`
-            ).join('');
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -2392,13 +2687,10 @@
             const title = document.getElementById('postTitle').value.trim();
             const content = document.getElementById('postContent').value.trim();
             const hideComments = document.getElementById('postHideComments').checked;
+            const hashtags = extractHashtagsFromText(content);
 
             if (!title && !content && postMedia.length === 0) {
                 showToast('Please add a title, content or media', 'o');
-                return;
-            }
-            if (postTags.length > 5) {
-                showToast('Max 5 tags allowed', 'o');
                 return;
             }
             if (postMedia.some(m => m.uploading)) {
@@ -2436,7 +2728,8 @@
                 const result = await PostsAPI.createPost({
                     title,
                     content: content || '',
-                    tags: postTags.slice(),
+                    tags: hashtags,        // kept in parallel for backward compat
+                    hashtags: hashtags,    // drives hashtags + post_hashtags tables
                     media: media,
                     mediaUrl: firstItem.url || '',
                     mediaType: firstItem.type || '',
@@ -2476,8 +2769,7 @@
                 postMedia = [];
                 postImageEmbeddings = [];
                 renderPostImageGrid();
-                postTags = [];
-                renderPostTags();
+                extractedHashtags = [];
 
                 showToast('Post published! 🎉', 'g');
                 btn.textContent = originalText;
