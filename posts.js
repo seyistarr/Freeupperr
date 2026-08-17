@@ -1073,18 +1073,90 @@
   }
 
   // ===================================================================
+  // HASHTAGS — find-or-create + link to a post
+  // -------------------------------------------------------------
+  // hashtags.tag has a unique index, so upsert with onConflict:'tag'
+  // and ignoreDuplicates is safe under concurrent posts using the same
+  // new hashtag — Postgres resolves the race, we just re-select ids.
+  //
+  // post_hashtags.(post_id, hashtag_id) is unique, so linking is also
+  // safe to retry — a duplicate insert attempt is a no-op via
+  // ignoreDuplicates rather than an error.
+  // ===================================================================
+  async function findOrCreateHashtagIds(tagNames) {
+    const clean = [...new Set(
+      (tagNames || [])
+        .map(t => String(t || '').trim())
+        .filter(Boolean)
+    )];
+    if (!clean.length) return [];
+
+    // Upsert any hashtags that don't exist yet. onConflict on the
+    // unique `tag` column; ignoreDuplicates so an existing row is left
+    // untouched rather than erroring or overwriting created_at.
+    const { error: upsertError } = await sb
+      .from('hashtags')
+      .upsert(
+        clean.map(tag => ({ tag })),
+        { onConflict: 'tag', ignoreDuplicates: true }
+      );
+
+    if (upsertError) {
+      console.warn('findOrCreateHashtagIds upsert warning:', upsertError);
+      // Not fatal — the rows may already exist. Continue to the select.
+    }
+
+    const { data, error } = await sb
+      .from('hashtags')
+      .select('id, tag')
+      .in('tag', clean);
+
+    if (error) {
+      console.warn('findOrCreateHashtagIds select error:', error);
+      return [];
+    }
+
+    return (data || []).map(row => row.id);
+  }
+
+  async function linkPostHashtags(postId, hashtagIds) {
+    if (!postId || !hashtagIds || !hashtagIds.length) return;
+
+    const rows = hashtagIds.map(hashtag_id => ({ post_id: postId, hashtag_id }));
+
+    const { error } = await sb
+      .from('post_hashtags')
+      .upsert(rows, { onConflict: 'post_id,hashtag_id', ignoreDuplicates: true });
+
+    if (error) {
+      console.warn('linkPostHashtags error:', error);
+      // Non-fatal — the post itself already succeeded. tags[] still
+      // has the hashtags for display even if this linking step failed.
+    }
+  }
+
+  // ===================================================================
   // CREATE POST
   // -------------------------------------------------------------
   // Does not run keyword topic-tagging at write time — that happens
   // client-side on read via index-algorithm.js's getPostTopics(),
   // cached on the post object. No server-side processing needed for
   // the algorithm to work.
+  //
+  // Hashtags: fields.hashtags (or fields.tags as a fallback) get
+  // written to BOTH posts.tags (kept for backward compatibility with
+  // existing display/search code) AND the hashtags/post_hashtags
+  // relational tables (the new source of truth for autocomplete,
+  // trending, and hashtag detail pages). If the relational linking
+  // step fails for any reason, the post itself still succeeds —
+  // tags[] is the fallback.
   // ===================================================================
   async function createPost(fields = {}) {
     const user = await requireUser();
 
     const media = safeArray(fields.media);
     const firstMedia = media[0] || null;
+    const hashtagNames = safeArray(fields.hashtags && fields.hashtags.length ? fields.hashtags : fields.tags);
 
     const payload = {
       user_id: user.id,
@@ -1101,7 +1173,7 @@
       sound_id: fields.sound_id || null,
       source: fields.source || CONFIG.DEFAULT_SOURCE,
       text_template_id: fields.textTemplateId || null,
-      image_embedding: fields.imageEmbedding || null  // ← NEW: store embedding
+      image_embedding: fields.imageEmbedding || null
     };
 
     const { data, error } = await sb
@@ -1111,6 +1183,15 @@
       .single();
 
     if (error) throw error;
+
+    if (hashtagNames.length) {
+      try {
+        const hashtagIds = await findOrCreateHashtagIds(hashtagNames);
+        await linkPostHashtags(data.id, hashtagIds);
+      } catch (hashtagErr) {
+        console.warn('Hashtag linking failed (post still created):', hashtagErr);
+      }
+    }
 
     return mapPost(data, { likedByMe: false, bookmarkedByMe: false, myRepost: null });
   }
@@ -1302,6 +1383,10 @@
     loadPostPreview,
     createPost,
     deletePost,
+
+    // Hashtags (relational, post_hashtags-backed)
+    findOrCreateHashtagIds,
+    linkPostHashtags,
 
     // Comments (+ replies — same functions handle both)
     loadComments,
