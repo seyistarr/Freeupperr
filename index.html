@@ -113,6 +113,7 @@
             --bottom-nav-height: 72px;
             --nav-h: 78px;
             --danger: #DC2626;
+            --pl: #8B5CF6;
         }
 
         [data-theme="dark"] {
@@ -128,6 +129,7 @@
             --inp: #1f1f1f;
             --navbg: rgba(0, 0, 0, 0.92);
             --sidebg: #0f0f0f;
+            --pl: #C4B5FD;
         }
 
         * {
@@ -3336,6 +3338,19 @@
             height: 100%;
             object-fit: cover;
         }
+
+        /* ─── INLINE STYLES FOR HASHTAG AND MENTION LINKS ─── */
+        .hashtag-link,
+        .mention-link {
+            color: var(--pl);
+            font-weight: 800;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .hashtag-link:hover,
+        .mention-link:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -3756,6 +3771,22 @@
 
             const content = document.getElementById('user-content');
 
+            // ─── OVERRIDE FOR HASHTAG.JS: inline styling for hashtag links ───
+            // This ensures hashtags render with the same deep light purple
+            // (var(--pl)) and bold weight as mentions, everywhere they appear.
+            if (window.Hashtags && typeof window.Hashtags.hashifyHtml === 'function') {
+                const originalHashify = window.Hashtags.hashifyHtml;
+                window.Hashtags.hashifyHtml = function(html) {
+                    if (!html) return '';
+                    return html.replace(/(^|[\s>])#(\w+)/g, function(m, pre, word) {
+                        const escapedWord = word.replace(/'/g, "\\'");
+                        return pre + '<span class="hashtag-link" data-tag="' + escapeHtml(word) +
+                            '" onclick="event.stopPropagation();window.Hashtags.goToHashtag(\'' +
+                            escapedWord + '\')">#' + escapeHtml(word) + '</span>';
+                    });
+                };
+            }
+
             // ───────────────────────────────────────────────────────────────
             // HELPERS
             // ───────────────────────────────────────────────────────────────
@@ -3809,6 +3840,9 @@
                 return 'fu-emoji-sm';
             }
 
+            // ─── FIX 1: renderPostTitle now uses linkifyContent() ──────────
+            // Titles now render hashtags and mentions as clickable, styled
+            // links instead of dead escaped text.
             function renderPostTitle(title, opts = {}) {
                 const text = title || '';
                 const type = getTitleType(text, opts.hasMedia);
@@ -3818,10 +3852,12 @@
                     const sizeClass = getEmojiSizeClass(text);
                     return `<div class="fu-emoji-title ${sizeClass}"><span class="fu-emoji-inner">${escapeHtml(text)}</span></div>`;
                 }
+                // FIX: titles now run through linkifyContent() — hashtags and
+                // mentions become clickable and styled the same as content.
                 if (type === 'short') {
-                    return `<div class="fu-short-title${clampClass}">${escapeHtml(text)}</div>`;
+                    return `<div class="fu-short-title${clampClass}">${linkifyContent(text, opts.mentions)}</div>`;
                 }
-                return `<div class="fu-normal-title${clampClass}">${escapeHtml(text)}</div>`;
+                return `<div class="fu-normal-title${clampClass}">${linkifyContent(text, opts.mentions)}</div>`;
             }
 
             // ─── CONTENT BOLD RENDER SYSTEM ───────────────────────────────
@@ -3844,13 +3880,11 @@
             }
 
             // ─── LINKIFY ───────────────────────────────────────────────────
-            // FIX 1: linkifyContent() accepts mentions array
             function linkifyContent(text, mentions) {
                 let html = escapeHtml(text);
                 html = html.replace(/(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g, u =>
                     `<a href="javascript:void(0)" class="text-primary underline font-medium break-all" data-extlink="${encodeURIComponent(u)}">${u}</a>`
                 );
-                // FIX: mentions must run before hashtags
                 if (window.Mentions && typeof window.Mentions.renderMentions === 'function' && mentions && mentions.length) {
                     html = window.Mentions.renderMentions(html, mentions);
                 }
@@ -3861,7 +3895,6 @@
             }
 
             // ─── buildContentBlockHTML ────────────────────────────────────
-            // FIX 2: accepts mentions via opts.mentions
             function buildContentBlockHTML(postId, rawContent, hasMedia, opts = {}) {
                 const text = rawContent || '';
                 const mentions = opts.mentions || [];
@@ -5885,7 +5918,7 @@
             }
 
             // ─── BUILD POST HTML ─────────────────────────────────────────────
-            // FIX 3: pass p.mentions to buildContentBlockHTML
+            // FIX 2 + 3: pass p.mentions to renderPostTitle() and buildContentBlockHTML()
             function buildPostHTML(p, index) {
                 const author = window.getAuthorFromProfile(p.profile);
                 const da = truncateName(author.name, 22);
@@ -5913,6 +5946,7 @@
 
                 const isRepostClass = repostBanner ? 'is-repost' : '';
 
+                // ─── FIX 2: pass mentions to renderPostTitle ───
                 return `<article class="feed-post ${isRepostClass}" data-post-id="${p.id}" data-author-id="${author.id}">
                         ${repostBanner}
                         <div class="flex items-start gap-3" style="padding:0 16px;">
@@ -5925,7 +5959,7 @@
                               ${lockPill}
                               ${followBtn}
                             </div>
-                            <div class="cursor-pointer mt-0.5">${renderPostTitle(p.title, { hasMedia })}</div>
+                            <div class="cursor-pointer mt-0.5">${renderPostTitle(p.title, { hasMedia, mentions: p.mentions })}</div>
                             ${hd?`<p class="text-sm mt-1 leading-relaxed" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(p.description)}</p>`:''}
                             <div class="mt-1" id="post-content-${p.id}">
                               ${buildContentBlockHTML(p.id, rawContent, hasMedia, { mentions: p.mentions })}
@@ -6142,7 +6176,6 @@
             }
 
             // ─── setupPostEventDelegation ───────────────────────────────────
-            // FIX 7: click-to-profile for .mention-link
             function setupPostEventDelegation(article) {
                 article.addEventListener('click', function(e) {
                     const t = e.target,
@@ -6469,7 +6502,6 @@
             }
 
             // ─── renderCommentThread ────────────────────────────────────────
-            // FIX 5: pass c.mentions to linkifyContent
             function renderCommentThread(c, allComments, postId) {
                 const author = window.getAuthorFromProfile(c.profile);
                 const username = truncateName(author.name, 16);
@@ -6530,7 +6562,6 @@
             }
 
             // ─── renderReplyItem ────────────────────────────────────────────
-            // FIX 6: pass r.mentions to linkifyContent
             function renderReplyItem(r, allComments, postId) {
                 const author = window.getAuthorFromProfile(r.profile);
                 const username = truncateName(author.name, 16);
@@ -6921,7 +6952,6 @@
                 refreshCommentsList(postId, 'comments-list'); }
 
             // ─── setupCommentListDelegation ─────────────────────────────────
-            // FIX 9: click-to-profile for .mention-link
             function setupCommentListDelegation(container, postId) {
                 container.addEventListener('click', function(e) {
                     const t = e.target;
@@ -7088,7 +7118,7 @@
             }
 
             // ─── buildSinglePostHTML ────────────────────────────────────────
-            // FIX 4: pass post.mentions to buildContentBlockHTML
+            // FIX 3: pass post.mentions to renderPostTitle() and buildContentBlockHTML()
             function buildSinglePostHTML(post) {
                 if (!post) return '<div class="p-8 text-center" style="color:var(--muted);">Post not found</div>';
                 const author = window.getAuthorFromProfile(post.profile);
@@ -7133,7 +7163,7 @@
                           ${mh}
                         </article>
                         ${hasCaption ? `<div class="mt-2">
-                          ${renderPostTitle(post.title, { noClamp: true, hasMedia })}
+                          ${renderPostTitle(post.title, { noClamp: true, hasMedia, mentions: post.mentions })}
                           ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
                           ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true, mentions: post.mentions })}</div>` : ''}
                         </div>` : ''}
@@ -7215,7 +7245,6 @@
                 document.body.classList.add('explore-open');
                 fs.scrollTop = 0;
 
-                // FIX 8: setupExploreEventDelegation with .mention-link click
                 setupExploreEventDelegation(fc, id);
                 setupCommentListDelegation(fc, id);
 
@@ -7337,7 +7366,6 @@
             }
 
             // ─── setupExploreEventDelegation ─────────────────────────────────
-            // FIX 8: click-to-profile for .mention-link
             function setupExploreEventDelegation(container, postId) {
                 container.addEventListener('click', function(e) {
                     const t = e.target;
@@ -8140,7 +8168,6 @@
             }
 
             // ─── VISIBILITY CHANGE ───────────────────────────────────────────
-            // Quiet resync only — never reload/re-render the feed.
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') {
                     Promise.all([loadFollows(), loadBookmarks(), loadShares()]).catch(() => {});
