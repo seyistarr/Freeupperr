@@ -39,9 +39,13 @@
    */
   function hashifyHtml(html) {
     if (!html) return '';
+    // FIX: inline style guarantees hashtags render identically to mentions
+    // (deep light purple, bold) everywhere hashifyHtml runs — titles,
+    // content, comments — regardless of what any external .hashtag-link
+    // CSS rule says.
     return html.replace(/(^|[\s>])#(\w+)/g, function (m, pre, word) {
       const escapedWord = word.replace(/'/g, "\\'");
-      return pre + '<span class="hashtag-link" data-tag="' + escapeHtml(word) + '" onclick="event.stopPropagation();window.Hashtags.goToHashtag(\'' + escapedWord + '\')">#' + escapeHtml(word) + '</span>';
+      return pre + '<span class="hashtag-link" data-tag="' + escapeHtml(word) + '" style="color:var(--pl);font-weight:800;cursor:pointer;" onclick="event.stopPropagation();window.Hashtags.goToHashtag(\'' + escapedWord + '\')">#' + escapeHtml(word) + '</span>';
     });
   }
 
