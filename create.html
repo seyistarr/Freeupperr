@@ -32,8 +32,6 @@
     STYLES
     ══════════════════════════════════════════ -->
     <link rel="stylesheet" href="global.css" />
-
-    <!-- ===== SHARED NAV STYLES ===== -->
     <link rel="stylesheet" href="bottom-nav.css" />
     <link rel="stylesheet" href="side-nav.css" />
 
@@ -41,7 +39,7 @@
     <link href="https://vjs.zencdn.net/8.6.1/video-js.css" rel="stylesheet" />
 
     <!-- ══════════════════════════════════════════
-    SCRIPTS (order matters)
+    SCRIPTS
     ══════════════════════════════════════════ -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
     </script>
@@ -55,12 +53,10 @@
     </script>
     <script src="mentions.js">
     </script>
+    <script src="hashtags.js">
+    </script>
     <script src="https://vjs.zencdn.net/8.6.1/video.min.js">
     </script>
-
-    <!-- ══════════════════════════════════════════
-    IMAGE EMBEDDING — for visual similarity
-    ══════════════════════════════════════════ -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js">
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js">
@@ -69,7 +65,7 @@
     </script>
 
     <style>
-        /* ── all existing styles from original create.html, minus duplicate nav rules ── */
+        /* ── base reset ── */
         *,
         *::before,
         *::after {
@@ -142,7 +138,7 @@
             --cardsh: 0 2px 16px rgba(0, 0, 0, .1);
         }
 
-        /* BASE */
+        /* ── BASE ── */
         html,
         body {
             height: 100%;
@@ -160,8 +156,6 @@
             overflow: hidden;
         }
 
-        /* ─── side-nav and bottom-nav styles are now external ─── */
-
         .main {
             flex: 1;
             overflow-y: auto;
@@ -174,6 +168,7 @@
         .main::-webkit-scrollbar {
             width: 0;
         }
+
         .create-col {
             width: 100%;
             max-width: 600px;
@@ -181,6 +176,7 @@
             padding: 20px 16px 40px;
         }
 
+        /* ── topbar ── */
         .topbar {
             display: flex;
             justify-content: space-between;
@@ -203,6 +199,7 @@
             letter-spacing: -.3px;
         }
 
+        /* ── tabs ── */
         .create-tabs {
             display: flex;
             border-bottom: 1px solid var(--brd);
@@ -249,6 +246,7 @@
             background: var(--rowh);
         }
 
+        /* ── panels ── */
         .panel {
             display: none;
             animation: fadeUp .3s ease both;
@@ -267,12 +265,13 @@
             }
         }
 
-        /* FORM ELEMENTS */
+        /* ── form elements ── */
         .form-group {
             display: flex;
             flex-direction: column;
             gap: 6px;
             margin-bottom: 16px;
+            position: relative;
         }
         .form-lbl {
             font-size: 12px;
@@ -309,7 +308,536 @@
             line-height: 1.6;
         }
 
-        /* ── Modern Picker Button (replaces select) ── */
+        /* ── Title input (bold, large) ── */
+        #postTitle {
+            font-weight: 800;
+            font-size: 18px;
+        }
+
+        /* ── Content textarea + backdrop ── */
+        .mention-textarea-wrap {
+            position: relative;
+        }
+        .mention-backdrop {
+            position: absolute;
+            inset: 0;
+            margin: 0;
+            padding: 12px 16px;
+            border: 1.5px solid transparent;
+            border-radius: 12px;
+            font-size: 15px;
+            line-height: 1.6;
+            font-family: inherit;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow: hidden;
+            color: var(--text);
+            font-weight: 700;
+            pointer-events: none;
+            background: transparent;
+            z-index: 1;
+        }
+        .mention-textarea {
+            position: relative;
+            background: transparent !important;
+            color: transparent;
+            caret-color: var(--text);
+            z-index: 2;
+            font-weight: 700;
+            font-size: 15px;
+        }
+        .mention-textarea.form-inp {
+            background: transparent !important;
+        }
+        .mention-textarea::placeholder {
+            color: var(--muted2);
+            font-weight: 400;
+        }
+        .mention-textarea-wrap .form-inp {
+            background: transparent !important;
+        }
+
+        .mention-highlight {
+            color: var(--pl);
+            font-weight: 800;
+        }
+
+        /* ── formatting toolbar ── */
+        .fmt-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            padding: 6px 8px;
+            border: 1.5px solid var(--brd);
+            border-bottom: none;
+            border-radius: 12px 12px 0 0;
+            background: var(--inp);
+            flex-wrap: wrap;
+        }
+        .fmt-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .12s;
+        }
+        .fmt-btn:hover {
+            background: var(--pdim);
+        }
+        .fmt-btn.italic-btn {
+            font-style: italic;
+            font-weight: 600;
+        }
+        .fmt-btn.mono-btn {
+            font-family: monospace;
+        }
+        .fmt-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
+        .fmt-divider {
+            width: 1px;
+            height: 18px;
+            background: var(--brd2);
+            margin: 0 4px;
+            flex-shrink: 0;
+        }
+        .fmt-hint {
+            font-size: 11px;
+            color: var(--muted2);
+            padding: 6px 2px 0;
+        }
+        .fmt-toolbar+.mention-textarea-wrap .form-inp,
+        .fmt-toolbar+.mention-textarea-wrap .mention-backdrop {
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+
+        /* ── suggestion boxes (fixed) ── */
+        .mention-suggestions,
+        .hashtag-suggestions {
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            border-radius: 12px;
+            max-height: 220px;
+            overflow-y: auto;
+            position: fixed;
+            z-index: 60;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+            display: none;
+            padding: 6px 0;
+            min-width: 180px;
+        }
+        .mention-suggestions .suggestion-item,
+        .hashtag-suggestions .h-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background .1s;
+            font-size: 14px;
+        }
+        .mention-suggestions .suggestion-item:hover,
+        .mention-suggestions .suggestion-item.active,
+        .hashtag-suggestions .h-item:hover,
+        .hashtag-suggestions .h-item.active {
+            background: var(--pdim);
+        }
+        .mention-suggestions .suggestion-item img {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: var(--bg4);
+        }
+        .mention-suggestions .suggestion-item .s-name {
+            font-weight: 600;
+        }
+        .mention-suggestions .suggestion-item .s-handle {
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .mention-suggestions .suggestion-item .s-badge {
+            font-size: 10px;
+            background: var(--pdim);
+            color: var(--pl);
+            padding: 2px 8px;
+            border-radius: 100px;
+            margin-left: auto;
+        }
+        .hashtag-suggestions .h-name {
+            font-weight: 700;
+            color: var(--pl);
+        }
+        .hashtag-suggestions .h-count {
+            font-size: 12px;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+        .hashtag-suggestions .h-count.h-new {
+            color: var(--ok);
+            font-weight: 600;
+        }
+
+        /* ── char counter ── */
+        .char-c {
+            font-size: 11px;
+            color: var(--muted2);
+            text-align: right;
+        }
+        .char-c.warn {
+            color: var(--warn);
+        }
+        .char-c.err {
+            color: var(--danger);
+        }
+
+        /* ── toggle switch ── */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1.5px solid var(--brd);
+            background: var(--inp);
+            margin-bottom: 16px;
+        }
+        .toggle-row-text {
+            min-width: 0;
+        }
+        .toggle-row-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .toggle-row-sub {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+            line-height: 1.4;
+        }
+        .toggle {
+            position: relative;
+            width: 46px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle .track {
+            position: absolute;
+            inset: 0;
+            border-radius: 100px;
+            background: rgba(150, 150, 150, .25);
+            cursor: pointer;
+            transition: background .2s;
+            border: 1.5px solid var(--brd);
+        }
+        .toggle input:checked+.track {
+            background: var(--p);
+            border-color: var(--p);
+        }
+        .toggle .track::after {
+            content: '';
+            position: absolute;
+            left: 2px;
+            top: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            transition: transform .2s cubic-bezier(.34, 1.4, .64, 1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+        }
+        .toggle input:checked+.track::after {
+            transform: translateX(20px);
+        }
+
+        /* ── buttons ── */
+        .btn-primary {
+            padding: 14px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--p), var(--pd));
+            color: #fff !important;
+            font-size: 15px;
+            font-weight: 800;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            transition: opacity .15s, transform .15s;
+            box-shadow: 0 4px 20px var(--pglow);
+        }
+        .btn-primary:hover {
+            opacity: .9;
+            transform: translateY(-1px);
+        }
+        .btn-primary:disabled {
+            opacity: .35;
+            cursor: default;
+            transform: none;
+        }
+
+        .upload-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .upload-row .form-inp {
+            flex: 1;
+        }
+        .upload-btn {
+            padding: 10px 16px;
+            border-radius: 12px;
+            background: var(--pdim);
+            border: 1.5px solid var(--pbrd);
+            color: var(--pl);
+            font-weight: 700;
+            cursor: pointer;
+            transition: background .15s;
+            white-space: nowrap;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .upload-btn:hover {
+            background: rgba(139, 92, 246, .25);
+        }
+        .upload-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
+
+        .upload-progress {
+            height: 3px;
+            background: var(--brd);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .upload-progress-bar {
+            height: 100%;
+            background: var(--p);
+            width: 0%;
+            transition: width .3s;
+            border-radius: 2px;
+        }
+
+        /* ── image grid ── */
+        .image-scroll {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 8px 0;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+        .image-scroll::-webkit-scrollbar {
+            display: none;
+        }
+        .image-thumb {
+            position: relative;
+            flex: 0 0 80px;
+            height: 80px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: var(--bg4);
+            border: 2px solid var(--brd);
+            cursor: pointer;
+            transition: transform .15s;
+        }
+        .image-thumb:hover {
+            transform: scale(1.05);
+        }
+        .image-thumb img,
+        .image-thumb video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .image-thumb .remove-btn {
+            position: absolute;
+            top: 3px;
+            right: 3px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, .7);
+            border: none;
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .15s;
+        }
+        .image-thumb .remove-btn:hover {
+            background: rgba(220, 38, 38, .8);
+        }
+        .image-thumb .cover-badge {
+            position: absolute;
+            bottom: 3px;
+            left: 3px;
+            background: rgba(0, 0, 0, .6);
+            color: #fff;
+            font-size: 8px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 3px;
+        }
+        .image-thumb .uploading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .image-thumb .uploading-overlay .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2.5px solid rgba(255, 255, 255, .2);
+            border-top-color: var(--p);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .image-add-btn {
+            flex: 0 0 80px;
+            height: 80px;
+            border-radius: 12px;
+            border: 2px dashed var(--brd2);
+            background: var(--inp);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all .15s;
+            color: var(--muted2);
+            font-size: 10px;
+            font-weight: 600;
+            gap: 2px;
+        }
+        .image-add-btn:hover {
+            border-color: var(--pbrd);
+            color: var(--pl);
+            background: var(--pdim);
+        }
+        .image-add-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
+
+        /* ── fullscreen viewer ── */
+        .fullscreen-viewer {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, .95);
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .3s;
+        }
+        .fullscreen-viewer.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .fullscreen-viewer .viewer-header {
+            display: flex;
+            justify-content: flex-end;
+            padding: 16px 20px;
+            flex-shrink: 0;
+            z-index: 2;
+        }
+        .fullscreen-viewer .viewer-close {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .1);
+            border: 1px solid rgba(255, 255, 255, .2);
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .15s;
+        }
+        .fullscreen-viewer .viewer-close:hover {
+            background: rgba(255, 255, 255, .2);
+        }
+        .fullscreen-viewer .viewer-close svg {
+            width: 22px;
+            height: 22px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+        }
+        .fullscreen-viewer .viewer-body {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 20px 40px;
+            overflow: hidden;
+        }
+        .fullscreen-viewer .viewer-body img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 8px;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        .fullscreen-viewer .viewer-counter {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, .6);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 6px 14px;
+            border-radius: 20px;
+        }
+
+        /* ── picker (category) ── */
         .picker-btn {
             width: 100%;
             padding: 12px 16px;
@@ -368,7 +896,6 @@
             margin-left: 8px;
         }
 
-        /* ── Picker Modal ── */
         .picker-modal-overlay {
             position: fixed;
             inset: 0;
@@ -525,409 +1052,7 @@
             font-size: 14px;
         }
 
-        /* ── other existing styles ── */
-        .char-c {
-            font-size: 11px;
-            color: var(--muted2);
-            text-align: right;
-        }
-        .char-c.warn {
-            color: var(--warn);
-        }
-        .char-c.err {
-            color: var(--danger);
-        }
-
-        /* ─── TOGGLE SWITCH ─── */
-        .toggle-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 14px 16px;
-            border-radius: 14px;
-            border: 1.5px solid var(--brd);
-            background: var(--inp);
-            margin-bottom: 16px;
-        }
-        .toggle-row-text {
-            min-width: 0;
-        }
-        .toggle-row-title {
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--text);
-        }
-        .toggle-row-sub {
-            font-size: 12px;
-            color: var(--muted);
-            margin-top: 2px;
-            line-height: 1.4;
-        }
-        .toggle {
-            position: relative;
-            width: 46px;
-            height: 26px;
-            flex-shrink: 0;
-        }
-        .toggle input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .toggle .track {
-            position: absolute;
-            inset: 0;
-            border-radius: 100px;
-            background: rgba(150, 150, 150, .25);
-            cursor: pointer;
-            transition: background .2s;
-            border: 1.5px solid var(--brd);
-        }
-        .toggle input:checked+.track {
-            background: var(--p);
-            border-color: var(--p);
-        }
-        .toggle .track::after {
-            content: '';
-            position: absolute;
-            left: 2px;
-            top: 2px;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: #fff;
-            transition: transform .2s cubic-bezier(.34, 1.4, .64, 1);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
-        }
-        .toggle input:checked+.track::after {
-            transform: translateX(20px);
-        }
-
-        .tag-pills {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-        .tag-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 5px 12px 5px 14px;
-            border-radius: 100px;
-            background: var(--pdim);
-            border: 1.5px solid var(--pbrd);
-            color: var(--pl);
-            font-size: 12px;
-            font-weight: 700;
-        }
-        .tag-pill button {
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: var(--pl);
-            font-size: 14px;
-            line-height: 1;
-            padding: 0;
-        }
-        .tag-pill button:hover {
-            color: var(--danger);
-        }
-
-        .tag-input-row {
-            display: flex;
-            gap: 8px;
-        }
-        .tag-input-row .form-inp {
-            flex: 1;
-        }
-        .tag-input-row button {
-            padding: 10px 18px;
-            border-radius: 12px;
-            background: var(--pdim);
-            border: 1.5px solid var(--pbrd);
-            color: var(--pl);
-            font-weight: 700;
-            cursor: pointer;
-            transition: background .15s;
-            white-space: nowrap;
-        }
-        .tag-input-row button:hover {
-            background: rgba(139, 92, 246, .25);
-        }
-
-        .btn-primary {
-            padding: 14px;
-            border-radius: 14px;
-            background: linear-gradient(135deg, var(--p), var(--pd));
-            color: #fff !important;
-            font-size: 15px;
-            font-weight: 800;
-            border: none;
-            cursor: pointer;
-            width: 100%;
-            transition: opacity .15s, transform .15s;
-            box-shadow: 0 4px 20px var(--pglow);
-        }
-        .btn-primary:hover {
-            opacity: .9;
-            transform: translateY(-1px);
-        }
-        .btn-primary:disabled {
-            opacity: .35;
-            cursor: default;
-            transform: none;
-        }
-
-        .category-row {
-            display: flex;
-            gap: 10px;
-        }
-        .category-row .form-group {
-            flex: 1;
-            margin-bottom: 0;
-        }
-
-        .upload-row {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-        .upload-row .form-inp {
-            flex: 1;
-        }
-        .upload-row .upload-btn {
-            padding: 10px 16px;
-            border-radius: 12px;
-            background: var(--pdim);
-            border: 1.5px solid var(--pbrd);
-            color: var(--pl);
-            font-weight: 700;
-            cursor: pointer;
-            transition: background .15s;
-            white-space: nowrap;
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .upload-row .upload-btn:hover {
-            background: rgba(139, 92, 246, .25);
-        }
-        .upload-row .upload-btn svg {
-            width: 16px;
-            height: 16px;
-            stroke: currentColor;
-            fill: none;
-            stroke-width: 2;
-            stroke-linecap: round;
-        }
-
-        .upload-progress {
-            height: 3px;
-            background: var(--brd);
-            border-radius: 2px;
-            overflow: hidden;
-            margin-top: 8px;
-        }
-        .upload-progress-bar {
-            height: 100%;
-            background: var(--p);
-            width: 0%;
-            transition: width .3s;
-            border-radius: 2px;
-        }
-
-        .image-scroll {
-            display: flex;
-            gap: 10px;
-            overflow-x: auto;
-            padding: 8px 0;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
-        }
-        .image-scroll::-webkit-scrollbar {
-            display: none;
-        }
-        .image-thumb {
-            position: relative;
-            flex: 0 0 80px;
-            height: 80px;
-            border-radius: 12px;
-            overflow: hidden;
-            background: var(--bg4);
-            border: 2px solid var(--brd);
-            cursor: pointer;
-            transition: transform .15s;
-        }
-        .image-thumb:hover {
-            transform: scale(1.05);
-        }
-        .image-thumb img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .image-thumb .remove-btn {
-            position: absolute;
-            top: 3px;
-            right: 3px;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: rgba(0, 0, 0, .7);
-            border: none;
-            color: #fff;
-            font-size: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background .15s;
-        }
-        .image-thumb .remove-btn:hover {
-            background: rgba(220, 38, 38, .8);
-        }
-        .image-thumb .cover-badge {
-            position: absolute;
-            bottom: 3px;
-            left: 3px;
-            background: rgba(0, 0, 0, .6);
-            color: #fff;
-            font-size: 8px;
-            font-weight: 700;
-            padding: 1px 6px;
-            border-radius: 3px;
-        }
-        .image-thumb .uploading-overlay {
-            position: absolute;
-            inset: 0;
-            background: rgba(0, 0, 0, .4);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .image-thumb .uploading-overlay .spinner {
-            width: 20px;
-            height: 20px;
-            border: 2.5px solid rgba(255, 255, 255, .2);
-            border-top-color: var(--p);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        .image-add-btn {
-            flex: 0 0 80px;
-            height: 80px;
-            border-radius: 12px;
-            border: 2px dashed var(--brd2);
-            background: var(--inp);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all .15s;
-            color: var(--muted2);
-            font-size: 10px;
-            font-weight: 600;
-            gap: 2px;
-        }
-        .image-add-btn:hover {
-            border-color: var(--pbrd);
-            color: var(--pl);
-            background: var(--pdim);
-        }
-        .image-add-btn svg {
-            width: 20px;
-            height: 20px;
-            stroke: currentColor;
-            fill: none;
-            stroke-width: 2;
-            stroke-linecap: round;
-        }
-
-        .fullscreen-viewer {
-            position: fixed;
-            inset: 0;
-            z-index: 200;
-            background: rgba(0, 0, 0, .95);
-            display: flex;
-            flex-direction: column;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity .3s;
-        }
-        .fullscreen-viewer.open {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .fullscreen-viewer .viewer-header {
-            display: flex;
-            justify-content: flex-end;
-            padding: 16px 20px;
-            flex-shrink: 0;
-            z-index: 2;
-        }
-        .fullscreen-viewer .viewer-close {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, .1);
-            border: 1px solid rgba(255, 255, 255, .2);
-            color: #fff;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background .15s;
-        }
-        .fullscreen-viewer .viewer-close:hover {
-            background: rgba(255, 255, 255, .2);
-        }
-        .fullscreen-viewer .viewer-close svg {
-            width: 22px;
-            height: 22px;
-            stroke: #fff;
-            fill: none;
-            stroke-width: 2.2;
-            stroke-linecap: round;
-        }
-        .fullscreen-viewer .viewer-body {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0 20px 40px;
-            overflow: hidden;
-        }
-        .fullscreen-viewer .viewer-body img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            border-radius: 8px;
-            user-select: none;
-            -webkit-user-drag: none;
-        }
-        .fullscreen-viewer .viewer-counter {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, .6);
-            color: #fff;
-            font-size: 13px;
-            font-weight: 700;
-            padding: 6px 14px;
-            border-radius: 20px;
-        }
-
+        /* ── marketplace specific ── */
         .price-wrap {
             position: relative;
         }
@@ -941,6 +1066,15 @@
         }
         .price-wrap .form-inp {
             padding-left: 32px;
+        }
+
+        .category-row {
+            display: flex;
+            gap: 10px;
+        }
+        .category-row .form-group {
+            flex: 1;
+            margin-bottom: 0;
         }
 
         .condition-row {
@@ -1012,6 +1146,7 @@
             margin-top: 4px;
         }
 
+        /* ── toast ── */
         #tw {
             position: fixed;
             top: clamp(14px, 4vw, 22px);
@@ -1077,6 +1212,7 @@
             background: var(--warn);
         }
 
+        /* ── responsive ── */
         @media (min-width:768px) {
             .main {
                 padding-bottom: 24px;
@@ -1091,223 +1227,16 @@
         .side-nav::-webkit-scrollbar {
             width: 0;
         }
-
-        /* ─── FIX: mention highlight now matches index.html's mention-link style ───
-           bold, light-purple text, no background pill */
-        .mention-highlight {
-            color: var(--pl);
-            font-weight: 800;
-        }
-
-        /* ─── Mention live-highlight overlay for the Content textarea ───
-           A textarea can't style parts of its own text, so we stack a
-           read-only "backdrop" div behind a transparent-text textarea.
-           The backdrop mirrors what's typed and bolds/colors @mentions;
-           the textarea itself only shows the caret and selection. */
-        .mention-textarea-wrap {
-            position: relative;
-        }
-        .mention-backdrop {
-            position: absolute;
-            inset: 0;
-            margin: 0;
-            padding: 12px 16px;
-            border: 1.5px solid transparent;
-            border-radius: 12px;
-            font-size: 14px;
-            line-height: 1.6;
-            font-family: inherit;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            overflow: hidden;
-            color: var(--text);
-            pointer-events: none;
-            background: transparent;
-            z-index: 1;
-        }
-        .mention-textarea {
-            position: relative;
-            background: transparent !important;
-            color: transparent;
-            caret-color: var(--text);
-            z-index: 2;
-        }
-        /* ensure the textarea's background is fully transparent */
-        .mention-textarea.form-inp {
-            background: transparent !important;
-        }
-        .mention-textarea::placeholder {
-            color: var(--muted2);
-        }
-        /* override the form-inp background for the textarea */
-        .mention-textarea-wrap .form-inp {
-            background: transparent !important;
-        }
-
-        .mention-suggestions {
-            background: var(--bg3);
-            border: 1px solid var(--brd2);
-            border-radius: 12px;
-            max-height: 180px;
-            overflow-y: auto;
-            position: absolute;
-            z-index: 60;
-            width: 100%;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
-            display: none;
-            padding: 6px 0;
-        }
-        .mention-suggestions .suggestion-item {
-            padding: 10px 14px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transition: background .1s;
-            font-size: 14px;
-        }
-        .mention-suggestions .suggestion-item:hover,
-        .mention-suggestions .suggestion-item.active {
-            background: var(--pdim);
-        }
-        .mention-suggestions .suggestion-item img {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            object-fit: cover;
-            background: var(--bg4);
-        }
-        .mention-suggestions .suggestion-item .s-name {
-            font-weight: 600;
-        }
-        .mention-suggestions .suggestion-item .s-handle {
-            font-size: 12px;
-            color: var(--muted);
-        }
-        .mention-suggestions .suggestion-item .s-badge {
-            font-size: 10px;
-            background: var(--pdim);
-            color: var(--pl);
-            padding: 2px 8px;
-            border-radius: 100px;
-            margin-left: auto;
-        }
-
-        /* Title input – bold text while typing */
-        #postTitle {
-            font-weight: 800;
-            font-size: 18px;
-        }
-
-        /* ─── FORMATTING TOOLBAR (Unicode Bold/Italic/Monospace) ─── */
-        .fmt-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 2px;
-            padding: 6px 8px;
-            border: 1.5px solid var(--brd);
-            border-bottom: none;
-            border-radius: 12px 12px 0 0;
-            background: var(--inp);
-        }
-        .fmt-btn {
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            border: none;
-            background: transparent;
-            color: var(--text);
-            font-size: 15px;
-            font-weight: 800;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background .12s;
-        }
-        .fmt-btn:hover {
-            background: var(--pdim);
-        }
-        .fmt-btn.italic-btn { font-style: italic; font-weight: 600; }
-        .fmt-btn.mono-btn { font-family: monospace; }
-        .fmt-btn svg {
-            width: 16px;
-            height: 16px;
-            stroke: currentColor;
-            fill: none;
-            stroke-width: 2;
-            stroke-linecap: round;
-        }
-        .fmt-divider {
-            width: 1px;
-            height: 18px;
-            background: var(--brd2);
-            margin: 0 4px;
-            flex-shrink: 0;
-        }
-        .fmt-hint {
-            font-size: 11px;
-            color: var(--muted2);
-            padding: 6px 2px 0;
-        }
-        /* The wrap now sits directly under the toolbar, so square off its top corners */
-        .fmt-toolbar + .mention-textarea-wrap .form-inp,
-        .fmt-toolbar + .mention-textarea-wrap .mention-backdrop {
-            border-top-left-radius: 0;
-            border-top-right-radius: 0;
-        }
-
-        /* ─── HASHTAG SUGGESTIONS (mirrors .mention-suggestions) ─── */
-        .hashtag-suggestions {
-            background: var(--bg3);
-            border: 1px solid var(--brd2);
-            border-radius: 12px;
-            max-height: 220px;
-            overflow-y: auto;
-            position: absolute;
-            z-index: 60;
-            width: 100%;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
-            display: none;
-            padding: 6px 0;
-        }
-        .hashtag-suggestions .h-item {
-            padding: 10px 14px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            transition: background .1s;
-            font-size: 14px;
-        }
-        .hashtag-suggestions .h-item:hover,
-        .hashtag-suggestions .h-item.active {
-            background: var(--pdim);
-        }
-        .hashtag-suggestions .h-name {
-            font-weight: 700;
-            color: var(--pl);
-        }
-        .hashtag-suggestions .h-count {
-            font-size: 12px;
-            color: var(--muted);
-            flex-shrink: 0;
-        }
-        .hashtag-suggestions .h-count.h-new {
-            color: var(--ok);
-            font-weight: 600;
-        }
     </style>
 </head>
 <body>
 
-    <!-- ══ TOAST CONTAINER ══ -->
+    <!-- ══ TOAST ══ -->
     <div id="tw"></div>
 
     <div class="layout">
 
-        <!-- ════ SIDE NAV (shared) ════ -->
+        <!-- ════ SIDE NAV ════ -->
         <side-nav show-chat></side-nav>
 
         <!-- ════ MAIN ════ -->
@@ -1317,37 +1246,36 @@
                 <!-- Topbar -->
                 <div class="topbar">
                     <div class="topbar-left">
-                        <span class="topbar-title" id="pageTitle">Create</span>
+                        <span class="topbar-title">Create</span>
                     </div>
-                    <div class="topbar-actions">
-                        <!-- Theme toggle is global via global.js -->
-                    </div>
+                    <div class="topbar-actions"></div>
                 </div>
 
                 <!-- Tabs -->
                 <div class="create-tabs">
-                    <button class="create-tab active" data-tab="post" onclick="switchTab(this, 'post')">
+                    <button class="create-tab active" data-tab="post" onclick="switchTab(this,'post')">
                         <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         Create Post
                     </button>
-                    <button class="create-tab" data-tab="sell" onclick="switchTab(this, 'sell')">
+                    <button class="create-tab" data-tab="sell" onclick="switchTab(this,'sell')">
                         <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
                         Sell Item
                     </button>
                 </div>
 
-                <!-- Panel: Create Post (no category, no description) -->
+                <!-- ─── PANEL: POST ─── -->
                 <div class="panel active" id="panel-post">
                     <div id="post-form">
-                        <!-- Title – now bold like H1 -->
+
+                        <!-- Title — now supports @ and # suggestions -->
                         <div class="form-group">
                             <label class="form-lbl">Title <span style="font-weight:400;color:var(--muted2);">(optional)</span></label>
-                            <input class="form-inp" id="postTitle" type="text" placeholder="What's on your mind?" maxlength="100">
+                            <input class="form-inp" id="postTitle" type="text" placeholder="What's on your mind?" maxlength="100" autocomplete="off">
                             <span class="char-c" id="postTitleCount">0 / 100</span>
                         </div>
 
-                        <!-- Content (optional) — formatting toolbar + mention/hashtag live overlay -->
-                        <div class="form-group" style="position:relative;">
+                        <!-- Content — formatting toolbar + mention/hashtag overlay -->
+                        <div class="form-group">
                             <label class="form-lbl">Content <span style="font-weight:400;color:var(--muted2);">(optional)</span></label>
                             <div class="fmt-toolbar">
                                 <button type="button" class="fmt-btn" onclick="applyUnicodeFormat('bold')" title="Bold">B</button>
@@ -1360,19 +1288,19 @@
                             </div>
                             <div class="mention-textarea-wrap">
                                 <div class="mention-backdrop" id="postContentBackdrop" aria-hidden="true"></div>
-                                <textarea class="form-inp mention-textarea" id="postContent" placeholder="Write your post content... Use @ to mention someone, # for hashtags" rows="6"></textarea>
+                                <textarea class="form-inp mention-textarea" id="postContent" placeholder="Write your post content… Use @ to mention, # for hashtags" rows="6"></textarea>
                             </div>
                             <div class="mention-suggestions" id="mentionSuggestions"></div>
                             <div class="hashtag-suggestions" id="hashtagSuggestions"></div>
                             <span class="char-c" id="postContentCount">0 characters</span>
-                            <div class="fmt-hint">Select text, then tap B / I / S to format it — hashtags and mentions are never affected.</div>
+                            <div class="fmt-hint">Select text, tap B / I / S to format — # and @ are never affected.</div>
                         </div>
 
-                        <!-- Media – multi‑image / video (up to 20 images) -->
+                        <!-- Media -->
                         <div class="form-group">
-                            <label class="form-lbl">Media <span style="font-weight:400;color:var(--muted2);">(up to 20 images, or 1 video max 100MB/3 mins)</span></label>
+                            <label class="form-lbl">Media <span style="font-weight:400;color:var(--muted2);">(up to 20 images, or 1 video ≤100MB / 3min)</span></label>
                             <div class="upload-row">
-                                <input class="form-inp" id="postMediaUrlInput" type="text" placeholder="Paste image or YouTube link..." oninput="previewPostMedia()">
+                                <input class="form-inp" id="postMediaUrlInput" type="text" placeholder="Paste image or YouTube link…" oninput="previewPostMedia()">
                                 <button class="upload-btn" onclick="document.getElementById('postFileInput').click()">
                                     <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                                     Upload
@@ -1385,7 +1313,7 @@
                             <div class="image-scroll" id="postImageGrid"></div>
                         </div>
 
-                        <!-- Toggle: Hide Comments -->
+                        <!-- Hide Comments -->
                         <div class="toggle-row">
                             <div class="toggle-row-text">
                                 <div class="toggle-row-title">Hide Comments</div>
@@ -1401,16 +1329,15 @@
                     </div>
                 </div>
 
-                <!-- Panel: Sell Item – DATABASE-DRIVEN CATEGORIES + WHATSAPP -->
+                <!-- ─── PANEL: SELL ─── -->
                 <div class="panel" id="panel-sell">
                     <div id="sell-form">
-                        <!-- Item Name -->
+
                         <div class="form-group">
                             <label class="form-lbl">Item Name <span style="color:var(--danger);">*</span></label>
                             <input class="form-inp" id="itemTitle" type="text" placeholder="What are you selling?" maxlength="80">
                         </div>
 
-                        <!-- Price -->
                         <div class="form-group">
                             <label class="form-lbl">Price (₦) <span style="color:var(--danger);">*</span></label>
                             <div class="price-wrap">
@@ -1419,7 +1346,6 @@
                             </div>
                         </div>
 
-                        <!-- ── CATEGORY & SUBCATEGORY with modern pickers ── -->
                         <div class="category-row">
                             <div class="form-group">
                                 <label class="form-lbl">Category <span style="color:var(--danger);">*</span></label>
@@ -1439,7 +1365,6 @@
                             </div>
                         </div>
 
-                        <!-- Condition -->
                         <div class="form-group">
                             <label class="form-lbl">Condition</label>
                             <div class="condition-row">
@@ -1450,7 +1375,6 @@
                             <input type="hidden" id="itemCondition" value="New">
                         </div>
 
-                        <!-- Location -->
                         <div class="form-group">
                             <label class="form-lbl">Location</label>
                             <div class="location-row">
@@ -1465,24 +1389,21 @@
                             <input type="hidden" id="itemLng" value="">
                         </div>
 
-                        <!-- WhatsApp -->
                         <div class="form-group">
                             <label class="form-lbl">WhatsApp Number <span style="font-weight:400;color:var(--muted2);">(optional)</span></label>
                             <input class="form-inp" id="itemWhatsApp" type="tel" placeholder="e.g. 2348012345678" maxlength="15">
                             <span style="font-size:11px;color:var(--muted2);">Include country code without '+'.</span>
                         </div>
 
-                        <!-- Description -->
                         <div class="form-group">
                             <label class="form-lbl">Description</label>
-                            <textarea class="form-inp" id="itemDescription" placeholder="Describe your item..." rows="3"></textarea>
+                            <textarea class="form-inp" id="itemDescription" placeholder="Describe your item…" rows="3"></textarea>
                         </div>
 
-                        <!-- Images -->
                         <div class="form-group">
                             <label class="form-lbl">Images <span style="font-weight:400;color:var(--muted2);">(up to 5)</span></label>
                             <div class="upload-row">
-                                <input class="form-inp" id="marketImageUrlInput" type="text" placeholder="Paste image URL..." oninput="previewMarketUrl()">
+                                <input class="form-inp" id="marketImageUrlInput" type="text" placeholder="Paste image URL…" oninput="previewMarketUrl()">
                                 <button class="upload-btn" onclick="document.getElementById('marketFileInput').click()">
                                     <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                                     Upload
@@ -1502,13 +1423,13 @@
             </div>
         </div>
 
-        <!-- ════ BOTTOM NAV (shared) ════ -->
+        <!-- ════ BOTTOM NAV ════ -->
         <bottom-nav></bottom-nav>
 
     </div>
 
     <!-- ══════════════════════════════════════════
-         PICKER MODAL (for category/subcategory – scrollable)
+    PICKER MODAL
     ══════════════════════════════════════════ -->
     <div class="picker-modal-overlay" id="pickerModal" onclick="if(event.target===this)closePickerModal()">
         <div class="picker-sheet" onclick="event.stopPropagation()">
@@ -1520,16 +1441,16 @@
                 </button>
             </div>
             <div class="picker-search">
-                <input type="text" id="pickerSearchInput" placeholder="Search..." oninput="filterPickerItems()">
+                <input type="text" id="pickerSearchInput" placeholder="Search…" oninput="filterPickerItems()">
             </div>
             <div class="picker-list" id="pickerList">
-                <div class="picker-empty">Loading...</div>
+                <div class="picker-empty">Loading…</div>
             </div>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════════
-         FULLSCREEN IMAGE VIEWER
+    FULLSCREEN VIEWER
     ══════════════════════════════════════════ -->
     <div class="fullscreen-viewer" id="fullscreenViewer" onclick="if(event.target===this)closeFullscreen()">
         <div class="viewer-header">
@@ -1548,25 +1469,21 @@
     <script src="side-nav.js" defer></script>
 
     <!-- ══════════════════════════════════════════
-    PAGE LOGIC – using PostsAPI & ListingsAPI
+    PAGE LOGIC
     ══════════════════════════════════════════ -->
     <script>
-        // ── CONFIG (your original Cloudinary settings) ──
+        // ── config ──
         const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
-        // ─── SEPARATE PRESETS FOR EACH MEDIA TYPE ───
-        const CLOUDINARY_IMAGE_UPLOAD_PRESET = 'image_upload'; // for images
-        const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload'; // for videos (must be configured)
-        const CLOUDINARY_MARKET_UPLOAD_PRESET = 'market_upload'; // for marketplace images
-
+        const CLOUDINARY_IMAGE_UPLOAD_PRESET = 'image_upload';
+        const CLOUDINARY_VIDEO_UPLOAD_PRESET = 'video_upload';
+        const CLOUDINARY_MARKET_UPLOAD_PRESET = 'market_upload';
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
         const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
         const MAX_VIDEO_DURATION_SECONDS = 180;
-        const MAX_POST_IMAGES = 20; // ─── up to 20 images ───
+        const MAX_POST_IMAGES = 20;
 
-        let postMedia = []; // array of {url, type, public_id, uploading}
-        let extractedHashtags = []; // last-known set of #tags found in content, kept in sync live
-        let postImageEmbeddings = []; // parallel array, same index as postMedia — embedding vector or null per slot
-
+        let postMedia = [];
+        let postImageEmbeddings = [];
         let marketImages = [];
         let marketLat = null;
         let marketLng = null;
@@ -1575,18 +1492,16 @@
         let fullscreenImages = [];
         let fullscreenIndex = 0;
 
-        // ── DB-driven category state ──
+        // ── category state ──
         let dbCategories = [];
         let dbSubcategories = [];
         let selectedCategoryId = '';
         let selectedSubcategoryId = '';
         let categoriesLoaded = false;
-        let pickerMode = 'category'; // 'category' or 'subcategory'
+        let pickerMode = 'category';
         let pickerData = [];
 
-        // ──────────────────────────────────────────────────────────────
-        // TOAST
-        // ──────────────────────────────────────────────────────────────
+        // ── toast ──
         function showToast(msg, type) {
             type = type || 'p';
             const w = document.getElementById('tw');
@@ -1601,11 +1516,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // MENTION HIGHLIGHT OVERLAY (Content textarea)
-        // Mirrors the textarea's text into a backdrop div, wrapping any
-        // @username that matches a real captured mention (from
-        // mentions.js's el._mentions) in bold, light-purple styling —
-        // the same look it gets once the post renders on index.html.
+        // MENTION BACKDROP SYNC (for content field)
         // ──────────────────────────────────────────────────────────────
         function escapeHtmlForMentions(s) {
             const d = document.createElement('div');
@@ -1624,20 +1535,25 @@
                     usernames.has(uname.toLowerCase()) ? `<span class="mention-highlight">@${uname}</span>` : match
                 );
             }
-            // Preserve a trailing newline so the backdrop's height doesn't
-            // fall a line short of the textarea's.
             backdropEl.innerHTML = html + (text.endsWith('\n') ? '<br>&nbsp;' : '');
             backdropEl.scrollTop = textareaEl.scrollTop;
         }
 
+        function initContentBackdrop() {
+            const ta = document.getElementById('postContent');
+            const bd = document.getElementById('postContentBackdrop');
+            if (!ta || !bd || ta._backdropWired) return;
+            ta._backdropWired = true;
+            ta.addEventListener('input', () => {
+                syncMentionBackdrop(ta, bd);
+                // hashtag extraction is handled elsewhere; we just keep backdrop in sync
+            });
+            ta.addEventListener('scroll', () => { bd.scrollTop = ta.scrollTop; });
+            syncMentionBackdrop(ta, bd);
+        }
+
         // ──────────────────────────────────────────────────────────────
-        // HASHTAG EXTRACTION
-        // Hashtags are no longer a separate field — they're extracted
-        // straight from postContent's text whenever it changes, and
-        // again (authoritatively) at submit time. ASCII-only \w+ is
-        // intentional: the Unicode formatter below always leaves
-        // #tokens untouched, so a real hashtag never contains bold/
-        // italic/monospace codepoints for this regex to miss.
+        // HASHTAG EXTRACTION (from any text)
         // ──────────────────────────────────────────────────────────────
         function extractHashtagsFromText(text) {
             const matches = (text || '').match(/#(\w{1,50})/g) || [];
@@ -1646,45 +1562,32 @@
             matches.forEach(m => {
                 const tag = m.slice(1);
                 const key = tag.toLowerCase();
-                if (!seen.has(key)) { seen.add(key); out.push(tag); }
+                if (!seen.has(key)) { seen.add(key);
+                    out.push(tag); }
             });
             return out;
         }
 
-        function initMentionBackdrop() {
-            const textareaEl = document.getElementById('postContent');
-            const backdropEl = document.getElementById('postContentBackdrop');
-            if (!textareaEl || !backdropEl || textareaEl._backdropWired) return;
-            textareaEl._backdropWired = true;
-            textareaEl.addEventListener('input', () => {
-                syncMentionBackdrop(textareaEl, backdropEl);
-                extractedHashtags = extractHashtagsFromText(textareaEl.value);
-                handleHashtagTyping(textareaEl);
+        function mergeHashtagLists(...lists) {
+            const seen = new Set();
+            const out = [];
+            lists.flat().forEach(tag => {
+                const key = tag.toLowerCase();
+                if (!seen.has(key)) { seen.add(key);
+                    out.push(tag); }
             });
-            textareaEl.addEventListener('scroll', () => { backdropEl.scrollTop = textareaEl.scrollTop; });
-            syncMentionBackdrop(textareaEl, backdropEl);
+            return out;
         }
 
         // ──────────────────────────────────────────────────────────────
-        // UNICODE TEXT FORMATTING (Bold / Italic / Monospace)
-        // -------------------------------------------------------------
-        // Converts the CURRENT SELECTION in #postContent to Unicode
-        // Mathematical Alphanumeric characters. This is real text, not
-        // markup — index.html needs zero changes to render it.
-        //
-        // Safety: hashtags and mentions inside the selection are left
-        // completely untouched. If a selection spans "Hello #FreeUpper
-        // @john", only "Hello " gets formatted; "#FreeUpper" and
-        // "@john" pass through byte-for-byte. This is what keeps
-        // hashtags.js's and mentions.js's ASCII-only regexes working.
+        // UNICODE FORMATTING (unchanged from original)
         // ──────────────────────────────────────────────────────────────
         const UNI_RANGES = {
-            bold:   { upper: 0x1D400, lower: 0x1D41A, digit: 0x1D7CE },
-            italic: { upper: 0x1D434, lower: 0x1D44E, digit: null   }, // digits: italic has none, left as-is
-            mono:   { upper: 0x1D670, lower: 0x1D68A, digit: 0x1D7F6 }
+            bold: { upper: 0x1D400, lower: 0x1D41A, digit: 0x1D7CE },
+            italic: { upper: 0x1D434, lower: 0x1D44E, digit: null },
+            mono: { upper: 0x1D670, lower: 0x1D68A, digit: 0x1D7F6 }
         };
-        // Known exceptions in the italic block (math already assigned these codepoints elsewhere)
-        const ITALIC_EXCEPTIONS = { h: '\u210E' }; // planck constant symbol stands in for italic h
+        const ITALIC_EXCEPTIONS = { h: '\u210E' };
 
         function buildUnicodeMap(kind) {
             const range = UNI_RANGES[kind];
@@ -1693,9 +1596,8 @@
                 const upperChar = String.fromCharCode(65 + i);
                 const lowerChar = String.fromCharCode(97 + i);
                 map[upperChar] = String.fromCodePoint(range.upper + i);
-                map[lowerChar] = (kind === 'italic' && lowerChar === 'h')
-                    ? ITALIC_EXCEPTIONS.h
-                    : String.fromCodePoint(range.lower + i);
+                map[lowerChar] = (kind === 'italic' && lowerChar === 'h') ? ITALIC_EXCEPTIONS.h : String.fromCodePoint(
+                range.lower + i);
             }
             if (range.digit !== null) {
                 for (let i = 0; i < 10; i++) {
@@ -1704,26 +1606,18 @@
             }
             return map;
         }
-
-        const FORMAT_MAPS = {
-            bold: buildUnicodeMap('bold'),
-            italic: buildUnicodeMap('italic'),
-            mono: buildUnicodeMap('mono')
-        };
-
-        // Reverse map: any styled char -> its plain ASCII original, across all three maps
+        const FORMAT_MAPS = { bold: buildUnicodeMap('bold'), italic: buildUnicodeMap('italic'), mono: buildUnicodeMap(
+                'mono') };
         const REVERSE_FORMAT_MAP = {};
         Object.values(FORMAT_MAPS).forEach(map => {
             Object.entries(map).forEach(([plain, styled]) => { REVERSE_FORMAT_MAP[styled] = plain; });
         });
 
-        // Splits text into segments, marking which ones are protected
-        // (#hashtag or @mention tokens) so formatting skips them.
         function splitProtectedSegments(text) {
             const tokenRe = /([#@]\w{1,50})/g;
             const segments = [];
-            let lastIndex = 0;
-            let m;
+            let lastIndex = 0,
+                m;
             while ((m = tokenRe.exec(text)) !== null) {
                 if (m.index > lastIndex) segments.push({ text: text.slice(lastIndex, m.index), protected: false });
                 segments.push({ text: m[0], protected: true });
@@ -1748,12 +1642,9 @@
         function applyUnicodeFormat(kind) {
             const ta = document.getElementById('postContent');
             if (!ta) return;
-            const start = ta.selectionStart;
-            const end = ta.selectionEnd;
-            if (start === end) {
-                showToast('Select some text first', 'o');
-                return;
-            }
+            const start = ta.selectionStart,
+                end = ta.selectionEnd;
+            if (start === end) { showToast('Select some text first', 'o'); return; }
             const before = ta.value.slice(0, start);
             const selected = ta.value.slice(start, end);
             const after = ta.value.slice(end);
@@ -1762,16 +1653,14 @@
             const newEnd = start + transformed.length;
             ta.focus();
             ta.setSelectionRange(start, newEnd);
-            // Fire the same pipeline a manual keystroke would: backdrop sync,
-            // hashtag re-extraction, character counter.
             ta.dispatchEvent(new Event('input'));
         }
 
         function insertAtCursor(char) {
             const ta = document.getElementById('postContent');
             if (!ta) return;
-            const start = ta.selectionStart;
-            const end = ta.selectionEnd;
+            const start = ta.selectionStart,
+                end = ta.selectionEnd;
             ta.value = ta.value.slice(0, start) + char + ta.value.slice(end);
             ta.focus();
             ta.setSelectionRange(start + 1, start + 1);
@@ -1779,15 +1668,68 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // HASHTAG AUTOCOMPLETE
-        // Mirrors mentions.js's suggestion-box pattern. Detects an
-        // in-progress "#word" at the caret, queries hashtags.searchHashtags()
-        // (post_hashtags-backed, live counts), and lets the user tap a
-        // result to complete the tag inline.
+        // MENTION & HASHTAG SUGGESTIONS (shared, fixed positioning)
         // ──────────────────────────────────────────────────────────────
         let hashtagSearchTimer = null;
         let hashtagTriggerStart = -1;
+        let mentionSearchTimer = null;
+        let mentionTriggerStart = -1;
 
+        // -- handle @ typing (delegates to mentions.js)
+        function handleMentionTyping(ta) {
+            if (!window.Mentions || typeof window.Mentions.handleMentionTyping !== 'function') {
+                // fallback: use mentions.js if available
+                return;
+            }
+            // mentions.js already handles its own suggestion rendering;
+            // we just need to make sure its suggestions are positioned correctly.
+            // We'll override the positioning in the render function.
+            const origRender = window.Mentions.renderSuggestions;
+            if (origRender && !window._mentionsRenderPatched) {
+                window._mentionsRenderPatched = true;
+                window.Mentions.renderSuggestions = function(results, query, ta) {
+                    const box = document.getElementById('mentionSuggestions');
+                    if (!box) return;
+                    if (!results || !results.length) { box.style.display = 'none'; return; }
+                    const rect = ta.getBoundingClientRect();
+                    box.style.left = rect.left + 'px';
+                    box.style.top = (rect.bottom + 6) + 'px';
+                    box.style.width = Math.min(rect.width, 320) + 'px';
+                    box.innerHTML = results.map(r => `
+                        <div class="suggestion-item" data-username="${r.username}">
+                            <img src="${r.avatar || ''}" onerror="this.style.display='none'">
+                            <span class="s-name">${r.name || r.username}</span>
+                            <span class="s-handle">@${r.username}</span>
+                            ${r.isFollowing ? '<span class="s-badge">Following</span>' : ''}
+                        </div>
+                    `).join('');
+                    box.style.display = 'block';
+                    box.querySelectorAll('.suggestion-item').forEach(el => {
+                        el.addEventListener('click', () => {
+                            const username = el.dataset.username;
+                            if (window.Mentions && typeof window.Mentions.insertMention ===
+                                'function') {
+                                window.Mentions.insertMention(ta, username);
+                            } else {
+                                // fallback: insert @username manually
+                                const before = ta.value.slice(0, mentionTriggerStart);
+                                const after = ta.value.slice(ta.selectionStart);
+                                ta.value = before + '@' + username + ' ' + after;
+                                const newPos = before.length + username.length + 2;
+                                ta.focus();
+                                ta.setSelectionRange(newPos, newPos);
+                                ta.dispatchEvent(new Event('input'));
+                            }
+                            box.style.display = 'none';
+                        });
+                    });
+                };
+            }
+            // call the original
+            window.Mentions.handleMentionTyping(ta);
+        }
+
+        // -- handle # typing
         function handleHashtagTyping(ta) {
             const cursor = ta.selectionStart;
             const text = ta.value;
@@ -1818,9 +1760,14 @@
             }
             if (!items.length) { box.style.display = 'none'; return; }
 
+            const rect = ta.getBoundingClientRect();
+            box.style.left = rect.left + 'px';
+            box.style.top = (rect.bottom + 6) + 'px';
+            box.style.width = Math.min(rect.width, 320) + 'px';
+
             box.innerHTML = items.map(r => `
-                <div class="h-item" data-tag="${escapeHtmlForMentions(r.tag)}">
-                    <span class="h-name">#${escapeHtmlForMentions(r.tag)}</span>
+                <div class="h-item" data-tag="${r.tag}">
+                    <span class="h-name">#${r.tag}</span>
                     <span class="h-count ${r.isNew ? 'h-new' : ''}">${r.isNew ? 'New hashtag' : formatHashtagCount(r.count) + ' posts'}</span>
                 </div>
             `).join('');
@@ -1831,13 +1778,6 @@
                     insertHashtagCompletion(ta, el.dataset.tag);
                 });
             });
-        }
-
-        function formatHashtagCount(n) {
-            n = Number(n) || 0;
-            if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
-            if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
-            return String(n);
         }
 
         function insertHashtagCompletion(ta, tag) {
@@ -1860,6 +1800,67 @@
             hashtagTriggerStart = -1;
         }
 
+        function formatHashtagCount(n) {
+            n = Number(n) || 0;
+            if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+            return String(n);
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // WIRE TITLE FIELD for @ and #
+        // ──────────────────────────────────────────────────────────────
+        function initTitleTagging() {
+            const titleEl = document.getElementById('postTitle');
+            if (!titleEl || titleEl._taggingWired) return;
+            titleEl._taggingWired = true;
+
+            // Init mentions on the title field
+            if (window.Mentions && typeof window.Mentions.initMentions === 'function') {
+                window.Mentions.initMentions(titleEl);
+            }
+
+            // Hashtag typing
+            titleEl.addEventListener('input', () => {
+                handleHashtagTyping(titleEl);
+            });
+
+            // Char counter
+            const countEl = document.getElementById('postTitleCount');
+            titleEl.addEventListener('input', () => {
+                countEl.textContent = titleEl.value.length + ' / 100';
+            });
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // CONTENT FIELD – wire mention + hashtag + backdrop
+        // ──────────────────────────────────────────────────────────────
+        function initContentField() {
+            const ta = document.getElementById('postContent');
+            if (!ta) return;
+
+            // Mentions
+            if (window.Mentions && typeof window.Mentions.initMentions === 'function') {
+                window.Mentions.initMentions(ta);
+            }
+
+            // Hashtag typing
+            ta.addEventListener('input', () => {
+                handleHashtagTyping(ta);
+            });
+
+            // Backdrop
+            initContentBackdrop();
+
+            // Char counter
+            const countEl = document.getElementById('postContentCount');
+            ta.addEventListener('input', () => {
+                const len = ta.value.length;
+                countEl.textContent = len + ' characters';
+                if (len > 1000) { countEl.classList.add('warn'); } else { countEl.classList.remove('warn'); }
+            });
+        }
+
         // ──────────────────────────────────────────────────────────────
         // TABS
         // ──────────────────────────────────────────────────────────────
@@ -1870,12 +1871,9 @@
             document.getElementById('panel-' + tab).classList.add('active');
             if (tab === 'sell') loadCategories();
             if (tab === 'post') {
-                setTimeout(function() {
-                    const textarea = document.getElementById('postContent');
-                    if (textarea && window.Mentions) {
-                        window.Mentions.initMentions(textarea);
-                    }
-                    initMentionBackdrop();
+                setTimeout(() => {
+                    initContentField();
+                    initTitleTagging();
                 }, 200);
             }
         }
@@ -1914,7 +1912,7 @@
                 status.style.color = 'var(--danger)';
                 return;
             }
-            status.textContent = 'Detecting location...';
+            status.textContent = 'Detecting location…';
             status.style.color = 'var(--muted)';
 
             navigator.geolocation.getCurrentPosition(
@@ -1962,7 +1960,7 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // CLOUDINARY UPLOAD – using separate presets for each type
+        // CLOUDINARY UPLOAD
         // ──────────────────────────────────────────────────────────────
         function uploadToCloudinary(file, mode = 'post', onProgress) {
             return new Promise((resolve, reject) => {
@@ -1983,8 +1981,6 @@
                 formData.append('file', file);
                 formData.append('upload_preset', preset);
 
-                console.log(`[Upload] → URL: ${url}, preset: ${preset}, resource: ${resourceType}, file size: ${(file.size/1024/1024).toFixed(1)}MB`);
-
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', url);
                 xhr.timeout = 300000;
@@ -2002,30 +1998,31 @@
                     if (xhr.status === 200) {
                         try {
                             const data = JSON.parse(xhr.responseText);
-                            console.log('[Upload] ✅ Success:', data.secure_url);
-                            resolve({
-                                url: data.secure_url,
-                                type: resourceType,
-                                public_id: data.public_id
-                            });
-                        } catch (e) {
-                            reject(new Error('Invalid response from Cloudinary'));
-                        }
+                            resolve({ url: data.secure_url, type: resourceType, public_id: data.public_id });
+                        } catch (e) { reject(new Error('Invalid response from Cloudinary')); }
                     } else {
                         let errMsg = `Upload failed (HTTP ${xhr.status})`;
                         try {
                             const data = JSON.parse(xhr.responseText);
                             errMsg = data.error?.message || errMsg;
-                            console.error('[Upload] ❌ Cloudinary error:', data.error);
                         } catch (e) {}
                         reject(new Error(errMsg));
                     }
                 };
-
                 xhr.onerror = () => reject(new Error('Network error – check your connection'));
-                xhr.ontimeout = () => reject(new Error('Upload timed out – the file may be too large or your connection is slow'));
-
+                xhr.ontimeout = () => reject(new Error('Upload timed out'));
                 xhr.send(formData);
+            });
+        }
+
+        function getVideoDuration(file) {
+            return new Promise((resolve) => {
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                video.src = URL.createObjectURL(file);
+                video.onloadedmetadata = () => { URL.revokeObjectURL(video.src);
+                    resolve(video.duration); };
+                video.onerror = () => resolve(0);
             });
         }
 
@@ -2043,34 +2040,23 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // POST MEDIA (multi‑image / video)
+        // POST MEDIA
         // ──────────────────────────────────────────────────────────────
 
         function previewPostMedia() {
             const input = document.getElementById('postMediaUrlInput');
             const url = input.value.trim();
-            if (!url) {
-                input.placeholder = 'Paste image or YouTube link...';
-                return;
-            }
+            if (!url) { input.placeholder = 'Paste image or YouTube link…'; return; }
 
             const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
             const isImage = /\.(jpg|jpeg|png|gif|webp)/i.test(url) || url.includes('cloudinary.com') || url.includes(
                 'imgur.com');
 
             if (ytMatch) {
-                if (postMedia.length > 0) {
-                    showToast('Remove existing media before adding a video', 'o');
-                    input.value = '';
-                    return;
-                }
+                if (postMedia.length > 0) { showToast('Remove existing media before adding a video', 'o');
+                    input.value = ''; return; }
                 const videoUrl = `https://www.youtube.com/embed/${ytMatch[1]}`;
-                postMedia = [{
-                    url: videoUrl,
-                    type: 'video',
-                    public_id: 'youtube_' + ytMatch[1],
-                    uploading: false
-                }];
+                postMedia = [{ url: videoUrl, type: 'video', public_id: 'youtube_' + ytMatch[1], uploading: false }];
                 postImageEmbeddings = [null];
                 input.value = '🎬 Video linked';
                 input.style.color = 'var(--pl)';
@@ -2078,28 +2064,14 @@
                 renderPostImageGrid();
                 showToast('YouTube video linked', 'p');
             } else if (isImage) {
-                if (postMedia.some(m => m.type === 'video')) {
-                    showToast('Remove the video before adding images', 'o');
-                    input.value = '';
-                    return;
-                }
-                if (postMedia.length >= MAX_POST_IMAGES) {
-                    showToast(`Max ${MAX_POST_IMAGES} images`, 'o');
-                    input.value = '';
-                    return;
-                }
-                if (postMedia.some(m => m.url === url)) {
-                    showToast('Image already added', 'o');
-                    input.value = '';
-                    return;
-                }
+                if (postMedia.some(m => m.type === 'video')) { showToast('Remove the video before adding images', 'o');
+                    input.value = ''; return; }
+                if (postMedia.length >= MAX_POST_IMAGES) { showToast(`Max ${MAX_POST_IMAGES} images`, 'o');
+                    input.value = ''; return; }
+                if (postMedia.some(m => m.url === url)) { showToast('Image already added', 'o');
+                    input.value = ''; return; }
                 const idx = postMedia.length;
-                postMedia.push({
-                    url: url,
-                    type: 'image',
-                    public_id: 'external_' + Date.now(),
-                    uploading: false
-                });
+                postMedia.push({ url, type: 'image', public_id: 'external_' + Date.now(), uploading: false });
                 postImageEmbeddings.push(null);
                 input.value = '';
                 renderPostImageGrid();
@@ -2110,41 +2082,13 @@
             }
         }
 
-        async function getVideoDuration(file) {
-            return new Promise((resolve) => {
-                const video = document.createElement('video');
-                video.preload = 'metadata';
-                video.src = URL.createObjectURL(file);
-                video.onloadedmetadata = () => {
-                    URL.revokeObjectURL(video.src);
-                    resolve(video.duration);
-                };
-                video.onerror = () => resolve(0);
-            });
-        }
-
-        // ──────────────────────────────────────────────────────────────
-        // IMAGE EMBEDDING — compute from uploaded image files
-        // ──────────────────────────────────────────────────────────────
         async function computeImageEmbedding(file) {
-            if (!window.ImageEmbedding || typeof window.ImageEmbedding.getEmbeddingFromFile !== 'function') {
-                console.warn('[Embedding] ImageEmbedding not available');
-                return null;
-            }
+            if (!window.ImageEmbedding || typeof window.ImageEmbedding.getEmbeddingFromFile !== 'function') return null;
             try {
-                console.log('[Embedding] Computing embedding for', file.name);
-                const embedding = await window.ImageEmbedding.getEmbeddingFromFile(file);
-                console.log('[Embedding] Done (length:', embedding ? embedding.length : 0, ')');
-                return embedding;
-            } catch (err) {
-                console.warn('[Embedding] Failed for', file.name, ':', err);
-                return null;
-            }
+                return await window.ImageEmbedding.getEmbeddingFromFile(file);
+            } catch (e) { return null; }
         }
 
-        // ──────────────────────────────────────────────────────────────
-        // handlePostUpload – with per-image embedding (non-blocking)
-        // ──────────────────────────────────────────────────────────────
         async function handlePostUpload(event) {
             const files = Array.from(event.target.files);
             if (!files.length) return;
@@ -2153,37 +2097,22 @@
             const hasMultiple = files.length > 1;
 
             if (hasVideo) {
-                if (postMedia.length > 0) {
-                    showToast('Remove existing media before adding a video', 'o');
-                    event.target.value = '';
-                    return;
-                }
-                if (hasMultiple) {
-                    showToast('Only one video allowed per post', 'o');
-                    event.target.value = '';
-                    return;
-                }
+                if (postMedia.length > 0) { showToast('Remove existing media before adding a video', 'o');
+                    event.target.value = ''; return; }
+                if (hasMultiple) { showToast('Only one video allowed per post', 'o');
+                    event.target.value = ''; return; }
             } else {
-                if (postMedia.some(m => m.type === 'video')) {
-                    showToast('Remove the video before adding images', 'o');
-                    event.target.value = '';
-                    return;
-                }
+                if (postMedia.some(m => m.type === 'video')) { showToast('Remove the video before adding images', 'o');
+                    event.target.value = ''; return; }
             }
 
-            if (Date.now() - lastUploadTime < 8000) {
-                showToast('Please wait before uploading again', 'o');
-                event.target.value = '';
-                return;
-            }
+            if (Date.now() - lastUploadTime < 8000) { showToast('Please wait before uploading again', 'o');
+                event.target.value = ''; return; }
             lastUploadTime = Date.now();
 
             const remaining = hasVideo ? 1 : (MAX_POST_IMAGES - postMedia.length);
-            if (remaining <= 0) {
-                showToast(`Max ${MAX_POST_IMAGES} images`, 'o');
-                event.target.value = '';
-                return;
-            }
+            if (remaining <= 0) { showToast(`Max ${MAX_POST_IMAGES} images`, 'o');
+                event.target.value = ''; return; }
             const toUpload = files.slice(0, remaining);
 
             const progress = document.getElementById('postProgress');
@@ -2192,34 +2121,18 @@
             for (const file of toUpload) {
                 const isVideo = file.type.startsWith('video');
                 const isImage = file.type.startsWith('image');
-                if (!isImage && !isVideo) {
-                    showToast('Only images or videos allowed', 'o');
-                    continue;
-                }
-                if (isImage && file.size > MAX_FILE_SIZE) {
-                    showToast(`${file.name} too large (max 5MB)`, 'o');
-                    continue;
-                }
-                if (isVideo && file.size > MAX_VIDEO_SIZE) {
-                    showToast('Video too large (max 100MB)', 'o');
-                    continue;
-                }
+                if (!isImage && !isVideo) { showToast('Only images or videos allowed', 'o'); continue; }
+                if (isImage && file.size > MAX_FILE_SIZE) { showToast(`${file.name} too large (max 5MB)`, 'o'); continue; }
+                if (isVideo && file.size > MAX_VIDEO_SIZE) { showToast('Video too large (max 100MB)', 'o'); continue; }
                 if (isVideo) {
                     const duration = await getVideoDuration(file);
-                    if (duration > MAX_VIDEO_DURATION_SECONDS) {
-                        showToast(`Video must be ${MAX_VIDEO_DURATION_SECONDS/60} mins or less`, 'o');
-                        continue;
-                    }
+                    if (duration > MAX_VIDEO_DURATION_SECONDS) { showToast(`Video must be ${MAX_VIDEO_DURATION_SECONDS/60} mins or less`,
+                            'o'); continue; }
                 }
 
                 const localUrl = URL.createObjectURL(file);
                 const idx = postMedia.length;
-                postMedia.push({
-                    url: localUrl,
-                    type: isVideo ? 'video' : 'image',
-                    public_id: '',
-                    uploading: true
-                });
+                postMedia.push({ url: localUrl, type: isVideo ? 'video' : 'image', public_id: '', uploading: true });
                 postImageEmbeddings.push(null);
                 renderPostImageGrid();
 
@@ -2227,24 +2140,14 @@
                 bar.style.width = '0%';
 
                 try {
-                    const result = await uploadToCloudinary(file, 'post', (percent) => {
-                        bar.style.width = percent + '%';
-                    });
+                    const result = await uploadToCloudinary(file, 'post', (percent) => { bar.style.width = percent + '%'; });
                     URL.revokeObjectURL(localUrl);
-                    postMedia[idx] = {
-                        url: result.url,
-                        type: result.type,
-                        public_id: result.public_id,
-                        uploading: false
-                    };
+                    postMedia[idx] = { url: result.url, type: result.type, public_id: result.public_id,
+                    uploading: false };
                     renderPostImageGrid();
                     showToast('Uploaded!', 'g');
-
                     if (isImage) {
-                        computeImageEmbedding(file).then(embedding => {
-                            postImageEmbeddings[idx] = embedding;
-                            console.log(`[Embedding] Slot ${idx} done:`, embedding ? '✅' : '❌ (skipped)');
-                        });
+                        computeImageEmbedding(file).then(emb => { postImageEmbeddings[idx] = emb; });
                     }
                 } catch (e) {
                     URL.revokeObjectURL(localUrl);
@@ -2252,7 +2155,6 @@
                     postImageEmbeddings.splice(idx, 1);
                     renderPostImageGrid();
                     showToast('Upload failed: ' + e.message, 'r');
-                    console.error('[Upload Error]', e);
                 }
             }
 
@@ -2261,9 +2163,7 @@
         }
 
         function removePostImage(idx) {
-            if (postMedia[idx]?.url?.startsWith('blob:')) {
-                URL.revokeObjectURL(postMedia[idx].url);
-            }
+            if (postMedia[idx]?.url?.startsWith('blob:')) URL.revokeObjectURL(postMedia[idx].url);
             postMedia.splice(idx, 1);
             postImageEmbeddings.splice(idx, 1);
             renderPostImageGrid();
@@ -2272,7 +2172,7 @@
                 input.value = '';
                 input.style.color = '';
                 input.style.fontWeight = '';
-                input.placeholder = 'Paste image or YouTube link...';
+                input.placeholder = 'Paste image or YouTube link…';
                 postImageEmbeddings = [];
             }
             showToast('Media removed', 'o');
@@ -2306,7 +2206,7 @@
             grid.innerHTML = thumbHtml + addBtn;
         }
 
-        // ─── POST FULLSCREEN (only for images) ──────────────────────
+        // ─── POST FULLSCREEN ───
         let postFullscreenImages = [];
 
         function openPostFullscreen(index) {
@@ -2324,7 +2224,6 @@
             viewer._fullscreenData = { images: postFullscreenImages, current: idx };
         }
 
-        // Override closeFullscreen to handle both market and post
         const originalCloseFullscreen = closeFullscreen;
         closeFullscreen = function() {
             const viewer = document.getElementById('fullscreenViewer');
@@ -2333,10 +2232,6 @@
             viewer.style.opacity = '';
             document.getElementById('fullscreenImage').style.transform = '';
             document.getElementById('fullscreenImage').src = '';
-            if (viewer._touchStart) viewer.removeEventListener('touchstart', viewer._touchStart);
-            if (viewer._touchMove) viewer.removeEventListener('touchmove', viewer._touchMove);
-            if (viewer._touchEnd) viewer.removeEventListener('touchend', viewer._touchEnd);
-            if (viewer._keyHandler) document.removeEventListener('keydown', viewer._keyHandler);
             viewer._fullscreenData = null;
         };
         document.addEventListener('keydown', function(e) {
@@ -2358,8 +2253,9 @@
         });
 
         // ──────────────────────────────────────────────────────────────
-        // MARKET IMAGES (multiple)
+        // MARKET IMAGES
         // ──────────────────────────────────────────────────────────────
+
         function previewMarketUrl() {
             const input = document.getElementById('marketImageUrlInput');
             const url = input.value.trim();
@@ -2371,7 +2267,7 @@
                 'imgur.com');
             if (!isImage) { showToast('Please enter a valid image URL', 'o'); return; }
 
-            marketImages.push({ url: url, public_id: 'external_' + Date.now(), isUploaded: true, uploading: false });
+            marketImages.push({ url, public_id: 'external_' + Date.now(), isUploaded: true, uploading: false });
             input.value = '';
             renderMarketImages();
             showToast('Image added', 'p');
@@ -2381,25 +2277,16 @@
             const files = Array.from(event.target.files);
             if (!files.length) return;
             const remaining = 5 - marketImages.length;
-            if (remaining <= 0) {
-                showToast('Max 5 images already added', 'o');
-                event.target.value = '';
-                return;
-            }
+            if (remaining <= 0) { showToast('Max 5 images already added', 'o');
+                event.target.value = ''; return; }
 
             const progress = document.getElementById('marketProgress');
             const bar = document.getElementById('marketProgressBar');
             const toUpload = files.slice(0, remaining);
 
             for (const file of toUpload) {
-                if (file.size > MAX_FILE_SIZE) {
-                    showToast(`${file.name} is too large`, 'o');
-                    continue;
-                }
-                if (!file.type.startsWith('image/')) {
-                    showToast('Only image files allowed', 'o');
-                    continue;
-                }
+                if (file.size > MAX_FILE_SIZE) { showToast(`${file.name} is too large`, 'o'); continue; }
+                if (!file.type.startsWith('image/')) { showToast('Only image files allowed', 'o'); continue; }
 
                 const localUrl = URL.createObjectURL(file);
                 const idx = marketImages.length;
@@ -2410,16 +2297,11 @@
                 bar.style.width = '0%';
 
                 try {
-                    const result = await uploadToCloudinary(file, 'market', (percent) => {
-                        bar.style.width = percent + '%';
-                    });
+                    const result = await uploadToCloudinary(file, 'market', (percent) => { bar.style.width = percent +
+                            '%'; });
                     URL.revokeObjectURL(localUrl);
-                    marketImages[idx] = {
-                        url: result.url,
-                        public_id: result.public_id,
-                        isUploaded: true,
-                        uploading: false
-                    };
+                    marketImages[idx] = { url: result.url, public_id: result.public_id, isUploaded: true,
+                    uploading: false };
                     renderMarketImages();
                     setTimeout(() => { progress.style.display = 'none'; }, 500);
                 } catch (e) {
@@ -2428,16 +2310,13 @@
                     marketImages.splice(idx, 1);
                     renderMarketImages();
                     showToast('Upload failed: ' + e.message, 'r');
-                    console.error('[Market Upload Error]', e);
                 }
             }
             event.target.value = '';
         }
 
         function removeMarketImage(idx) {
-            if (marketImages[idx]?.url?.startsWith('blob:')) {
-                URL.revokeObjectURL(marketImages[idx].url);
-            }
+            if (marketImages[idx]?.url?.startsWith('blob:')) URL.revokeObjectURL(marketImages[idx].url);
             marketImages.splice(idx, 1);
             renderMarketImages();
             if (marketImages.length === 0) {
@@ -2472,7 +2351,6 @@
             fullscreenImages = marketImages.filter(i => i.isUploaded).map(i => i.url);
         }
 
-        // ─── MARKET FULLSCREEN ──────────────────────────────────────
         function openMarketFullscreen(index) {
             const uploaded = marketImages.filter(i => i.isUploaded);
             if (uploaded.length === 0) return;
@@ -2489,14 +2367,13 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // DATABASE-DRIVEN CATEGORIES (using CategoryAPI from listings.js)
+        // CATEGORIES (DB-driven)
         // ──────────────────────────────────────────────────────────────
 
         async function loadCategories() {
             if (categoriesLoaded) return;
             try {
                 if (!window.CategoryAPI || typeof window.CategoryAPI.loadCategories !== 'function') {
-                    console.warn('[DEBUG] CategoryAPI not loaded, trying fallback...');
                     const { data, error } = await window.sb
                         .from('market_categories')
                         .select('*')
@@ -2508,15 +2385,10 @@
                     dbCategories = await window.CategoryAPI.loadCategories();
                 }
                 categoriesLoaded = true;
-
                 document.getElementById('categoryPickerBtn').disabled = false;
-
-                if (selectedCategoryId) {
-                    updateCategoryPickerDisplay(selectedCategoryId);
-                }
-                console.log('[DEBUG] Categories loaded:', dbCategories.length);
+                if (selectedCategoryId) updateCategoryPickerDisplay(selectedCategoryId);
             } catch (err) {
-                console.error('[DEBUG] Failed to load categories:', err);
+                console.error('[Categories] Failed to load:', err);
                 showToast('Could not load categories. Please refresh.', 'r');
             }
         }
@@ -2525,7 +2397,7 @@
             if (!categoryId) {
                 document.getElementById('subcategoryPickerBtn').disabled = true;
                 document.getElementById('subcategoryPickerBtn').querySelector('.placeholder').textContent =
-                    'Select category first';
+                'Select category first';
                 document.getElementById('itemSubcategoryId').value = '';
                 selectedSubcategoryId = '';
                 return;
@@ -2533,7 +2405,6 @@
 
             try {
                 if (!window.CategoryAPI || typeof window.CategoryAPI.loadSubcategories !== 'function') {
-                    console.warn('[DEBUG] CategoryAPI not loaded, trying fallback...');
                     const { data, error } = await window.sb
                         .from('market_subcategories')
                         .select('*')
@@ -2555,18 +2426,15 @@
                 } else {
                     subBtn.disabled = false;
                     subBtn.querySelector('.placeholder').textContent = 'Select subcategory';
-                    if (selectedSubcategoryId) {
-                        updateSubcategoryPickerDisplay(selectedSubcategoryId);
-                    }
+                    if (selectedSubcategoryId) updateSubcategoryPickerDisplay(selectedSubcategoryId);
                 }
-                console.log('[DEBUG] Subcategories loaded:', dbSubcategories.length);
             } catch (err) {
-                console.error('[DEBUG] Failed to load subcategories:', err);
+                console.error('[Subcategories] Failed to load:', err);
                 showToast('Could not load subcategories.', 'r');
             }
         }
 
-        // ── Picker Modal Functions ──
+        // ── Picker Modal ──
 
         function openPickerModal(mode) {
             pickerMode = mode;
@@ -2580,15 +2448,9 @@
                 pickerData = dbCategories.map(c => ({ id: c.id, name: c.name }));
             } else {
                 title.textContent = 'Select Subcategory';
-                if (!selectedCategoryId) {
-                    showToast('Please select a category first', 'o');
-                    return;
-                }
+                if (!selectedCategoryId) { showToast('Please select a category first', 'o'); return; }
                 pickerData = dbSubcategories.map(s => ({ id: s.id, name: s.name }));
-                if (pickerData.length === 0) {
-                    showToast('No subcategories available', 'o');
-                    return;
-                }
+                if (pickerData.length === 0) { showToast('No subcategories available', 'o'); return; }
             }
 
             search.value = '';
@@ -2665,11 +2527,10 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT POST – with Mentions + Notifications + commentsHidden flag + source: 'composer' + image embedding (averaged)
+        // SUBMIT POST
         // ──────────────────────────────────────────────────────────────
-        async function submitPost() {
-            console.log('[DEBUG] submitPost called');
 
+        async function submitPost() {
             if (!window.PostsAPI || typeof window.PostsAPI.createPost !== 'function') {
                 showToast('System not ready. Please refresh.', 'r');
                 return;
@@ -2684,10 +2545,16 @@
                 return;
             }
 
-            const title = document.getElementById('postTitle').value.trim();
-            const content = document.getElementById('postContent').value.trim();
+            const titleEl = document.getElementById('postTitle');
+            const contentEl = document.getElementById('postContent');
+            const title = titleEl.value.trim();
+            const content = contentEl.value.trim();
             const hideComments = document.getElementById('postHideComments').checked;
-            const hashtags = extractHashtagsFromText(content);
+
+            // Merge hashtags from title + content
+            const titleHashtags = extractHashtagsFromText(title);
+            const contentHashtags = extractHashtagsFromText(content);
+            const hashtags = mergeHashtagLists(titleHashtags, contentHashtags);
 
             if (!title && !content && postMedia.length === 0) {
                 showToast('Please add a title, content or media', 'o');
@@ -2698,38 +2565,40 @@
                 return;
             }
 
-            const textarea = document.getElementById('postContent');
+            // Merge mentions from title + content
             let mentions = [];
             if (window.Mentions && typeof window.Mentions.extractMentions === 'function') {
-                mentions = window.Mentions.extractMentions(textarea);
-                console.log('[DEBUG] Extracted mentions:', mentions);
+                const titleMentions = window.Mentions.extractMentions(titleEl);
+                const contentMentions = window.Mentions.extractMentions(contentEl);
+                const seen = new Set();
+                mentions = [...titleMentions, ...contentMentions].filter(m => {
+                    const key = (m.username || '').toLowerCase();
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
             }
 
             const btn = document.querySelector('.btn-primary[onclick="submitPost()"]');
             const originalText = btn.textContent;
-            btn.textContent = 'Publishing...';
+            btn.textContent = 'Publishing…';
             btn.disabled = true;
 
-            const media = postMedia.map(m => ({
-                url: m.url,
-                type: m.type,
-                public_id: m.public_id || ''
-            }));
+            const media = postMedia.map(m => ({ url: m.url, type: m.type, public_id: m.public_id || '' }));
             const firstItem = media[0] || {};
 
             const validEmbeddings = postImageEmbeddings.filter(e => Array.isArray(e) && e.length);
-            const imageEmbedding = (window.ImageEmbedding && typeof window.ImageEmbedding.averageEmbeddings === 'function' &&
-                validEmbeddings.length) ?
+            const imageEmbedding = (window.ImageEmbedding && typeof window.ImageEmbedding.averageEmbeddings ===
+                'function' && validEmbeddings.length) ?
                 window.ImageEmbedding.averageEmbeddings(validEmbeddings) :
                 null;
-            console.log(`[Embedding] Averaging ${validEmbeddings.length}/${postImageEmbeddings.length} image(s) for this post.`);
 
             try {
                 const result = await PostsAPI.createPost({
                     title,
                     content: content || '',
-                    tags: hashtags,        // kept in parallel for backward compat
-                    hashtags: hashtags,    // drives hashtags + post_hashtags tables
+                    tags: hashtags,
+                    hashtags: hashtags,
                     media: media,
                     mediaUrl: firstItem.url || '',
                     mediaType: firstItem.type || '',
@@ -2739,37 +2608,28 @@
                     imageEmbedding: imageEmbedding
                 });
 
-                console.log('[DEBUG] Post created successfully:', result);
-
                 if (result.id && mentions.length > 0) {
                     if (window.Mentions && typeof window.Mentions.notifyMentionedUsers === 'function') {
                         try {
-                            await window.Mentions.notifyMentionedUsers(
-                                'post',
-                                result.id,
-                                mentions,
-                                user.id,
-                                null
-                            );
-                            console.log('[DEBUG] Mention notifications sent for', mentions.length, 'users');
-                        } catch (notifyErr) {
-                            console.error('[DEBUG] Failed to send mention notifications:', notifyErr);
-                        }
+                            await window.Mentions.notifyMentionedUsers('post', result.id, mentions, user.id, null);
+                        } catch (notifyErr) { console.error('[Mentions] notify failed:', notifyErr); }
                     }
                 }
 
-                // ── Reset form ──
-                document.getElementById('postTitle').value = '';
-                document.getElementById('postContent').value = '';
-                document.getElementById('postContent')._mentions = [];
-                syncMentionBackdrop(document.getElementById('postContent'), document.getElementById('postContentBackdrop'));
+                // ── Reset ──
+                titleEl.value = '';
+                contentEl.value = '';
+                contentEl._mentions = [];
+                titleEl._mentions = [];
+                syncMentionBackdrop(contentEl, document.getElementById('postContentBackdrop'));
                 document.getElementById('postHideComments').checked = false;
                 document.getElementById('postMediaUrlInput').value = '';
                 postMedia.forEach(m => { if (m.url?.startsWith('blob:')) URL.revokeObjectURL(m.url); });
                 postMedia = [];
                 postImageEmbeddings = [];
                 renderPostImageGrid();
-                extractedHashtags = [];
+                document.getElementById('postTitleCount').textContent = '0 / 100';
+                document.getElementById('postContentCount').textContent = '0 characters';
 
                 showToast('Post published! 🎉', 'g');
                 btn.textContent = originalText;
@@ -2780,7 +2640,7 @@
                 }, 500);
 
             } catch (err) {
-                console.error('[DEBUG] Error creating post:', err);
+                console.error('[SubmitPost] Error:', err);
                 showToast(err.message || 'Failed to publish post. Please try again.', 'r');
                 btn.textContent = originalText;
                 btn.disabled = false;
@@ -2788,11 +2648,10 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // SUBMIT ITEM – uses ListingsAPI.createListing
+        // SUBMIT ITEM
         // ──────────────────────────────────────────────────────────────
-        function submitItem() {
-            console.log('[DEBUG] submitItem called');
 
+        function submitItem() {
             const user = getCurrentUser();
             if (!user || !user.isLoggedIn) {
                 showToast('Please sign in to list an item', 'o');
@@ -2808,8 +2667,8 @@
             }
 
             const title = document.getElementById('itemTitle').value.trim();
-            var priceInput = document.getElementById('itemPrice');
-            var price = priceInput.value.replace(/[^0-9,]/g, '').replace(/,/g, '');
+            const priceInput = document.getElementById('itemPrice');
+            const price = priceInput.value.replace(/[^0-9,]/g, '').replace(/,/g, '');
             const description = document.getElementById('itemDescription').value.trim();
             const location = document.getElementById('itemLocation').value.trim();
             const condition = document.getElementById('itemCondition').value;
@@ -2819,37 +2678,20 @@
             const subcategoryId = document.getElementById('itemSubcategoryId').value;
             const whatsapp = document.getElementById('itemWhatsApp').value.trim();
 
-            if (!title || !price) {
-                showToast('Item name and price are required', 'o');
-                return;
-            }
-            if (isNaN(Number(price)) || Number(price) <= 0) {
-                showToast('Enter a valid price', 'o');
-                return;
-            }
-            if (!categoryId) {
-                showToast('Please select a category', 'o');
-                return;
-            }
-            if (marketImages.some(function(i) { return i.uploading; })) {
-                showToast('Please wait for images to finish uploading', 'o');
-                return;
-            }
+            if (!title || !price) { showToast('Item name and price are required', 'o'); return; }
+            if (isNaN(Number(price)) || Number(price) <= 0) { showToast('Enter a valid price', 'o'); return; }
+            if (!categoryId) { showToast('Please select a category', 'o'); return; }
+            if (marketImages.some(i => i.uploading)) { showToast('Please wait for images to finish uploading', 'o'); return; }
 
-            var imageObjects = marketImages.map(function(img) {
-                return {
-                    url: img.url,
-                    public_id: img.public_id || ''
-                };
-            });
+            const imageObjects = marketImages.map(img => ({ url: img.url, public_id: img.public_id || '' }));
 
-            var btn = document.querySelector('.btn-primary[onclick="submitItem()"]');
-            var originalText = btn.textContent;
-            btn.textContent = 'Listing...';
+            const btn = document.querySelector('.btn-primary[onclick="submitItem()"]');
+            const originalText = btn.textContent;
+            btn.textContent = 'Listing…';
             btn.disabled = true;
 
             ListingsAPI.createListing({
-                    title: title,
+                    title,
                     price: parseFloat(price),
                     category_id: categoryId,
                     subcategory_id: subcategoryId || null,
@@ -2862,7 +2704,7 @@
                     whatsapp: whatsapp || null
                 })
                 .then(function(result) {
-                    console.log('[DEBUG] Item listed successfully:', result);
+                    // Reset form
                     document.getElementById('itemTitle').value = '';
                     document.getElementById('itemPrice').value = '';
                     document.getElementById('itemDescription').value = '';
@@ -2871,14 +2713,11 @@
                     document.getElementById('itemLng').value = '';
                     document.getElementById('locationStatus').textContent = '';
                     document.getElementById('itemWhatsApp').value = '';
-                    var input = document.getElementById('marketImageUrlInput');
-                    input.value = '';
-                    input.style.color = '';
-                    input.style.fontWeight = '';
+                    document.getElementById('marketImageUrlInput').value = '';
                     marketImages = [];
                     renderMarketImages();
                     fullscreenImages = [];
-                    document.querySelectorAll('.condition-opt').forEach(function(c) { c.classList.remove('active'); });
+                    document.querySelectorAll('.condition-opt').forEach(c => c.classList.remove('active'));
                     document.querySelector('.condition-opt[data-condition="New"]').classList.add('active');
                     selectedCondition = 'New';
                     document.getElementById('itemCondition').value = 'New';
@@ -2888,7 +2727,7 @@
                     document.getElementById('itemCategoryId').value = '';
                     document.getElementById('itemSubcategoryId').value = '';
                     document.getElementById('categoryPickerBtn').querySelector('.placeholder').textContent =
-                        'Select category';
+                    'Select category';
                     document.getElementById('subcategoryPickerBtn').querySelector('.placeholder').textContent =
                         'Select category first';
                     document.getElementById('subcategoryPickerBtn').disabled = true;
@@ -2905,7 +2744,7 @@
                     }, 500);
                 })
                 .catch(function(err) {
-                    console.error('[DEBUG] Error listing item:', err);
+                    console.error('[SubmitItem] Error:', err);
                     showToast(err.message || 'Failed to list item', 'r');
                     btn.textContent = originalText;
                     btn.disabled = false;
@@ -2913,8 +2752,9 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // AVATAR / NAV UPDATES
+        // NAV AVATAR
         // ──────────────────────────────────────────────────────────────
+
         function updateNavAvatar() {
             const user = getCurrentUser();
             document.querySelectorAll('.side-av, .nav-av').forEach(el => {
@@ -2924,33 +2764,9 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // CHARACTER COUNTERS
-        // ──────────────────────────────────────────────────────────────
-        document.addEventListener('DOMContentLoaded', function() {
-            const titleInput = document.getElementById('postTitle');
-            const titleCount = document.getElementById('postTitleCount');
-            titleInput.addEventListener('input', function() {
-                titleCount.textContent = this.value.length + ' / 100';
-            });
-
-            const contentInput = document.getElementById('postContent');
-            const contentCount = document.getElementById('postContentCount');
-            contentInput.addEventListener('input', function() {
-                const len = this.value.length;
-                contentCount.textContent = len + ' characters';
-                if (len > 1000) {
-                    contentCount.classList.add('warn');
-                } else {
-                    contentCount.classList.remove('warn');
-                }
-            });
-
-            initMentionBackdrop();
-        });
-
-        // ──────────────────────────────────────────────────────────────
         // INIT
         // ──────────────────────────────────────────────────────────────
+
         function init() {
             updateNavAvatar();
 
@@ -2977,15 +2793,11 @@
                 document.documentElement.setAttribute('data-theme', e.detail.theme);
             });
 
-            const postContent = document.getElementById('postContent');
-            if (postContent) {
-                if (window.Mentions && typeof window.Mentions.initMentions === 'function') {
-                    window.Mentions.initMentions(postContent);
-                    console.log('[DEBUG] Mentions initialised on post content');
-                }
-                initMentionBackdrop();
-            }
+            // Wire up title + content
+            initTitleTagging();
+            initContentField();
 
+            // Load categories for sell panel
             const activePanel = document.querySelector('.panel.active');
             if (activePanel && activePanel.id === 'panel-sell') {
                 loadCategories();
@@ -2993,15 +2805,14 @@
                 setTimeout(loadCategories, 500);
             }
 
+            // Preload embedding model
             if (window.ImageEmbedding && typeof window.ImageEmbedding.preloadModel === 'function') {
                 window.ImageEmbedding.preloadModel()
-                    .then(() => console.log('[Embedding] Model preloaded successfully'))
+                    .then(() => console.log('[Embedding] Model preloaded'))
                     .catch(e => console.warn('[Embedding] Preload error:', e));
-            } else {
-                console.warn('[Embedding] ImageEmbedding not available for preload');
             }
 
-            console.log('[DEBUG] create.html: multi‑image support, source: composer, up to 20 images, with per-image embedding averaging, mention live-highlight');
+            console.log('[Create] Initialised with title + content @/# support, fixed suggestions, bold readable text.');
         }
 
         if (document.readyState === 'loading') {
