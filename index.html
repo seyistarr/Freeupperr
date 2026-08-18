@@ -3771,22 +3771,6 @@
 
             const content = document.getElementById('user-content');
 
-            // ─── OVERRIDE FOR HASHTAG.JS: inline styling for hashtag links ───
-            // This ensures hashtags render with the same deep light purple
-            // (var(--pl)) and bold weight as mentions, everywhere they appear.
-            if (window.Hashtags && typeof window.Hashtags.hashifyHtml === 'function') {
-                const originalHashify = window.Hashtags.hashifyHtml;
-                window.Hashtags.hashifyHtml = function(html) {
-                    if (!html) return '';
-                    return html.replace(/(^|[\s>])#(\w+)/g, function(m, pre, word) {
-                        const escapedWord = word.replace(/'/g, "\\'");
-                        return pre + '<span class="hashtag-link" data-tag="' + escapeHtml(word) +
-                            '" onclick="event.stopPropagation();window.Hashtags.goToHashtag(\'' +
-                            escapedWord + '\')">#' + escapeHtml(word) + '</span>';
-                    });
-                };
-            }
-
             // ───────────────────────────────────────────────────────────────
             // HELPERS
             // ───────────────────────────────────────────────────────────────
@@ -3841,8 +3825,6 @@
             }
 
             // ─── FIX 1: renderPostTitle now uses linkifyContent() ──────────
-            // Titles now render hashtags and mentions as clickable, styled
-            // links instead of dead escaped text.
             function renderPostTitle(title, opts = {}) {
                 const text = title || '';
                 const type = getTitleType(text, opts.hasMedia);
@@ -3852,8 +3834,6 @@
                     const sizeClass = getEmojiSizeClass(text);
                     return `<div class="fu-emoji-title ${sizeClass}"><span class="fu-emoji-inner">${escapeHtml(text)}</span></div>`;
                 }
-                // FIX: titles now run through linkifyContent() — hashtags and
-                // mentions become clickable and styled the same as content.
                 if (type === 'short') {
                     return `<div class="fu-short-title${clampClass}">${linkifyContent(text, opts.mentions)}</div>`;
                 }
@@ -5918,7 +5898,7 @@
             }
 
             // ─── BUILD POST HTML ─────────────────────────────────────────────
-            // FIX 2 + 3: pass p.mentions to renderPostTitle() and buildContentBlockHTML()
+            // FIX 2: pass p.mentions to renderPostTitle()
             function buildPostHTML(p, index) {
                 const author = window.getAuthorFromProfile(p.profile);
                 const da = truncateName(author.name, 22);
@@ -5946,7 +5926,6 @@
 
                 const isRepostClass = repostBanner ? 'is-repost' : '';
 
-                // ─── FIX 2: pass mentions to renderPostTitle ───
                 return `<article class="feed-post ${isRepostClass}" data-post-id="${p.id}" data-author-id="${author.id}">
                         ${repostBanner}
                         <div class="flex items-start gap-3" style="padding:0 16px;">
