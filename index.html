@@ -1557,12 +1557,14 @@
             text-overflow: ellipsis;
             text-align: right;
         }
+        /* FIX 2: overscroll-behavior: contain prevents scroll chaining */
         #explore-fullscreen-content {
             flex: 1;
             overflow-y: auto;
             overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
             padding-bottom: 20px;
+            overscroll-behavior: contain;
         }
         .market-fullscreen-body {
             flex: 1;
@@ -4011,22 +4013,26 @@
                 }, 190);
             }
 
-            // ─── SCROLL LOCK ──────────────────────────────────────────────
+            // ─── SCROLL LOCK (FIX 2: robust body locking) ────────────────
             function lockBodyScroll() {
                 _lockedScrollY = window.scrollY;
+                document.documentElement.style.overflow = 'hidden';
                 document.body.style.position = 'fixed';
                 document.body.style.top = `-${_lockedScrollY}px`;
                 document.body.style.left = '0';
                 document.body.style.right = '0';
                 document.body.style.width = '100%';
+                document.body.style.overflow = 'hidden';
             }
 
             function unlockBodyScroll() {
+                document.documentElement.style.overflow = '';
                 document.body.style.position = '';
                 document.body.style.top = '';
                 document.body.style.left = '';
                 document.body.style.right = '';
                 document.body.style.width = '';
+                document.body.style.overflow = '';
                 window.scrollTo(0, _lockedScrollY);
             }
 
@@ -7307,6 +7313,7 @@
                 }
             }
 
+            // ─── closeExploreFullscreen (FIX 4: preserve feed DOM) ────────
             function closeExploreFullscreen() {
                 if (window.IndexRender && typeof window.IndexRender.resume === 'function') {
                     window.IndexRender.resume();
@@ -7335,6 +7342,23 @@
                 if (chipsEl) chipsEl.classList.remove('chips-hidden');
                 if (headerEl) headerEl.classList.remove('header-hidden');
                 refreshTabStates();
+
+                // FIX 4: the background feed DOM was never destroyed — it was only
+                // covered by the overlay. Re-rendering here re-ranks the whole feed
+                // (the just-viewed post now carries a "seen" penalty), silently
+                // reordering everything so the saved scroll position lands on a
+                // different post. Just uncover it instead.
+                const existingContainer = document.getElementById('feed-container');
+                if ((returnPage === 'home' || returnPage === 'explore') && existingContainer && existingContainer.children.length) {
+                    setTimeout(() => {
+                        const fc = document.getElementById('explore-fullscreen-content');
+                        if (fc) fc.innerHTML = '';
+                        setupVideoAutoplay(existingContainer);
+                        window.IndexRender?.rescan();
+                    }, 400);
+                    return;
+                }
+
                 renderUI();
                 setTimeout(() => {
                     const fc = document.getElementById('explore-fullscreen-content');
