@@ -34,19 +34,31 @@
   /**
    * Turn #word occurrences in plain text into clickable spans.
    * Should be called AFTER escaping HTML and handling mentions.
+   * Splits on HTML tags first, so the regex only runs on real text nodes
+   * and never accidentally inside an attribute or across a tag boundary.
    * @param {string} html - already-escaped HTML string
    * @returns {string} HTML with clickable hashtag spans
    */
   function hashifyHtml(html) {
     if (!html) return '';
-    // FIX: inline style guarantees hashtags render identically to mentions
-    // (deep light purple, bold) everywhere hashifyHtml runs — titles,
-    // content, comments — regardless of what any external .hashtag-link
-    // CSS rule says.
-    return html.replace(/(^|[\s>])#(\w+)/g, function (m, pre, word) {
-      const escapedWord = word.replace(/'/g, "\\'");
-      return pre + '<span class="hashtag-link" data-tag="' + escapeHtml(word) + '" style="color:var(--pl);font-weight:800;cursor:pointer;" onclick="event.stopPropagation();window.Hashtags.goToHashtag(\'' + escapedWord + '\')">#' + escapeHtml(word) + '</span>';
-    });
+    const parts = html.split(/(<[^>]+>)/g);
+    return parts
+      .map((part) => {
+        if (part.startsWith('<')) return part; // leave tags untouched
+        return part.replace(/#(\w+)/g, function (m, word) {
+          const escapedWord = word.replace(/'/g, "\\'");
+          return (
+            '<span class="hashtag-link" data-tag="' +
+            escapeHtml(word) +
+            '" style="color:var(--pl);font-weight:800;cursor:pointer;" onclick="event.stopPropagation();window.Hashtags.goToHashtag(\'' +
+            escapedWord +
+            '\')">#' +
+            escapeHtml(word) +
+            '</span>'
+          );
+        });
+      })
+      .join('');
   }
 
   /**
@@ -74,7 +86,7 @@
       }
       if (!tagRows || !tagRows.length) return [];
 
-      const ids = tagRows.map(r => r.id);
+      const ids = tagRows.map((r) => r.id);
       const { data: linkRows, error: linkErr } = await window.sb
         .from('post_hashtags')
         .select('hashtag_id')
@@ -82,16 +94,16 @@
 
       if (linkErr) {
         console.warn('searchHashtags count error:', linkErr);
-        return tagRows.map(r => ({ id: r.id, tag: r.tag, count: 0 }));
+        return tagRows.map((r) => ({ id: r.id, tag: r.tag, count: 0 }));
       }
 
       const counts = {};
-      (linkRows || []).forEach(row => {
+      (linkRows || []).forEach((row) => {
         counts[row.hashtag_id] = (counts[row.hashtag_id] || 0) + 1;
       });
 
       return tagRows
-        .map(r => ({ id: r.id, tag: r.tag, count: counts[r.id] || 0 }))
+        .map((r) => ({ id: r.id, tag: r.tag, count: counts[r.id] || 0 }))
         .sort((a, b) => b.count - a.count);
     } catch (err) {
       console.warn('searchHashtags exception:', err);
@@ -115,7 +127,9 @@
       if (error || !linkRows || !linkRows.length) return [];
 
       const counts = {};
-      linkRows.forEach(row => { counts[row.hashtag_id] = (counts[row.hashtag_id] || 0) + 1; });
+      linkRows.forEach((row) => {
+        counts[row.hashtag_id] = (counts[row.hashtag_id] || 0) + 1;
+      });
 
       const topIds = Object.entries(counts)
         .sort((a, b) => b[1] - a[1])
@@ -132,8 +146,8 @@
       if (tagErr || !tagRows) return [];
 
       return topIds
-        .map(id => {
-          const row = tagRows.find(t => t.id === id);
+        .map((id) => {
+          const row = tagRows.find((t) => t.id === id);
           return row ? { tag: row.tag, count: counts[id] } : null;
         })
         .filter(Boolean);
@@ -164,7 +178,7 @@
         .eq('hashtag_id', tagRow.id);
 
       if (linkErr || !linkRows) return [];
-      return linkRows.map(r => r.post_id);
+      return linkRows.map((r) => r.post_id);
     } catch (err) {
       console.warn('fetchHashtagPostIds exception:', err);
       return [];
@@ -177,7 +191,7 @@
     hashifyHtml: hashifyHtml,
     searchHashtags: searchHashtags,
     fetchTrendingHashtags: fetchTrendingHashtags,
-    fetchHashtagPostIds: fetchHashtagPostIds
+    fetchHashtagPostIds: fetchHashtagPostIds,
   };
 
   console.log('✅ hashtags.js loaded (rendering + post_hashtags-backed search/trending)');
