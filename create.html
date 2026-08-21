@@ -426,7 +426,7 @@
         }
 
         /* ──────────────────────────────────────────────────────────────
-           7.  TITLE INPUT (bold, large)
+           7.  TITLE INPUT (with backdrop wrapper)
            ────────────────────────────────────────────────────────────── */
         #postTitle {
             font-weight: 800;
@@ -440,15 +440,14 @@
         }
 
         /* ──────────────────────────────────────────────────────────────
-           8.  CONTENT TEXTAREA + BACKDROP (fixed: visible text)
+           8.  CONTENT TEXTAREA + BACKDROP (live highlight)
            ────────────────────────────────────────────────────────────── */
         .mention-textarea-wrap {
             position: relative;
         }
 
-        /* ── Backdrop is now hidden (fix for invisible text) ── */
+        /* Backdrop — visible again, sits behind the transparent text */
         .mention-backdrop {
-            display: none;
             position: absolute;
             inset: 0;
             margin: 0;
@@ -468,11 +467,11 @@
             z-index: 1;
         }
 
-        /* ── Textarea now shows actual text (was transparent) ── */
+        /* Textarea — transparent text, caret visible */
         .mention-textarea {
             position: relative;
             background: transparent !important;
-            color: var(--text);
+            color: transparent;
             caret-color: var(--text);
             z-index: 2;
             font-weight: 700;
@@ -494,6 +493,7 @@
             background: transparent !important;
         }
 
+        /* Highlighted tokens — both mentions and hashtags */
         .mention-highlight {
             color: var(--pl);
             font-weight: 800;
@@ -586,10 +586,11 @@
         }
 
         /* ──────────────────────────────────────────────────────────────
-           10. SUGGESTION BOXES (fixed positioning)
+           10. SUGGESTION BOXES (unified styling)
            ────────────────────────────────────────────────────────────── */
         .mention-suggestions,
-        .hashtag-suggestions {
+        .hashtag-suggestions,
+        #mention-suggestions /* dynamic box from mentions.js */ {
             background: var(--bg3);
             border: 1px solid var(--brd2);
             border-radius: var(--radius-sm);
@@ -607,22 +608,26 @@
         }
 
         .mention-suggestions::-webkit-scrollbar,
-        .hashtag-suggestions::-webkit-scrollbar {
+        .hashtag-suggestions::-webkit-scrollbar,
+        #mention-suggestions::-webkit-scrollbar {
             width: 3px;
         }
 
         .mention-suggestions::-webkit-scrollbar-track,
-        .hashtag-suggestions::-webkit-scrollbar-track {
+        .hashtag-suggestions::-webkit-scrollbar-track,
+        #mention-suggestions::-webkit-scrollbar-track {
             background: transparent;
         }
 
         .mention-suggestions::-webkit-scrollbar-thumb,
-        .hashtag-suggestions::-webkit-scrollbar-thumb {
+        .hashtag-suggestions::-webkit-scrollbar-thumb,
+        #mention-suggestions::-webkit-scrollbar-thumb {
             background: var(--pbrd);
             border-radius: 100px;
         }
 
         .mention-suggestions .suggestion-item,
+        #mention-suggestions .suggestion-item,
         .hashtag-suggestions .h-item {
             padding: 10px 14px;
             cursor: pointer;
@@ -637,12 +642,15 @@
 
         .mention-suggestions .suggestion-item:hover,
         .mention-suggestions .suggestion-item.active,
+        #mention-suggestions .suggestion-item:hover,
+        #mention-suggestions .suggestion-item.active,
         .hashtag-suggestions .h-item:hover,
         .hashtag-suggestions .h-item.active {
             background: var(--pdim);
         }
 
-        .mention-suggestions .suggestion-item img {
+        .mention-suggestions .suggestion-item img,
+        #mention-suggestions .suggestion-item img {
             width: 28px;
             height: 28px;
             border-radius: 50%;
@@ -651,18 +659,21 @@
             flex-shrink: 0;
         }
 
-        .mention-suggestions .suggestion-item .s-name {
+        .mention-suggestions .suggestion-item .s-name,
+        #mention-suggestions .suggestion-item .s-name {
             font-weight: 600;
             white-space: nowrap;
         }
 
-        .mention-suggestions .suggestion-item .s-handle {
+        .mention-suggestions .suggestion-item .s-handle,
+        #mention-suggestions .suggestion-item .s-handle {
             font-size: 12px;
             color: var(--muted);
             white-space: nowrap;
         }
 
-        .mention-suggestions .suggestion-item .s-badge {
+        .mention-suggestions .suggestion-item .s-badge,
+        #mention-suggestions .suggestion-item .s-badge {
             font-size: 10px;
             background: var(--pdim);
             color: var(--pl);
@@ -1931,13 +1942,16 @@
                 <section class="panel active" id="panel-post" role="tabpanel">
                     <form id="post-form" onsubmit="event.preventDefault();submitPost();" novalidate>
 
-                        <!-- Title -->
+                        <!-- Title (now with live highlight backdrop) -->
                         <div class="form-group">
                             <label class="form-lbl" for="postTitle">
                                 Title
                                 <span class="optional">(optional)</span>
                             </label>
-                            <input class="form-inp" id="postTitle" type="text" placeholder="Free to say what's on your mind?" maxlength="100" autocomplete="off" aria-describedby="postTitleCount">
+                            <div class="mention-textarea-wrap">
+                                <div class="mention-backdrop" id="postTitleBackdrop" aria-hidden="true" style="white-space:nowrap;overflow:hidden;padding:12px 16px;font-weight:800;font-size:18px;border-radius:var(--radius-sm);border:1.5px solid transparent;"></div>
+                                <input class="form-inp mention-textarea" id="postTitle" type="text" placeholder="Free to say what's on your mind?" maxlength="100" autocomplete="off" style="font-weight:800;font-size:18px;" aria-describedby="postTitleCount">
+                            </div>
                             <span class="char-c" id="postTitleCount">0 / 100</span>
                         </div>
 
@@ -1960,7 +1974,6 @@
                                 <div class="mention-backdrop" id="postContentBackdrop" aria-hidden="true"></div>
                                 <textarea class="form-inp mention-textarea" id="postContent" placeholder="Write your post content… Use @ to mention, # for hashtags" rows="6" aria-describedby="postContentCount"></textarea>
                             </div>
-                            <div class="mention-suggestions" id="mentionSuggestions" role="listbox"></div>
                             <div class="hashtag-suggestions" id="hashtagSuggestions" role="listbox"></div>
                             <span class="char-c" id="postContentCount">0 characters</span>
                             <div class="fmt-hint">Select text, tap B / I / S to format — # and @ are never affected.</div>
@@ -2187,9 +2200,9 @@
         /**
          * ================================================================
          *  CREATE PAGE — Freeupper
-         *  Version: 2.0
+         *  Version: 2.2 (live highlight restored)
          *  Description: Full-featured post & marketplace listing composer
-         *  with mention/hashtag support, media uploads, and category picker.
+         *  with live purple highlighting for @mentions and #hashtags.
          * ================================================================
          */
 
@@ -2446,15 +2459,59 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // 7.  MENTION BACKDROP (deprecated – kept for compatibility)
+        // 7.  MENTION BACKDROP (LIVE HIGHLIGHT)
         // ──────────────────────────────────────────────────────────────
 
+        function escapeHtmlForMentions(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+
         function syncMentionBackdrop(textareaEl, backdropEl) {
-            // No-op: backdrop is hidden (display:none) — kept for compatibility
+            if (!textareaEl || !backdropEl) return;
+            const text = textareaEl.value;
+            const mentions = textareaEl._mentions || [];
+            const usernames = new Set(mentions.map(m => (m.username || '').toLowerCase()));
+            let html = escapeHtmlForMentions(text);
+
+            // Highlight confirmed mentions (from mentions.js)
+            if (usernames.size) {
+                html = html.replace(/@([A-Za-z0-9_]{1,30})/g, (match, uname) =>
+                    usernames.has(uname.toLowerCase()) ? `<span class="mention-highlight">@${uname}</span>` : match
+                );
+            }
+
+            // Highlight any #hashtag as the user types — every # token counts,
+            // not just ones confirmed via suggestion click.
+            html = html.replace(/#(\w{1,50})/g, '<span class="mention-highlight">#$1</span>');
+
+            backdropEl.innerHTML = html + (text.endsWith('\n') ? '<br>&nbsp;' : '');
+            backdropEl.scrollTop = textareaEl.scrollTop;
         }
 
         function initContentBackdrop() {
-            // No-op: backdrop is hidden
+            const ta = document.getElementById('postContent');
+            const bd = document.getElementById('postContentBackdrop');
+            if (!ta || !bd || ta._backdropWired) return;
+            ta._backdropWired = true;
+            ta.addEventListener('input', () => {
+                syncMentionBackdrop(ta, bd);
+            });
+            ta.addEventListener('scroll', () => { bd.scrollTop = ta.scrollTop; });
+            syncMentionBackdrop(ta, bd);
+        }
+
+        function initTitleBackdrop() {
+            const ta = document.getElementById('postTitle');
+            const bd = document.getElementById('postTitleBackdrop');
+            if (!ta || !bd || ta._backdropWired) return;
+            ta._backdropWired = true;
+            ta.addEventListener('input', () => {
+                syncMentionBackdrop(ta, bd);
+            });
+            ta.addEventListener('scroll', () => { bd.scrollLeft = ta.scrollLeft; });
+            syncMentionBackdrop(ta, bd);
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -2601,8 +2658,6 @@
             ta.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
                     closeHashtagSuggestions();
-                    const mentionBox = document.getElementById('mentionSuggestions');
-                    if (mentionBox) mentionBox.style.display = 'none';
                 }
             });
 
@@ -2610,12 +2665,13 @@
             document.addEventListener('click', (e) => {
                 if (!ta.contains(e.target)) {
                     closeHashtagSuggestions();
-                    const mentionBox = document.getElementById('mentionSuggestions');
-                    if (mentionBox) mentionBox.style.display = 'none';
                 }
             });
 
-            console.log('[Create] Content field initialised with @ and # support.');
+            // Live backdrop
+            initContentBackdrop();
+
+            console.log('[Create] Content field initialised with @ and # support and live highlighting.');
         }
 
         function updateContentCounter(ta) {
@@ -2628,16 +2684,19 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // 10. INIT TITLE FIELD (with tagging)
+        // 10. INIT TITLE FIELD (with tagging and backdrop)
         // ──────────────────────────────────────────────────────────────
 
         function initTitleField() {
             const titleEl = document.getElementById('postTitle');
-            if (!titleEl) return;
+            if (!titleEl || titleEl._taggingWired) return;
+            titleEl._taggingWired = true;
 
             // Mentions on title
             if (window.Mentions && typeof window.Mentions.initMentions === 'function') {
                 window.Mentions.initMentions(titleEl);
+            } else {
+                console.error('[Create] mentions.js did not load — @ suggestions disabled. Check Network tab for a 404.');
             }
 
             // Hashtag typing
@@ -2658,12 +2717,13 @@
             titleEl.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
                     closeHashtagSuggestions();
-                    const mentionBox = document.getElementById('mentionSuggestions');
-                    if (mentionBox) mentionBox.style.display = 'none';
                 }
             });
 
-            console.log('[Create] Title field initialised.');
+            // Live backdrop
+            initTitleBackdrop();
+
+            console.log('[Create] Title field initialised with @ and # support and live highlighting.');
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -3787,8 +3847,6 @@
             if (mainScroll) {
                 mainScroll.addEventListener('scroll', () => {
                     closeHashtagSuggestions();
-                    const mentionBox = document.getElementById('mentionSuggestions');
-                    if (mentionBox) mentionBox.style.display = 'none';
                 });
             }
 
