@@ -19,6 +19,11 @@
         }
     </script>
 
+    <!-- Plyr for custom video player -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js" defer>
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer>
     </script>
     <script src="global.js" defer></script>
@@ -75,7 +80,7 @@
             --sidebar-w: 360px;
             --max-msg-width: 75%;
             --avatar-size: 42px;
-            --bubble-radius: 18px;
+            --bubble-radius: 7.5px;
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
         }
@@ -1018,16 +1023,16 @@
         }
         .message-bubble.sent {
             align-self: flex-end;
-            background: var(--p);
+            background: var(--bubble-color, var(--p));
             color: #fff;
-            border-bottom-right-radius: 4px;
+            border-bottom-right-radius: 2px;
         }
         .message-bubble.received {
             align-self: flex-start;
             background: var(--bg3);
             border: 1px solid var(--brd);
             color: var(--text);
-            border-bottom-left-radius: 4px;
+            border-bottom-left-radius: 2px;
         }
         .message-bubble.failed {
             opacity: .75;
@@ -1078,7 +1083,7 @@
         }
         .message-bubble .msg-media {
             margin: 2px 0 6px;
-            border-radius: 10px;
+            border-radius: 6px;
             overflow: hidden;
             cursor: pointer;
             background: #000;
@@ -1113,6 +1118,40 @@
             to {
                 transform: rotate(360deg);
             }
+        }
+        .message-bubble .msg-media-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+            margin: 2px 0 6px;
+            border-radius: 6px;
+            overflow: hidden;
+            max-width: 260px;
+        }
+        .message-bubble .msg-media-grid .grid-cell {
+            position: relative;
+            aspect-ratio: 1;
+            cursor: pointer;
+            background: #000;
+            overflow: hidden;
+        }
+        .message-bubble .msg-media-grid .grid-cell img,
+        .message-bubble .msg-media-grid .grid-cell video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .message-bubble .msg-media-grid .grid-cell .more-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .55);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.1rem;
         }
         .message-bubble .msg-doc {
             display: flex;
@@ -1430,6 +1469,436 @@
             font-size: .85rem;
             font-weight: 600;
         }
+
+        /* ============================================================
+               FREEUPPER FULL-SCREEN CHAT MODALS (profile / theme / wallpaper / bubble)
+            ============================================================ */
+        .fu-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 400;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            visibility: hidden;
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity .25s, visibility .25s, transform .3s cubic-bezier(.32, 1, .64, 1);
+        }
+        .fu-screen.open {
+            visibility: visible;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .fu-screen .fu-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 12px;
+            border-bottom: 1px solid var(--brd);
+            flex-shrink: 0;
+        }
+        .fu-screen .fu-topbar button.fu-back {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: none;
+            background: var(--pdim);
+            color: var(--p);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .fu-screen .fu-topbar h2 {
+            font-size: 1.05rem;
+            font-weight: 800;
+            flex: 1;
+        }
+        .fu-screen .fu-body {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 40px;
+        }
+
+        /* Hero header w/ gradient + glow avatar */
+        .fu-hero {
+            padding: 28px 20px 20px;
+            text-align: center;
+            background: radial-gradient(120% 100% at 50% 0%, var(--pdim), transparent 70%);
+        }
+        .fu-hero .fu-avatar-glow {
+            width: 104px;
+            height: 104px;
+            border-radius: 50%;
+            margin: 0 auto 14px;
+            padding: 3px;
+            background: conic-gradient(from 180deg, var(--p), #a78bfa, var(--p));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fu-hero .fu-avatar-glow img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--bg);
+        }
+        .fu-hero h3 {
+            font-size: 1.15rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .fu-hero .fu-sub {
+            font-size: .85rem;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        /* Chip action row */
+        .fu-chip-row {
+            display: flex;
+            gap: 10px;
+            padding: 16px 16px 6px;
+            overflow-x: auto;
+        }
+        .fu-chip-row::-webkit-scrollbar {
+            display: none;
+        }
+        .fu-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            padding: 9px 16px;
+            border-radius: 100px;
+            background: var(--pdim);
+            color: var(--p);
+            font-weight: 700;
+            font-size: .82rem;
+            cursor: pointer;
+            transition: background .15s;
+            border: 1px solid transparent;
+        }
+        .fu-chip:hover {
+            background: var(--p);
+            color: #fff;
+        }
+        .fu-chip i {
+            font-size: 1rem;
+        }
+
+        /* List rows w/ icon chip on the left */
+        .fu-list {
+            padding: 10px 0;
+        }
+        .fu-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 13px 18px;
+            cursor: pointer;
+            transition: background .12s;
+        }
+        .fu-row:hover {
+            background: var(--pdim);
+        }
+        .fu-row .fu-ico {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--pdim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--p);
+            flex-shrink: 0;
+            font-size: 1.05rem;
+        }
+        .fu-row .fu-row-label {
+            flex: 1;
+            font-size: .92rem;
+            font-weight: 600;
+        }
+        .fu-row .fu-row-right {
+            color: var(--muted);
+            font-size: .8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .fu-row.danger .fu-ico {
+            background: rgba(239, 68, 68, .12);
+            color: var(--danger);
+        }
+        .fu-row.danger .fu-row-label {
+            color: var(--danger);
+        }
+        .fu-divider {
+            height: 8px;
+            background: var(--bg2);
+        }
+
+        /* Segmented sliding tabs */
+        .fu-tabs {
+            display: flex;
+            position: relative;
+            margin: 12px 16px;
+            background: var(--bg2);
+            border-radius: 100px;
+            padding: 4px;
+        }
+        .fu-tabs .fu-tab {
+            flex: 1;
+            text-align: center;
+            padding: 9px 0;
+            font-size: .82rem;
+            font-weight: 700;
+            color: var(--muted);
+            border-radius: 100px;
+            cursor: pointer;
+            position: relative;
+            z-index: 1;
+            transition: color .2s;
+        }
+        .fu-tabs .fu-tab.active {
+            color: #fff;
+        }
+        .fu-tabs .fu-tab-indicator {
+            position: absolute;
+            top: 4px;
+            bottom: 4px;
+            background: var(--p);
+            border-radius: 100px;
+            transition: left .25s cubic-bezier(.4, 0, .2, 1), width .25s;
+            z-index: 0;
+        }
+
+        /* Theme / wallpaper preview grid */
+        .fu-theme-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            padding: 4px 16px 20px;
+        }
+        .fu-theme-card {
+            aspect-ratio: 9/16;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            border: 2px solid var(--brd);
+            cursor: pointer;
+            background: var(--bg2);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 8px;
+        }
+        .fu-theme-card.active {
+            border-color: var(--p);
+            box-shadow: 0 0 0 3px var(--pdim);
+        }
+        .fu-theme-card img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .fu-theme-card .fu-bubble-preview {
+            align-self: flex-end;
+            width: 60%;
+            height: 12px;
+            border-radius: 8px;
+            position: relative;
+            z-index: 1;
+        }
+        .fu-theme-card .fu-check {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--p);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .7rem;
+            z-index: 2;
+        }
+        .fu-upload-card {
+            aspect-ratio: 9/16;
+            border-radius: 16px;
+            border: 1.5px dashed var(--brd2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: .72rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 8px;
+        }
+        .fu-upload-card i {
+            font-size: 1.4rem;
+            color: var(--p);
+        }
+
+        /* Solid-color wallpaper swatches */
+        .fu-color-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            padding: 4px 16px 20px;
+        }
+        .fu-swatch {
+            aspect-ratio: 1;
+            border-radius: 14px;
+            cursor: pointer;
+            position: relative;
+            border: 2px solid transparent;
+            transition: transform .15s;
+        }
+        .fu-swatch:active {
+            transform: scale(.92);
+        }
+        .fu-swatch.active {
+            border-color: #fff;
+            box-shadow: 0 0 0 3px var(--p);
+        }
+        .fu-swatch .fu-check {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 1.1rem;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+        }
+
+        /* Media/Links/Docs grid + rows */
+        .fu-media-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 3px;
+            padding: 0 2px;
+        }
+        .fu-media-grid .fu-media-cell {
+            aspect-ratio: 1;
+            position: relative;
+            cursor: pointer;
+            overflow: hidden;
+            background: #000;
+        }
+        .fu-media-grid .fu-media-cell img,
+        .fu-media-grid .fu-media-cell video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .fu-media-grid .fu-media-cell .dur {
+            position: absolute;
+            bottom: 4px;
+            right: 6px;
+            color: #fff;
+            font-size: .65rem;
+            font-weight: 700;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+        }
+        .fu-link-row,
+        .fu-doc-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--brd);
+            cursor: pointer;
+        }
+        .fu-link-row .fu-link-thumb {
+            width: 46px;
+            height: 46px;
+            border-radius: 10px;
+            object-fit: cover;
+            background: var(--bg2);
+            flex-shrink: 0;
+        }
+        .fu-link-row .fu-link-info,
+        .fu-doc-row .fu-doc-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .fu-link-row .fu-link-title,
+        .fu-doc-row .fu-doc-title {
+            font-weight: 700;
+            font-size: .87rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .fu-link-row .fu-link-domain,
+        .fu-doc-row .fu-doc-meta {
+            font-size: .74rem;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+        .fu-doc-row .fu-doc-ico {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: var(--pdim);
+            color: var(--p);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        .fu-empty-tab {
+            text-align: center;
+            padding: 60px 24px;
+            color: var(--muted);
+            font-size: .85rem;
+        }
+
+        /* ─── REACTION PICKER ─── */
+        .reaction-picker {
+            display: none;
+            position: fixed;
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            border-radius: 100px;
+            padding: 8px 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .45);
+            z-index: 300;
+            gap: 6px;
+            animation: fadeUp .15s ease both;
+        }
+        .reaction-picker.open {
+            display: flex;
+        }
+        .reaction-picker .reaction-emoji {
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 50%;
+            transition: transform .15s, background .15s;
+            line-height: 1;
+        }
+        .reaction-picker .reaction-emoji:hover {
+            transform: scale(1.2);
+            background: var(--pdim);
+        }
     </style>
 </head>
 <body>
@@ -1619,48 +2088,137 @@
         </div>
     </div>
 
-    <!-- ===== CHAT PROFILE MODAL (unified for 1:1 & groups) ===== -->
-    <div class="poll-modal" id="chatProfileModal">
-        <div class="poll-sheet" style="max-height:85vh;">
-            <div class="poll-header">
-                <h3>Chat Info</h3>
-                <button onclick="closeChatProfileModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <!-- ===== FREEUPPER CHAT PROFILE (full-screen) ===== -->
+    <div class="fu-screen" id="fuProfileScreen">
+        <div class="fu-topbar">
+            <button class="fu-back" onclick="closeChatProfileModal()"><i class="ri-arrow-left-line"></i></button>
+            <h2>Chat Info</h2>
+        </div>
+        <div class="fu-body">
+            <div class="fu-hero">
+                <div class="fu-avatar-glow"><img id="cpAvatar" src="" alt=""></div>
+                <h3 id="cpNameDisplay" onclick="startEditChatName()">
+                    <span id="cpNameText"></span>
+                    <i class="ri-pencil-line" id="cpEditIcon" style="font-size:.8rem;color:var(--muted);"></i>
+                </h3>
+                <input id="cpNameInput" type="text" maxlength="50" style="display:none;width:80%;margin:8px auto 0;padding:8px 12px;border-radius:10px;border:1.5px solid var(--p);background:var(--inp);color:var(--text);font-size:.9rem;text-align:center;" onkeydown="if(event.key==='Enter')saveChatName()" onblur="saveChatName()">
+                <div class="fu-sub" id="cpSubtext"></div>
             </div>
 
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-                <img id="cpAvatar" src="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;background:var(--bg4);">
-                <div style="flex:1;min-width:0;">
-                    <div id="cpNameDisplay" style="font-weight:800;font-size:1rem;display:flex;align-items:center;gap:6px;cursor:pointer;" onclick="startEditChatName()">
-                        <span id="cpNameText"></span>
-                        <svg id="cpEditIcon" viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--muted);fill:none;stroke-width:2;"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
-                    </div>
-                    <input id="cpNameInput" type="text" maxlength="50" style="display:none;width:100%;padding:6px 10px;border-radius:8px;border:1.5px solid var(--p);background:var(--inp);color:var(--text);font-size:.9rem;" onkeydown="if(event.key==='Enter')saveChatName()" onblur="saveChatName()">
-                    <div id="cpSubtext" style="font-size:.8rem;color:var(--muted);margin-top:2px;"></div>
+            <div class="fu-chip-row">
+                <div class="fu-chip group-only hidden" onclick="closeChatProfileModal();openAddMembersModal();"><i class="ri-user-add-line"></i>Add</div>
+                <div class="fu-chip" onclick="openPartnerProfile()"><i class="ri-user-line"></i>Profile</div>
+                <div class="fu-chip" onclick="openGroupSearch()"><i class="ri-search-line"></i>Search</div>
+                <div class="fu-chip" onclick="openChatThemeModal()"><i class="ri-palette-line"></i>Theme</div>
+            </div>
+
+            <div class="fu-list">
+                <div class="fu-row" onclick="openChatThemeModal()">
+                    <div class="fu-ico"><i class="ri-palette-line"></i></div>
+                    <div class="fu-row-label">Chat Theme</div>
+                    <div class="fu-row-right"><i class="ri-arrow-right-s-line"></i></div>
+                </div>
+                <div class="fu-row" onclick="openMediaLinksDocsModal()">
+                    <div class="fu-ico"><i class="ri-image-2-line"></i></div>
+                    <div class="fu-row-label">Media, Links &amp; Docs</div>
+                    <div class="fu-row-right"><span id="cpMediaCount">0</span><i class="ri-arrow-right-s-line"></i></div>
+                </div>
+                <div class="fu-row group-only hidden" onclick="openGroupMembersList()">
+                    <div class="fu-ico"><i class="ri-group-line"></i></div>
+                    <div class="fu-row-label">Members</div>
+                    <div class="fu-row-right"><span id="cpMembersLink"></span><i class="ri-arrow-right-s-line"></i></div>
+                </div>
+                <div class="fu-row" style="cursor:default;">
+                    <div class="fu-ico"><i class="ri-notification-off-line"></i></div>
+                    <div class="fu-row-label">Mute Notifications</div>
+                    <label class="gi-toggle"><input type="checkbox" id="cpMuteToggle" onchange="toggleMuteChat(this.checked)"><span class="gi-toggle-slider"></span></label>
                 </div>
             </div>
-
-            <div style="display:flex;flex-direction:column;">
-                <div class="gi-row" onclick="openChatProfileTheme()"><span>Chat Theme</span></div>
-                <div class="gi-row" onclick="openGroupMedia()"><span>Media, Links &amp; Files</span><span style="color:var(--muted);font-size:.85rem;" id="cpMediaCount">0</span></div>
-                <div class="gi-row" onclick="openGroupSearch()"><span>Search in Conversation</span></div>
-                <div class="gi-row group-only hidden" onclick="openGroupMembersList()"><span>Members</span><span style="color:var(--muted);font-size:.85rem;" id="cpMembersLink"></span></div>
-                <div class="gi-row group-only hidden" onclick="closeChatProfileModal();openAddMembersModal();"><span>Add Members</span></div>
-                <div class="gi-row" style="justify-content:space-between;"><span>Mute Notifications</span><label class="gi-toggle"><input type="checkbox" id="cpMuteToggle" onchange="toggleMuteChat(this.checked)"><span class="gi-toggle-slider"></span></label></div>
-                <div class="gi-row group-only hidden" style="color:var(--danger);" onclick="leaveGroup()"><span>Leave Group</span></div>
-                <div class="gi-row dm-only hidden" style="color:var(--danger);" onclick="reportChatPartner()"><span>Report</span></div>
-            </div>
-
-            <div id="cpThemePanel" class="hidden" style="margin-top:14px;">
-                <div class="theme-grid">
-                    <div class="theme-opt" data-theme="default" onclick="setChatTheme('default')">Default</div>
-                    <div class="theme-opt" data-theme="theme1" onclick="setChatTheme('theme1')"><img src="/themes/theme1.png" alt="Theme 1"></div>
-                    <div class="theme-opt" data-theme="theme2" onclick="setChatTheme('theme2')"><img src="/themes/theme2.png" alt="Theme 2"></div>
-                    <div class="theme-opt" data-theme="theme3" onclick="setChatTheme('theme3')"><img src="/themes/theme3.png" alt="Theme 3"></div>
-                    <div class="theme-opt" data-theme="theme4" onclick="setChatTheme('theme4')"><img src="/themes/theme4.png" alt="Theme 4"></div>
-                    <div class="theme-opt" data-theme="theme5" onclick="setChatTheme('theme5')"><img src="/themes/theme5.png" alt="Theme 5"></div>
-                    <button onclick="uploadCustomTheme()">Upload from device</button>
+            <div class="fu-divider"></div>
+            <div class="fu-list">
+                <div class="fu-row danger group-only hidden" onclick="leaveGroup()">
+                    <div class="fu-ico"><i class="ri-logout-box-line"></i></div>
+                    <div class="fu-row-label">Leave Group</div>
+                </div>
+                <div class="fu-row danger dm-only hidden" onclick="reportChatPartner()">
+                    <div class="fu-ico"><i class="ri-flag-line"></i></div>
+                    <div class="fu-row-label">Report</div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- ===== CHAT THEME (full-screen) ===== -->
+    <div class="fu-screen" id="fuThemeScreen">
+        <div class="fu-topbar">
+            <button class="fu-back" onclick="closeChatThemeModal()"><i class="ri-arrow-left-line"></i></button>
+            <h2>Chat Theme</h2>
+        </div>
+        <div class="fu-body">
+            <div class="fu-theme-grid" id="fuThemePresetGrid"></div>
+            <div class="fu-divider"></div>
+            <div class="fu-list">
+                <div class="fu-row" onclick="openBubbleColorModal()">
+                    <div class="fu-ico"><i class="ri-chat-3-line"></i></div>
+                    <div class="fu-row-label">Bubble Color</div>
+                    <div class="fu-row-right"><span class="fu-bubble-dot" id="fuThemeBubbleDot" style="width:18px;height:18px;border-radius:50%;display:inline-block;"></span><i class="ri-arrow-right-s-line"></i></div>
+                </div>
+                <div class="fu-row" onclick="openWallpaperModal()">
+                    <div class="fu-ico"><i class="ri-image-line"></i></div>
+                    <div class="fu-row-label">Wallpaper</div>
+                    <div class="fu-row-right"><i class="ri-arrow-right-s-line"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== WALLPAPER (full-screen) ===== -->
+    <div class="fu-screen" id="fuWallpaperScreen">
+        <div class="fu-topbar">
+            <button class="fu-back" onclick="closeWallpaperModal()"><i class="ri-arrow-left-line"></i></button>
+            <h2>Wallpaper</h2>
+        </div>
+        <div class="fu-body">
+            <div class="fu-list">
+                <div class="fu-row" onclick="chooseWallpaperFromPhotos()">
+                    <div class="fu-ico"><i class="ri-image-add-line"></i></div>
+                    <div class="fu-row-label">Upload from device</div>
+                </div>
+                <div class="fu-row" onclick="showWallpaperColorGrid()">
+                    <div class="fu-ico"><i class="ri-contrast-2-line"></i></div>
+                    <div class="fu-row-label">Solid color</div>
+                </div>
+            </div>
+            <div id="fuWallpaperColorGrid" class="fu-color-grid hidden"></div>
+            <div class="fu-theme-grid" id="fuWallpaperPresetGrid" style="padding-top:14px;"></div>
+        </div>
+    </div>
+
+    <!-- ===== BUBBLE COLOR (full-screen) ===== -->
+    <div class="fu-screen" id="fuBubbleScreen">
+        <div class="fu-topbar">
+            <button class="fu-back" onclick="closeBubbleColorModal()"><i class="ri-arrow-left-line"></i></button>
+            <h2>Bubble Color</h2>
+        </div>
+        <div class="fu-body">
+            <div class="fu-color-grid" id="fuBubbleColorGrid" style="padding-top:16px;"></div>
+        </div>
+    </div>
+
+    <!-- ===== MEDIA / LINKS / DOCS (full-screen) ===== -->
+    <div class="fu-screen" id="fuMediaScreen">
+        <div class="fu-topbar">
+            <button class="fu-back" onclick="closeMediaLinksDocsModal()"><i class="ri-arrow-left-line"></i></button>
+            <h2>Shared Content</h2>
+        </div>
+        <div class="fu-body">
+            <div class="fu-tabs" id="fuMediaTabs">
+                <div class="fu-tab-indicator" id="fuMediaTabIndicator"></div>
+                <div class="fu-tab active" data-tab="media" onclick="switchMediaTab('media')">Media</div>
+                <div class="fu-tab" data-tab="links" onclick="switchMediaTab('links')">Links</div>
+                <div class="fu-tab" data-tab="docs" onclick="switchMediaTab('docs')">Docs</div>
+            </div>
+            <div id="fuMediaTabContent"></div>
         </div>
     </div>
 
@@ -2089,6 +2647,7 @@
 
                 // Apply chat theme
                 applyChatBackground(conv.theme_url || null);
+                applyBubbleColor(conv.bubble_color || 'brand');
 
                 messagesArea.innerHTML =
                     `<div class="no-messages">${emptyChatIllustration()}<p>Loading…</p></div>`;
@@ -2219,19 +2778,37 @@
                     if (msg.message_type === 'image' && msg.media_url) {
                         const uploadSpinner = msg.uploading ?
                             `<div class="upload-spinner"><div class="ring"></div></div>` : '';
-                        contentHtml = `
-                                <div class="msg-media" onclick="${msg.uploading ? '' : `openImage('${msg.media_url}')`}" style="position:relative;">
+                        // Check for multiple images (media_urls)
+                        const urls = msg.media_urls && msg.media_urls.length ? msg.media_urls : (msg.media_url ? [msg
+                            .media_url
+                        ] : []);
+                        if (urls.length > 1) {
+                            const gridItems = urls.slice(0, 4).map((u, i) => {
+                                const more = i === 3 && urls.length > 4 ? `+${urls.length - 4}` : '';
+                                return `<div class="grid-cell" onclick="openImage('${u}')">
+                                        <img src="${u}" loading="lazy">
+                                        ${more ? `<div class="more-overlay">${more}</div>` : ''}
+                                    </div>`;
+                            }).join('');
+                            contentHtml = `
+                                <div class="msg-media-grid">${gridItems}</div>
+                                ${msg.text ? `<div>${escapeHtml(msg.text)}</div>` : ''}
+                            `;
+                        } else {
+                            contentHtml = `
+                                <div class="msg-media" onclick="openImage('${msg.media_url}')" style="position:relative;">
                                     <img src="${msg.media_url}" loading="lazy" alt="Image" />
                                     ${uploadSpinner}
                                 </div>
                                 ${msg.text ? `<div>${escapeHtml(msg.text)}</div>` : ''}
                             `;
+                        }
                     } else if (msg.message_type === 'video' && msg.media_url) {
                         const uploadSpinner = msg.uploading ?
                             `<div class="upload-spinner"><div class="ring"></div></div>` : '';
                         contentHtml = `
                                 <div class="msg-media" style="position:relative;">
-                                    <video src="${msg.media_url}" controls playsinline preload="metadata" style="max-height:300px;width:100%;"></video>
+                                    <video class="fu-player" data-msg-id="${msg.id}" src="${msg.media_url}" playsinline preload="metadata" style="max-height:300px;width:100%;"></video>
                                     ${uploadSpinner}
                                 </div>
                                 ${msg.text ? `<div>${escapeHtml(msg.text)}</div>` : ''}
@@ -2345,6 +2922,25 @@
                 });
 
                 messagesArea.innerHTML = html;
+                initFuPlayers();
+            }
+
+            // ─── Custom video player (Plyr — swap engine here without touching markup) ───
+            let fuPlayerInstances = [];
+
+            function initFuPlayers() {
+                if (!window.Plyr) { setTimeout(initFuPlayers, 200); return; }
+                fuPlayerInstances.forEach(p => { try { p.destroy(); } catch (e) {} });
+                fuPlayerInstances = [];
+                document.querySelectorAll('.fu-player').forEach(el => {
+                    fuPlayerInstances.push(new Plyr(el, {
+                        controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume',
+                            'fullscreen'
+                        ],
+                        clickToPlay: true,
+                        resetOnEnd: true
+                    }));
+                });
             }
 
             // ============================================================
@@ -2368,7 +2964,8 @@
                 await loadConversations();
             };
 
-            async function sendMessageToConv(text, type = 'text', mediaUrl = null, replyTo = null, pollData = null) {
+            async function sendMessageToConv(text, type = 'text', mediaUrl = null, replyTo = null, pollData = null,
+                mediaUrls = null) {
                 if (!selectedConversationId || isBlockedConversation) return;
                 const payload = {
                     conversation_id: selectedConversationId,
@@ -2378,6 +2975,7 @@
                     media_url: mediaUrl || null,
                     reply_to: replyTo || null,
                     poll_data: pollData || null,
+                    media_urls: mediaUrls || null,
                 };
                 const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
                 const tempMsg = { ...payload, id: tempId, created_at: new Date().toISOString() };
@@ -2406,7 +3004,8 @@
                 const msg = messages[idx];
                 messages.splice(idx, 1);
                 renderMessages();
-                sendMessageToConv(msg.text, msg.message_type, msg.media_url, msg.reply_to, msg.poll_data);
+                sendMessageToConv(msg.text, msg.message_type, msg.media_url, msg.reply_to, msg.poll_data, msg
+                .media_urls);
             };
 
             // ============================================================
@@ -2557,51 +3156,91 @@
                 });
             }
 
-            // ─── WhatsApp-style upload flow ───
-            async function uploadAndSend(file, type) {
-                const localUrl = URL.createObjectURL(file);
-                const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-                // Determine actual message type from file MIME
-                let msgType = 'document';
-                if (file.type.startsWith('image')) msgType = 'image';
-                else if (file.type.startsWith('video')) msgType = 'video';
+            // ─── WhatsApp-style upload flow (single or multiple) ───
+            async function uploadAndSend(files) {
+                const fileList = Array.isArray(files) ? files : [files];
+                // Filter images/videos only
+                const mediaFiles = fileList.filter(f => f.type.startsWith('image') || f.type.startsWith('video'));
+                if (!mediaFiles.length) return;
 
-                // Push temp optimistic message with local preview and uploading flag
-                const tempMsg = {
-                    id: tempId,
-                    sender_id: currentUserId,
-                    message_type: msgType,
-                    media_url: localUrl,
-                    created_at: new Date().toISOString(),
-                    uploading: true,
-                    text: '',
-                    reply_to: null,
-                    poll_data: null,
-                    message_reactions: [],
-                    message_reads: [],
-                    failed: false,
-                };
-                messages.push(tempMsg);
-                renderMessages();
-                scrollToBottom();
+                // If single file, use the existing optimistic flow with media_url
+                if (mediaFiles.length === 1) {
+                    const file = mediaFiles[0];
+                    const localUrl = URL.createObjectURL(file);
+                    const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+                    let msgType = 'document';
+                    if (file.type.startsWith('image')) msgType = 'image';
+                    else if (file.type.startsWith('video')) msgType = 'video';
 
+                    const tempMsg = {
+                        id: tempId,
+                        sender_id: currentUserId,
+                        message_type: msgType,
+                        media_url: localUrl,
+                        created_at: new Date().toISOString(),
+                        uploading: true,
+                        text: '',
+                        reply_to: null,
+                        poll_data: null,
+                        message_reactions: [],
+                        message_reads: [],
+                        failed: false,
+                        media_urls: null,
+                    };
+                    messages.push(tempMsg);
+                    renderMessages();
+                    scrollToBottom();
+
+                    try {
+                        const result = await uploadToCloudinary(file);
+                        messages = messages.filter(m => m.id !== tempId);
+                        await sendMessageToConv('', msgType, result.url);
+                        await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
+                            selectedConversationId);
+                        await loadConversations();
+                    } catch (err) {
+                        messages = messages.filter(m => m.id !== tempId);
+                        renderMessages();
+                        showToast('Upload failed: ' + err.message, 'r');
+                    }
+                    return;
+                }
+
+                // Multiple files: upload all, then send one message with media_urls array
                 try {
-                    const result = await uploadToCloudinary(file, (pct) => {
-                        // Optionally update a small progress indicator inside the bubble
-                        const el = messagesArea.querySelector(`[data-msg-id="${tempId}"] .upload-pct`);
-                        if (el) el.textContent = pct + '%';
-                    });
-                    // Remove temp optimistic message
+                    const uploadPromises = mediaFiles.map(f => uploadToCloudinary(f));
+                    const results = await Promise.all(uploadPromises);
+                    const urls = results.map(r => r.url);
+                    // Show a temp "uploading" message with grid
+                    const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+                    const firstLocalUrl = URL.createObjectURL(mediaFiles[0]);
+                    const tempMsg = {
+                        id: tempId,
+                        sender_id: currentUserId,
+                        message_type: 'image', // treat as image for grid
+                        media_url: firstLocalUrl,
+                        created_at: new Date().toISOString(),
+                        uploading: true,
+                        text: '',
+                        reply_to: null,
+                        poll_data: null,
+                        message_reactions: [],
+                        message_reads: [],
+                        failed: false,
+                        media_urls: urls.map(u => u), // store all URLs
+                    };
+                    messages.push(tempMsg);
+                    renderMessages();
+                    scrollToBottom();
+
+                    // Remove temp and send real message with media_urls
                     messages = messages.filter(m => m.id !== tempId);
-                    // Send the real message with the uploaded URL
-                    await sendMessageToConv('', msgType, result.url);
+                    // Send as a single message with multiple images
+                    await sendMessageToConv('', 'image', urls[0], null, null, urls);
                     await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
                         selectedConversationId);
                     await loadConversations();
                 } catch (err) {
-                    // Remove temp and show error
-                    messages = messages.filter(m => m.id !== tempId);
-                    renderMessages();
                     showToast('Upload failed: ' + err.message, 'r');
                 }
             }
@@ -2715,13 +3354,13 @@
 
                 const type = this.dataset.type || 'media';
 
-                for (const file of files) {
-                    if (file.size > MAX_FILE_SIZE) {
-                        showToast(`${file.name} is too large (max 25MB)`, 'o');
-                        continue;
-                    }
-                    // If document type, just send directly
-                    if (type === 'document') {
+                if (type === 'document') {
+                    // Document upload – single file
+                    for (const file of files) {
+                        if (file.size > MAX_FILE_SIZE) {
+                            showToast(`${file.name} is too large (max 25MB)`, 'o');
+                            continue;
+                        }
                         try {
                             const result = await uploadToCloudinary(file);
                             await sendMessageToConv('', 'document', result.url);
@@ -2731,11 +3370,12 @@
                         } catch (err) {
                             showToast('Document upload failed: ' + err.message, 'r');
                         }
-                        continue;
                     }
-                    // Media (image/video) — use WhatsApp-style spinner
-                    await uploadAndSend(file, type);
+                    return;
                 }
+
+                // Media (image/video) — use WhatsApp-style spinner, supports multiple
+                await uploadAndSend(files);
             });
 
             // ============================================================
@@ -2854,17 +3494,20 @@
             // ============================================================
             // REACTION PICKER
             // ============================================================
-            const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '👏'];
+            const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🤗'];
+
             window.toggleReactionPicker = function(event, msgId) {
                 const picker = document.getElementById('reactionPicker');
                 const rect = event.target.closest('.message-bubble')?.getBoundingClientRect();
                 if (!rect) return;
                 picker.innerHTML = REACTIONS.map(r =>
-                    `<span class="reaction-emoji" onclick="addReaction('${msgId}', '${r}')">${r}</span>`).join('');
+                    `<span class="reaction-emoji" onclick="addReaction('${msgId}', '${r}')">${r}</span>`).join('') +
+                    `<span class="reaction-emoji" style="font-size:1.1rem;color:var(--muted);background:var(--pdim);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;" onclick="showToast('More reactions coming soon','o')">+</span>`;
                 picker.style.left = (rect.left + rect.width / 2 - 80) + 'px';
                 picker.style.top = (rect.top - 50) + 'px';
                 picker.classList.toggle('open');
             };
+
             window.addReaction = async function(msgId, emoji) {
                 document.getElementById('reactionPicker').classList.remove('open');
                 try {
@@ -2887,15 +3530,19 @@
                 modal.onclick = () => modal.remove();
                 document.body.appendChild(modal);
             };
+
             window.openVideo = function(url) {
                 const modal = document.createElement('div');
                 modal.style.cssText =
-                    'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;cursor:pointer;';
+                    'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;';
                 modal.innerHTML =
-                    `<video src="${url}" controls autoplay style="max-width:95vw;max-height:95vh;border-radius:8px;" />`;
-                modal.onclick = () => { modal.remove(); };
+                    `<div style="max-width:95vw;max-height:95vh;width:600px;" onclick="event.stopPropagation()"><video class="fu-player-lightbox" src="${url}" playsinline autoplay style="border-radius:8px;"></video></div>`;
+                modal.onclick = () => { player.destroy();
+                    modal.remove(); };
                 document.body.appendChild(modal);
+                const player = new Plyr(modal.querySelector('.fu-player-lightbox'), { autoplay: true });
             };
+
             window.openDocument = function(url) { window.open(url, '_blank'); };
 
             // ============================================================
@@ -3201,22 +3848,48 @@
             };
 
             // ============================================================
-            // CHAT PROFILE MODAL (unified for 1:1 & groups)
+            // FREEUPPER CHAT INFO SYSTEM (profile → theme → wallpaper/bubble → media)
             // ============================================================
+            const FU_BUBBLE_COLORS = [
+                { id: 'brand', name: 'FreeUpper', hex: '#8b5cf6' },
+                { id: 'deep', name: 'Deep Purple', hex: '#5b21b6' },
+                { id: 'light', name: 'Light Lavender', hex: '#c4b5fd' },
+                { id: 'blue', name: 'Electric Blue', hex: '#2563eb' },
+                { id: 'teal', name: 'Teal', hex: '#0d9488' },
+                { id: 'emerald', name: 'Emerald', hex: '#059669' },
+                { id: 'rose', name: 'Rose', hex: '#e11d48' },
+                { id: 'crimson', name: 'Crimson', hex: '#be123c' },
+                { id: 'orange', name: 'Sunset', hex: '#ea580c' },
+                { id: 'gold', name: 'Amber Gold', hex: '#d97706' },
+                { id: 'slate', name: 'Slate', hex: '#475569' },
+                { id: 'midnight', name: 'Midnight', hex: '#1e1b4b' },
+            ];
+            const FU_WALLPAPER_COLORS = ['#0b0b0f', '#1e1b4b', '#3730a3', '#065f46', '#7c2d12', '#831843', '#164e63',
+                '#312e81'
+            ];
+            const FU_WALLPAPER_PRESETS = [
+                { id: 'default', label: 'Default', url: null },
+                { id: 'theme1', label: 'Nebula', url: '/themes/theme1.png' },
+                { id: 'theme2', label: 'Dusk', url: '/themes/theme2.png' },
+                { id: 'theme3', label: 'Neon', url: '/themes/theme3.png' },
+                { id: 'theme4', label: 'Circuit', url: '/themes/theme4.png' },
+                { id: 'theme5', label: 'Glass', url: '/themes/theme5.png' },
+            ];
+
+            function currentConv() { return conversations.find(c => c.id === selectedConversationId); }
+
+            // ─── Screen 1: Chat Profile ───
             window.openChatProfile = function() {
-                document.getElementById('chatProfileModal').classList.add('open');
+                document.getElementById('fuProfileScreen').classList.add('open');
                 populateChatProfileModal();
             };
-
             window.closeChatProfileModal = function() {
-                document.getElementById('chatProfileModal').classList.remove('open');
-                document.getElementById('cpThemePanel').classList.add('hidden');
+                document.getElementById('fuProfileScreen').classList.remove('open');
             };
 
             async function populateChatProfileModal() {
-                const conv = conversations.find(c => c.id === selectedConversationId);
+                const conv = currentConv();
                 if (!conv) return;
-
                 const groupRows = document.querySelectorAll('.group-only');
                 const dmRows = document.querySelectorAll('.dm-only');
 
@@ -3241,7 +3914,7 @@
                     const other = conv.otherUser || {};
                     document.getElementById('cpAvatar').src = getAvatar(other);
                     document.getElementById('cpNameText').textContent = getDisplayName(other);
-                    document.getElementById('cpEditIcon').style.display = 'none'; // can't rename a DM
+                    document.getElementById('cpEditIcon').style.display = 'none';
                     document.getElementById('cpSubtext').textContent = '@' + (other.username || '');
                     const { count: mediaCount } = await sb.from('messages').select('id', { count: 'exact', head: true })
                         .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document']);
@@ -3251,22 +3924,21 @@
             }
 
             window.startEditChatName = function() {
-                const conv = conversations.find(c => c.id === selectedConversationId);
-                if (!conv || !conv.is_group) return; // DMs aren't renameable
+                const conv = currentConv();
+                if (!conv || !conv.is_group) return;
                 document.getElementById('cpNameDisplay').style.display = 'none';
                 const input = document.getElementById('cpNameInput');
                 input.style.display = 'block';
                 input.value = conv.group_name || '';
                 input.focus();
             };
-
             window.saveChatName = async function() {
                 const input = document.getElementById('cpNameInput');
                 const disp = document.getElementById('cpNameDisplay');
                 const newName = input.value.trim();
                 input.style.display = 'none';
                 disp.style.display = 'flex';
-                const conv = conversations.find(c => c.id === selectedConversationId);
+                const conv = currentConv();
                 if (!conv || !newName || newName === conv.group_name) return;
                 const { error } = await sb.from('conversations').update({ group_name: newName }).eq('id', conv.id);
                 if (error) { showToast('Failed to rename', 'r'); return; }
@@ -3277,12 +3949,8 @@
                 showToast('Group name updated', 'g');
             };
 
-            window.openChatProfileTheme = function() {
-                document.getElementById('cpThemePanel').classList.toggle('hidden');
-            };
-
             window.toggleMuteChat = async function(muted) {
-                const conv = conversations.find(c => c.id === selectedConversationId);
+                const conv = currentConv();
                 if (!conv) return;
                 let list = new Set(conv.muted_by || []);
                 if (muted) list.add(currentUserId);
@@ -3293,129 +3961,243 @@
                     showToast(muted ? 'Notifications muted' : 'Notifications unmuted', 'g'); } else document.getElementById(
                     'cpMuteToggle').checked = !muted;
             };
-
             window.reportChatPartner = function() {
                 closeChatProfileModal();
                 showToast('Report feature coming soon', 'o');
-                // Hook into your existing report flow, scoped to selectedPartnerId
             };
 
-            // ─── THEME SYSTEM ───
-            async function setChatTheme(themeId, customUrl) {
-                const bg = customUrl || (themeId === 'default' ? null : `/themes/${themeId}.png`);
-                const conv = conversations.find(c => c.id === selectedConversationId);
-                if (!conv) return;
-                try {
-                    await sb.from('conversations').update({ theme_url: bg }).eq('id', conv.id);
-                    conv.theme_url = bg;
-                    applyChatBackground(bg);
-                    // Update active state in theme grid
-                    document.querySelectorAll('.theme-grid .theme-opt').forEach(el => el.classList.remove('active'));
-                    const opt = document.querySelector(`.theme-grid .theme-opt[data-theme="${themeId}"]`);
-                    if (opt) opt.classList.add('active');
-                    showToast('Theme updated', 'g');
-                } catch (err) {
-                    showToast('Failed to update theme', 'r');
-                }
-            }
+            // ─── Screen 2: Chat Theme (bundles bubble color + wallpaper) ───
+            window.openChatThemeModal = function() {
+                document.getElementById('fuThemeScreen').classList.add('open');
+                renderThemePresetGrid();
+                const conv = currentConv();
+                const dot = document.getElementById('fuThemeBubbleDot');
+                const c = FU_BUBBLE_COLORS.find(x => x.id === (conv?.bubble_color || 'brand')) || FU_BUBBLE_COLORS[0];
+                dot.style.background = c.hex;
+            };
+            window.closeChatThemeModal = function() {
+                document.getElementById('fuThemeScreen').classList.remove('open');
+            };
 
-            function applyChatBackground(url) {
-                messagesArea.style.backgroundImage = url ? `url(${url})` : 'none';
-                messagesArea.style.backgroundSize = 'cover';
-                messagesArea.style.backgroundPosition = 'center';
+            function renderThemePresetGrid() {
+                const conv = currentConv();
+                const grid = document.getElementById('fuThemePresetGrid');
+                grid.innerHTML = FU_WALLPAPER_PRESETS.map(t => {
+                    const active = (conv?.theme_url || null) === t.url;
+                    const bg = t.url ? `<img src="${t.url}" alt="${t.label}">` : '';
+                    return `
+                            <div class="fu-theme-card ${active ? 'active' : ''}" onclick="applyThemePreset('${t.id}')" style="background:${t.url ? 'transparent' : 'var(--bg2)'};">
+                                ${bg}
+                                ${active ? '<div class="fu-check"><i class="ri-check-line"></i></div>' : ''}
+                                <div class="fu-bubble-preview" style="background:var(--p);"></div>
+                            </div>`;
+                }).join('');
             }
+            window.applyThemePreset = async function(presetId) {
+                const preset = FU_WALLPAPER_PRESETS.find(p => p.id === presetId);
+                await setChatWallpaper(preset.url);
+                renderThemePresetGrid();
+            };
 
-            function uploadCustomTheme() {
+            // ─── Screen 3a: Wallpaper ───
+            window.openWallpaperModal = function() {
+                document.getElementById('fuThemeScreen').classList.remove('open');
+                document.getElementById('fuWallpaperScreen').classList.add('open');
+                renderWallpaperPresetGrid();
+                document.getElementById('fuWallpaperColorGrid').classList.add('hidden');
+            };
+            window.closeWallpaperModal = function() {
+                document.getElementById('fuWallpaperScreen').classList.remove('open');
+                document.getElementById('fuThemeScreen').classList.add('open');
+            };
+
+            function renderWallpaperPresetGrid() {
+                const conv = currentConv();
+                const grid = document.getElementById('fuWallpaperPresetGrid');
+                grid.innerHTML = FU_WALLPAPER_PRESETS.map(t => {
+                    const active = (conv?.theme_url || null) === t.url;
+                    const bg = t.url ? `<img src="${t.url}" alt="${t.label}">` : '';
+                    return `
+                            <div class="fu-theme-card ${active ? 'active' : ''}" onclick="applyThemePreset('${t.id}');renderWallpaperPresetGrid();" style="background:${t.url ? 'transparent' : 'var(--bg2)'};">
+                                ${bg}${active ? '<div class="fu-check"><i class="ri-check-line"></i></div>' : ''}
+                            </div>`;
+                }).join('');
+            }
+            window.showWallpaperColorGrid = function() {
+                const conv = currentConv();
+                const grid = document.getElementById('fuWallpaperColorGrid');
+                grid.classList.remove('hidden');
+                grid.innerHTML = FU_WALLPAPER_COLORS.map(hex => {
+                    const active = conv?.theme_url === ('solid:' + hex);
+                    return `<div class="fu-swatch ${active ? 'active' : ''}" style="background:${hex};" onclick="setChatWallpaper('solid:${hex}')">${active ? '<div class="fu-check"><i class="ri-check-line"></i></div>' : ''}</div>`;
+                }).join('');
+            };
+            window.chooseWallpaperFromPhotos = function() {
                 const inp = document.createElement('input');
                 inp.type = 'file';
                 inp.accept = 'image/*';
                 inp.onchange = async () => {
                     if (!inp.files || !inp.files.length) return;
                     try {
-                        showToast('Uploading theme...', 'p');
+                        showToast('Uploading wallpaper...', 'p');
                         const result = await uploadToCloudinary(inp.files[0]);
-                        await setChatTheme('custom', result.url);
-                    } catch (err) {
-                        showToast('Theme upload failed: ' + err.message, 'r');
-                    }
+                        await setChatWallpaper(result.url);
+                        renderWallpaperPresetGrid();
+                    } catch (err) { showToast('Wallpaper upload failed: ' + err.message, 'r'); }
                 };
                 inp.click();
-            }
-
-            // ─── Group media, search, members, add members, leave ───
-            window.openGroupMedia = async function() {
-                const conv = conversations.find(c => c.id === selectedConversationId);
-                if (!conv) return;
-                const { data, error } = await sb
-                    .from('messages')
-                    .select('id, message_type, media_url, created_at')
-                    .eq('conversation_id', conv.id)
-                    .in('message_type', ['image', 'video', 'document'])
-                    .order('created_at', { ascending: false });
-                if (error) { showToast('Failed to load media', 'r'); return; }
-
-                const modal = document.createElement('div');
-                modal.style.cssText =
-                    'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
-                const grid = (data || []).filter(m => m.message_type !== 'document').map(m =>
-                    `<div style="aspect-ratio:1;border-radius:10px;overflow:hidden;cursor:pointer;background:#000;" onclick="${m.message_type === 'image' ? `openImage('${m.media_url}')` : `openVideo('${m.media_url}')`}">
-                            ${m.message_type === 'image' ? `<img src="${m.media_url}" style="width:100%;height:100%;object-fit:cover;">` : `<video src="${m.media_url}" style="width:100%;height:100%;object-fit:cover;"></video>`}
-                        </div>`
-                ).join('');
-                const docs = (data || []).filter(m => m.message_type === 'document').map(m => {
-                    const name = m.media_url.split('/').pop();
-                    return `<div class="msg-doc" style="margin:6px 0;" onclick="openDocument('${m.media_url}')"><span class="doc-icon">📄</span><div class="doc-info"><div class="doc-name">${escapeHtml(name)}</div></div></div>`;
-                }).join('');
-
-                modal.innerHTML = `
-                        <div style="background:var(--bg3);border-radius:20px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto;padding:20px;" onclick="event.stopPropagation()">
-                            <h3 style="margin-bottom:14px;font-weight:800;">Media, Links &amp; Files</h3>
-                            ${data && data.length ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">${grid}</div>${docs}` : '<p style="color:var(--muted);">No media shared yet.</p>'}
-                        </div>
-                    `;
-                modal.onclick = () => modal.remove();
-                document.body.appendChild(modal);
             };
 
-            window.openGroupSearch = function() {
-                closeChatProfileModal();
-                const q = prompt('Search messages in this conversation:');
-                if (!q || !q.trim()) return;
-                const term = q.trim().toLowerCase();
-                const match = messages.find(m => (m.text || '').toLowerCase().includes(term));
-                if (!match) { showToast('No matching messages found', 'o'); return; }
-                const el = messagesArea.querySelector(`[data-msg-id="${match.id}"]`);
-                if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    el.style.outline = '2px solid var(--p)';
-                    setTimeout(() => { el.style.outline = 'none'; }, 1500);
+            async function setChatWallpaper(bg) {
+                const conv = currentConv();
+                if (!conv) return;
+                try {
+                    await sb.from('conversations').update({ theme_url: bg }).eq('id', conv.id);
+                    conv.theme_url = bg;
+                    applyChatBackground(bg);
+                    showToast('Wallpaper updated', 'g');
+                } catch (err) { showToast('Failed to update wallpaper', 'r'); }
+            }
+
+            function applyChatBackground(bg) {
+                if (bg && bg.startsWith('solid:')) {
+                    messagesArea.style.backgroundImage = 'none';
+                    messagesArea.style.backgroundColor = bg.replace('solid:', '');
+                } else {
+                    messagesArea.style.backgroundImage = bg ? `url(${bg})` : 'none';
+                    messagesArea.style.backgroundColor = 'transparent';
+                    messagesArea.style.backgroundSize = 'cover';
+                    messagesArea.style.backgroundPosition = 'center';
+                }
+            }
+
+            // ─── Screen 3b: Bubble Color ───
+            window.openBubbleColorModal = function() {
+                document.getElementById('fuThemeScreen').classList.remove('open');
+                document.getElementById('fuBubbleScreen').classList.add('open');
+                renderBubbleColorGrid();
+            };
+            window.closeBubbleColorModal = function() {
+                document.getElementById('fuBubbleScreen').classList.remove('open');
+                document.getElementById('fuThemeScreen').classList.add('open');
+            };
+
+            function renderBubbleColorGrid() {
+                const conv = currentConv();
+                const active = conv?.bubble_color || 'brand';
+                document.getElementById('fuBubbleColorGrid').innerHTML = FU_BUBBLE_COLORS.map(c => `
+                        <div class="fu-swatch ${c.id === active ? 'active' : ''}" style="background:${c.hex};" onclick="setBubbleColor('${c.id}')" title="${c.name}">
+                            ${c.id === active ? '<div class="fu-check"><i class="ri-check-line"></i></div>' : ''}
+                        </div>`).join('');
+            }
+            window.setBubbleColor = async function(colorId) {
+                const conv = currentConv();
+                if (!conv) return;
+                try {
+                    await sb.from('conversations').update({ bubble_color: colorId }).eq('id', conv.id);
+                    conv.bubble_color = colorId;
+                    applyBubbleColor(colorId);
+                    renderBubbleColorGrid();
+                    showToast('Bubble color updated', 'g');
+                } catch (err) { showToast('Failed to update bubble color', 'r'); }
+            };
+
+            function applyBubbleColor(colorId) {
+                const c = FU_BUBBLE_COLORS.find(x => x.id === colorId) || FU_BUBBLE_COLORS[0];
+                messagesArea.style.setProperty('--bubble-color', c.hex);
+            }
+
+            // ─── Media, Links & Docs ───
+            window.openMediaLinksDocsModal = function() {
+                document.getElementById('fuMediaScreen').classList.add('open');
+                switchMediaTab('media');
+            };
+            window.closeMediaLinksDocsModal = function() {
+                document.getElementById('fuMediaScreen').classList.remove('open');
+            };
+            window.switchMediaTab = async function(tab) {
+                document.querySelectorAll('#fuMediaTabs .fu-tab').forEach(t => t.classList.toggle('active', t.dataset.tab ===
+                    tab));
+                const tabs = ['media', 'links', 'docs'];
+                const idx = tabs.indexOf(tab);
+                const indicator = document.getElementById('fuMediaTabIndicator');
+                indicator.style.width = 'calc(33.333% - 4px)';
+                indicator.style.left = `calc(${idx * 33.333}% + 4px)`;
+
+                const conv = currentConv();
+                const content = document.getElementById('fuMediaTabContent');
+                if (!conv) return;
+                content.innerHTML = `<div class="fu-empty-tab">Loading…</div>`;
+
+                if (tab === 'media') {
+                    const { data } = await sb.from('messages').select('id, message_type, media_url, media_urls')
+                        .eq('conversation_id', conv.id).in('message_type', ['image', 'video']).order('created_at', {
+                            ascending: false
+                        });
+                    const items = [];
+                    (data || []).forEach(m => {
+                        const urls = m.media_urls && m.media_urls.length ? m.media_urls : (m.media_url ? [m
+                            .media_url
+                        ] : []);
+                        urls.forEach(u => items.push({ url: u, type: m.message_type }));
+                    });
+                    content.innerHTML = items.length ?
+                        `<div class="fu-media-grid">${items.map(i => `
+                                <div class="fu-media-cell" onclick="${i.type === 'image' ? `openImage('${i.url}')` : `openVideo('${i.url}')`}">
+                                    ${i.type === 'image' ? `<img src="${i.url}" loading="lazy">` : `<video src="${i.url}" preload="metadata"></video><span class="dur"><i class="ri-play-fill"></i></span>`}
+                                </div>`).join('')}</div>` :
+                        `<div class="fu-empty-tab">No media shared yet.</div>`;
+                } else if (tab === 'links') {
+                    const { data } = await sb.from('messages').select('id, text, created_at').eq('conversation_id', conv.id)
+                        .not('text', 'is', null).order('created_at', { ascending: false }).limit(200);
+                    const urlRe = /(https?:\/\/[^\s]+)/gi;
+                    const links = [];
+                    (data || []).forEach(m => { const found = (m.text || '').match(urlRe); if (found) found.forEach(u =>
+                            links.push(u)); });
+                    content.innerHTML = links.length ? links.map(u => {
+                        let domain = u;
+                        try { domain = new URL(u).hostname.replace('www.', ''); } catch (e) {}
+                        return `<div class="fu-link-row" onclick="window.open('${u}','_blank')">
+                                    <div class="fu-doc-ico"><i class="ri-link"></i></div>
+                                    <div class="fu-link-info"><div class="fu-link-title">${escapeHtml(u)}</div><div class="fu-link-domain">${escapeHtml(domain)}</div></div>
+                                </div>`;
+                    }).join('') : `<div class="fu-empty-tab">No links shared yet.</div>`;
+                } else {
+                    const { data } = await sb.from('messages').select('id, media_url').eq('conversation_id', conv.id)
+                        .eq('message_type', 'document').order('created_at', { ascending: false });
+                    content.innerHTML = (data && data.length) ? data.map(m => {
+                        const name = (m.media_url || '').split('/').pop() || 'Document';
+                        const ext = name.split('.').pop()?.toLowerCase() || '';
+                        const icons = { pdf: 'ri-file-pdf-2-line', doc: 'ri-file-word-2-line', docx: 'ri-file-word-2-line',
+                            xls: 'ri-file-excel-2-line', xlsx: 'ri-file-excel-2-line', ppt: 'ri-file-ppt-2-line',
+                            pptx: 'ri-file-ppt-2-line', zip: 'ri-file-zip-line', txt: 'ri-file-text-line' };
+                        return `<div class="fu-doc-row" onclick="openDocument('${m.media_url}')">
+                                    <div class="fu-doc-ico"><i class="${icons[ext] || 'ri-file-3-line'}"></i></div>
+                                    <div class="fu-doc-info"><div class="fu-doc-title">${escapeHtml(name)}</div><div class="fu-doc-meta">Tap to view</div></div>
+                                </div>`;
+                    }).join('') : `<div class="fu-empty-tab">No documents shared yet.</div>`;
                 }
             };
 
+            // ─── Group members / leave (unchanged logic, kept for group-only rows above) ───
             window.openGroupMembersList = async function() {
-                const conv = conversations.find(c => c.id === selectedConversationId);
+                const conv = currentConv();
                 if (!conv) return;
                 const { data, error } = await sb
                     .from('conversation_members')
                     .select('user_id, role, profiles:profiles(id, display_name, username, avatar_url, verified_status)')
                     .eq('conversation_id', conv.id);
                 if (error) { showToast('Failed to load members', 'r'); return; }
-
                 const myRow = data.find(m => m.user_id === currentUserId);
                 const iAmAdmin = myRow && myRow.role === 'admin';
-
                 const modal = document.createElement('div');
-                modal.id = 'membersListOverlay';
                 modal.style.cssText =
                     'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
                 modal.innerHTML = `
                         <div style="background:var(--bg3);border-radius:20px;max-width:420px;width:100%;max-height:75vh;overflow-y:auto;padding:20px;" onclick="event.stopPropagation()">
                             <h3 style="margin-bottom:14px;font-weight:800;">Members (${data.length})</h3>
-                            <div id="membersListRows">
-                                ${data.map(m => memberRowHtml(m, iAmAdmin)).join('')}
-                            </div>
-                        </div>
-                    `;
+                            <div id="membersListRows">${data.map(m => memberRowHtml(m, iAmAdmin)).join('')}</div>
+                        </div>`;
                 modal.onclick = () => modal.remove();
                 document.body.appendChild(modal);
             };
@@ -3432,42 +4214,50 @@
                                 <div class="u-handle">@${escapeHtml(p.username || '')}</div>
                             </div>
                             ${m.role === 'admin' ? '<span class="u-tag">Admin</span>' : ''}
-                            ${canRemove ? `<button onclick="event.stopPropagation();removeMemberFromGroup('${m.user_id}', '${escapeHtml(getDisplayName(p))}')" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:6px;flex-shrink:0;" title="Remove"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : ''}
-                        </div>
-                    `;
+                            ${canRemove ? `<button onclick="event.stopPropagation();removeMemberFromGroup('${m.user_id}', '${escapeHtml(getDisplayName(p))}')" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:6px;flex-shrink:0;" title="Remove"><i class="ri-close-line"></i></button>` : ''}
+                        </div>`;
             }
-
             window.removeMemberFromGroup = async function(userId, name) {
                 if (!confirm(`Remove ${name} from the group?`)) return;
-                const conv = conversations.find(c => c.id === selectedConversationId);
+                const conv = currentConv();
                 if (!conv) return;
                 try {
-                    const { error } = await sb.from('conversation_members').delete()
-                        .eq('conversation_id', conv.id).eq('user_id', userId);
+                    const { error } = await sb.from('conversation_members').delete().eq('conversation_id', conv.id).eq(
+                        'user_id', userId);
                     if (error) throw error;
                     const row = document.querySelector(`[data-member-id="${userId}"]`);
                     if (row) row.remove();
                     showToast(`Removed ${name}`, 'g');
-                } catch (err) {
-                    console.error('removeMemberFromGroup error:', err);
-                    showToast('Failed to remove member', 'r');
-                }
+                } catch (err) { showToast('Failed to remove member', 'r'); }
             };
-
             window.leaveGroup = async function() {
-                const conv = conversations.find(c => c.id === selectedConversationId);
+                const conv = currentConv();
                 if (!conv) return;
                 if (!confirm(`Leave "${conv.group_name || 'this group'}"?`)) return;
                 try {
-                    const { error } = await sb.from('conversation_members').delete()
-                        .eq('conversation_id', conv.id).eq('user_id', currentUserId);
+                    const { error } = await sb.from('conversation_members').delete().eq('conversation_id', conv.id).eq(
+                        'user_id', currentUserId);
                     if (error) throw error;
                     closeChatProfileModal();
                     showToast('You left the group', 'g');
                     closeChatView();
                     await loadConversations();
-                } catch (err) {
-                    showToast('Failed to leave group', 'r');
+                } catch (err) { showToast('Failed to leave group', 'r'); }
+            };
+
+            // ─── Group search (reused from earlier) ───
+            window.openGroupSearch = function() {
+                closeChatProfileModal();
+                const q = prompt('Search messages in this conversation:');
+                if (!q || !q.trim()) return;
+                const term = q.trim().toLowerCase();
+                const match = messages.find(m => (m.text || '').toLowerCase().includes(term));
+                if (!match) { showToast('No matching messages found', 'o'); return; }
+                const el = messagesArea.querySelector(`[data-msg-id="${match.id}"]`);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.style.outline = '2px solid var(--p)';
+                    setTimeout(() => { el.style.outline = 'none'; }, 1500);
                 }
             };
 
@@ -3949,16 +4739,14 @@
         /* ─── REACTION PICKER ─── */
         .reaction-picker {
             display: none;
-            position: absolute;
-            bottom: 100%;
-            left: 0;
+            position: fixed;
             background: var(--bg3);
-            border: 1px solid var(--brd);
-            border-radius: 20px;
-            padding: 6px 10px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, .3);
-            z-index: 30;
-            gap: 4px;
+            border: 1px solid var(--brd2);
+            border-radius: 100px;
+            padding: 8px 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .45);
+            z-index: 300;
+            gap: 6px;
             animation: fadeUp .15s ease both;
         }
         .reaction-picker.open {
