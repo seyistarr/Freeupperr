@@ -984,20 +984,21 @@
             stroke-width: 2;
         }
         .message-bubble .msg-media {
-            margin: 2px 0 6px;
+            margin: 0 0 4px;
             border-radius: 4px;
             overflow: hidden;
             cursor: pointer;
-            background: #000;
-            max-height: 300px;
-            border: 1px solid rgba(255, 255, 255, .06);
+            background: transparent;
+            max-height: 320px;
+            border: 1px solid rgba(255, 255, 255, .08);
             position: relative;
+            line-height: 0;
         }
         .message-bubble .msg-media img,
         .message-bubble .msg-media video {
             width: 100%;
-            max-height: 300px;
-            object-fit: contain;
+            max-height: 320px;
+            object-fit: cover;
             display: block;
         }
         .message-bubble .msg-media .upload-spinner {
@@ -1025,7 +1026,7 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 2px;
-            margin: 2px 0 6px;
+            margin: 0 0 4px;
             border-radius: 4px;
             overflow: hidden;
             max-width: 260px;
@@ -2018,13 +2019,13 @@
         </div>
     </div>
 
-    <!-- ===== CREATE GROUP MODAL ===== -->
-    <div class="poll-modal" id="createGroupModal">
-        <div class="poll-sheet" style="max-height:85vh;">
-            <div class="poll-header">
-                <h3>Create Group</h3>
-                <button onclick="closeCreateGroupModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-            </div>
+    <!-- ===== CREATE GROUP (full-screen) ===== -->
+    <div class="fu-screen" id="createGroupModal">
+        <div class="fu-topbar">
+            <button class="fu-back" onclick="closeCreateGroupModal()"><i class="ri-arrow-left-line"></i></button>
+            <h2>Create Group</h2>
+        </div>
+        <div class="fu-body" style="padding:16px;">
             <div class="form-group">
                 <label>Group Name</label>
                 <input type="text" id="groupNameInput" placeholder="Add group name" maxlength="50">
@@ -2033,11 +2034,11 @@
                 <label>Add Members</label>
                 <input type="text" id="groupMemberSearch" placeholder="Search friends..." oninput="filterGroupMembers(this.value)">
             </div>
-            <div id="groupMemberList" style="overflow-y:auto;max-height:40vh;margin-bottom:12px;"></div>
-            <div class="poll-footer">
-                <button class="cancel-poll" onclick="closeCreateGroupModal()">Cancel</button>
-                <button class="create-poll" id="createGroupBtn" onclick="createGroup()">Create Group (0)</button>
-            </div>
+            <div id="groupMemberList" style="overflow-y:auto;max-height:calc(100vh - 320px);margin-bottom:12px;"></div>
+        </div>
+        <div class="poll-footer" style="padding:12px 16px;">
+            <button class="cancel-poll" onclick="closeCreateGroupModal()">Cancel</button>
+            <button class="create-poll" id="createGroupBtn" onclick="createGroup()">Create Group (0)</button>
         </div>
     </div>
 
@@ -2479,7 +2480,7 @@
             }
 
             // ============================================================
-            // SUPABASE - CONVERSATIONS (FIXED: better profile fetching)
+            // SUPABASE - CONVERSATIONS (with fallback for RLS)
             // ============================================================
             async function loadConversations() {
                 if (!currentUserId) return;
@@ -2524,17 +2525,29 @@
                         }
                     });
 
-                    // Fetch profiles for all 1:1 partners
+                    // Fetch profiles for all 1:1 partners (with fallback)
                     let profileMap = {};
                     if (userIds.length) {
                         const { data: profiles, error: pErr } = await sb
                             .from('profiles')
                             .select('id, display_name, username, avatar_url, verified_status, online_status')
                             .in('id', userIds);
-                        if (!pErr && profiles) {
-                            profiles.forEach(p => profileMap[p.id] = p);
-                        } else {
-                            console.warn('Profile fetch error:', pErr);
+                        if (pErr) {
+                            console.error('Profile fetch error:', pErr);
+                            showToast('Could not load profiles: ' + (pErr.message || pErr.code || ''), 'r');
+                        }
+                        (profiles || []).forEach(p => profileMap[p.id] = p);
+
+                        // Fallback: fetch missing profiles one by one
+                        const missingIds = userIds.filter(id => !profileMap[id]);
+                        if (missingIds.length) {
+                            const results = await Promise.all(missingIds.map(id =>
+                                sb.from('profiles')
+                                .select('id, display_name, username, avatar_url, verified_status, online_status')
+                                .eq('id', id)
+                                .maybeSingle()
+                            ));
+                            results.forEach(r => { if (r.data) profileMap[r.data.id] = r.data; });
                         }
                     }
 
@@ -2548,7 +2561,7 @@
                         if (!conv.is_group) {
                             const otherId = conv.user1_id === currentUserId ? conv.user2_id : conv.user1_id;
                             base.otherUserId = otherId;
-                            base.otherUser = profileMap[otherId] || null; // might be null if not found
+                            base.otherUser = profileMap[otherId] || null;
                         }
                         return base;
                     });
@@ -2562,7 +2575,7 @@
             }
 
             // ============================================================
-            // RENDER CONVERSATIONS (fixed fallback)
+            // RENDER CONVERSATIONS
             // ============================================================
             function renderConversations(filter = '') {
                 const q = filter.toLowerCase().trim();
@@ -2670,7 +2683,6 @@
                 if (!conv.is_group) {
                     selectedPartnerId = conv.otherUserId;
                     if (!conv.otherUser && selectedPartnerId) {
-                        // Try to fetch profile again if missing
                         const { data: profile, error } = await sb
                             .from('profiles')
                             .select('id, display_name, username, avatar_url, verified_status, online_status')
@@ -2680,7 +2692,6 @@
                             console.error('partner profile fetch error:', error);
                         } else if (profile) {
                             conv.otherUser = profile;
-                            // Update the conversation in the list so it stays
                             const idx = conversations.findIndex(c => c.id === convId);
                             if (idx !== -1) conversations[idx].otherUser = profile;
                         }
@@ -2702,7 +2713,6 @@
                     document.getElementById('conversationsSidebar').classList.add('hidden');
                 }
 
-                // Apply chat theme
                 applyChatBackground(conv.theme_url || null);
                 applyBubbleColor(conv.bubble_color || 'brand');
 
@@ -2721,7 +2731,6 @@
                     return;
                 }
 
-                // Restore from blocked state if needed
                 if (messageInputArea.classList.contains('blocked-input')) {
                     messageInputArea.classList.remove('blocked-input');
                     messageInputArea.innerHTML = messageInputArea.dataset.defaultHtml || messageInputArea.innerHTML;
@@ -2878,23 +2887,18 @@
 
                     let contentHtml = '';
 
-                    // Text content with link previews
                     let textContent = msg.text || '';
                     const urls = extractUrls(textContent);
                     let linkPreviewHtml = '';
 
-                    // Check if we have link preview data stored
                     if (msg.link_previews && msg.link_previews.length) {
                         msg.link_previews.forEach(p => {
                             linkPreviewHtml += renderLinkPreview({ ...p, url: p.url }, isSent);
                         });
                     } else if (urls.length) {
-                        // We'll fetch previews on the fly - but for rendering, show a placeholder
-                        // The actual fetching happens after render
                         linkPreviewHtml = urls.map(u =>
                             `<div class="link-preview ${isSent ? 'sent' : ''}" style="padding:12px;text-align:center;color:var(--muted);font-size:.75rem;">Loading preview…</div>`
                         ).join('');
-                        // Store URLs to fetch after render
                         msg._pendingUrls = urls;
                     }
 
@@ -2987,15 +2991,12 @@
                                     ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
                                 `;
                     } else {
-                        // Plain text message with possible links
                         let displayText = escapeHtml(textContent);
-                        // Replace URLs with clickable links
                         const urlRe = /(https?:\/\/[^\s]+)/gi;
                         displayText = displayText.replace(urlRe, function(match) {
                             return `<a href="${match}" target="_blank" style="color:var(--p);text-decoration:underline;">${match}</a>`;
                         });
                         contentHtml = `<div>${displayText}</div>`;
-                        // If there are URLs, prepend link previews
                         if (linkPreviewHtml) {
                             contentHtml = linkPreviewHtml + contentHtml;
                         }
@@ -3057,7 +3058,6 @@
                 messagesArea.innerHTML = html;
                 initFuPlayers();
 
-                // Fetch link previews for messages that have pending URLs
                 messages.forEach(msg => {
                     if (msg._pendingUrls && msg._pendingUrls.length) {
                         const msgEl = messagesArea.querySelector(`[data-msg-id="${msg.id}"]`);
@@ -3079,12 +3079,10 @@
                     }
                 }
                 if (previews.length) {
-                    // Store previews in the message
                     msg.link_previews = previews;
                     try {
                         await sb.from('messages').update({ link_previews: previews }).eq('id', msg.id);
                     } catch (e) { /* ignore */ }
-                    // Re-render the message bubble
                     const tempMessages = messages.slice();
                     const idx = tempMessages.findIndex(m => m.id === msg.id);
                     if (idx !== -1) {
@@ -3118,15 +3116,19 @@
             // ============================================================
             window.sendMessage = function() {
                 if (isBlockedConversation) return;
-                const text = messageInput.value.trim();
+                const text = document.getElementById('messageInput')?.value.trim();
                 if (!text || !selectedConversationId) return;
                 const replyTo = replyTargetMessage ? replyTargetMessage.id : null;
 
-                messageInput.value = '';
-                messageInput.style.height = 'auto';
-                sendBtn.classList.remove('visible');
+                const input = document.getElementById('messageInput');
+                if (input) {
+                    input.value = '';
+                    input.style.height = 'auto';
+                }
+                const btn = document.getElementById('sendBtn');
+                if (btn) btn.classList.remove('visible');
                 replyTargetMessage = null;
-                messageInput.placeholder = 'Type a message...';
+                if (input) input.placeholder = 'Type a message...';
 
                 sendMessageToConv(text, 'text', null, replyTo).then(() => {
                     sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
@@ -3623,9 +3625,11 @@
                 const msg = messages.find(m => m.id === contextMenuMsgId);
                 if (msg) {
                     replyTargetMessage = msg;
-                    messageInput.focus();
-                    messageInput.placeholder =
-                        `Replying to ${msg.sender_id === currentUserId ? 'yourself' : '...'}`;
+                    const inp = document.getElementById('messageInput');
+                    if (inp) {
+                        inp.focus();
+                        inp.placeholder = `Replying to ${msg.sender_id === currentUserId ? 'yourself' : '...'}`;
+                    }
                     document.getElementById('msgContextMenu').classList.remove('open');
                 }
             };
@@ -4056,7 +4060,6 @@
                 const groupRows = document.querySelectorAll('.group-only');
                 const dmRows = document.querySelectorAll('.dm-only');
 
-                // Check if user is admin for group avatar upload
                 let isAdmin = false;
                 if (conv.is_group) {
                     const { data: member } = await sb
@@ -4074,7 +4077,6 @@
                     document.getElementById('cpAvatar').src = conv.group_avatar || DEFAULT_AVATAR;
                     document.getElementById('cpNameText').textContent = conv.group_name || 'Group';
                     document.getElementById('cpEditIcon').style.display = 'inline';
-                    // Show upload badge if admin
                     const badge = document.getElementById('cpUploadBadge');
                     if (isAdmin) {
                         badge.classList.remove('hidden');
@@ -4110,11 +4112,9 @@
             window.triggerGroupAvatarUpload = function() {
                 const conv = currentConv();
                 if (!conv || !conv.is_group) {
-                    // For 1:1, open partner profile instead
                     openPartnerProfile();
                     return;
                 }
-                // Check if admin
                 sb.from('conversation_members')
                     .select('role')
                     .eq('conversation_id', conv.id)
@@ -4438,7 +4438,7 @@
                         </div>`;
             }
 
-            // ─── Group Members (full-screen) ───
+            // ─── Group Members (full-screen) — fixed to show all members ───
             window.openGroupMembersList = async function() {
                 const conv = currentConv();
                 if (!conv) return;
@@ -4446,15 +4446,25 @@
                     `Members · ${conv.group_name || 'Group'}`;
                 document.getElementById('fuMembersScreen').classList.add('open');
 
-                const { data, error } = await sb
+                // First fetch member IDs and roles
+                const { data: memberRows, error } = await sb
                     .from('conversation_members')
-                    .select('user_id, role, profiles:profiles(id, display_name, username, avatar_url, verified_status)')
+                    .select('user_id, role')
                     .eq('conversation_id', conv.id);
-                if (error) {
+                if (error || !memberRows) {
                     document.getElementById('fuMembersList').innerHTML =
                         `<div class="fu-empty-tab">Failed to load members.</div>`;
                     return;
                 }
+
+                const memberIds = memberRows.map(m => m.user_id);
+                const { data: memberProfiles } = await sb
+                    .from('profiles')
+                    .select('id, display_name, username, avatar_url, verified_status')
+                    .in('id', memberIds);
+                const profileById = {};
+                (memberProfiles || []).forEach(p => profileById[p.id] = p);
+                const data = memberRows.map(m => ({ ...m, profiles: profileById[m.user_id] || {} }));
 
                 const myRow = data.find(m => m.user_id === currentUserId);
                 const iAmAdmin = myRow && myRow.role === 'admin';
@@ -4494,7 +4504,6 @@
                     const { error } = await sb.from('conversation_members').delete().eq('conversation_id', conv.id).eq(
                         'user_id', userId);
                     if (error) throw error;
-                    // Refresh members list
                     openGroupMembersList();
                     showToast(`Removed ${name}`, 'g');
                 } catch (err) { showToast('Failed to remove member', 'r'); }
@@ -4629,21 +4638,21 @@
                     messageInputArea.classList.remove('blocked-input');
                     messageInputArea.innerHTML = messageInputArea.dataset.defaultHtml;
                 }
-                messageInput.disabled = true;
-                sendBtn.disabled = true;
-                sendBtn.classList.remove('visible');
+                const inp = document.getElementById('messageInput');
+                if (inp) inp.disabled = true;
+                const btn = document.getElementById('sendBtn');
+                if (btn) { btn.disabled = true;
+                    btn.classList.remove('visible'); }
                 document.getElementById('conversationsSidebar').classList.remove('hidden');
                 renderConversations(convSearch.value);
                 applyChatBackground(null);
             };
 
             window.openPartnerProfile = function() {
-                // For 1:1 chats, navigate to user profile
                 if (selectedPartnerId) {
                     window.location.href = 'profile.html?uid=' + selectedPartnerId;
                     return;
                 }
-                // For groups, open the group profile (already open)
                 const conv = currentConv();
                 if (conv && conv.is_group) {
                     openChatProfile();
@@ -4651,27 +4660,32 @@
             };
 
             // ============================================================
-            // EVENT LISTENERS
+            // EVENT LISTENERS — using event delegation to survive DOM swaps
             // ============================================================
-            messageInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault();
-                    window.sendMessage(); }
-                if (typingTimeout) clearTimeout(typingTimeout);
-                sendTypingIndicator(true);
-                typingTimeout = setTimeout(() => sendTypingIndicator(false), 2000);
-            });
-
-            messageInput.addEventListener('input', function() {
-                this.style.height = 'auto';
-                this.style.height = Math.min(this.scrollHeight, 100) + 'px';
-                sendBtn.classList.toggle('visible', this.value.trim().length > 0);
-            });
-
-            // Make sure sendBtn click works
-            sendBtn.addEventListener('click', function(e) {
-                if (!this.disabled) {
+            document.addEventListener('keydown', function(e) {
+                if (e.target && e.target.id === 'messageInput' && e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
                     window.sendMessage();
                 }
+                if (e.target && e.target.id === 'messageInput') {
+                    if (typingTimeout) clearTimeout(typingTimeout);
+                    sendTypingIndicator(true);
+                    typingTimeout = setTimeout(() => sendTypingIndicator(false), 2000);
+                }
+            });
+
+            document.addEventListener('input', function(e) {
+                if (e.target && e.target.id === 'messageInput') {
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+                    const btn = document.getElementById('sendBtn');
+                    if (btn) btn.classList.toggle('visible', e.target.value.trim().length > 0);
+                }
+            });
+
+            document.addEventListener('click', function(e) {
+                const btn = e.target.closest('#sendBtn');
+                if (btn && !btn.disabled) window.sendMessage();
             });
 
             // ============================================================
