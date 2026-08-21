@@ -2479,11 +2479,12 @@
             }
 
             // ============================================================
-            // SUPABASE - CONVERSATIONS
+            // SUPABASE - CONVERSATIONS (FIXED: better profile fetching)
             // ============================================================
             async function loadConversations() {
                 if (!currentUserId) return;
                 try {
+                    // Fetch conversations
                     let groupIdList = [];
                     try {
                         const { data: myGroupIds, error: gErr } = await sb
@@ -2500,9 +2501,9 @@
                     let query = sb
                         .from('conversations')
                         .select(`
-                                    *,
-                                    messages:messages( id, text, sender_id, created_at, message_type, media_url, reply_to )
-                                `)
+                                *,
+                                messages:messages( id, text, sender_id, created_at, message_type, media_url, reply_to )
+                            `)
                         .order('updated_at', { ascending: false });
 
                     if (groupIdList.length) {
@@ -2514,6 +2515,30 @@
                     const { data, error } = await query;
                     if (error) throw error;
 
+                    // Collect all user IDs from 1:1 conversations
+                    const userIds = [];
+                    data.forEach(conv => {
+                        if (!conv.is_group) {
+                            const otherId = conv.user1_id === currentUserId ? conv.user2_id : conv.user1_id;
+                            if (otherId && !userIds.includes(otherId)) userIds.push(otherId);
+                        }
+                    });
+
+                    // Fetch profiles for all 1:1 partners
+                    let profileMap = {};
+                    if (userIds.length) {
+                        const { data: profiles, error: pErr } = await sb
+                            .from('profiles')
+                            .select('id, display_name, username, avatar_url, verified_status, online_status')
+                            .in('id', userIds);
+                        if (!pErr && profiles) {
+                            profiles.forEach(p => profileMap[p.id] = p);
+                        } else {
+                            console.warn('Profile fetch error:', pErr);
+                        }
+                    }
+
+                    // Build conversation objects with proper partner data
                     conversations = data.map(conv => {
                         const msgs = conv.messages || [];
                         const lastMsg = msgs.length ? msgs.reduce((a, b) => new Date(a.created_at) > new Date(b
@@ -2521,27 +2546,13 @@
                         const base = { ...conv, lastMessage: lastMsg, lastMessageTime: lastMsg ? lastMsg.created_at :
                                 conv.updated_at };
                         if (!conv.is_group) {
-                            base.otherUserId = conv.user1_id === currentUserId ? conv.user2_id : conv.user1_id;
+                            const otherId = conv.user1_id === currentUserId ? conv.user2_id : conv.user1_id;
+                            base.otherUserId = otherId;
+                            base.otherUser = profileMap[otherId] || null; // might be null if not found
                         }
                         return base;
                     });
 
-                    const userIds = conversations.filter(c => !c.is_group).map(c => c.otherUserId).filter(Boolean);
-                    if (userIds.length) {
-                        const { data: profiles, error: pErr } = await sb
-                            .from('profiles')
-                            .select('id, display_name, username, avatar_url, verified_status, online_status')
-                            .in('id', userIds);
-                        if (!pErr && profiles) {
-                            const profileMap = {};
-                            profiles.forEach(p => profileMap[p.id] = p);
-                            conversations.forEach(c => {
-                                if (!c.is_group) c.otherUser = profileMap[c.otherUserId] || null;
-                            });
-                        } else if (pErr) {
-                            console.error('profiles fetch error:', pErr);
-                        }
-                    }
                     renderConversations(convSearch.value);
                 } catch (err) {
                     console.error('loadConversations error:', err);
@@ -2551,7 +2562,7 @@
             }
 
             // ============================================================
-            // RENDER CONVERSATIONS
+            // RENDER CONVERSATIONS (fixed fallback)
             // ============================================================
             function renderConversations(filter = '') {
                 const q = filter.toLowerCase().trim();
@@ -2590,8 +2601,12 @@
                     if (q) html += `<div class="search-section-header">Conversations</div>`;
                     html += matchedConvs.map(c => {
                         const other = c.otherUser || {};
-                        const name = c.is_group ? (c.group_name || 'Group') : (other.display_name || other
-                            .username || 'User');
+                        let name = 'User';
+                        if (c.is_group) {
+                            name = c.group_name || 'Group';
+                        } else {
+                            name = other.display_name || other.username || 'User';
+                        }
                         const avatar = c.is_group ? (c.group_avatar || DEFAULT_AVATAR) : getAvatar(other);
                         let lastMsg = 'No messages yet';
                         if (c.lastMessage) {
@@ -2655,6 +2670,7 @@
                 if (!conv.is_group) {
                     selectedPartnerId = conv.otherUserId;
                     if (!conv.otherUser && selectedPartnerId) {
+                        // Try to fetch profile again if missing
                         const { data: profile, error } = await sb
                             .from('profiles')
                             .select('id, display_name, username, avatar_url, verified_status, online_status')
@@ -2664,6 +2680,9 @@
                             console.error('partner profile fetch error:', error);
                         } else if (profile) {
                             conv.otherUser = profile;
+                            // Update the conversation in the list so it stays
+                            const idx = conversations.findIndex(c => c.id === convId);
+                            if (idx !== -1) conversations[idx].otherUser = profile;
                         }
                     }
                 }
@@ -2674,7 +2693,7 @@
                     chatPartnerAvatar.src = conv.group_avatar || DEFAULT_AVATAR;
                     chatPartnerStatus.textContent = 'Group chat';
                 } else {
-                    chatPartnerName.textContent = getDisplayName(other);
+                    chatPartnerName.textContent = other.display_name || other.username || 'User';
                     chatPartnerAvatar.src = getAvatar(other);
                     chatPartnerStatus.textContent = other.online_status === 'online' ? 'Online' : 'Last seen recently';
                 }
@@ -4087,7 +4106,7 @@
                 document.getElementById('cpMuteToggle').checked = (conv.muted_by || []).includes(currentUserId);
             }
 
-            // ─── Group avatar upload ───
+            // ─── Group avatar upload (admin only) ───
             window.triggerGroupAvatarUpload = function() {
                 const conv = currentConv();
                 if (!conv || !conv.is_group) {
@@ -4366,7 +4385,7 @@
                                 let preview = null;
                                 if (m.link_previews && m.link_previews.length) {
                                     const p = m.link_previews.find(l => l.url === u || l.url === u
-                                    .replace(/\/$/, ''));
+                                        .replace(/\/$/, ''));
                                     if (p) preview = p;
                                 }
                                 links.push({ url: u, preview: preview });
@@ -4624,9 +4643,7 @@
                     window.location.href = 'profile.html?uid=' + selectedPartnerId;
                     return;
                 }
-                // For groups, if the avatar/name is clicked, it should open the group profile (already open)
-                // But if we're in a group and the user clicks the avatar, nothing happens — we already have the group profile open
-                // However, if the user clicks the avatar in the header, we should open the group profile
+                // For groups, open the group profile (already open)
                 const conv = currentConv();
                 if (conv && conv.is_group) {
                     openChatProfile();
@@ -4650,8 +4667,7 @@
                 sendBtn.classList.toggle('visible', this.value.trim().length > 0);
             });
 
-            // Make sure sendBtn click works — the onclick attribute is on the button
-            // But we also attach a listener for safety
+            // Make sure sendBtn click works
             sendBtn.addEventListener('click', function(e) {
                 if (!this.disabled) {
                     window.sendMessage();
