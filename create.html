@@ -426,7 +426,7 @@
         }
 
         /* ──────────────────────────────────────────────────────────────
-           7.  TITLE INPUT (with backdrop wrapper)
+           7.  TITLE INPUT (bold, large)
            ────────────────────────────────────────────────────────────── */
         #postTitle {
             font-weight: 800;
@@ -440,14 +440,15 @@
         }
 
         /* ──────────────────────────────────────────────────────────────
-           8.  CONTENT TEXTAREA + BACKDROP (live highlight)
+           8.  CONTENT TEXTAREA + BACKDROP (fixed: visible text)
            ────────────────────────────────────────────────────────────── */
         .mention-textarea-wrap {
             position: relative;
         }
 
-        /* Backdrop — visible again, sits behind the transparent text */
+        /* ── Backdrop is now hidden (fix for invisible text) ── */
         .mention-backdrop {
+            display: none;
             position: absolute;
             inset: 0;
             margin: 0;
@@ -467,11 +468,11 @@
             z-index: 1;
         }
 
-        /* Textarea — transparent text, caret visible */
+        /* ── Textarea now shows actual text (was transparent) ── */
         .mention-textarea {
             position: relative;
             background: transparent !important;
-            color: transparent;
+            color: var(--text);
             caret-color: var(--text);
             z-index: 2;
             font-weight: 700;
@@ -493,7 +494,6 @@
             background: transparent !important;
         }
 
-        /* Highlighted tokens — both mentions and hashtags */
         .mention-highlight {
             color: var(--pl);
             font-weight: 800;
@@ -586,7 +586,8 @@
         }
 
         /* ──────────────────────────────────────────────────────────────
-           10. SUGGESTION BOXES (unified styling)
+           10. SUGGESTION BOXES (fixed positioning)
+               Now unified for both hashtag and mention boxes.
            ────────────────────────────────────────────────────────────── */
         .mention-suggestions,
         .hashtag-suggestions,
@@ -597,7 +598,7 @@
             max-height: 240px;
             overflow-y: auto;
             position: fixed;
-            z-index: 60;
+            z-index: 60; /* unified with hashtag box */
             box-shadow: var(--shadow-lg);
             display: none;
             padding: 6px 0;
@@ -626,6 +627,7 @@
             border-radius: 100px;
         }
 
+        /* Style items inside the mention box (mentions.js uses .suggestion-item) */
         .mention-suggestions .suggestion-item,
         #mention-suggestions .suggestion-item,
         .hashtag-suggestions .h-item {
@@ -1942,16 +1944,13 @@
                 <section class="panel active" id="panel-post" role="tabpanel">
                     <form id="post-form" onsubmit="event.preventDefault();submitPost();" novalidate>
 
-                        <!-- Title (now with live highlight backdrop) -->
+                        <!-- Title -->
                         <div class="form-group">
                             <label class="form-lbl" for="postTitle">
                                 Title
                                 <span class="optional">(optional)</span>
                             </label>
-                            <div class="mention-textarea-wrap">
-                                <div class="mention-backdrop" id="postTitleBackdrop" aria-hidden="true" style="white-space:nowrap;overflow:hidden;padding:12px 16px;font-weight:800;font-size:18px;border-radius:var(--radius-sm);border:1.5px solid transparent;"></div>
-                                <input class="form-inp mention-textarea" id="postTitle" type="text" placeholder="Free to say what's on your mind?" maxlength="100" autocomplete="off" style="font-weight:800;font-size:18px;" aria-describedby="postTitleCount">
-                            </div>
+                            <input class="form-inp" id="postTitle" type="text" placeholder="Free to say what's on your mind?" maxlength="100" autocomplete="off" aria-describedby="postTitleCount">
                             <span class="char-c" id="postTitleCount">0 / 100</span>
                         </div>
 
@@ -1974,6 +1973,7 @@
                                 <div class="mention-backdrop" id="postContentBackdrop" aria-hidden="true"></div>
                                 <textarea class="form-inp mention-textarea" id="postContent" placeholder="Write your post content… Use @ to mention, # for hashtags" rows="6" aria-describedby="postContentCount"></textarea>
                             </div>
+                            <!-- Static mention suggestion div removed – now handled by mentions.js -->
                             <div class="hashtag-suggestions" id="hashtagSuggestions" role="listbox"></div>
                             <span class="char-c" id="postContentCount">0 characters</span>
                             <div class="fmt-hint">Select text, tap B / I / S to format — # and @ are never affected.</div>
@@ -2200,9 +2200,10 @@
         /**
          * ================================================================
          *  CREATE PAGE — Freeupper
-         *  Version: 2.2 (live highlight restored)
+         *  Version: 2.1 (cleanup)
          *  Description: Full-featured post & marketplace listing composer
-         *  with live purple highlighting for @mentions and #hashtags.
+         *  with mention/hashtag support, media uploads, and category picker.
+         *  Cleaned up dead code and unified suggestion box styling.
          * ================================================================
          */
 
@@ -2459,59 +2460,15 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // 7.  MENTION BACKDROP (LIVE HIGHLIGHT)
+        // 7.  MENTION BACKDROP (deprecated – kept for compatibility)
         // ──────────────────────────────────────────────────────────────
 
-        function escapeHtmlForMentions(s) {
-            const d = document.createElement('div');
-            d.textContent = s || '';
-            return d.innerHTML;
-        }
-
         function syncMentionBackdrop(textareaEl, backdropEl) {
-            if (!textareaEl || !backdropEl) return;
-            const text = textareaEl.value;
-            const mentions = textareaEl._mentions || [];
-            const usernames = new Set(mentions.map(m => (m.username || '').toLowerCase()));
-            let html = escapeHtmlForMentions(text);
-
-            // Highlight confirmed mentions (from mentions.js)
-            if (usernames.size) {
-                html = html.replace(/@([A-Za-z0-9_]{1,30})/g, (match, uname) =>
-                    usernames.has(uname.toLowerCase()) ? `<span class="mention-highlight">@${uname}</span>` : match
-                );
-            }
-
-            // Highlight any #hashtag as the user types — every # token counts,
-            // not just ones confirmed via suggestion click.
-            html = html.replace(/#(\w{1,50})/g, '<span class="mention-highlight">#$1</span>');
-
-            backdropEl.innerHTML = html + (text.endsWith('\n') ? '<br>&nbsp;' : '');
-            backdropEl.scrollTop = textareaEl.scrollTop;
+            // No-op: backdrop is hidden (display:none) — kept for compatibility
         }
 
         function initContentBackdrop() {
-            const ta = document.getElementById('postContent');
-            const bd = document.getElementById('postContentBackdrop');
-            if (!ta || !bd || ta._backdropWired) return;
-            ta._backdropWired = true;
-            ta.addEventListener('input', () => {
-                syncMentionBackdrop(ta, bd);
-            });
-            ta.addEventListener('scroll', () => { bd.scrollTop = ta.scrollTop; });
-            syncMentionBackdrop(ta, bd);
-        }
-
-        function initTitleBackdrop() {
-            const ta = document.getElementById('postTitle');
-            const bd = document.getElementById('postTitleBackdrop');
-            if (!ta || !bd || ta._backdropWired) return;
-            ta._backdropWired = true;
-            ta.addEventListener('input', () => {
-                syncMentionBackdrop(ta, bd);
-            });
-            ta.addEventListener('scroll', () => { bd.scrollLeft = ta.scrollLeft; });
-            syncMentionBackdrop(ta, bd);
+            // No-op: backdrop is hidden
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -2658,6 +2615,7 @@
             ta.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
                     closeHashtagSuggestions();
+                    // mention box close is handled by mentions.js itself
                 }
             });
 
@@ -2668,10 +2626,7 @@
                 }
             });
 
-            // Live backdrop
-            initContentBackdrop();
-
-            console.log('[Create] Content field initialised with @ and # support and live highlighting.');
+            console.log('[Create] Content field initialised with @ and # support.');
         }
 
         function updateContentCounter(ta) {
@@ -2684,19 +2639,16 @@
         }
 
         // ──────────────────────────────────────────────────────────────
-        // 10. INIT TITLE FIELD (with tagging and backdrop)
+        // 10. INIT TITLE FIELD (with tagging)
         // ──────────────────────────────────────────────────────────────
 
         function initTitleField() {
             const titleEl = document.getElementById('postTitle');
-            if (!titleEl || titleEl._taggingWired) return;
-            titleEl._taggingWired = true;
+            if (!titleEl) return;
 
             // Mentions on title
             if (window.Mentions && typeof window.Mentions.initMentions === 'function') {
                 window.Mentions.initMentions(titleEl);
-            } else {
-                console.error('[Create] mentions.js did not load — @ suggestions disabled. Check Network tab for a 404.');
             }
 
             // Hashtag typing
@@ -2720,10 +2672,7 @@
                 }
             });
 
-            // Live backdrop
-            initTitleBackdrop();
-
-            console.log('[Create] Title field initialised with @ and # support and live highlighting.');
+            console.log('[Create] Title field initialised.');
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -3847,6 +3796,7 @@
             if (mainScroll) {
                 mainScroll.addEventListener('scroll', () => {
                     closeHashtagSuggestions();
+                    // mention box close is handled by mentions.js itself
                 });
             }
 
