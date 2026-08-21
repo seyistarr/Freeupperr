@@ -2020,24 +2020,24 @@
         </div>
     </div>
 
-    <!-- ===== CREATE GROUP (full-screen) — FIXED ===== -->
+    <!-- ===== CREATE GROUP (full-screen) — FIXED LAYOUT ===== -->
     <div class="fu-screen" id="createGroupModal">
         <div class="fu-topbar">
             <button class="fu-back" onclick="closeCreateGroupModal()"><i class="ri-arrow-left-line"></i></button>
             <h2>Create Group</h2>
         </div>
-        <div class="fu-body" style="padding:16px;">
+        <div class="fu-body" style="padding:16px; display:flex; flex-direction:column; gap:12px;">
             <div class="form-group">
                 <label>Group Name</label>
                 <input type="text" id="groupNameInput" placeholder="Add group name" maxlength="50">
             </div>
-            <div class="form-group">
+            <div class="form-group" style="flex-shrink:0;">
                 <label>Add Members</label>
                 <input type="text" id="groupMemberSearch" placeholder="Search friends..." oninput="filterGroupMembers(this.value)">
             </div>
-            <div id="groupMemberList" style="overflow-y:auto;max-height:calc(100vh - 320px);margin-bottom:12px;"></div>
+            <div id="groupMemberList" style="flex:1; overflow-y:auto; margin-bottom:0; min-height:0;"></div>
         </div>
-        <div class="poll-footer" style="padding:12px 16px;">
+        <div class="poll-footer" style="padding:12px 16px; flex-shrink:0; border-top:1px solid var(--brd);">
             <button class="cancel-poll" onclick="closeCreateGroupModal()">Cancel</button>
             <button class="create-poll" id="createGroupBtn" onclick="createGroup()">Create Group (0)</button>
         </div>
@@ -2481,7 +2481,7 @@
             }
 
             // ============================================================
-            // SUPABASE - CONVERSATIONS (with fallback for RLS) — FIXED PROFILE FETCH
+            // SUPABASE - CONVERSATIONS (fixed: removed online_status)
             // ============================================================
             async function loadConversations() {
                 if (!currentUserId) return;
@@ -2526,12 +2526,12 @@
                         }
                     });
 
-                    // Fetch profiles for all 1:1 partners (with fallback)
+                    // Fetch profiles for all 1:1 partners (without online_status)
                     let profileMap = {};
                     if (userIds.length) {
                         const { data: profiles, error: pErr } = await sb
                             .from('profiles')
-                            .select('id, display_name, username, avatar_url, verified_status, online_status')
+                            .select('id, display_name, username, avatar_url, verified_status')
                             .in('id', userIds);
                         if (pErr) {
                             console.error('Profile fetch error:', pErr);
@@ -2544,7 +2544,7 @@
                         if (missingIds.length) {
                             const results = await Promise.all(missingIds.map(id =>
                                 sb.from('profiles')
-                                .select('id, display_name, username, avatar_url, verified_status, online_status')
+                                .select('id, display_name, username, avatar_url, verified_status')
                                 .eq('id', id)
                                 .maybeSingle()
                             ));
@@ -2576,7 +2576,7 @@
             }
 
             // ============================================================
-            // RENDER CONVERSATIONS
+            // RENDER CONVERSATIONS (no online dot)
             // ============================================================
             function renderConversations(filter = '') {
                 const q = filter.toLowerCase().trim();
@@ -2630,8 +2630,8 @@
                         const time = c.lastMessageTime ? formatDate(c.lastMessageTime) : '';
                         const active = c.id === selectedConversationId ? 'active' : '';
                         const badge = c.is_group ? '' : getVerifiedBadge(other.verified_status);
-                        const online = !c.is_group && other.online_status === 'online' ?
-                            '<div class="online-dot"></div>' : '';
+                        // online dot removed
+                        const online = '';
                         const isMuted = (c.muted_by || []).includes(currentUserId);
                         const muteIcon = isMuted ?
                             '<svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:var(--muted2);fill:none;stroke-width:2;flex-shrink:0;"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>' :
@@ -2674,7 +2674,7 @@
             window.filterConversations = function(value) { renderConversations(value); };
 
             // ============================================================
-            // SELECT CONVERSATION
+            // SELECT CONVERSATION (no online_status)
             // ============================================================
             window.selectConversation = async function(convId) {
                 selectedConversationId = convId;
@@ -2686,7 +2686,7 @@
                     if (!conv.otherUser && selectedPartnerId) {
                         const { data: profile, error } = await sb
                             .from('profiles')
-                            .select('id, display_name, username, avatar_url, verified_status, online_status')
+                            .select('id, display_name, username, avatar_url, verified_status')
                             .eq('id', selectedPartnerId)
                             .single();
                         if (error) {
@@ -2707,7 +2707,8 @@
                 } else {
                     chatPartnerName.textContent = other.display_name || other.username || 'User';
                     chatPartnerAvatar.src = getAvatar(other);
-                    chatPartnerStatus.textContent = other.online_status === 'online' ? 'Online' : 'Last seen recently';
+                    // No online_status, show static text
+                    chatPartnerStatus.textContent = 'Last seen recently';
                 }
 
                 if (window.innerWidth <= 768) {
@@ -3113,7 +3114,7 @@
             }
 
             // ============================================================
-            // SEND MESSAGE — FIXED: now uses event delegation, but keep this for reference
+            // SEND MESSAGE — FIXED: uses event delegation, but keep this for reference
             // ============================================================
             window.sendMessage = function() {
                 if (isBlockedConversation) return;
@@ -4439,7 +4440,7 @@
                         </div>`;
             }
 
-            // ─── Group Members (full-screen) — FIXED to show all members ───
+            // ─── Group Members (full-screen) — fixed to show all members ───
             window.openGroupMembersList = async function() {
                 const conv = currentConv();
                 if (!conv) return;
