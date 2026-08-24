@@ -24,6 +24,13 @@
     <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js" defer>
     </script>
 
+    <!-- PhotoSwipe for image gallery -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.4/photoswipe.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.4/umd/photoswipe.umd.min.js" defer>
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.4/umd/photoswipe-lightbox.umd.min.js" defer>
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer>
     </script>
     <script src="global.js" defer></script>
@@ -646,8 +653,11 @@
             color: var(--text);
             line-height: 1.4;
             min-height: 20px;
-            max-height: 100px;
+            max-height: 180px;
             box-sizing: border-box;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            overflow-y: auto;
         }
         .message-input-area .input-wrapper textarea::placeholder {
             color: var(--muted2);
@@ -1058,6 +1068,11 @@
             animation: fadeUp .15s ease both;
             margin-bottom: 2px;
         }
+        .message-bubble .message-text {
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
         .message-bubble.sent {
             align-self: flex-end;
             background: var(--bubble-color, var(--p));
@@ -1115,6 +1130,11 @@
             stroke: currentColor;
             fill: none;
             stroke-width: 2;
+        }
+        .msg-edited {
+            font-size: .68rem;
+            opacity: .65;
+            font-style: italic;
         }
 
         /* ─── DOWNLOAD BUTTON (only) ─── */
@@ -1181,7 +1201,7 @@
             margin: 0 0 4px;
             border-radius: 8px;
             overflow: hidden;
-            cursor: pointer;
+            cursor: default;
             background: transparent;
             max-height: 320px;
             max-width: 260px;
@@ -1596,160 +1616,21 @@
         }
 
         /* ─── FULL-SCREEN MEDIA VIEWER ─── */
-        .fu-media-viewer {
-            position: fixed;
-            inset: 0;
-            z-index: 600;
-            background: #000;
-            display: flex;
-            flex-direction: column;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity .2s, visibility .2s;
+        /* PhotoSwipe overrides */
+        .pswp {
+            --pswp-bg: #000;
+            --pswp-root-z-index: 600;
         }
-        .fu-media-viewer.open {
-            opacity: 1;
-            visibility: visible;
+        .pswp__top-bar {
+            padding: 12px 16px;
         }
-        .fu-mv-topbar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 14px;
-            flex-shrink: 0;
-        }
-        .fu-mv-back,
-        .fu-mv-icon-btn {
+        .pswp__button {
             width: 34px;
             height: 34px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, .1);
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            flex-shrink: 0;
         }
-        .fu-mv-back svg,
-        .fu-mv-icon-btn svg {
+        .pswp__button svg {
             width: 17px;
             height: 17px;
-            stroke: #fff;
-            fill: none;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-        .fu-mv-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            object-fit: cover;
-            flex-shrink: 0;
-        }
-        .fu-mv-titleblock {
-            flex: 1;
-            min-width: 0;
-        }
-        .fu-mv-name {
-            color: #fff;
-            font-weight: 700;
-            font-size: 14px;
-        }
-        .fu-mv-date {
-            color: rgba(255, 255, 255, .6);
-            font-size: 11px;
-            margin-top: 1px;
-        }
-        .fu-mv-body {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            padding: 0 8px;
-            position: relative;
-        }
-        .fu-mv-media {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            border-radius: 6px;
-        }
-        .fu-mv-video {
-            width: 100%;
-        }
-        .fu-mv-caption {
-            color: #fff;
-            font-size: 14px;
-            text-align: center;
-            padding: 4px 24px;
-            flex-shrink: 0;
-        }
-        .fu-mv-divider {
-            height: 1px;
-            background: rgba(255, 255, 255, .12);
-            margin: 0 16px;
-        }
-        .fu-mv-footer {
-            padding: 14px 16px max(14px, env(safe-area-inset-bottom, 0px));
-            display: flex;
-            justify-content: flex-start;
-            flex-shrink: 0;
-        }
-        .fu-mv-reply-plain {
-            background: none;
-            border: none;
-            color: #fff;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            padding: 4px 10px;
-        }
-        .fu-mv-reply-plain svg {
-            width: 15px;
-            height: 15px;
-            stroke: #fff;
-            fill: none;
-            stroke-width: 2.2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-        .fu-mv-nav {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: rgba(0, 0, 0, .45);
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 2;
-        }
-        .fu-mv-nav:disabled {
-            opacity: .25;
-            pointer-events: none;
-        }
-        .fu-mv-prev {
-            left: 10px;
-        }
-        .fu-mv-next {
-            right: 10px;
-        }
-        .fu-mv-nav svg {
-            width: 20px;
-            height: 20px;
-            stroke: #fff;
-            fill: none;
-            stroke-width: 2.4;
         }
 
         /* ─── CREATE GROUP MODAL FIX ─── */
@@ -2849,6 +2730,24 @@
             background: rgba(0, 0, 0, .08);
             color: var(--muted);
         }
+
+        /* ─── MESSAGE TRUNCATION ─── */
+        .msg-collapsed.hidden,
+        .msg-expanded.hidden {
+            display: none;
+        }
+        .see-more-btn {
+            display: block;
+            background: none;
+            border: none;
+            color: inherit;
+            opacity: .8;
+            font-weight: 800;
+            font-size: .82rem;
+            padding: 4px 0 0;
+            cursor: pointer;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -3411,9 +3310,11 @@
                 }, 2600);
             }
 
-            function escapeHtml(s) { const d = document.createElement('div');
-                d.textContent = s || '';
-                return d.innerHTML; }
+            function escapeHtml(str) {
+                const div = document.createElement('div');
+                div.textContent = str;
+                return div.innerHTML;
+            }
 
             function formatTime(iso) {
                 const d = new Date(iso);
@@ -3488,6 +3389,105 @@
                 if (convSwipeBlocked) { convSwipeBlocked = false; return; }
                 selectConversation(convId);
             };
+
+            // ============================================================
+            // TRUNCATION / RENDER HELPERS
+            // ============================================================
+            const MESSAGE_COLLAPSE_LIMIT = 1000;
+
+            function findTruncationPoint(text, limit) {
+                if (text.length <= limit) return text.length;
+                const paraBreak = text.lastIndexOf('\n\n', limit);
+                if (paraBreak > limit * 0.5) return paraBreak;
+                const sentenceEnd = Math.max(text.lastIndexOf('. ', limit), text.lastIndexOf('! ', limit), text.lastIndexOf(
+                    '? ', limit));
+                if (sentenceEnd > limit * 0.5) return sentenceEnd + 1;
+                const spaceIdx = text.lastIndexOf(' ', limit);
+                return spaceIdx > limit * 0.5 ? spaceIdx : limit;
+            }
+
+            function renderMessageText(text) {
+                if (!text) return '';
+                const safe = escapeHtml(text);
+                if (text.length <= MESSAGE_COLLAPSE_LIMIT) return safe;
+
+                const cutPoint = findTruncationPoint(text, MESSAGE_COLLAPSE_LIMIT);
+                const shortSafe = escapeHtml(text.slice(0, cutPoint));
+                const uid = 'msgtxt_' + Math.random().toString(36).slice(2, 9);
+
+                return `
+                    <span class="msg-collapsed" id="${uid}_short">${shortSafe}…</span>
+                    <span class="msg-expanded hidden" id="${uid}_full">${safe}</span>
+                    <button class="see-more-btn" id="${uid}_btn" onclick="toggleMessageExpand('${uid}')">See more</button>
+                `;
+            }
+
+            window.toggleMessageExpand = function(uid) {
+                const shortEl = document.getElementById(uid + '_short');
+                const fullEl = document.getElementById(uid + '_full');
+                const btn = document.getElementById(uid + '_btn');
+                const isExpanded = !fullEl.classList.contains('hidden');
+                shortEl.classList.toggle('hidden', !isExpanded);
+                fullEl.classList.toggle('hidden', isExpanded);
+                btn.textContent = isExpanded ? 'See more' : 'See less';
+            };
+
+            // ============================================================
+            // PHOTOSWIPE + PLYR INTEGRATION
+            // ============================================================
+            let psLightbox = null;
+
+            function initPhotoSwipe(urls, startIndex) {
+                if (psLightbox) { psLightbox.destroy();
+                    psLightbox = null; }
+                const dataSource = urls.map(u => ({ src: u, width: 1600, height: 1600 }));
+
+                psLightbox = new PhotoSwipeLightbox({
+                    dataSource: dataSource,
+                    pswpModule: PhotoSwipe,
+                    bgOpacity: 0.95,
+                    showHideAnimationType: 'zoom',
+                });
+                psLightbox.init();
+                psLightbox.loadAndOpen(startIndex);
+
+                dataSource.forEach((item, i) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        item.width = img.naturalWidth;
+                        item.height = img.naturalHeight;
+                        if (psLightbox.pswp) psLightbox.pswp.refreshSlideContent(i);
+                    };
+                    img.src = item.src;
+                });
+            }
+
+            window.openImage = function(url, msgId) {
+                const msg = messages.find(m => m.id === msgId);
+                const urls = (msg && msg.media_urls && msg.media_urls.length) ? msg.media_urls : [url];
+                const startIndex = Math.max(0, urls.indexOf(url));
+                initPhotoSwipe(urls, startIndex);
+            };
+
+            window.openVideo = function(url, msgId) {
+                // For single video, we open a separate viewer; but we can use PhotoSwipe with a video item? Not straightforward.
+                // Fallback to a simple full-screen video overlay — or we could use Plyr in a modal.
+                // For simplicity, we'll open the video in a new tab (or use a basic overlay).
+                // We'll use the downloadMedia approach to open in a new window.
+                window.open(url, '_blank');
+            };
+
+            function initPlyrPlayers() {
+                document.querySelectorAll('video[data-plyr]:not([data-plyr-ready])').forEach(video => {
+                    video.setAttribute('data-plyr-ready', 'true');
+                    new Plyr(video, {
+                        controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume',
+                            'fullscreen'
+                        ],
+                        clickToPlay: true,
+                    });
+                });
+            }
 
             // ============================================================
             // BLOCK STATE
@@ -3927,7 +3927,6 @@
                 if (!domain && preview.url) { try { domain = new URL(preview.url).hostname.replace('www.', ''); } catch (
                     e) {} }
 
-                // Failed / no-metadata fallback — plain compact link chip
                 if (preview.failed || (!preview.title && !preview.image)) {
                     return `
                                 <div class="link-preview link-preview-plain ${isSent ? 'sent' : ''}" onclick="window.open('${preview.url}','_blank')">
@@ -4243,7 +4242,7 @@
             };
 
             // ============================================================
-            // ACTION SHEET (long-press) — share button removed
+            // ACTION SHEET (long-press) — share removed, edit added
             // ============================================================
             let msgSheetTarget = null;
 
@@ -4253,6 +4252,7 @@
                 msgSheetTarget = msgId;
                 const isOwner = msg.sender_id === currentUserId;
                 const myReaction = (msg.message_reactions || []).find(r => r.user_id === currentUserId);
+                const canEdit = isOwner && (Date.now() - new Date(msg.created_at).getTime()) < 3600000;
 
                 let sheet = document.getElementById('fuMsgActionSheet');
                 if (!sheet) {
@@ -4269,6 +4269,10 @@
                                     ${REACTIONS.map(r => `<span class="reaction-emoji ${myReaction && myReaction.emoji === r ? 'active' : ''}" onclick="addReaction('${msgId}', '${r}'); closeMessageActionSheet();">${r}</span>`).join('')}
                                 </div>
                                 <div class="fu-action-sheet-list">
+                                    ${canEdit ? `<button class="fu-sheet-item" onclick="editMessage('${msgId}');closeMessageActionSheet();">
+                                        <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                        Edit
+                                    </button>` : ''}
                                     <button class="fu-sheet-item" onclick="replyToMessage('${msgId}');closeMessageActionSheet();">
                                         <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                                         Reply
@@ -4325,8 +4329,21 @@
                 }
             };
 
-            // "Delete for me" hides the message locally via deleted_for array.
-            // "Delete for everyone" hard-deletes for everyone (owner only).
+            // ─── Edit message ───
+            let editingMessageId = null;
+
+            window.editMessage = function(msgId) {
+                const msg = messages.find(m => m.id === msgId);
+                if (!msg) return;
+                editingMessageId = msgId;
+                const input = document.getElementById('messageInput');
+                input.value = msg.text || '';
+                input.dispatchEvent(new Event('input'));
+                input.focus();
+                showToast('Editing message — tap send to save', 'p');
+            };
+
+            // ─── Delete with scope ───
             window.deleteMessage = async function(msgId, scope) {
                 const msg = messages.find(m => m.id === msgId);
                 if (!msg) return;
@@ -4342,7 +4359,6 @@
                     return;
                 }
 
-                // scope === 'me'
                 if (!confirm('Delete this message for you?')) return;
                 const deletedFor = Array.from(new Set([...(msg.deleted_for || []), currentUserId]));
                 const { error } = await sb.from('messages').update({ deleted_for: deletedFor }).eq('id', msgId);
@@ -4544,84 +4560,10 @@
             }
 
             // ============================================================
-            // FULL-SCREEN MEDIA VIEWER
+            // FULL-SCREEN MEDIA VIEWER (PhotoSwipe)
             // ============================================================
-            let mvCurrentUrls = [];
-            let mvCurrentIndex = 0;
-            let mvCurrentType = 'image';
-            let mvCurrentMsgId = null;
-
-            window.openImage = function(url, msgId) {
-                const msg = messages.find(m => m.id === msgId);
-                const urls = msg && msg.media_urls && msg.media_urls.length ? msg.media_urls : [url];
-                openMediaViewer(urls, 'image', msgId, Math.max(0, urls.indexOf(url)));
-            };
-            window.openVideo = function(url, msgId) { openMediaViewer([url], 'video', msgId, 0); };
-
-            function openMediaViewer(urls, type, msgId, startIndex) {
-                mvCurrentUrls = urls;
-                mvCurrentIndex = startIndex || 0;
-                mvCurrentType = type;
-                mvCurrentMsgId = msgId;
-                let modal = document.getElementById('fuMediaViewer');
-                if (modal) modal.remove();
-                modal = document.createElement('div');
-                modal.id = 'fuMediaViewer';
-                modal.className = 'fu-media-viewer';
-                document.body.appendChild(modal);
-                renderMediaViewer();
-                requestAnimationFrame(() => modal.classList.add('open'));
-            }
-
-            function renderMediaViewer() {
-                const modal = document.getElementById('fuMediaViewer');
-                if (!modal) return;
-                const url = mvCurrentUrls[mvCurrentIndex];
-                const msg = mvCurrentMsgId ? messages.find(m => m.id === mvCurrentMsgId) : null;
-                const conv = currentConv();
-                const isSent = msg && msg.sender_id === currentUserId;
-                const partnerName = conv ? (conv.is_group ? (conv.group_name || 'Group') : getDisplayName(conv.otherUser || {})) : '';
-                const partnerAvatar = conv ? (conv.is_group ? (conv.group_avatar || DEFAULT_AVATAR) : getAvatar(conv.otherUser || {})) : DEFAULT_AVATAR;
-                const label = isSent ? 'You' : partnerName;
-                const dateLabel = msg ? new Date(msg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + formatTime(msg.created_at) : '';
-                const caption = msg && msg.text ? escapeHtml(msg.text) : '';
-                const hasMultiple = mvCurrentUrls.length > 1;
-                modal.innerHTML = `
-                            <div class="fu-mv-topbar">
-                                <button class="fu-mv-back" onclick="closeMediaViewer()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-                                <img class="fu-mv-avatar" src="${partnerAvatar}" ${avatarErrAttr()}>
-                                <div class="fu-mv-titleblock">
-                                    <div class="fu-mv-name">${escapeHtml(label)}</div>
-                                    <div class="fu-mv-date">${dateLabel}</div>
-                                </div>
-                                <button class="fu-mv-icon-btn" onclick="downloadMedia('${url}')" title="Download"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                                <button class="fu-mv-icon-btn" onclick="openMessageActionSheet('${mvCurrentMsgId}')" title="More"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
-                            </div>
-                            <div class="fu-mv-body">
-                                ${hasMultiple ? `<button class="fu-mv-nav fu-mv-prev" onclick="mvNav(-1)" ${mvCurrentIndex === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>` : ''}
-                                ${mvCurrentType === 'image'
-                                    ? `<img src="${url}" class="fu-mv-media">`
-                                    : `<video src="${url}" class="fu-mv-media fu-mv-video" controls autoplay playsinline></video>`}
-                                ${hasMultiple ? `<button class="fu-mv-nav fu-mv-next" onclick="mvNav(1)" ${mvCurrentIndex === mvCurrentUrls.length - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>` : ''}
-                            </div>
-                            ${caption ? `<div class="fu-mv-caption">${caption}</div>` : ''}
-                            ${mvCurrentMsgId ? `<div class="fu-mv-divider"></div>
-                            <div class="fu-mv-footer">
-                                <button class="fu-mv-reply-plain" onclick="replyFromViewer('${mvCurrentMsgId}')">
-                                    <svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
-                                    Reply
-                                </button>
-                            </div>` : ''}
-                        `;
-                modal.classList.add('open');
-            }
-
-            window.mvNav = function(dir) {
-                const next = mvCurrentIndex + dir;
-                if (next < 0 || next >= mvCurrentUrls.length) return;
-                mvCurrentIndex = next;
-                renderMediaViewer();
-            };
+            // (already handled by PhotoSwipe integration above)
+            // We keep the openVideo fallback as download.
 
             window.downloadMedia = async function(url) {
                 try {
@@ -4641,22 +4583,10 @@
                 }
             };
 
-            window.closeMediaViewer = function() {
-                const modal = document.getElementById('fuMediaViewer');
-                if (!modal) return;
-                modal.classList.remove('open');
-                setTimeout(() => { if (modal.parentNode) modal.remove(); }, 220);
-            };
-
-            window.replyFromViewer = function(msgId) {
-                closeMediaViewer();
-                replyToMessage(msgId);
-            };
-
             window.openDocument = function(url) { downloadMedia(url); };
 
             // ============================================================
-            // RENDER MESSAGES (with system messages support)
+            // RENDER MESSAGES (with system messages support and formatting)
             // ============================================================
             function renderMessages() {
                 if (!messages.length) {
@@ -4756,8 +4686,8 @@
                         const uploadSpinner = msg.uploading ?
                             `<div class="upload-spinner"><div class="ring"></div></div>` : '';
                         contentHtml = `
-                                    <div class="msg-media" style="position:relative;" onclick="openVideo('${msg.media_url}', '${msg.id}')">
-                                        <video class="fu-player" data-msg-id="${msg.id}" src="${msg.media_url}" playsinline preload="metadata" style="max-height:300px;width:100%;"></video>
+                                    <div class="msg-media" style="position:relative;">
+                                        <video class="fu-player" data-msg-id="${msg.id}" data-plyr="true" src="${msg.media_url}" playsinline preload="metadata" style="max-height:300px;width:100%;"></video>
                                         ${uploadSpinner}
                                     </div>
                                     ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
@@ -4821,12 +4751,12 @@
                                     ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
                                 `;
                     } else {
-                        let displayText = escapeHtml(textContent);
-                        const urlRe = /(https?:\/\/[^\s]+)/gi;
-                        displayText = displayText.replace(urlRe, function(match) {
-                            return `<a href="${match}" target="_blank" style="color:var(--p);text-decoration:underline;">${match}</a>`;
-                        });
-                        contentHtml = `<div>${displayText}</div>`;
+                        // Text message with formatting
+                        let displayText = renderMessageText(textContent);
+                        // Linkify URLs after rendering (but we already have link previews; we still want clickable links)
+                        // We'll wrap in a span with message-text class and let the renderMessageText handle it.
+                        // However, link previews are handled separately; for plain text we just use renderMessageText.
+                        contentHtml = `<span class="message-text">${renderMessageText(textContent)}</span>`;
                         if (linkPreviewHtml) {
                             contentHtml = linkPreviewHtml + contentHtml;
                         }
@@ -4874,7 +4804,8 @@
                                 `<span class="read-receipt read"><svg viewBox="0 0 24 24"><path d="M18 6L7 17l-5-5"/><path d="M23 6L12 17l-1-1"/></svg></span>` :
                                 `<span class="read-receipt"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>`;
                         }
-                        footerHtml = `<div class="msg-time">${time}${readReceiptHtml}</div>`;
+                        footerHtml =
+                            `${msg.edited_at ? '<span class="msg-edited">Edited</span> ' : ''}<span class="msg-time">${formatTime(msg.created_at)}</span>${readReceiptHtml}`;
                     }
 
                     const isMedia = (msg.message_type === 'image' || msg.message_type === 'video') && msg.media_url;
@@ -4895,7 +4826,7 @@
                 });
 
                 messagesArea.innerHTML = html;
-                initFuPlayers();
+                initPlyrPlayers();
 
                 messages.forEach(msg => {
                     if (msg._pendingUrls && msg._pendingUrls.length) {
@@ -4907,44 +4838,39 @@
                 });
             }
 
-            // ─── Custom video player (Plyr) ───
-            let fuPlayerInstances = [];
-
-            function initFuPlayers() {
-                if (!window.Plyr) { setTimeout(initFuPlayers, 200); return; }
-                fuPlayerInstances.forEach(p => { try { p.destroy(); } catch (e) {} });
-                fuPlayerInstances = [];
-                document.querySelectorAll('.fu-player').forEach(el => {
-                    fuPlayerInstances.push(new Plyr(el, {
-                        controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume',
-                            'fullscreen'
-                        ],
-                        clickToPlay: true,
-                        resetOnEnd: true
-                    }));
-                });
-            }
-
             // ============================================================
-            // SEND MESSAGE
+            // SEND MESSAGE (with edit support)
             // ============================================================
-            window.sendMessage = function() {
+            window.sendMessage = async function() {
                 if (isBlockedConversation) return;
-                const text = document.getElementById('messageInput')?.value.trim();
-                if (!text || !selectedConversationId) return;
-                const replyTo = replyTargetMessage ? replyTargetMessage.id : null;
-
                 const input = document.getElementById('messageInput');
-                if (input) {
-                    input.value = '';
-                    input.style.height = 'auto';
+                const text = input.value.trim();
+                if (!text) return;
+
+                if (editingMessageId) {
+                    const id = editingMessageId;
+                    editingMessageId = null;
+                    try {
+                        const { error } = await sb.from('messages').update({ text: text, edited_at: new Date()
+                                .toISOString() }).eq('id', id);
+                        if (error) throw error;
+                        input.value = '';
+                        input.dispatchEvent(new Event('input'));
+                        await loadMessages(selectedConversationId);
+                        showToast('Message edited', 'g');
+                    } catch (err) { showToast('Failed to edit message', 'r'); }
+                    return;
                 }
+
+                const replyTo = replyTargetMessage ? replyTargetMessage.id : null;
+                input.value = '';
+                input.style.height = 'auto';
                 const btn = document.getElementById('sendBtn');
                 if (btn) btn.classList.remove('visible');
                 const mic = document.getElementById('micBtn');
                 if (mic) mic.classList.add('visible');
                 replyTargetMessage = null;
-                if (input) input.placeholder = 'Type a message...';
+                input.placeholder = 'Type a message...';
 
                 sendMessageToConv(text, 'text', null, replyTo).then(() => {
                     sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
@@ -6542,11 +6468,8 @@
                 }
             };
 
-            // ─── Add Members (old modal) — kept for backward compatibility, but now we use the full screen ───
-            // The old modal is still used for group creation; we keep it separate.
-
             // ============================================================
-            // SCREEN 2/3: THEME / BUBBLE / WALLPAPER (unchanged from previous)
+            // SCREEN 2/3: THEME / BUBBLE / WALLPAPER
             // ============================================================
             window.openChatThemeModal = function() {
                 document.getElementById('fuThemeScreen').classList.add('open');
@@ -6856,29 +6779,37 @@
             };
 
             // ============================================================
-            // EVENT LISTENERS
+            // EVENT LISTENERS (composer)
             // ============================================================
-            document.addEventListener('keydown', function(e) {
-                if (e.target && e.target.id === 'messageInput' && e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    window.sendMessage();
-                }
-                if (e.target && e.target.id === 'messageInput') {
-                    if (typingTimeout) clearTimeout(typingTimeout);
-                    sendTypingIndicator(true);
-                    typingTimeout = setTimeout(() => sendTypingIndicator(false), 2000);
-                }
-            });
+            const COMPOSER_MAX_CHARS = 10000;
 
             document.addEventListener('input', function(e) {
                 if (e.target && e.target.id === 'messageInput') {
+                    if (e.target.value.length > COMPOSER_MAX_CHARS) {
+                        e.target.value = e.target.value.slice(0, COMPOSER_MAX_CHARS);
+                    }
                     e.target.style.height = 'auto';
-                    e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
                     const hasText = e.target.value.trim().length > 0;
                     const btn = document.getElementById('sendBtn');
                     const mic = document.getElementById('micBtn');
                     if (btn) btn.classList.toggle('visible', hasText);
                     if (mic) mic.classList.toggle('visible', !hasText);
+                }
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.target && e.target.id === 'messageInput' && e.key === 'Enter') {
+                    // Enter inserts newline — only the Send button sends.
+                    // (Prevents accidental sends on mobile keyboards.)
+                    if (!e.shiftKey) {
+                        return; // let default newline insertion happen
+                    }
+                }
+                if (e.target && e.target.id === 'messageInput') {
+                    if (typingTimeout) clearTimeout(typingTimeout);
+                    sendTypingIndicator(true);
+                    typingTimeout = setTimeout(() => sendTypingIndicator(false), 2000);
                 }
             });
 
