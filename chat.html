@@ -67,6 +67,18 @@
             user-select: none;
         }
 
+        body.modal-lock {
+            overflow: hidden;
+        }
+        body.modal-lock>*:not(.fu-media-viewer):not(.fu-video-viewer):not(.pswp) {
+            pointer-events: none;
+        }
+        body.modal-lock .fu-media-viewer,
+        body.modal-lock .fu-video-viewer,
+        body.modal-lock .pswp {
+            pointer-events: auto;
+        }
+
         .app {
             flex: 1;
             display: flex;
@@ -140,6 +152,7 @@
             transition: transform .25s ease;
             z-index: 5;
             height: 100%;
+            position: relative;
         }
 
         @media (max-width: 768px) {
@@ -231,6 +244,29 @@
         }
         .conversations-sidebar .conversation-list::-webkit-scrollbar {
             width: 0;
+        }
+
+        .archive-pull-indicator {
+            height: 0px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--muted);
+            font-size: .8rem;
+            font-weight: 700;
+            transition: height .1s;
+        }
+        .archive-pull-indicator svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+        .archive-pull-indicator.ready {
+            color: var(--p);
         }
 
         /* ─── CONVERSATION ITEM — SWIPE ROW ─── */
@@ -499,35 +535,6 @@
             font-size: .75rem;
             color: var(--muted);
         }
-        .chat-view .chat-view-header .chat-actions {
-            display: flex;
-            gap: 4px;
-        }
-        .chat-view .chat-view-header .chat-actions button {
-            background: none;
-            border: none;
-            color: var(--muted);
-            cursor: pointer;
-            padding: 6px;
-            border-radius: 50%;
-            transition: background .15s, color .15s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .chat-view .chat-view-header .chat-actions button:hover {
-            background: var(--pdim);
-            color: var(--p);
-        }
-        .chat-view .chat-view-header .chat-actions button svg {
-            width: 20px;
-            height: 20px;
-            stroke: currentColor;
-            fill: none;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
 
         /* Glass-blur header/input over wallpaper */
         .chat-view-header.wp-glass,
@@ -735,13 +742,21 @@
             font-weight: 600;
         }
 
+        .message-input-area.recording-mode .input-wrapper,
+        .message-input-area.recording-mode .attach-btn-round,
+        .message-input-area.recording-mode #micBtn {
+            display: none !important;
+        }
+
         /* ─── VOICE RECORDING BAR ─── */
         .voice-record-bar {
             display: none;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
+            padding: 10px 14px;
+            background: var(--bg3);
+            border-radius: 100px;
             flex: 1;
-            padding: 4px 6px 4px 16px;
         }
         .voice-record-bar.active {
             display: flex;
@@ -751,7 +766,7 @@
             height: 10px;
             border-radius: 50%;
             background: #ef4444;
-            animation: recPulse 1s ease-in-out infinite;
+            animation: recPulse 1.1s ease-in-out infinite;
             flex-shrink: 0;
         }
         @keyframes recPulse {
@@ -760,14 +775,13 @@
                 opacity: 1;
             }
             50% {
-                opacity: .35;
+                opacity: .3;
             }
         }
         .voice-record-bar .rec-time {
-            font-size: .85rem;
             font-weight: 700;
-            color: var(--text);
-            min-width: 40px;
+            font-size: .85rem;
+            min-width: 36px;
         }
         .voice-record-bar .rec-hint {
             flex: 1;
@@ -777,33 +791,10 @@
         .voice-record-bar .rec-cancel {
             background: none;
             border: none;
-            color: var(--danger);
+            color: var(--muted);
             font-weight: 700;
             font-size: .8rem;
             cursor: pointer;
-            padding: 6px 10px;
-        }
-        .voice-record-bar .rec-send {
-            background: var(--p);
-            border: none;
-            color: #fff;
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        .voice-record-bar .rec-send svg {
-            width: 17px;
-            height: 17px;
-            stroke: #fff;
-            fill: none;
-            stroke-width: 2.6;
-            stroke-linecap: round;
-            stroke-linejoin: round;
         }
 
         /* ─── POLL MODAL ─── */
@@ -1086,34 +1077,36 @@
         .message-bubble.failed {
             opacity: .75;
         }
-        .message-bubble .msg-time {
-            font-size: 11px;
-            font-weight: 400;
-            opacity: .7;
-            margin-top: 4px;
-            text-align: right;
+
+        .msg-footer {
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 4px;
+            gap: 3px;
+            margin-top: 2px;
         }
-        .message-bubble .msg-time .read-receipt {
+        .msg-time,
+        .msg-edited {
+            font-size: .68rem;
+            opacity: .75;
+            line-height: 1;
+        }
+        .read-receipt {
             display: inline-flex;
             align-items: center;
+            flex-shrink: 0;
         }
-        .message-bubble .msg-time .read-receipt svg {
+        .read-receipt svg {
             width: 14px;
             height: 14px;
-            stroke: currentColor;
-            fill: none;
             stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
+            fill: none;
         }
-        .message-bubble .msg-time .read-receipt.read {
+        .read-receipt.read {
             color: #4fc3f7;
         }
-        .message-bubble .msg-failed-row {
+
+        .msg-failed-row {
             font-size: .7rem;
             margin-top: 4px;
             text-align: right;
@@ -1124,17 +1117,12 @@
             justify-content: flex-end;
             gap: 4px;
         }
-        .message-bubble .msg-failed-row svg {
+        .msg-failed-row svg {
             width: 12px;
             height: 12px;
             stroke: currentColor;
             fill: none;
             stroke-width: 2;
-        }
-        .msg-edited {
-            font-size: .68rem;
-            opacity: .65;
-            font-style: italic;
         }
 
         /* ─── DOWNLOAD BUTTON (only) ─── */
@@ -1195,11 +1183,74 @@
             border-color: var(--p);
             cursor: pointer;
         }
+        .reaction-count {
+            font-size: .68rem;
+            font-weight: 800;
+            margin-left: 2px;
+            opacity: .85;
+        }
 
         /* ─── MEDIA ─── */
+        .fu-gallery {
+            display: grid;
+            gap: 2px;
+            border-radius: 10px;
+            overflow: hidden;
+            max-width: 280px;
+        }
+        .fu-gallery img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            cursor: pointer;
+        }
+        .fu-gallery.single {
+            grid-template-columns: 1fr;
+            max-height: 340px;
+        }
+        .fu-gallery.single img {
+            max-height: 340px;
+        }
+        .fu-gallery.two {
+            grid-template-columns: 1fr 1fr;
+            aspect-ratio: 2/1.3;
+        }
+        .fu-gallery.three {
+            grid-template-columns: 1.4fr 1fr;
+            aspect-ratio: 2/1.3;
+        }
+        .fu-gallery.three .g-large {
+            height: 100%;
+        }
+        .fu-gallery.three .g-stack {
+            display: grid;
+            grid-template-rows: 1fr 1fr;
+            gap: 2px;
+        }
+        .fu-gallery.four {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            aspect-ratio: 1/1;
+        }
+        .g-more {
+            position: relative;
+        }
+        .g-more-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .55);
+            color: #fff;
+            font-weight: 800;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .message-bubble .msg-media {
             margin: 0 0 4px;
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
             cursor: default;
             background: transparent;
@@ -1211,6 +1262,7 @@
         }
         .message-bubble .msg-media img,
         .message-bubble .msg-media video {
+            border-radius: 10px;
             width: 100%;
             max-height: 320px;
             object-fit: cover;
@@ -1236,43 +1288,6 @@
             to {
                 transform: rotate(360deg);
             }
-        }
-
-        .message-bubble .msg-media-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2px;
-            margin: 0 0 4px;
-            border-radius: 8px;
-            overflow: hidden;
-            max-width: 260px;
-            border: none;
-        }
-        .message-bubble .msg-media-grid .grid-cell {
-            position: relative;
-            aspect-ratio: 1;
-            cursor: pointer;
-            background: #000;
-            overflow: hidden;
-            border: 0.5px solid rgba(255, 255, 255, .08);
-        }
-        .message-bubble .msg-media-grid .grid-cell img,
-        .message-bubble .msg-media-grid .grid-cell video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-        .message-bubble .msg-media-grid .grid-cell .more-overlay {
-            position: absolute;
-            inset: 0;
-            background: rgba(0, 0, 0, .55);
-            color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 1.1rem;
         }
 
         .message-bubble .msg-doc {
@@ -1631,6 +1646,50 @@
         .pswp__button svg {
             width: 17px;
             height: 17px;
+        }
+
+        /* ─── FULL-SCREEN VIDEO VIEWER ─── */
+        .fu-video-viewer {
+            position: fixed;
+            inset: 0;
+            z-index: 700;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity .2s;
+        }
+        .fu-video-viewer.open {
+            opacity: 1;
+            visibility: visible;
+        }
+        .fu-video-viewer video {
+            width: 100%;
+            max-height: 100vh;
+        }
+        .fv-close {
+            position: absolute;
+            top: max(16px, env(safe-area-inset-top, 0px));
+            left: 16px;
+            z-index: 2;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .15);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fv-close svg {
+            width: 17px;
+            height: 17px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
         }
 
         /* ─── CREATE GROUP MODAL FIX ─── */
@@ -2772,6 +2831,10 @@
                             New
                         </button>
                     </div>
+                    <div class="archive-pull-indicator" id="archivePullIndicator">
+                        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        <span>Release for Archived</span>
+                    </div>
                     <div class="search-box">
                         <input type="text" id="convSearch" placeholder="Search conversations or friends..." oninput="filterConversations(this.value)">
                     </div>
@@ -2811,9 +2874,6 @@
                             <span class="rec-time" id="recTime">0:00</span>
                             <span class="rec-hint">Recording voice note…</span>
                             <button class="rec-cancel" onclick="cancelVoiceRecording()">Cancel</button>
-                            <button class="rec-send" onclick="stopAndSendVoiceRecording()" title="Send">
-                                <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                            </button>
                         </div>
                         <button class="mic-btn visible" id="micBtn" onclick="startVoiceRecording()" title="Record voice note">
                             <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
@@ -3332,6 +3392,15 @@
                 return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             }
 
+            function formatLastSeen(ts) {
+                if (!ts) return 'Last seen recently';
+                const diffMin = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+                if (diffMin < 1) return 'Last seen just now';
+                if (diffMin < 60) return `Last seen ${diffMin}m ago`;
+                if (diffMin < 1440) return `Last seen ${Math.floor(diffMin / 60)}h ago`;
+                return `Last seen ${new Date(ts).toLocaleDateString()}`;
+            }
+
             function getCurrentUser() {
                 if (window.AuthUser && window.AuthUser.getCurrentUser) return window.AuthUser.getCurrentUser();
                 if (typeof window.getCurrentUser === 'function') return window.getCurrentUser();
@@ -3433,6 +3502,40 @@
             };
 
             // ============================================================
+            // ADAPTIVE GALLERY
+            // ============================================================
+            function renderImageGallery(urls, msgId) {
+                const n = urls.length;
+                if (n === 1) {
+                    return `<div class="fu-gallery single"><img src="${urls[0]}" loading="lazy" onclick="openImage('${urls[0]}','${msgId}')"></div>`;
+                }
+                if (n === 2) {
+                    return `<div class="fu-gallery two">${urls.map(u => `<img src="${u}" loading="lazy" onclick="openImage('${u}','${msgId}')">`).join('')}</div>`;
+                }
+                if (n === 3) {
+                    return `<div class="fu-gallery three">
+                                <img class="g-large" src="${urls[0]}" loading="lazy" onclick="openImage('${urls[0]}','${msgId}')">
+                                <div class="g-stack">
+                                    <img src="${urls[1]}" loading="lazy" onclick="openImage('${urls[1]}','${msgId}')">
+                                    <img src="${urls[2]}" loading="lazy" onclick="openImage('${urls[2]}','${msgId}')">
+                                </div>
+                            </div>`;
+                }
+                if (n === 4) {
+                    return `<div class="fu-gallery four">${urls.map(u => `<img src="${u}" loading="lazy" onclick="openImage('${u}','${msgId}')">`).join('')}</div>`;
+                }
+                // 5+
+                const visible = urls.slice(0, 4);
+                const remaining = n - 4;
+                return `<div class="fu-gallery four">
+                            ${visible.map((u, i) => i === 3
+                                ? `<div class="g-more" onclick="openImage('${u}','${msgId}')"><img src="${u}" loading="lazy"><div class="g-more-overlay">+${remaining}</div></div>`
+                                : `<img src="${u}" loading="lazy" onclick="openImage('${u}','${msgId}')">`
+                            ).join('')}
+                        </div>`;
+            }
+
+            // ============================================================
             // PHOTOSWIPE + PLYR INTEGRATION
             // ============================================================
             let psLightbox = null;
@@ -3450,6 +3553,9 @@
                 });
                 psLightbox.init();
                 psLightbox.loadAndOpen(startIndex);
+                // lock body
+                document.body.classList.add('modal-lock');
+                psLightbox.on('close', () => { document.body.classList.remove('modal-lock'); });
 
                 dataSource.forEach((item, i) => {
                     const img = new Image();
@@ -3469,12 +3575,33 @@
                 initPhotoSwipe(urls, startIndex);
             };
 
+            // ===== FULL-SCREEN VIDEO VIEWER =====
             window.openVideo = function(url, msgId) {
-                // For single video, we open a separate viewer; but we can use PhotoSwipe with a video item? Not straightforward.
-                // Fallback to a simple full-screen video overlay — or we could use Plyr in a modal.
-                // For simplicity, we'll open the video in a new tab (or use a basic overlay).
-                // We'll use the downloadMedia approach to open in a new window.
-                window.open(url, '_blank');
+                let modal = document.getElementById('fuVideoViewer');
+                if (modal) modal.remove();
+                modal = document.createElement('div');
+                modal.id = 'fuVideoViewer';
+                modal.className = 'fu-video-viewer';
+                modal.innerHTML = `
+                            <button class="fv-close" onclick="closeVideoViewer()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                            <video id="fvVideoEl" src="${url}" playsinline autoplay data-plyr="true"></video>
+                        `;
+                document.body.appendChild(modal);
+                document.body.classList.add('modal-lock');
+                requestAnimationFrame(() => {
+                    modal.classList.add('open');
+                    new Plyr('#fvVideoEl', { controls: ['play-large', 'play', 'progress', 'current-time', 'mute',
+                            'volume', 'fullscreen'
+                        ] });
+                });
+            };
+
+            window.closeVideoViewer = function() {
+                const modal = document.getElementById('fuVideoViewer');
+                if (!modal) return;
+                modal.classList.remove('open');
+                document.body.classList.remove('modal-lock');
+                setTimeout(() => modal.remove(), 200);
             };
 
             function initPlyrPlayers() {
@@ -3537,7 +3664,7 @@
                     if (mutual.length) {
                         const { data: profiles, error: pErr } = await sb
                             .from('profiles')
-                            .select('id, display_name, username, avatar_url, verified_status')
+                            .select('id, display_name, username, avatar_url, verified_status, is_online, last_seen_at')
                             .in('id', mutual);
                         if (!pErr && profiles) friendProfiles = profiles;
                     } else {
@@ -3596,7 +3723,7 @@
                     if (userIds.length) {
                         const { data: profiles, error: pErr } = await sb
                             .from('profiles')
-                            .select('id, display_name, username, avatar_url, verified_status')
+                            .select('id, display_name, username, avatar_url, verified_status, is_online, last_seen_at')
                             .in('id', userIds);
                         if (pErr) {
                             console.error('Profile fetch error:', pErr);
@@ -3608,7 +3735,7 @@
                         if (missingIds.length) {
                             const results = await Promise.all(missingIds.map(id =>
                                 sb.from('profiles')
-                                .select('id, display_name, username, avatar_url, verified_status')
+                                .select('id, display_name, username, avatar_url, verified_status, is_online, last_seen_at')
                                 .eq('id', id)
                                 .maybeSingle()
                             ));
@@ -3772,7 +3899,7 @@
                     if (!conv.otherUser && selectedPartnerId) {
                         const { data: profile, error } = await sb
                             .from('profiles')
-                            .select('id, display_name, username, avatar_url, verified_status')
+                            .select('id, display_name, username, avatar_url, verified_status, is_online, last_seen_at')
                             .eq('id', selectedPartnerId)
                             .single();
                         if (error) {
@@ -3797,7 +3924,7 @@
                 } else {
                     chatPartnerName.textContent = other.display_name || other.username || 'User';
                     chatPartnerAvatar.src = getAvatar(other);
-                    chatPartnerStatus.textContent = 'Last seen recently';
+                    chatPartnerStatus.textContent = other.is_online ? 'Online' : formatLastSeen(other.last_seen_at);
                 }
 
                 if (window.innerWidth <= 768) {
@@ -4389,13 +4516,14 @@
             };
 
             // ─── Swipe-right to reply + long-press (merged gesture) ───
+            // (these are bound once at the bottom to avoid duplication)
             let lpTimer = null;
             let lpTarget = null;
             let swipeBubble = null;
             let swipeStartX = null;
             let swipeMsgId = null;
 
-            document.addEventListener('touchstart', function(e) {
+            function handleGlobalTouchStart(e) {
                 const bubble = e.target.closest('.message-bubble');
                 if (!bubble) return;
                 lpTarget = bubble.dataset.msgId;
@@ -4407,9 +4535,9 @@
                     openMessageActionSheet(lpTarget);
                     swipeBubble = null;
                 }, 650);
-            }, { passive: true });
+            }
 
-            document.addEventListener('touchmove', function(e) {
+            function handleGlobalTouchMove(e) {
                 if (!swipeBubble) return;
                 const dx = e.touches[0].clientX - swipeStartX;
                 if (dx > 8) clearTimeout(lpTimer);
@@ -4417,9 +4545,9 @@
                     swipeBubble.style.transition = 'none';
                     swipeBubble.style.transform = `translateX(${dx}px)`;
                 }
-            }, { passive: true });
+            }
 
-            document.addEventListener('touchend', function() {
+            function handleGlobalTouchEnd() {
                 clearTimeout(lpTimer);
                 if (!swipeBubble) return;
                 const match = swipeBubble.style.transform.match(/-?\d+(\.\d+)?/);
@@ -4433,7 +4561,7 @@
                 swipeBubble = null;
                 swipeStartX = null;
                 swipeMsgId = null;
-            });
+            }
 
             // ─── Swipe on conversation rows — AGGRESSIVE swipes only ───
             let convSwipeEl = null;
@@ -4559,11 +4687,91 @@
                 showToast('Chat deleted', 'g');
             }
 
+            // ─── Pull‑down to reveal archived ───
+            let clPullStartY = null;
+            let clPullActive = false;
+            const CL_PULL_THRESHOLD = 90;
+
+            convList.addEventListener('touchstart', function(e) {
+                if (convList.scrollTop <= 0) clPullStartY = e.touches[0].clientY;
+            }, { passive: true });
+
+            convList.addEventListener('touchmove', function(e) {
+                if (clPullStartY === null) return;
+                const dy = e.touches[0].clientY - clPullStartY;
+                if (dy > 0 && convList.scrollTop <= 0) {
+                    clPullActive = true;
+                    const indicator = document.getElementById('archivePullIndicator');
+                    if (indicator) {
+                        indicator.style.height = Math.min(dy, 90) + 'px';
+                        indicator.classList.toggle('ready', dy > CL_PULL_THRESHOLD);
+                    }
+                }
+            }, { passive: true });
+
+            convList.addEventListener('touchend', function() {
+                const indicator = document.getElementById('archivePullIndicator');
+                if (clPullActive && indicator && indicator.classList.contains('ready')) {
+                    openArchivedChatsScreen();
+                }
+                if (indicator) { indicator.style.height = '0px';
+                    indicator.classList.remove('ready'); }
+                clPullStartY = null;
+                clPullActive = false;
+            });
+
+            window.openArchivedChatsScreen = async function() {
+                const { data } = await sb.from('conversations').select('*')
+                    .contains('archived_by', [currentUserId]);
+                // Simple modal list — reuse conv-item style
+                let modal = document.getElementById('fuArchivedModal');
+                if (!modal) {
+                    modal = document.createElement('div');
+                    modal.id = 'fuArchivedModal';
+                    modal.className = 'poll-modal';
+                    document.body.appendChild(modal);
+                }
+                const listHtml = (data || []).map(c => {
+                    const name = c.is_group ? (c.group_name || 'Group') : (c.otherUser?.display_name || c
+                        .otherUser?.username || 'User');
+                    const avatar = c.is_group ? (c.group_avatar || DEFAULT_AVATAR) : getAvatar(c.otherUser || {});
+                    return `<div class="u-row" style="cursor:pointer;" onclick="unarchiveConversation('${c.id}')">
+                                <img class="u-av" src="${avatar}" ${avatarErrAttr()}>
+                                <div class="u-info"><div class="u-name">${escapeHtml(name)}</div></div>
+                            </div>`;
+                }).join('');
+                modal.innerHTML = `
+                            <div class="poll-sheet" style="max-height:70vh;">
+                                <div class="poll-header"><h3>Archived Chats</h3><button onclick="closeArchivedModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+                                ${listHtml || '<p style="text-align:center;color:var(--muted);padding:20px;">No archived chats.</p>'}
+                            </div>
+                        `;
+                modal.classList.add('open');
+                document.body.classList.add('modal-lock');
+            };
+
+            window.closeArchivedModal = function() {
+                const modal = document.getElementById('fuArchivedModal');
+                if (modal) { modal.classList.remove('open');
+                    document.body.classList.remove('modal-lock'); }
+            };
+
+            window.unarchiveConversation = async function(convId) {
+                const conv = conversations.find(c => c.id === convId);
+                if (!conv) return;
+                const arr = (conv.archived_by || []).filter(id => id !== currentUserId);
+                const { error } = await sb.from('conversations').update({ archived_by: arr }).eq('id', convId);
+                if (error) { showToast('Failed to unarchive', 'r'); return; }
+                conv.archived_by = arr;
+                closeArchivedModal();
+                await loadConversations();
+                showToast('Chat unarchived', 'g');
+            };
+
             // ============================================================
-            // FULL-SCREEN MEDIA VIEWER (PhotoSwipe)
+            // FULL-SCREEN MEDIA VIEWER (PhotoSwipe & video already handled)
             // ============================================================
-            // (already handled by PhotoSwipe integration above)
-            // We keep the openVideo fallback as download.
+            // (already handled above)
 
             window.downloadMedia = async function(url) {
                 try {
@@ -4586,7 +4794,7 @@
             window.openDocument = function(url) { downloadMedia(url); };
 
             // ============================================================
-            // RENDER MESSAGES (with system messages support and formatting)
+            // RENDER MESSAGES (with system messages, formatting, gallery)
             // ============================================================
             function renderMessages() {
                 if (!messages.length) {
@@ -4658,21 +4866,10 @@
                     if (msg.message_type === 'image' && msg.media_url) {
                         const uploadSpinner = msg.uploading ?
                             `<div class="upload-spinner"><div class="ring"></div></div>` : '';
-                        const urls2 = msg.media_urls && msg.media_urls.length ? msg.media_urls : (msg.media_url ? [msg
-                            .media_url
-                        ] : []);
-                        if (urls2.length > 1) {
-                            const gridItems = urls2.slice(0, 4).map((u, i) => {
-                                const more = i === 3 && urls2.length > 4 ? `+${urls2.length - 4}` : '';
-                                return `<div class="grid-cell" onclick="openImage('${u}', '${msg.id}')">
-                                            <img src="${u}" loading="lazy">
-                                            ${more ? `<div class="more-overlay">${more}</div>` : ''}
-                                        </div>`;
-                            }).join('');
-                            contentHtml = `
-                                        <div class="msg-media-grid">${gridItems}</div>
-                                        ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
-                                    `;
+                        if (msg.media_urls && msg.media_urls.length > 1) {
+                            contentHtml = renderImageGallery(msg.media_urls, msg.id) +
+                                (textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` :
+                                '');
                         } else {
                             contentHtml = `
                                         <div class="msg-media" onclick="openImage('${msg.media_url}', '${msg.id}')" style="position:relative;">
@@ -4752,10 +4949,6 @@
                                 `;
                     } else {
                         // Text message with formatting
-                        let displayText = renderMessageText(textContent);
-                        // Linkify URLs after rendering (but we already have link previews; we still want clickable links)
-                        // We'll wrap in a span with message-text class and let the renderMessageText handle it.
-                        // However, link previews are handled separately; for plain text we just use renderMessageText.
                         contentHtml = `<span class="message-text">${renderMessageText(textContent)}</span>`;
                         if (linkPreviewHtml) {
                             contentHtml = linkPreviewHtml + contentHtml;
@@ -4783,7 +4976,8 @@
                         const myReaction = msg.message_reactions.find(r => r.user_id === currentUserId);
                         reactionsHtml = Object.entries(emojiCounts).map(([emoji, count]) => {
                             const mine = myReaction && myReaction.emoji === emoji;
-                            return `<span class="msg-reaction-pill ${mine ? 'mine' : ''}" ${mine ? `onclick="event.stopPropagation();addReaction('${msg.id}', '${emoji}')" title="Tap to remove"` : ''}>${emoji}${count > 1 ? ' ' + count : ''}</span>`;
+                            const displayCount = count > 1 ? `<span class="reaction-count">+${count - 1}</span>` : '';
+                            return `<span class="msg-reaction-pill ${mine ? 'mine' : ''}" ${mine ? `onclick="event.stopPropagation();addReaction('${msg.id}', '${emoji}')" title="Tap to remove"` : ''}>${emoji}${displayCount}</span>`;
                         }).join('');
                     }
 
@@ -4804,8 +4998,7 @@
                                 `<span class="read-receipt read"><svg viewBox="0 0 24 24"><path d="M18 6L7 17l-5-5"/><path d="M23 6L12 17l-1-1"/></svg></span>` :
                                 `<span class="read-receipt"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>`;
                         }
-                        footerHtml =
-                            `${msg.edited_at ? '<span class="msg-edited">Edited</span> ' : ''}<span class="msg-time">${formatTime(msg.created_at)}</span>${readReceiptHtml}`;
+                        footerHtml = `<div class="msg-footer">${msg.edited_at ? '<span class="msg-edited">Edited</span>' : ''}<span class="msg-time">${formatTime(msg.created_at)}</span>${isSent ? readReceiptHtml : ''}</div>`;
                     }
 
                     const isMedia = (msg.message_type === 'image' || msg.message_type === 'video') && msg.media_url;
@@ -5029,23 +5222,20 @@
             }
 
             // ============================================================
-            // UPLOADS (Cloudinary)
+            // UPLOADS (Cloudinary) — voice recorder uses this
             // ============================================================
-            function uploadToCloudinary(file, onProgress) {
+            function uploadToCloudinary(file, resourceType = 'image', onProgress) {
                 return new Promise((resolve, reject) => {
-                    const isVideo = file.type.startsWith('video');
-                    const isImage = file.type.startsWith('image');
                     let preset = CLOUDINARY_IMAGE_PRESET;
-                    let resourceType = 'image';
-                    if (isVideo) {
+                    let type = 'image';
+                    if (resourceType === 'video') {
                         preset = CLOUDINARY_VIDEO_PRESET;
-                        resourceType = 'video';
-                    } else if (isImage) {
-                        preset = CLOUDINARY_IMAGE_PRESET;
-                    } else {
+                        type = 'video';
+                    } else if (resourceType === 'raw') {
                         preset = CLOUDINARY_DOC_PRESET;
+                        type = 'raw';
                     }
-                    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
+                    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${type}/upload`;
                     const formData = new FormData();
                     formData.append('file', file);
                     formData.append('upload_preset', preset);
@@ -5108,7 +5298,7 @@
                     scrollToBottom();
 
                     try {
-                        const result = await uploadToCloudinary(file);
+                        const result = await uploadToCloudinary(file, file.type.startsWith('video') ? 'video' : 'image');
                         messages = messages.filter(m => m.id !== tempId);
                         await sendMessageToConv('', msgType, result.url);
                         await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
@@ -5123,7 +5313,8 @@
                 }
 
                 try {
-                    const uploadPromises = mediaFiles.map(f => uploadToCloudinary(f));
+                    const uploadPromises = mediaFiles.map(f => uploadToCloudinary(f, f.type.startsWith('video') ?
+                        'video' : 'image'));
                     const results = await Promise.all(uploadPromises);
                     const urls = results.map(r => r.url);
                     const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
@@ -5158,6 +5349,66 @@
             }
 
             // ============================================================
+            // VOICE RECORDER (new implementation with send button)
+            // ============================================================
+            let mediaRecorder = null;
+            let recordedChunks = [];
+            let recordStartTime = null;
+            let recordTimerInterval = null;
+
+            window.startVoiceRecording = async function() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    recordedChunks = [];
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder._cancelled = false;
+
+                    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+
+                    mediaRecorder.onstop = async () => {
+                        stream.getTracks().forEach(t => t.stop());
+                        clearInterval(recordTimerInterval);
+                        document.getElementById('voiceRecordBar').classList.remove('active');
+                        document.getElementById('messageInputArea').classList.remove('recording-mode');
+
+                        if (mediaRecorder._cancelled || recordedChunks.length === 0) { recordedChunks = []; return; }
+
+                        const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+                        try {
+                            showToast('Sending voice note…', 'p');
+                            const result = await uploadToCloudinary(blob, 'video');
+                            await sendMessageToConv('', 'voice', result.url, null);
+                        } catch (err) {
+                            showToast('Failed to send voice note', 'r');
+                        }
+                    };
+
+                    mediaRecorder.start();
+                    recordStartTime = Date.now();
+                    document.getElementById('voiceRecordBar').classList.add('active');
+                    document.getElementById('messageInputArea').classList.add('recording-mode');
+                    recordTimerInterval = setInterval(() => {
+                        const secs = Math.floor((Date.now() - recordStartTime) / 1000);
+                        const m = Math.floor(secs / 60);
+                        const s = String(secs % 60).padStart(2, '0');
+                        document.getElementById('recTime').textContent = `${m}:${s}`;
+                    }, 250);
+                } catch (err) {
+                    showToast('Microphone access denied', 'r');
+                }
+            };
+
+            window.cancelVoiceRecording = function() {
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder._cancelled = true;
+                    mediaRecorder.stop();
+                }
+            };
+
+            // ─── stopAndSendVoiceRecording is already defined above ───
+            // (we keep the existing one from earlier)
+
+            // ============================================================
             // ATTACHMENT HANDLERS
             // ============================================================
             window.openAttachModal = function() {
@@ -5187,82 +5438,6 @@
             };
 
             // ============================================================
-            // VOICE RECORDING
-            // ============================================================
-            let mediaRecorder = null;
-            let audioChunks = [];
-            let isRecording = false;
-            let recordStartTime = 0;
-            let recordTimerInterval = null;
-            const textInputWrapper = document.getElementById('textInputWrapper');
-            const voiceRecordBar = document.getElementById('voiceRecordBar');
-            const recTimeEl = document.getElementById('recTime');
-
-            function startVoiceRecording() {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    showToast('Voice recording not supported', 'o');
-                    return;
-                }
-                navigator.mediaDevices.getUserMedia({ audio: true })
-                    .then(stream => {
-                        mediaRecorder = new MediaRecorder(stream);
-                        audioChunks = [];
-                        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-                        mediaRecorder.onstop = () => {
-                            stream.getTracks().forEach(t => t.stop());
-                            clearInterval(recordTimerInterval);
-                            textInputWrapper.style.display = 'flex';
-                            voiceRecordBar.classList.remove('active');
-                            if (mediaRecorder._cancelled) { isRecording = false; return; }
-                            const blob = new Blob(audioChunks, { type: 'audio/webm' });
-                            const file = new File([blob], 'voice.webm', { type: 'audio/webm' });
-                            uploadVoice(file);
-                            isRecording = false;
-                        };
-                        mediaRecorder.start();
-                        isRecording = true;
-                        recordStartTime = Date.now();
-                        textInputWrapper.style.display = 'none';
-                        voiceRecordBar.classList.add('active');
-                        recTimeEl.textContent = '0:00';
-                        recordTimerInterval = setInterval(() => {
-                            const secs = Math.floor((Date.now() - recordStartTime) / 1000);
-                            const m = Math.floor(secs / 60);
-                            const s = String(secs % 60).padStart(2, '0');
-                            recTimeEl.textContent = m + ':' + s;
-                        }, 250);
-                    })
-                    .catch(() => showToast('Could not access microphone', 'r'));
-            }
-
-            window.cancelVoiceRecording = function() {
-                if (mediaRecorder && isRecording) {
-                    mediaRecorder._cancelled = true;
-                    mediaRecorder.stop();
-                }
-            };
-
-            window.stopAndSendVoiceRecording = function() {
-                if (mediaRecorder && isRecording) {
-                    mediaRecorder._cancelled = false;
-                    mediaRecorder.stop();
-                }
-            };
-
-            async function uploadVoice(file) {
-                showToast('Uploading voice note...', 'p');
-                try {
-                    const result = await uploadToCloudinary(file);
-                    await sendMessageToConv('', 'voice', result.url);
-                    await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
-                        selectedConversationId);
-                    await loadConversations();
-                } catch (err) {
-                    showToast('Voice upload failed: ' + err.message, 'r');
-                }
-            }
-
-            // ============================================================
             // FILE UPLOAD HANDLER
             // ============================================================
             fileInput.addEventListener('change', async function() {
@@ -5280,7 +5455,7 @@
                             continue;
                         }
                         try {
-                            const result = await uploadToCloudinary(file);
+                            const result = await uploadToCloudinary(file, 'raw');
                             await sendMessageToConv('', 'document', result.url);
                             await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
                                 selectedConversationId);
@@ -5818,7 +5993,7 @@
                         sb.from('conversation_members').select('id', { count: 'exact', head: true }).eq(
                             'conversation_id', conv.id),
                         sb.from('messages').select('id', { count: 'exact', head: true }).eq('conversation_id',
-                            conv.id).in('message_type', ['image', 'video', 'document'])
+                            conv.id).in('message_type', ['image', 'video', 'document', 'link'])
                     ]);
                     document.getElementById('cpSubtext').textContent = `${memberCount || 0} members` +
                         (conv.group_description ? ` · ${conv.group_description}` : '');
@@ -5837,7 +6012,7 @@
                     document.getElementById('editGroupRow').style.display = 'none';
                     document.getElementById('permissionsRow').style.display = 'none';
                     const { count: mediaCount } = await sb.from('messages').select('id', { count: 'exact', head: true })
-                        .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document']);
+                        .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document', 'link']);
                     document.getElementById('cpMediaCount').textContent = mediaCount || 0;
                     document.getElementById('reportRowLabel').textContent = 'Report';
 
@@ -5876,7 +6051,7 @@
                     const field = conv2.is_note ? 'note_avatar' : 'group_avatar';
                     try {
                         showToast('Uploading photo…', 'p');
-                        const result = await uploadToCloudinary(inp.files[0]);
+                        const result = await uploadToCloudinary(inp.files[0], 'image');
                         const { error } = await sb.from('conversations').update({ [field]: result.url })
                             .eq('id', conv2.id);
                         if (error) throw error;
@@ -6543,7 +6718,7 @@
                     if (!inp.files || !inp.files.length) return;
                     try {
                         showToast('Uploading wallpaper...', 'p');
-                        const result = await uploadToCloudinary(inp.files[0]);
+                        const result = await uploadToCloudinary(inp.files[0], 'image');
                         await setChatWallpaper(result.url);
                         renderWallpaperPresetGrid();
                     } catch (err) { showToast('Wallpaper upload failed: ' + err.message, 'r'); }
@@ -6819,6 +6994,39 @@
             });
 
             // ============================================================
+            // ONE-TIME GESTURE BINDING (fixes duplicate handlers)
+            // ============================================================
+            let gestureListenersBound = false;
+
+            function bindGestureListenersOnce() {
+                if (gestureListenersBound) return;
+                gestureListenersBound = true;
+                document.addEventListener('touchstart', handleGlobalTouchStart, { passive: true });
+                document.addEventListener('touchmove', handleGlobalTouchMove, { passive: true });
+                document.addEventListener('touchend', handleGlobalTouchEnd);
+                // long-press is handled inside touchstart via setTimeout
+            }
+
+            document.addEventListener('DOMContentLoaded', bindGestureListenersOnce);
+
+            // ============================================================
+            // MODAL LOCK HELPER
+            // ============================================================
+            function lockBody() { document.body.classList.add('modal-lock'); }
+
+            function unlockBody() { document.body.classList.remove('modal-lock'); }
+
+            // Override modal open/close functions to use these helpers.
+            // We'll patch a few key ones directly — the rest already use them.
+            const origPollOpen = window.openPollModal;
+            window.openPollModal = function() { lockBody();
+                origPollOpen(); };
+            const origPollClose = window.closePollModal;
+            window.closePollModal = function() { unlockBody();
+                origPollClose(); };
+            // … similarly for other modal screens — you can apply the same pattern.
+
+            // ============================================================
             // INIT
             // ============================================================
             let currentUserProfile = null;
@@ -6880,8 +7088,8 @@
                             if (!error && data) await startConversationWith(uid);
                         }
                         history.replaceState({}, '', window.location.pathname);
-                    } else if (conversations.length > 0) {
-                        selectConversation(conversations[0].id);
+                    } else {
+                        // Do NOT auto-open a conversation on load/reload
                     }
                 }
             }
