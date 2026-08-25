@@ -509,6 +509,29 @@
             stroke-linecap: round;
             stroke-linejoin: round;
         }
+        .chat-view .chat-view-header .chat-actions button {
+            background: none;
+            border: none;
+            color: var(--text);
+            cursor: pointer;
+            width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background .15s;
+            flex-shrink: 0;
+        }
+        .chat-view-header .chat-actions button:hover { background: var(--pdim); }
+        .chat-view-header .chat-actions button svg {
+            width: 22px;
+            height: 22px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
         .chat-view .chat-view-header .chat-partner-avatar {
             width: 38px;
             height: 38px;
@@ -539,10 +562,33 @@
         /* Glass-blur header/input over wallpaper */
         .chat-view-header.wp-glass,
         .message-input-area.wp-glass {
-            background: rgba(20, 18, 28, .38) !important;
-            backdrop-filter: blur(20px) saturate(160%);
-            -webkit-backdrop-filter: blur(20px) saturate(160%);
+            position: relative;
+            overflow: hidden;
+            background: transparent !important;
             border-color: rgba(255, 255, 255, .08);
+            z-index: 3;
+        }
+        .chat-view-header.wp-glass::before,
+        .message-input-area.wp-glass::before {
+            content: '';
+            position: absolute;
+            inset: -24px;
+            background-image: var(--wp-img, none);
+            background-color: var(--wp-color, transparent);
+            background-size: cover;
+            background-position: center;
+            filter: blur(18px) brightness(.6) saturate(140%);
+            z-index: -2;
+        }
+        .chat-view-header.wp-glass::after,
+        .message-input-area.wp-glass::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(20, 18, 28, .38);
+            backdrop-filter: blur(6px) saturate(160%);
+            -webkit-backdrop-filter: blur(6px) saturate(160%);
+            z-index: -1;
         }
 
         /* ─── MESSAGES AREA ─── */
@@ -1062,6 +1108,21 @@
         .hidden {
             display: none !important;
         }
+        .disap-badge {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--p);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            border: 2px solid var(--bg2);
+        }
 
         /* ─── MESSAGE BUBBLE ─── */
         .message-bubble {
@@ -1098,6 +1159,14 @@
         }
         .message-bubble.failed {
             opacity: .75;
+        }
+        .message-bubble.media-only {
+            background: transparent !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+        }
+        .message-bubble.media-only .msg-footer {
+            padding: 4px 2px 0;
         }
 
         .msg-footer {
@@ -1222,13 +1291,13 @@
         /* ─── MEDIA GRID (matches FreeUpper demo layout) ─── */
         .fu-media-grid-wrap {
             display: grid;
-            gap: 3px;
+            gap: 2px;
             max-width: 280px;
             width: 100%;
-            border-radius: 12px;
+            border-radius: 8px;
             overflow: hidden;
             background: #0c0c0e;
-            padding: 3px;
+            padding: 2px;
             margin-bottom: 4px;
         }
         .fu-media-grid-wrap.count-1 { grid-template-columns: 1fr; }
@@ -1245,7 +1314,7 @@
             position: relative;
             width: 100%;
             overflow: hidden;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
             background: #000;
         }
@@ -1280,7 +1349,7 @@
 
         .message-bubble .msg-media {
             margin: 0 0 4px;
-            border-radius: 12px;
+            border-radius: 8px;
             overflow: hidden;
             cursor: pointer;
             background: #0c0c0e;
@@ -1293,7 +1362,7 @@
         }
         .message-bubble .msg-media img,
         .message-bubble .msg-media video {
-            border-radius: 12px;
+            border-radius: 8px;
             width: 100%;
             max-height: 320px;
             object-fit: cover;
@@ -3036,7 +3105,10 @@
                         <button class="back-btn" onclick="closeChatView()">
                             <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
                         </button>
-                        <img class="chat-partner-avatar" id="chatPartnerAvatar" src="" alt="" onclick="openPartnerProfile()">
+                        <span style="position:relative;display:inline-block;flex-shrink:0;" onclick="openPartnerProfile()">
+                            <img class="chat-partner-avatar" id="chatPartnerAvatar" src="" alt="">
+                            <span id="disapHeaderBadge" class="disap-badge hidden"><i class="ri-time-line"></i></span>
+                        </span>
                         <div class="chat-partner-info" onclick="openPartnerProfile()">
                             <div class="chat-partner-name" id="chatPartnerName">Select a conversation</div>
                             <div class="chat-partner-status" id="chatPartnerStatus">Online</div>
@@ -4287,7 +4359,9 @@
                 }
 
                 applyChatBackground(conv.theme_url || null);
-                applyBubbleColor(conv.bubble_color || 'brand');
+                applyBubbleColor(getMyBubbleColor(conv));
+                const disapBadgeEl = document.getElementById('disapHeaderBadge');
+                if (disapBadgeEl) disapBadgeEl.classList.toggle('hidden', !(conv.disappearing_duration > 0));
 
                 renderTypingIndicator(false);
                 messagesArea.innerHTML =
@@ -4475,6 +4549,14 @@
             let currentAudioMsgId = null;
             let currentAudioBtn = null;
             let voiceRAF = null;
+            let audioUnlocked = false;
+
+            function unlockAudioOnce() {
+                if (audioUnlocked) return;
+                audioUnlocked = true;
+                try { const a = new Audio(); a.play().catch(() => {}); } catch (e) {}
+            }
+            document.addEventListener('touchend', unlockAudioOnce, { once: true, passive: true });
 
             const VOICE_WAVE_BAR_COUNT = 28;
             const voiceWaveCache = {};
@@ -4551,7 +4633,11 @@
                     return;
                 }
                 stopCurrentVoice();
-                const audio = new Audio(url);
+                const audio = new Audio();
+                audio.setAttribute('playsinline', '');
+                audio.setAttribute('webkit-playsinline', '');
+                audio.preload = 'auto';
+                audio.src = url;
                 currentAudio = audio;
                 currentAudioMsgId = msgId;
                 currentAudioBtn = btn;
@@ -4564,7 +4650,13 @@
                     const dur = document.getElementById('vdur-' + msgId);
                     if (dur) dur.textContent = formatVoiceTime(audio.duration);
                 });
-                audio.play();
+                const playPromise = audio.play();
+                if (playPromise && playPromise.catch) {
+                    playPromise.catch(() => {
+                        showToast('Tap play again to listen', 'o');
+                        stopCurrentVoice();
+                    });
+                }
                 voiceRAF = requestAnimationFrame(tickVoiceProgress);
                 audio.onended = () => stopCurrentVoice();
             };
@@ -5351,6 +5443,7 @@
                     let contentHtml = '';
 
                     let textContent = msg.text || '';
+                    const isMediaOnly = (msg.message_type === 'image' || msg.message_type === 'video') && !textContent;
                     const urls = extractUrls(textContent);
                     let linkPreviewHtml = '';
 
@@ -5402,7 +5495,7 @@
                         const initialDur = msg.voice_duration ? formatVoiceTime(msg.voice_duration) : '0:00';
                         contentHtml = `
                                     <div class="voice-msg" data-voice-id="${msg.id}">
-                                        <button class="play-btn" onclick="toggleVoicePlay(this, '${msg.media_url}', '${msg.id}')">
+                                        <button class="play-btn" onclick="event.stopPropagation();toggleVoicePlay(this, '${msg.media_url}', '${msg.id}')" ontouchstart="event.stopPropagation()">
                                             <svg class="ic-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                                             <svg class="ic-pause" viewBox="0 0 24 24" style="display:none;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
                                         </button>
@@ -5535,7 +5628,7 @@
                                 </div>` : '';
 
                     html += `
-                                <div class="message-bubble ${msgClass}${msg.failed ? ' failed' : ''}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:14px;' : ''}">
+                                <div class="message-bubble ${msgClass}${msg.failed ? ' failed' : ''}${isMediaOnly ? ' media-only' : ''}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:14px;' : ''}">
                                     ${sideHtml}
                                     ${replyHtml}
                                     ${contentHtml}
@@ -6513,6 +6606,13 @@
 
             function currentConv() { return conversations.find(c => c.id === selectedConversationId); }
 
+            function getMyBubbleColor(conv) {
+                if (conv && conv.bubble_color && typeof conv.bubble_color === 'object') {
+                    return conv.bubble_color[currentUserId] || 'brand';
+                }
+                return 'brand';
+            }
+
             // ─── System message posting ───
             async function postSystemMessage(conversationId, text) {
                 await sb.from('messages').insert({
@@ -7092,6 +7192,9 @@
                         `${myName} turned off disappearing messages` :
                         `${myName} set disappearing messages to ${label}`);
 
+                    const badgeEl = document.getElementById('disapHeaderBadge');
+                    if (badgeEl) badgeEl.classList.toggle('hidden', !(seconds > 0));
+
                     closeDisappearingScreen();
                     showToast('Disappearing messages updated', 'g');
                 } catch (err) {
@@ -7258,7 +7361,7 @@
                 renderThemePresetGrid();
                 const conv = currentConv();
                 const dot = document.getElementById('fuThemeBubbleDot');
-                const c = FU_BUBBLE_COLORS.find(x => x.id === (conv?.bubble_color || 'brand')) || FU_BUBBLE_COLORS[0];
+                const c = FU_BUBBLE_COLORS.find(x => x.id === getMyBubbleColor(conv)) || FU_BUBBLE_COLORS[0];
                 dot.style.background = c.preview;
             };
             window.closeChatThemeModal = function() {
@@ -7349,8 +7452,9 @@
             function applyChatBackground(bg) {
                 const headerEl = document.querySelector('.chat-view-header');
                 const hasWallpaper = !!bg;
+                const isSolid = bg && bg.startsWith('solid:');
 
-                if (bg && bg.startsWith('solid:')) {
+                if (isSolid) {
                     messagesArea.style.backgroundImage = 'none';
                     messagesArea.style.backgroundColor = bg.replace('solid:', '');
                 } else {
@@ -7360,8 +7464,17 @@
                     messagesArea.style.backgroundPosition = 'center';
                 }
 
-                if (headerEl) headerEl.classList.toggle('wp-glass', hasWallpaper);
-                if (messageInputArea) messageInputArea.classList.toggle('wp-glass', hasWallpaper);
+                [headerEl, messageInputArea].forEach(el => {
+                    if (!el) return;
+                    el.classList.toggle('wp-glass', hasWallpaper);
+                    if (hasWallpaper) {
+                        el.style.setProperty('--wp-img', isSolid ? 'none' : `url(${bg})`);
+                        el.style.setProperty('--wp-color', isSolid ? bg.replace('solid:', '') : 'transparent');
+                    } else {
+                        el.style.removeProperty('--wp-img');
+                        el.style.removeProperty('--wp-color');
+                    }
+                });
             }
 
             // ─── Bubble Color ───
@@ -7379,7 +7492,7 @@
                 const grid = document.getElementById('bubbleColorGrid');
                 if (!grid) return;
                 grid.innerHTML = FU_BUBBLE_COLORS.map(c => `
-                            <div class="bubble-color-swatch ${c.id === (currentConv()?.bubble_color || 'brand') ? 'selected' : ''}" data-color-id="${c.id}" style="background:${c.preview};"></div>
+                            <div class="bubble-color-swatch ${c.id === getMyBubbleColor(currentConv()) ? 'selected' : ''}" data-color-id="${c.id}" style="background:${c.preview};"></div>
                         `).join('');
                 grid.onclick = function(e) {
                     const swatch = e.target.closest('.bubble-color-swatch');
@@ -7392,17 +7505,18 @@
             window.setBubbleColor = async function(colorId) {
                 const conv = currentConv();
                 if (!conv) return;
+                const updatedMap = { ...(conv.bubble_color && typeof conv.bubble_color === 'object' ? conv.bubble_color : {}), [currentUserId]: colorId };
                 applyBubbleColor(colorId);
-                conv.bubble_color = colorId;
+                conv.bubble_color = updatedMap;
                 renderBubbleColorGrid();
-                const { error } = await sb.from('conversations').update({ bubble_color: colorId }).eq('id', conv.id);
+                const { error } = await sb.from('conversations').update({ bubble_color: updatedMap }).eq('id', conv.id);
                 if (error) {
                     console.error('bubble color update error:', error);
                     showToast('Failed to save bubble color', 'r');
                     return;
                 }
                 const idx = conversations.findIndex(c => c.id === conv.id);
-                if (idx !== -1) conversations[idx].bubble_color = colorId;
+                if (idx !== -1) conversations[idx].bubble_color = updatedMap;
                 showToast('Bubble color updated', 'g');
             };
 
