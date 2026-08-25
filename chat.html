@@ -753,7 +753,7 @@
             display: none;
             align-items: center;
             gap: 10px;
-            padding: 10px 14px;
+            padding: 8px 12px;
             background: var(--bg3);
             border-radius: 100px;
             flex: 1;
@@ -787,13 +787,33 @@
             display: block;
         }
         .voice-record-bar .rec-cancel {
-            background: none;
+            background: var(--bg2);
             border: none;
-            color: var(--muted);
-            font-weight: 700;
-            font-size: .8rem;
+            color: var(--danger);
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
+            flex-shrink: 0;
+            font-size: 1rem;
         }
+        .voice-record-bar .rec-send {
+            background: var(--p);
+            border: none;
+            color: #fff;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .voice-record-bar .rec-send svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 
         /* ─── POLL MODAL ─── */
         .poll-modal {
@@ -1047,7 +1067,6 @@
         .message-bubble {
             max-width: var(--max-msg-width);
             padding: 12px 16px;
-            border-radius: 18px;
             font-family: 'Inter', -apple-system, sans-serif;
             font-size: 16px;
             line-height: 1.5;
@@ -1069,11 +1088,13 @@
             align-self: flex-end;
             background: var(--bubble-color, var(--p));
             color: #fff;
+            border-radius: 20px 20px 4px 20px;
         }
         .message-bubble.received {
             align-self: flex-start;
             background: var(--bg3);
             color: var(--text);
+            border-radius: 20px 20px 20px 4px;
         }
         .message-bubble.failed {
             opacity: .75;
@@ -3022,7 +3043,7 @@
                         </div>
                         <div class="chat-actions">
                             <button onclick="openChatProfile()" title="Chat options">
-                                <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
                             </button>
                         </div>
                     </div>
@@ -3038,10 +3059,11 @@
                             <input type="file" id="fileInput" accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style="display:none" multiple />
                         </div>
                         <div class="voice-record-bar" id="voiceRecordBar">
+                            <button class="rec-cancel" onclick="cancelVoiceRecording()"><i class="ri-delete-bin-line"></i></button>
                             <div class="rec-dot"></div>
                             <span class="rec-time" id="recTime">0:00</span>
                             <canvas id="recWaveCanvas" width="160" height="28" style="flex:1;height:28px;"></canvas>
-                            <button class="rec-cancel" onclick="cancelVoiceRecording()">Cancel</button>
+                            <button class="rec-send" onclick="sendVoiceRecording()"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>
                         </div>
                         <button class="mic-btn visible" id="micBtn" onclick="startVoiceRecording()" title="Record voice note">
                             <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
@@ -3239,7 +3261,7 @@
                     <div class="fu-row-label">Media, Links &amp; Docs</div>
                     <div class="fu-row-right"><span id="cpMediaCount">0</span><i class="ri-arrow-right-s-line"></i></div>
                 </div>
-                <div class="fu-row group-only hidden" onclick="openMembersScreen(selectedConversationId)">
+                <div class="fu-row group-only hidden" onclick="openGroupMembersFromProfile()">
                     <div class="fu-ico"><i class="ri-group-line"></i></div>
                     <div class="fu-row-label">Members</div>
                     <div class="fu-row-right"><span id="cpMembersLink"></span><i class="ri-arrow-right-s-line"></i></div>
@@ -3403,6 +3425,10 @@
             <div class="am-search-wrap">
                 <input type="text" id="amSearchInput" placeholder="Search friends..." oninput="filterAddMembersList(this.value)">
             </div>
+            <label style="display:flex;align-items:center;gap:10px;padding:0 16px 10px;font-size:.85rem;font-weight:600;color:var(--muted);cursor:pointer;">
+                <input type="checkbox" id="amAddAsAdminToggle" onchange="amAddAsAdmin = this.checked;">
+                Add as admin
+            </label>
             <div id="amFriendsList" class="am-friends-list"></div>
         </div>
 
@@ -3478,7 +3504,7 @@
 
             <div class="fu-lb-floating" id="lbFloating">
                 <div class="fu-lb-react">
-                    <div class="fu-lb-circle" id="lbEmojiToggle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
+                    <div class="fu-lb-circle" id="lbEmojiToggle"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
                     <div class="fu-lb-emoji-bar" id="lbEmojiBar">
                         <span onclick="lbReact('❤️')">❤️</span>
                         <span onclick="lbReact('👍')">👍</span>
@@ -3821,7 +3847,7 @@
                 const item = lbItems[lbIndex];
                 if (!item) return;
                 const img = lbImgEl(), vid = lbVideoEl();
-                document.getElementById('lbEmojiToggle').innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>';
+                document.getElementById('lbEmojiToggle').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>';
 
                 if (item.type === 'image') {
                     vid.pause();
@@ -5978,6 +6004,13 @@
                 }
             };
 
+            window.sendVoiceRecording = function() {
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder._cancelled = false;
+                    mediaRecorder.stop();
+                }
+            };
+
             // ============================================================
             // ATTACHMENT HANDLERS
             // ============================================================
@@ -6819,6 +6852,7 @@
             let amSelectedIds = new Set();
             let amFriendsCache = [];
             let currentInviteLink = '';
+            let amAddAsAdmin = false;
 
             window.openAddMembersScreen = async function() {
                 const conv = currentConv();
@@ -6827,6 +6861,8 @@
                 if (!canAdd) { showToast('Only admins can add members here', 'o'); return; }
 
                 amSelectedIds = new Set();
+                amAddAsAdmin = false;
+                document.getElementById('amAddAsAdminToggle').checked = false;
                 document.getElementById('amDoneBtn').textContent = 'Add (0)';
                 document.getElementById('amDoneBtn').disabled = true;
                 switchAddMembersTab('people');
@@ -6898,7 +6934,7 @@
                 const conv = currentConv();
                 if (!conv || amSelectedIds.size === 0) return;
                 const rows = Array.from(amSelectedIds).map(uid => ({
-                    conversation_id: conv.id, user_id: uid, role: 'member'
+                    conversation_id: conv.id, user_id: uid, role: amAddAsAdmin ? 'admin' : 'member'
                 }));
                 try {
                     const { error } = await sb.from('conversation_members').insert(rows);
@@ -7064,6 +7100,11 @@
             };
 
             // ─── Members Screen ───
+            window.openGroupMembersFromProfile = function() {
+                const conv = currentConv();
+                if (conv) openMembersScreen(conv.id);
+            };
+
             window.openMembersScreen = async function(convId) {
                 const members = await loadGroupMembers(convId);
                 groupMembersCache = members;
@@ -7338,7 +7379,7 @@
                 const grid = document.getElementById('bubbleColorGrid');
                 if (!grid) return;
                 grid.innerHTML = FU_BUBBLE_COLORS.map(c => `
-                            <div class="bubble-color-swatch ${c.id === (currentConv()?.bubble_color || 'brand') ? 'selected' : ''}" data-color-id="${c.id}" style="background:${c.preview};pointer-events:none;"></div>
+                            <div class="bubble-color-swatch ${c.id === (currentConv()?.bubble_color || 'brand') ? 'selected' : ''}" data-color-id="${c.id}" style="background:${c.preview};"></div>
                         `).join('');
                 grid.onclick = function(e) {
                     const swatch = e.target.closest('.bubble-color-swatch');
