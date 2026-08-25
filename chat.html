@@ -318,6 +318,62 @@
         .conv-swipe-actions.right .swipe-btn.archive-btn {
             background: #475569;
         }
+        @media (hover: hover) and (pointer: fine) {
+            .conv-swipe-actions { display: none !important; }
+            .conv-item { padding-right: 44px; }
+            .conv-item .conv-more-btn { display: flex; }
+        }
+        .conv-item .conv-more-btn {
+            display: none;
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: none;
+            border: none;
+            color: var(--muted);
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .conv-item .conv-more-btn:hover {
+            background: var(--pdim);
+            color: var(--p);
+        }
+        .conv-more-menu {
+            position: fixed;
+            z-index: 60;
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(0,0,0,.4);
+            padding: 6px;
+            min-width: 160px;
+            display: none;
+        }
+        .conv-more-menu.open { display: block; }
+        .conv-more-menu button {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 10px;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: .85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px;
+            text-align: left;
+        }
+        .conv-more-menu button:hover { background: var(--pdim); }
+        .conv-more-menu button.danger { color: var(--danger); }
+
         .conv-item {
             display: flex;
             align-items: center;
@@ -571,13 +627,13 @@
         .chat-view-header.wp-glass::before,
         .message-input-area.wp-glass::before {
             content: '';
-            position: absolute;
-            inset: -24px;
+            position: fixed;
+            inset: 0;
             background-image: var(--wp-img, none);
             background-color: var(--wp-color, transparent);
             background-size: cover;
             background-position: center;
-            filter: blur(18px) brightness(.6) saturate(140%);
+            background-attachment: fixed;
             z-index: -2;
         }
         .chat-view-header.wp-glass::after,
@@ -585,9 +641,9 @@
             content: '';
             position: absolute;
             inset: 0;
-            background: rgba(20, 18, 28, .38);
-            backdrop-filter: blur(6px) saturate(160%);
-            -webkit-backdrop-filter: blur(6px) saturate(160%);
+            background: rgba(10, 8, 16, .28);
+            backdrop-filter: blur(14px) saturate(150%);
+            -webkit-backdrop-filter: blur(14px) saturate(150%);
             z-index: -1;
         }
 
@@ -1157,6 +1213,10 @@
             color: var(--text);
             border-radius: 20px 20px 20px 4px;
         }
+        [data-theme="light"] .message-bubble.received {
+            background: #e9e9ec;
+            color: #111;
+        }
         .message-bubble.failed {
             opacity: .75;
         }
@@ -1216,40 +1276,13 @@
             stroke-width: 2;
         }
 
-        /* ─── DOWNLOAD BUTTON (only) ─── */
-        .message-bubble .msg-side-download {
-            position: absolute;
-            left: -44px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background: var(--bg3);
-            border: 1px solid var(--brd2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 2;
-        }
-        .message-bubble .msg-side-download svg {
-            width: 14px;
-            height: 14px;
-            stroke: var(--muted);
-            fill: none;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
         /* ─── REACTIONS PILLS ─── */
         .reaction-emoji.active {
             background: var(--pdim);
         }
         .message-bubble .msg-reactions-row {
             position: absolute;
-            bottom: -10px;
+            bottom: -16px;
             display: flex;
             gap: 3px;
             z-index: 1;
@@ -1518,19 +1551,6 @@
             flex-shrink: 0;
             min-width: 32px;
             text-align: right;
-        }
-        .voice-msg .voice-dl-btn {
-            background: none;
-            border: none;
-            color: inherit;
-            opacity: .6;
-            cursor: pointer;
-            padding: 2px;
-            display: flex;
-            flex-shrink: 0;
-        }
-        .voice-msg .voice-dl-btn i {
-            font-size: 15px;
         }
 
         /* ─── POLL ─── */
@@ -3070,6 +3090,7 @@
 <body>
 
     <div id="tw"></div>
+    <audio id="fuVoicePlayer" playsinline preload="none" style="display:none"></audio>
 
     <div class="app">
         <!-- ===== HEADER ===== -->
@@ -4283,6 +4304,9 @@
                                                 <div class="conv-last-msg">${readTick}<span>${escapeHtml(lastMsg)}</span></div>
                                             </div>
                                             <div class="conv-time">${time}</div>
+                                            <button class="conv-more-btn" onclick="event.stopPropagation();openConvMoreMenu(event,'${c.id}')" title="More">
+                                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                            </button>
                                         </div>
                                     </div>
                                 `;
@@ -4543,20 +4567,24 @@
             }
 
             // ============================================================
-            // VOICE PLAYER
+            // VOICE PLAYER — shared <audio> element (reliable on mobile)
             // ============================================================
-            let currentAudio = null;
+            const fuAudioEl = document.getElementById('fuVoicePlayer');
             let currentAudioMsgId = null;
             let currentAudioBtn = null;
             let voiceRAF = null;
             let audioUnlocked = false;
 
             function unlockAudioOnce() {
-                if (audioUnlocked) return;
+                if (audioUnlocked || !fuAudioEl) return;
                 audioUnlocked = true;
-                try { const a = new Audio(); a.play().catch(() => {}); } catch (e) {}
+                const p = fuAudioEl.play();
+                if (p && p.catch) p.catch(() => {});
+                fuAudioEl.pause();
+                fuAudioEl.currentTime = 0;
             }
             document.addEventListener('touchend', unlockAudioOnce, { once: true, passive: true });
+            document.addEventListener('click', unlockAudioOnce, { once: true });
 
             const VOICE_WAVE_BAR_COUNT = 28;
             const voiceWaveCache = {};
@@ -4589,11 +4617,11 @@
             }
 
             window.seekVoiceWave = function(event, msgId) {
-                if (currentAudioMsgId !== msgId || !currentAudio) return;
+                if (currentAudioMsgId !== msgId || !fuAudioEl) return;
                 const wave = event.currentTarget;
                 const rect = wave.getBoundingClientRect();
                 const pct = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-                if (currentAudio.duration) currentAudio.currentTime = pct * currentAudio.duration;
+                if (fuAudioEl.duration) fuAudioEl.currentTime = pct * fuAudioEl.duration;
             };
 
             function formatVoiceTime(secs) {
@@ -4605,7 +4633,7 @@
 
             function stopCurrentVoice() {
                 if (voiceRAF) cancelAnimationFrame(voiceRAF);
-                if (currentAudio) { currentAudio.pause(); }
+                if (fuAudioEl) fuAudioEl.pause();
                 if (currentAudioBtn) {
                     const play = currentAudioBtn.querySelector('.ic-play');
                     const pause = currentAudioBtn.querySelector('.ic-pause');
@@ -4613,32 +4641,27 @@
                     if (pause) pause.style.display = 'none';
                 }
                 if (currentAudioMsgId) updateVoiceWaveProgress(currentAudioMsgId, 0);
-                currentAudio = null;
                 currentAudioBtn = null;
                 currentAudioMsgId = null;
             }
 
             function tickVoiceProgress() {
-                if (!currentAudio || !currentAudioMsgId) return;
-                const pct = currentAudio.duration ? (currentAudio.currentTime / currentAudio.duration) * 100 : 0;
+                if (!fuAudioEl || !currentAudioMsgId) return;
+                const pct = fuAudioEl.duration ? (fuAudioEl.currentTime / fuAudioEl.duration) * 100 : 0;
                 const dur = document.getElementById('vdur-' + currentAudioMsgId);
-                if (dur) dur.textContent = formatVoiceTime(currentAudio.duration - currentAudio.currentTime);
+                if (dur) dur.textContent = formatVoiceTime(fuAudioEl.duration - fuAudioEl.currentTime);
                 updateVoiceWaveProgress(currentAudioMsgId, pct);
                 voiceRAF = requestAnimationFrame(tickVoiceProgress);
             }
 
             window.toggleVoicePlay = function(btn, url, msgId) {
-                if (currentAudioMsgId === msgId && currentAudio && !currentAudio.paused) {
+                if (!fuAudioEl) return;
+                if (currentAudioMsgId === msgId && !fuAudioEl.paused) {
                     stopCurrentVoice();
                     return;
                 }
+                const wasDifferentTrack = fuAudioEl.src !== url;
                 stopCurrentVoice();
-                const audio = new Audio();
-                audio.setAttribute('playsinline', '');
-                audio.setAttribute('webkit-playsinline', '');
-                audio.preload = 'auto';
-                audio.src = url;
-                currentAudio = audio;
                 currentAudioMsgId = msgId;
                 currentAudioBtn = btn;
                 const play = btn.querySelector('.ic-play');
@@ -4646,19 +4669,32 @@
                 if (play) play.style.display = 'none';
                 if (pause) pause.style.display = '';
 
-                audio.addEventListener('loadedmetadata', () => {
-                    const dur = document.getElementById('vdur-' + msgId);
-                    if (dur) dur.textContent = formatVoiceTime(audio.duration);
-                });
-                const playPromise = audio.play();
-                if (playPromise && playPromise.catch) {
-                    playPromise.catch(() => {
-                        showToast('Tap play again to listen', 'o');
-                        stopCurrentVoice();
-                    });
+                const startPlayback = () => {
+                    const p = fuAudioEl.play();
+                    if (p && p.catch) {
+                        p.catch(() => {
+                            showToast('Could not play voice note', 'r');
+                            stopCurrentVoice();
+                        });
+                    }
+                    voiceRAF = requestAnimationFrame(tickVoiceProgress);
+                };
+
+                if (wasDifferentTrack) {
+                    fuAudioEl.src = url;
+                    fuAudioEl.load();
+                    fuAudioEl.addEventListener('loadedmetadata', function onMeta() {
+                        fuAudioEl.removeEventListener('loadedmetadata', onMeta);
+                        const dur = document.getElementById('vdur-' + msgId);
+                        if (dur) dur.textContent = formatVoiceTime(fuAudioEl.duration);
+                        startPlayback();
+                    }, { once: true });
+                } else {
+                    fuAudioEl.currentTime = 0;
+                    startPlayback();
                 }
-                voiceRAF = requestAnimationFrame(tickVoiceProgress);
-                audio.onended = () => stopCurrentVoice();
+
+                fuAudioEl.onended = () => stopCurrentVoice();
             };
 
             // ============================================================
@@ -5100,10 +5136,11 @@
             let convSwipeStartX = 0;
             let convSwipeId = null;
             let convSwipeOpenId = null;
-            const CONV_REVEAL_THRESHOLD = 64;
-            const CONV_FULL_THRESHOLD = 180;
+            const CONV_REVEAL_THRESHOLD = 90;
+            const CONV_FULL_THRESHOLD = 190;
             const CONV_OPEN_LEFT = -160;
             const CONV_OPEN_RIGHT = 84;
+            const CONV_SWIPE_DEADZONE = 14;
 
             function closeAllConvSwipes() {
                 if (!convSwipeOpenId) return;
@@ -5116,6 +5153,40 @@
                 convSwipeOpenId = null;
             }
             window.closeConvSwipe = closeAllConvSwipes;
+
+            // Desktop chevron "more" menu (Pin/Archive/Delete)
+            let convMoreMenuEl = null;
+            window.openConvMoreMenu = function(evt, convId) {
+                closeConvMoreMenu();
+                const conv = conversations.find(c => c.id === convId);
+                if (!conv) return;
+                const isPinned = (conv.pinned_by || []).includes(currentUserId);
+                const menu = document.createElement('div');
+                menu.className = 'conv-more-menu open';
+                menu.innerHTML = `
+                    <button onclick="closeConvMoreMenu();togglePinConversation('${convId}')"><i class="ri-pushpin-2-line"></i> ${isPinned ? 'Unpin' : 'Pin'}</button>
+                    <button onclick="closeConvMoreMenu();archiveConversation('${convId}')"><i class="ri-archive-line"></i> Archive</button>
+                    <button class="danger" onclick="closeConvMoreMenu();confirmDeleteConversation('${convId}')"><i class="ri-delete-bin-line"></i> Delete</button>
+                `;
+                document.body.appendChild(menu);
+                const rect = evt.currentTarget.getBoundingClientRect();
+                const menuWidth = 170;
+                let left = rect.right - menuWidth;
+                if (left < 8) left = 8;
+                let top = rect.bottom + 4;
+                if (top + 140 > window.innerHeight) top = rect.top - 144;
+                menu.style.left = left + 'px';
+                menu.style.top = top + 'px';
+                convMoreMenuEl = menu;
+                setTimeout(() => document.addEventListener('click', closeConvMoreMenuOnOutside), 0);
+            };
+            function closeConvMoreMenuOnOutside(e) {
+                if (convMoreMenuEl && !convMoreMenuEl.contains(e.target)) closeConvMoreMenu();
+            }
+            window.closeConvMoreMenu = function() {
+                if (convMoreMenuEl) { convMoreMenuEl.remove(); convMoreMenuEl = null; }
+                document.removeEventListener('click', closeConvMoreMenuOnOutside);
+            };
 
             convList.addEventListener('touchstart', function(e) {
                 if (convSwipeOpenId && !e.target.closest(`.conv-swipe-wrap[data-conv-id="${convSwipeOpenId}"]`)) {
@@ -5130,8 +5201,14 @@
 
             convList.addEventListener('touchmove', function(e) {
                 if (!convSwipeEl) return;
-                const dx = e.touches[0].clientX - convSwipeStartX;
-                if (Math.abs(dx) > 10) convSwipeBlocked = true;
+                const rawDx = e.touches[0].clientX - convSwipeStartX;
+                if (Math.abs(rawDx) > 10) convSwipeBlocked = true;
+                if (Math.abs(rawDx) < CONV_SWIPE_DEADZONE) {
+                    convSwipeEl.style.transition = 'none';
+                    convSwipeEl.style.transform = 'translateX(0)';
+                    return;
+                }
+                const dx = rawDx > 0 ? rawDx - CONV_SWIPE_DEADZONE : rawDx + CONV_SWIPE_DEADZONE;
                 const clamped = Math.max(-220, Math.min(110, dx));
                 convSwipeEl.style.transition = 'none';
                 convSwipeEl.style.transform = `translateX(${clamped}px)`;
@@ -5259,7 +5336,7 @@
                 if (!modal) {
                     modal = document.createElement('div');
                     modal.id = 'fuArchivedModal';
-                    modal.className = 'poll-modal';
+                    modal.className = 'fu-screen';
                     document.body.appendChild(modal);
                 }
                 const listHtml = (data || []).map(c => {
@@ -5272,13 +5349,16 @@
                             </div>`;
                 }).join('');
                 modal.innerHTML = `
-                            <div class="poll-sheet" style="max-height:70vh;">
-                                <div class="poll-header"><h3>Archived Chats</h3><button onclick="closeArchivedModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
-                                ${listHtml || '<p style="text-align:center;color:var(--muted);padding:20px;">No archived chats.</p>'}
+                            <div class="fu-screen-header">
+                                <button onclick="closeArchivedModal()"><i class="ri-arrow-left-line"></i></button>
+                                <h3>Archived Chats</h3>
+                            </div>
+                            <div class="fu-body">
+                                ${listHtml || '<div class="fu-empty-tab">No archived chats.</div>'}
                             </div>
                         `;
-                modal.classList.add('open');
                 document.body.classList.add('modal-lock');
+                requestAnimationFrame(() => modal.classList.add('open'));
             };
 
             window.closeArchivedModal = function() {
@@ -5501,7 +5581,6 @@
                                         </button>
                                         <div class="voice-wave" id="vwave-${msg.id}" onclick="seekVoiceWave(event, '${msg.id}')">${renderVoiceWaveformBars(msg.id)}</div>
                                         <span class="voice-duration" id="vdur-${msg.id}">${initialDur}</span>
-                                        <button class="voice-dl-btn" onclick="downloadMedia('${msg.media_url}')" title="Download"><i class="ri-download-2-line"></i></button>
                                     </div>
                                     ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
                                 `;
@@ -5621,15 +5700,8 @@
                         footerHtml = `<div class="msg-footer">${msg.edited_at ? '<span class="msg-edited">Edited</span>' : ''}<span class="msg-time">${formatTime(msg.created_at)}</span>${isSent ? readReceiptHtml : ''}</div>`;
                     }
 
-                    const isMedia = (msg.message_type === 'image' || msg.message_type === 'video') && msg.media_url;
-                    const sideHtml = isMedia ? `
-                                <div class="msg-side-download" onclick="downloadMedia('${msg.media_url}')" title="Download">
-                                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                </div>` : '';
-
                     html += `
-                                <div class="message-bubble ${msgClass}${msg.failed ? ' failed' : ''}${isMediaOnly ? ' media-only' : ''}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:14px;' : ''}">
-                                    ${sideHtml}
+                                <div class="message-bubble ${msgClass}${msg.failed ? ' failed' : ''}${isMediaOnly ? ' media-only' : ''}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:20px;' : ''}">
                                     ${replyHtml}
                                     ${contentHtml}
                                     ${reactionsHtml ? `<div class="msg-reactions-row">${reactionsHtml}</div>` : ''}
@@ -7457,11 +7529,13 @@
                 if (isSolid) {
                     messagesArea.style.backgroundImage = 'none';
                     messagesArea.style.backgroundColor = bg.replace('solid:', '');
+                    messagesArea.style.backgroundAttachment = '';
                 } else {
                     messagesArea.style.backgroundImage = bg ? `url(${bg})` : 'none';
                     messagesArea.style.backgroundColor = 'transparent';
                     messagesArea.style.backgroundSize = 'cover';
                     messagesArea.style.backgroundPosition = 'center';
+                    messagesArea.style.backgroundAttachment = bg ? 'fixed' : '';
                 }
 
                 [headerEl, messageInputArea].forEach(el => {
