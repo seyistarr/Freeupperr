@@ -1186,6 +1186,13 @@
             border-color: var(--p);
             cursor: pointer;
         }
+        .msg-reaction-pill.bare {
+            background: none;
+            border: none;
+            box-shadow: none;
+            padding: 0;
+            font-size: 1.05rem;
+        }
         .reaction-count {
             font-size: .68rem;
             font-weight: 800;
@@ -1296,6 +1303,37 @@
             to {
                 transform: rotate(360deg);
             }
+        }
+        .message-bubble .msg-media .vid-play-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, .15);
+        }
+        .message-bubble .msg-media .vid-play-overlay .vid-play-btn {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, .45);
+            backdrop-filter: blur(2px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .message-bubble .msg-media .vid-play-overlay svg {
+            width: 22px;
+            height: 22px;
+            fill: #fff;
+            margin-left: 3px;
+        }
+        .message-bubble .msg-media img.vid-thumb {
+            width: 100%;
+            max-height: 320px;
+            object-fit: cover;
+            display: block;
+            background: var(--bg3);
         }
 
         .message-bubble .msg-doc {
@@ -1678,18 +1716,15 @@
             max-height: 100vh;
         }
         .fv-close {
-            position: absolute;
-            top: max(16px, env(safe-area-inset-top, 0px));
-            left: 16px;
-            z-index: 2;
-            width: 36px;
-            height: 36px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             background: rgba(255, 255, 255, .15);
             border: none;
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
         }
         .fv-close svg {
             width: 17px;
@@ -1698,6 +1733,33 @@
             fill: none;
             stroke-width: 2.2;
             stroke-linecap: round;
+        }
+
+        /* ─── SWIPE REPLY ICON ─── */
+        .swipe-reply-icon {
+            position: fixed;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: var(--bg3);
+            border: 1px solid var(--brd2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0;
+            transform: scale(.5);
+            transition: opacity .1s, transform .1s;
+        }
+        .swipe-reply-icon svg {
+            width: 16px;
+            height: 16px;
+            stroke: var(--p);
+            fill: none;
+            stroke-width: 2.4;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
         /* ─── CREATE GROUP MODAL FIX ─── */
@@ -1827,16 +1889,11 @@
         /* ─── TYPING INDICATOR ─── */
         .typing-indicator {
             align-self: flex-start;
-            padding: 8px 14px;
-            background: var(--bg3);
-            border: 1px solid var(--brd);
-            border-radius: var(--bubble-radius);
-            border-bottom-left-radius: 4px;
+            padding: 4px 12px 10px;
+            background: none;
+            border: none;
             display: flex;
             align-items: center;
-            gap: 6px;
-            font-size: .8rem;
-            color: var(--muted);
             animation: fadeUp .2s ease both;
         }
         .typing-indicator .dots {
@@ -3551,6 +3608,7 @@
             // PHOTOSWIPE + PLYR INTEGRATION
             // ============================================================
             let psLightbox = null;
+            let pswpCurrentMsgId = null;
 
             function initPhotoSwipe(urls, startIndex) {
                 if (psLightbox) { psLightbox.destroy();
@@ -3563,9 +3621,35 @@
                     bgOpacity: 0.95,
                     showHideAnimationType: 'zoom',
                 });
+                psLightbox.on('uiRegister', function() {
+                    psLightbox.pswp.ui.registerElement({
+                        name: 'fu-download',
+                        ariaLabel: 'Download',
+                        order: 8,
+                        isButton: true,
+                        html: '<svg viewBox="0 0 24 24" style="width:19px;height:19px;stroke:#fff;fill:none;stroke-width:2;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+                        onClick: () => {
+                            const curr = psLightbox.pswp.currSlide.data.src;
+                            downloadMedia(curr);
+                        }
+                    });
+                    const msg = messages.find(m => m.id === pswpCurrentMsgId);
+                    if (msg && msg.sender_id === currentUserId) {
+                        psLightbox.pswp.ui.registerElement({
+                            name: 'fu-delete',
+                            ariaLabel: 'Delete',
+                            order: 9,
+                            isButton: true,
+                            html: '<svg viewBox="0 0 24 24" style="width:19px;height:19px;stroke:#fff;fill:none;stroke-width:2;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+                            onClick: () => {
+                                psLightbox.pswp.close();
+                                if (pswpCurrentMsgId) deleteMessage(pswpCurrentMsgId, 'everyone');
+                            }
+                        });
+                    }
+                });
                 psLightbox.init();
                 psLightbox.loadAndOpen(startIndex);
-                // lock body
                 document.body.classList.add('modal-lock');
                 psLightbox.on('close', () => { document.body.classList.remove('modal-lock'); });
 
@@ -3581,6 +3665,7 @@
             }
 
             window.openImage = function(url, msgId) {
+                pswpCurrentMsgId = msgId || null;
                 const msg = messages.find(m => m.id === msgId);
                 const urls = (msg && msg.media_urls && msg.media_urls.length) ? msg.media_urls : [url];
                 const startIndex = Math.max(0, urls.indexOf(url));
@@ -3591,11 +3676,17 @@
             window.openVideo = function(url, msgId) {
                 let modal = document.getElementById('fuVideoViewer');
                 if (modal) modal.remove();
+                const msg = messages.find(m => m.id === msgId);
+                const isMine = msg && msg.sender_id === currentUserId;
                 modal = document.createElement('div');
                 modal.id = 'fuVideoViewer';
                 modal.className = 'fu-video-viewer';
                 modal.innerHTML = `
-                            <button class="fv-close" onclick="closeVideoViewer()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                            <button class="fv-close" style="position:absolute;top:max(16px,env(safe-area-inset-top,0px));left:16px;z-index:2;" onclick="closeVideoViewer()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                            <div style="position:absolute;top:max(16px,env(safe-area-inset-top,0px));right:16px;z-index:2;display:flex;gap:10px;">
+                                <button class="fv-close" onclick="downloadMedia('${url}')"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:#fff;fill:none;stroke-width:2;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                                ${isMine ? `<button class="fv-close" onclick="closeVideoViewer();deleteMessage('${msgId}','everyone')"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:#fff;fill:none;stroke-width:2;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>` : ''}
+                            </div>
                             <video id="fvVideoEl" src="${url}" playsinline autoplay data-plyr="true"></video>
                         `;
                 document.body.appendChild(modal);
@@ -3626,6 +3717,11 @@
                         clickToPlay: true,
                     });
                 });
+            }
+
+            function videoThumbUrl(url) {
+                if (!url) return '';
+                return url.replace(/\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i, '.jpg$2');
             }
 
             // ============================================================
@@ -3946,6 +4042,7 @@
                 applyChatBackground(conv.theme_url || null);
                 applyBubbleColor(conv.bubble_color || 'brand');
 
+                renderTypingIndicator(false);
                 messagesArea.innerHTML =
                     `<div class="no-messages">${emptyChatIllustration()}<p>Loading…</p></div>`;
 
@@ -4453,12 +4550,51 @@
                 const msg = messages.find(m => m.id === msgId);
                 if (!msg) return;
                 replyTargetMessage = msg;
+                renderReplyPreviewBar();
                 const inp = document.getElementById('messageInput');
-                if (inp) {
-                    inp.focus();
-                    inp.placeholder = `Replying to ${msg.sender_id === currentUserId ? 'yourself' : '...'}`;
-                }
+                if (inp) inp.focus();
             };
+
+            window.cancelReplyPreview = function() {
+                replyTargetMessage = null;
+                const bar = document.getElementById('replyPreviewBar');
+                if (bar) bar.remove();
+                const inp = document.getElementById('messageInput');
+                if (inp) inp.placeholder = 'Type a message...';
+            };
+
+            function renderReplyPreviewBar() {
+                let bar = document.getElementById('replyPreviewBar');
+                if (!bar) {
+                    bar = document.createElement('div');
+                    bar.id = 'replyPreviewBar';
+                    bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--bg3);border-top:1px solid var(--brd);';
+                    messageInputArea.parentElement.insertBefore(bar, messageInputArea);
+                }
+                if (!replyTargetMessage) { bar.remove(); return; }
+                const m = replyTargetMessage;
+                let thumb = '';
+                let label = escapeHtml(m.text || '');
+                if (m.message_type === 'image' && m.media_url) {
+                    thumb = `<img src="${m.media_url}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;">`;
+                    label = label || '📷 Photo';
+                } else if (m.message_type === 'video' && m.media_url) {
+                    thumb = `<img src="${videoThumbUrl(m.media_url)}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;">`;
+                    label = label || '🎬 Video';
+                } else if (m.message_type === 'voice') {
+                    label = label || '🎤 Voice message';
+                } else if (m.message_type === 'document') {
+                    label = label || '📄 Document';
+                }
+                bar.innerHTML = `
+                    ${thumb}
+                    <div style="flex:1;min-width:0;border-left:2.5px solid var(--p);padding-left:8px;">
+                        <div style="font-size:.78rem;font-weight:700;color:var(--p);">Replying to ${m.sender_id === currentUserId ? 'yourself' : 'them'}</div>
+                        <div style="font-size:.8rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+                    </div>
+                    <button onclick="cancelReplyPreview()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;"><svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                `;
+            }
 
             window.copyMessage = function(msgId) {
                 const msg = messages.find(m => m.id === msgId);
@@ -4527,13 +4663,22 @@
                 } catch (err) { showToast('Failed to react', 'r'); }
             };
 
-            // ─── Swipe-right to reply + long-press (merged gesture) ───
-            // (these are bound once at the bottom to avoid duplication)
+            // ─── Swipe-to-reply with floating icon ───
             let lpTimer = null;
             let lpTarget = null;
             let swipeBubble = null;
             let swipeStartX = null;
             let swipeMsgId = null;
+            let swipeIcon = null;
+
+            function ensureSwipeIcon() {
+                if (swipeIcon) return swipeIcon;
+                swipeIcon = document.createElement('div');
+                swipeIcon.className = 'swipe-reply-icon';
+                swipeIcon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+                document.body.appendChild(swipeIcon);
+                return swipeIcon;
+            }
 
             function handleGlobalTouchStart(e) {
                 const bubble = e.target.closest('.message-bubble');
@@ -4556,11 +4701,19 @@
                 if (dx > 0 && dx < 90) {
                     swipeBubble.style.transition = 'none';
                     swipeBubble.style.transform = `translateX(${dx}px)`;
+                    const icon = ensureSwipeIcon();
+                    const rect = swipeBubble.getBoundingClientRect();
+                    const pct = Math.min(1, dx / 55);
+                    icon.style.opacity = pct;
+                    icon.style.transform = `scale(${0.5 + pct * 0.5})`;
+                    icon.style.top = (rect.top + rect.height / 2 - 17) + 'px';
+                    icon.style.left = (rect.left - 40) + 'px';
                 }
             }
 
             function handleGlobalTouchEnd() {
                 clearTimeout(lpTimer);
+                if (swipeIcon) { swipeIcon.style.opacity = '0'; swipeIcon.style.transform = 'scale(.5)'; }
                 if (!swipeBubble) return;
                 const match = swipeBubble.style.transform.match(/-?\d+(\.\d+)?/);
                 const dx = match ? parseFloat(match[0]) : 0;
@@ -4735,7 +4888,6 @@
             window.openArchivedChatsScreen = async function() {
                 const { data } = await sb.from('conversations').select('*')
                     .contains('archived_by', [currentUserId]);
-                // Simple modal list — reuse conv-item style
                 let modal = document.getElementById('fuArchivedModal');
                 if (!modal) {
                     modal = document.createElement('div');
@@ -4783,7 +4935,6 @@
             // ============================================================
             // FULL-SCREEN MEDIA VIEWER (PhotoSwipe & video already handled)
             // ============================================================
-            // (already handled above)
 
             window.downloadMedia = async function(url) {
                 try {
@@ -4803,7 +4954,77 @@
                 }
             };
 
-            window.openDocument = function(url) { downloadMedia(url); };
+            // ─── Document viewer full-screen ───
+            window.openDocument = function(url, msgId) {
+                const fileName = (url.split('/').pop() || 'Document').split('?')[0];
+                const ext = fileName.split('.').pop()?.toLowerCase() || '';
+                const msg = messages.find(m => m.id === msgId);
+                const isMine = msg && msg.sender_id === currentUserId;
+                let modal = document.getElementById('fuDocViewer');
+                if (modal) modal.remove();
+                modal = document.createElement('div');
+                modal.id = 'fuDocViewer';
+                modal.className = 'fu-screen';
+                modal.innerHTML = `
+                    <div class="fu-screen-header">
+                        <button onclick="closeDocViewer()"><i class="ri-arrow-left-line"></i></button>
+                        <h3 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(fileName)}</h3>
+                        <button onclick="downloadMedia('${url}')"><i class="ri-download-2-line"></i></button>
+                        ${isMine ? `<button onclick="closeDocViewer();deleteMessage('${msgId}','everyone')"><i class="ri-delete-bin-line"></i></button>` : ''}
+                    </div>
+                    <div class="fu-body" id="fuDocViewerBody" style="padding:0;background:#111;display:flex;flex-direction:column;align-items:center;"></div>
+                `;
+                document.body.appendChild(modal);
+                lockBody();
+                requestAnimationFrame(() => modal.classList.add('open'));
+
+                const body = document.getElementById('fuDocViewerBody');
+                if (ext === 'pdf') {
+                    body.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center;">Loading document…</div>';
+                    renderPdfPreview(url, body);
+                } else {
+                    const icons = { doc: '📝', docx: '📝', xls: '📊', xlsx: '📊', ppt: '📽️', pptx: '📽️', zip: '📦', txt: '📃' };
+                    body.innerHTML = `
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px 24px;text-align:center;color:#fff;">
+                            <div style="font-size:4rem;margin-bottom:16px;">${icons[ext] || '📄'}</div>
+                            <div style="font-weight:700;margin-bottom:6px;word-break:break-all;">${escapeHtml(fileName)}</div>
+                            <div style="color:#999;font-size:.85rem;margin-bottom:22px;">This file type can't be previewed in-app</div>
+                            <button onclick="downloadMedia('${url}')" style="background:var(--p);color:#fff;border:none;padding:12px 24px;border-radius:100px;font-weight:700;cursor:pointer;">Download</button>
+                        </div>
+                    `;
+                }
+            };
+
+            window.closeDocViewer = function() {
+                const modal = document.getElementById('fuDocViewer');
+                if (!modal) return;
+                modal.classList.remove('open');
+                unlockBody();
+                setTimeout(() => modal.remove(), 250);
+            };
+
+            async function renderPdfPreview(url, container) {
+                try {
+                    const loadingTask = pdfjsLib.getDocument(url);
+                    const pdf = await loadingTask.promise;
+                    container.innerHTML = '';
+                    const numPages = Math.min(pdf.numPages, 30);
+                    for (let i = 1; i <= numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const viewport = page.getViewport({ scale: Math.min(1.4, (window.innerWidth - 20) / page
+                                .getViewport({ scale: 1 }).width) });
+                        const canvas = document.createElement('canvas');
+                        canvas.style.cssText = 'margin:8px auto;max-width:100%;box-shadow:0 2px 12px rgba(0,0,0,.4);';
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        container.appendChild(canvas);
+                        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                    }
+                } catch (err) {
+                    container.innerHTML =
+                        `<div style="color:#aaa;padding:30px;text-align:center;">Couldn't preview this PDF.<br><button onclick="downloadMedia('${url}')" style="margin-top:14px;background:var(--p);color:#fff;border:none;padding:10px 20px;border-radius:100px;font-weight:700;cursor:pointer;">Download instead</button></div>`;
+                }
+            }
 
             // ============================================================
             // RENDER MESSAGES (with system messages, formatting, gallery)
@@ -4843,7 +5064,6 @@
                         html += `<div class="date-divider-row"><div class="date-divider">${label}</div></div>`;
                     }
 
-                    // System messages
                     if (msg.is_system) {
                         html += `<div class="system-msg-row"><span>${escapeHtml(msg.text)}</span></div>`;
                         return;
@@ -4894,9 +5114,11 @@
                     } else if (msg.message_type === 'video' && msg.media_url) {
                         const uploadSpinner = msg.uploading ?
                             `<div class="upload-spinner"><div class="ring"></div></div>` : '';
+                        const thumbUrl = msg.uploading ? msg.media_url : videoThumbUrl(msg.media_url);
                         contentHtml = `
-                                    <div class="msg-media" style="position:relative;">
-                                        <video class="fu-player" data-msg-id="${msg.id}" data-plyr="true" src="${msg.media_url}" playsinline preload="metadata" style="max-height:300px;width:100%;"></video>
+                                    <div class="msg-media" ${!msg.uploading ? `onclick="openVideo('${msg.media_url}','${msg.id}')"` : ''} style="position:relative;">
+                                        <img class="vid-thumb" src="${thumbUrl}" loading="lazy" alt="Video">
+                                        ${!msg.uploading ? `<div class="vid-play-overlay"><div class="vid-play-btn"><svg viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg></div></div>` : ''}
                                         ${uploadSpinner}
                                     </div>
                                     ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
@@ -4924,11 +5146,11 @@
                             zip: '📦', txt: '📃' };
                         const icon = icons[ext] || '📄';
                         contentHtml = `
-                                    <div class="msg-doc" onclick="downloadMedia('${msg.media_url}')">
+                                    <div class="msg-doc" onclick="openDocument('${msg.media_url}','${msg.id}')">
                                         <span class="doc-icon">${icon}</span>
                                         <div class="doc-info">
                                             <div class="doc-name">${escapeHtml(fileName)}</div>
-                                            <div class="doc-size">Tap to download</div>
+                                            <div class="doc-size">Tap to open</div>
                                         </div>
                                     </div>
                                     ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
@@ -4960,7 +5182,6 @@
                                     ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
                                 `;
                     } else {
-                        // Text message with formatting
                         contentHtml = `<span class="message-text">${renderMessageText(textContent)}</span>`;
                         if (linkPreviewHtml) {
                             contentHtml = linkPreviewHtml + contentHtml;
@@ -4972,10 +5193,29 @@
                         const replied = messages.find(m => m.id === msg.reply_to);
                         if (replied) {
                             const replyAuthor = replied.sender_id === currentUserId ? 'You' : (replied.sender_name ||
-                            'User');
+                                'User');
+                            let replyThumb = '';
+                            let replyLabel = escapeHtml(replied.text || '');
+                            if (replied.message_type === 'image' && replied.media_url) {
+                                replyThumb =
+                                    `<img src="${replied.media_url}" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;">`;
+                                replyLabel = replyLabel || '📷 Photo';
+                            } else if (replied.message_type === 'video' && replied.media_url) {
+                                replyThumb =
+                                    `<img src="${videoThumbUrl(replied.media_url)}" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;">`;
+                                replyLabel = replyLabel || '🎬 Video';
+                            } else if (replied.message_type === 'voice') {
+                                replyLabel = replyLabel || '🎤 Voice message';
+                            } else if (replied.message_type === 'document') {
+                                replyLabel = replyLabel || '📄 Document';
+                            }
                             replyHtml = `
-                                        <div style="font-size:.75rem;opacity:.7;padding:2px 0 4px 0;border-left:2px solid var(--p);padding-left:8px;margin-bottom:4px;">
-                                            ↳ ${escapeHtml(replyAuthor)}: ${escapeHtml(replied.text || '')}
+                                        <div style="display:flex;align-items:center;gap:8px;font-size:.75rem;opacity:.8;padding:4px 0 6px;border-left:2px solid var(--p);padding-left:8px;margin-bottom:4px;">
+                                            ${replyThumb}
+                                            <div style="min-width:0;overflow:hidden;">
+                                                <div style="font-weight:700;">${escapeHtml(replyAuthor)}</div>
+                                                <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${replyLabel}</div>
+                                            </div>
                                         </div>
                                     `;
                         }
@@ -4986,10 +5226,12 @@
                         const emojiCounts = {};
                         msg.message_reactions.forEach(r => { emojiCounts[r.emoji] = (emojiCounts[r.emoji] || 0) + 1; });
                         const myReaction = msg.message_reactions.find(r => r.user_id === currentUserId);
+                        const bare = msg.message_reactions.length === 1;
                         reactionsHtml = Object.entries(emojiCounts).map(([emoji, count]) => {
                             const mine = myReaction && myReaction.emoji === emoji;
-                            const displayCount = count > 1 ? `<span class="reaction-count">+${count - 1}</span>` : '';
-                            return `<span class="msg-reaction-pill ${mine ? 'mine' : ''}" ${mine ? `onclick="event.stopPropagation();addReaction('${msg.id}', '${emoji}')" title="Tap to remove"` : ''}>${emoji}${displayCount}</span>`;
+                            const displayCount = (!bare && count > 1) ? `<span class="reaction-count">+${count - 1}</span>` :
+                                '';
+                            return `<span class="msg-reaction-pill${bare ? ' bare' : ''} ${mine ? 'mine' : ''}" ${mine ? `onclick="event.stopPropagation();addReaction('${msg.id}', '${emoji}')" title="Tap to remove"` : ''}>${emoji}${displayCount}</span>`;
                         }).join('');
                     }
 
@@ -5075,7 +5317,7 @@
                 const mic = document.getElementById('micBtn');
                 if (mic) mic.classList.add('visible');
                 replyTargetMessage = null;
-                input.placeholder = 'Type a message...';
+                cancelReplyPreview();
 
                 sendMessageToConv(text, 'text', null, replyTo).then(() => {
                     sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
@@ -5211,17 +5453,39 @@
                 }, 3400);
             }
 
+            // ============================================================
+            // TYPING INDICATOR — floating 3 dots
+            // ============================================================
             function subscribeToConversations() {
                 if (conversationSubscription) { sb.removeChannel(conversationSubscription);
                     conversationSubscription = null; }
                 conversationSubscription = sb.channel('conversations-chat')
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => { loadConversations(); })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
+                        if (payload.eventType === 'UPDATE' && payload.new.id === selectedConversationId) {
+                            const others = (payload.new.typing_users || []).filter(id => id !== currentUserId);
+                            renderTypingIndicator(others.length > 0);
+                        }
+                        loadConversations();
+                    })
                     .subscribe();
             }
 
-            // ============================================================
-            // TYPING INDICATORS
-            // ============================================================
+            function renderTypingIndicator(isTyping) {
+                let el = document.getElementById('fuTypingIndicator');
+                if (isTyping) {
+                    if (!el) {
+                        el = document.createElement('div');
+                        el.id = 'fuTypingIndicator';
+                        el.className = 'typing-indicator';
+                        el.innerHTML = '<div class="dots"><span></span><span></span><span></span></div>';
+                        messagesArea.appendChild(el);
+                    }
+                    scrollToBottom();
+                } else if (el) {
+                    el.remove();
+                }
+            }
+
             function sendTypingIndicator(typing) {
                 if (!selectedConversationId || isBlockedConversation) return;
                 const conv = conversations.find(c => c.id === selectedConversationId);
@@ -5416,9 +5680,6 @@
                     mediaRecorder.stop();
                 }
             };
-
-            // ─── stopAndSendVoiceRecording is already defined above ───
-            // (we keep the existing one from earlier)
 
             // ============================================================
             // ATTACHMENT HANDLERS
@@ -5962,7 +6223,6 @@
                 }
                 cpIsAdmin = isAdmin;
 
-                // My Note branch
                 if (conv.is_note) {
                     groupRows.forEach(el => el.classList.add('hidden'));
                     dmRows.forEach(el => el.classList.add('hidden'));
@@ -5976,7 +6236,6 @@
                         .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document', 'link']);
                     document.getElementById('cpMediaCount').textContent = mediaCount || 0;
                     document.getElementById('cpMuteToggle').checked = false;
-                    // Hide edit group/permissions rows
                     document.getElementById('editGroupRow').style.display = 'none';
                     document.getElementById('permissionsRow').style.display = 'none';
                     document.getElementById('blockRowBtn').style.display = 'none';
@@ -5996,7 +6255,6 @@
                     } else {
                         badge.classList.add('hidden');
                     }
-                    // Show edit/permissions rows only for admins
                     document.getElementById('editGroupRow').style.display = isAdmin ? 'flex' : 'none';
                     document.getElementById('permissionsRow').style.display = isAdmin ? 'flex' : 'none';
                     document.getElementById('blockRowBtn').style.display = 'none';
@@ -6028,7 +6286,6 @@
                     document.getElementById('cpMediaCount').textContent = mediaCount || 0;
                     document.getElementById('reportRowLabel').textContent = 'Report';
 
-                    // Block/unblock
                     const blockBtn = document.getElementById('blockRowBtn');
                     blockBtn.style.display = 'flex';
                     const otherId = conv.otherUser?.id;
@@ -6901,9 +7158,9 @@
                             docx: 'ri-file-word-2-line',
                             xls: 'ri-file-excel-2-line', xlsx: 'ri-file-excel-2-line', ppt: 'ri-file-ppt-2-line',
                             pptx: 'ri-file-ppt-2-line', zip: 'ri-file-zip-line', txt: 'ri-file-text-line' };
-                        return `<div class="fu-doc-row" onclick="downloadMedia('${m.media_url}')">
+                        return `<div class="fu-doc-row" onclick="openDocument('${m.media_url}','${m.id}')">
                                     <div class="fu-doc-ico"><i class="${icons[ext] || 'ri-file-3-line'}"></i></div>
-                                    <div class="fu-doc-info"><div class="fu-doc-title">${escapeHtml(name)}</div><div class="fu-doc-meta">Tap to download</div></div>
+                                    <div class="fu-doc-info"><div class="fu-doc-title">${escapeHtml(name)}</div><div class="fu-doc-meta">Tap to open</div></div>
                                 </div>`;
                     }).join('') : `<div class="fu-empty-tab">No documents shared yet.</div>`;
                 }
@@ -6930,6 +7187,7 @@
                 selectedPartnerId = null;
                 isBlockedConversation = false;
                 messages = [];
+                renderTypingIndicator(false);
                 messagesArea.innerHTML = `
                             <div class="no-messages">
                                 ${emptyChatIllustration()}
@@ -6986,12 +7244,8 @@
             });
 
             document.addEventListener('keydown', function(e) {
-                if (e.target && e.target.id === 'messageInput' && e.key === 'Enter') {
-                    // Enter inserts newline — only the Send button sends.
-                    // (Prevents accidental sends on mobile keyboards.)
-                    if (!e.shiftKey) {
-                        return; // let default newline insertion happen
-                    }
+                if (e.target && e.target.id === 'messageInput' && e.key === 'Enter' && e.shiftKey) {
+                    // Shift+Enter inserts newline — let default happen.
                 }
                 if (e.target && e.target.id === 'messageInput') {
                     if (typingTimeout) clearTimeout(typingTimeout);
@@ -7016,32 +7270,57 @@
                 document.addEventListener('touchstart', handleGlobalTouchStart, { passive: true });
                 document.addEventListener('touchmove', handleGlobalTouchMove, { passive: true });
                 document.addEventListener('touchend', handleGlobalTouchEnd);
-                // long-press is handled inside touchstart via setTimeout
             }
 
             document.addEventListener('DOMContentLoaded', bindGestureListenersOnce);
 
             // ============================================================
-            // MODAL LOCK HELPER
+            // MODAL LOCK HELPERS
             // ============================================================
             function lockBody() { document.body.classList.add('modal-lock'); }
 
             function unlockBody() { document.body.classList.remove('modal-lock'); }
 
-            // Override modal open/close functions to use these helpers.
-            // We'll patch a few key ones directly — the rest already use them.
+            // ============================================================
+            // INIT
+            // ============================================================
+            let currentUserProfile = null;
+
+            // Wrap every full-screen (.fu-screen) and modal (.poll-modal) open/close pair
+            const modalPairs = [
+                ['openChatProfile', 'closeChatProfileModal'],
+                ['openChatThemeModal', 'closeChatThemeModal'],
+                ['openWallpaperModal', 'closeWallpaperModal'],
+                ['openBubbleColorModal', 'closeBubbleColorModal'],
+                ['openMediaLinksDocsModal', 'closeMediaLinksDocsModal'],
+                ['openMembersScreen', 'closeMembersScreen'],
+                ['openEditGroupInfo', 'closeEditGroupInfo'],
+                ['openGroupPermissions', 'closeGroupPermissions'],
+                ['openAddMembersScreen', 'closeAddMembersScreen'],
+                ['openDisappearingScreen', 'closeDisappearingScreen'],
+                ['openCreateGroupModal', 'closeCreateGroupModal'],
+                ['openReportModal', 'closeReportModal'],
+                ['openAttachModal', 'closeAttachModal'],
+            ];
+
+            modalPairs.forEach(([openName, closeName]) => {
+                const origOpen = window[openName];
+                const origClose = window[closeName];
+                if (typeof origOpen === 'function') {
+                    window[openName] = function(...args) { lockBody(); return origOpen.apply(this, args); };
+                }
+                if (typeof origClose === 'function') {
+                    window[closeName] = function(...args) { unlockBody(); return origClose.apply(this, args); };
+                }
+            });
+
+            // Poll modal wrap
             const origPollOpen = window.openPollModal;
             window.openPollModal = function() { lockBody();
                 origPollOpen(); };
             const origPollClose = window.closePollModal;
             window.closePollModal = function() { unlockBody();
                 origPollClose(); };
-            // … similarly for other modal screens — you can apply the same pattern.
-
-            // ============================================================
-            // INIT
-            // ============================================================
-            let currentUserProfile = null;
 
             async function initChat() {
                 const user = getCurrentUser();
@@ -7055,7 +7334,6 @@
                 currentUserId = user.id;
                 messageInputArea.dataset.defaultHtml = messageInputArea.innerHTML;
 
-                // Fetch own profile
                 const { data: profile } = await sb.from('profiles').select('*').eq('id', currentUserId).single();
                 currentUserProfile = profile || {};
 
@@ -7064,7 +7342,6 @@
                 subscribeToMessages();
                 subscribeToConversations();
 
-                // Check for invite link
                 const path = window.location.pathname;
                 const match = path.match(/\/join\/([a-z0-9]+)/i);
                 if (match) {
@@ -7100,8 +7377,6 @@
                             if (!error && data) await startConversationWith(uid);
                         }
                         history.replaceState({}, '', window.location.pathname);
-                    } else {
-                        // Do NOT auto-open a conversation on load/reload
                     }
                 }
             }
