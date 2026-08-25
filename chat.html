@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Chat · FreeUpper</title>
     <link rel="icon" type="image/png" href="freeupper.png" />
     <link rel="stylesheet" href="global.css" />
@@ -19,17 +19,7 @@
         }
     </script>
 
-    <!-- Plyr for custom video player -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
-    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js" defer>
-    </script>
-
-    <!-- PhotoSwipe for image gallery -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.4/photoswipe.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.4/umd/photoswipe.umd.min.js" defer>
-    </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.4/umd/photoswipe-lightbox.umd.min.js" defer>
-    </script>
+    <script src="https://unpkg.com/lucide@latest" defer></script>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer>
     </script>
@@ -58,6 +48,12 @@
             background: var(--bg);
             color: var(--text);
             transition: background .3s, color .3s;
+            touch-action: manipulation;
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+        }
+        img, video, canvas {
+            touch-action: manipulation;
         }
 
         body {
@@ -70,12 +66,16 @@
         body.modal-lock {
             overflow: hidden;
         }
-        body.modal-lock>*:not(.fu-media-viewer):not(.fu-video-viewer):not(.pswp) {
+        body.modal-lock>*:not(.fu-lb):not(.fu-screen):not(.poll-modal):not(.fu-confirm-modal):not(.fu-action-sheet-backdrop):not(.mfs):not(#fuDocViewer):not(#fuArchivedModal):not(#tw) {
             pointer-events: none;
         }
-        body.modal-lock .fu-media-viewer,
-        body.modal-lock .fu-video-viewer,
-        body.modal-lock .pswp {
+        body.modal-lock .fu-lb,
+        body.modal-lock .fu-screen,
+        body.modal-lock .poll-modal,
+        body.modal-lock .fu-confirm-modal,
+        body.modal-lock .fu-action-sheet-backdrop,
+        body.modal-lock .mfs,
+        body.modal-lock #tw {
             pointer-events: auto;
         }
 
@@ -783,10 +783,8 @@
             font-size: .85rem;
             min-width: 36px;
         }
-        .voice-record-bar .rec-hint {
-            flex: 1;
-            font-size: .78rem;
-            color: var(--muted);
+        .voice-record-bar canvas {
+            display: block;
         }
         .voice-record-bar .rec-cancel {
             background: none;
@@ -1200,74 +1198,71 @@
             opacity: .85;
         }
 
-        /* ─── MEDIA ─── */
-        .fu-gallery {
+        /* ─── MEDIA GRID (matches FreeUpper demo layout) ─── */
+        .fu-media-grid-wrap {
             display: grid;
-            gap: 2px;
-            border-radius: 8px;
-            overflow: hidden;
+            gap: 3px;
             max-width: 280px;
-            border: none;
-            box-shadow: none;
-            background: transparent;
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #0c0c0e;
+            padding: 3px;
+            margin-bottom: 4px;
         }
-        .fu-gallery img {
+        .fu-media-grid-wrap.count-1 { grid-template-columns: 1fr; }
+        .fu-media-grid-wrap.count-1 .fu-tile { aspect-ratio: 4/3; }
+        .fu-media-grid-wrap.count-2 { grid-template-columns: 1fr 1fr; }
+        .fu-media-grid-wrap.count-2 .fu-tile { aspect-ratio: 1/1; }
+        .fu-media-grid-wrap.count-3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+        .fu-media-grid-wrap.count-3 .fu-tile:nth-child(1) { grid-row: 1/span 2; aspect-ratio: auto; height: 100%; }
+        .fu-media-grid-wrap.count-3 .fu-tile:nth-child(2),
+        .fu-media-grid-wrap.count-3 .fu-tile:nth-child(3) { aspect-ratio: 1/1; }
+        .fu-media-grid-wrap.count-4, .fu-media-grid-wrap.count-more { grid-template-columns: 1fr 1fr; }
+        .fu-media-grid-wrap.count-4 .fu-tile, .fu-media-grid-wrap.count-more .fu-tile { aspect-ratio: 1/1; }
+        .fu-tile {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #000;
+        }
+        .fu-tile img, .fu-tile video {
             width: 100%;
             height: 100%;
             object-fit: cover;
             display: block;
-            cursor: pointer;
-            border-radius: 0;
         }
-        .fu-gallery.single {
-            grid-template-columns: 1fr;
-            max-height: 340px;
+        .fu-tile .fu-tile-play {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px; height: 40px;
+            background: rgba(0,0,0,.55);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff;
+            pointer-events: none;
         }
-        .fu-gallery.single img {
-            max-height: 340px;
-        }
-        .fu-gallery.two {
-            grid-template-columns: 1fr 1fr;
-            aspect-ratio: 2/1.3;
-        }
-        .fu-gallery.three {
-            grid-template-columns: 1.4fr 1fr;
-            aspect-ratio: 2/1.3;
-        }
-        .fu-gallery.three .g-large {
-            height: 100%;
-        }
-        .fu-gallery.three .g-stack {
-            display: grid;
-            grid-template-rows: 1fr 1fr;
-            gap: 2px;
-        }
-        .fu-gallery.four {
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: 1fr 1fr;
-            aspect-ratio: 1/1;
-        }
-        .g-more {
-            position: relative;
-        }
-        .g-more-overlay {
+        .fu-tile .fu-tile-play svg { width: 18px; height: 18px; fill: #fff; margin-left: 2px; }
+        .fu-tile .fu-tile-more {
             position: absolute;
             inset: 0;
-            background: rgba(0, 0, 0, .55);
+            background: rgba(0,0,0,.65);
+            backdrop-filter: blur(2px);
             color: #fff;
+            font-size: 1.5rem;
             font-weight: 800;
-            font-size: 1.3rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
         }
 
         .message-bubble .msg-media {
             margin: 0 0 4px;
-            border-radius: 8px;
+            border-radius: 12px;
             overflow: hidden;
-            cursor: default;
-            background: transparent;
+            cursor: pointer;
+            background: #0c0c0e;
             max-height: 320px;
             max-width: 260px;
             border: none;
@@ -1277,12 +1272,13 @@
         }
         .message-bubble .msg-media img,
         .message-bubble .msg-media video {
-            border-radius: 8px;
+            border-radius: 12px;
             width: 100%;
             max-height: 320px;
             object-fit: cover;
             display: block;
         }
+
         .message-bubble .msg-media .upload-spinner {
             position: absolute;
             inset: 0;
@@ -1402,43 +1398,29 @@
             fill: currentColor;
             position: absolute;
         }
-        .message-bubble .voice-msg .voice-track {
+        .message-bubble .voice-msg .voice-wave {
             flex: 1;
-            height: 4px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, .18);
-            position: relative;
-            cursor: pointer;
+            height: 24px;
             display: flex;
             align-items: center;
+            gap: 2px;
+            cursor: pointer;
         }
-        .message-bubble.received .voice-msg .voice-track {
+        .message-bubble .voice-msg .voice-wave .vw-bar {
+            flex: 1;
+            min-width: 2px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, .3);
+            transition: background .05s linear;
+        }
+        .message-bubble.received .voice-msg .voice-wave .vw-bar {
             background: var(--brd2);
         }
-        .message-bubble .voice-msg .voice-track-fill {
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 0%;
+        .message-bubble .voice-msg .voice-wave .vw-bar.played {
             background: #fff;
-            border-radius: 4px;
-            pointer-events: none;
         }
-        .message-bubble.received .voice-msg .voice-track-fill {
+        .message-bubble.received .voice-msg .voice-wave .vw-bar.played {
             background: var(--p);
-        }
-        .message-bubble .voice-msg .voice-track-knob {
-            position: absolute;
-            left: 0%;
-            width: 11px;
-            height: 11px;
-            border-radius: 50%;
-            background: #fff;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
-            transform: translateX(-50%);
-            pointer-events: none;
-            transition: left .05s linear;
         }
         .message-bubble .voice-msg .voice-duration {
             font-size: .75rem;
@@ -1674,65 +1656,6 @@
         }
         .fu-sheet-item.danger {
             color: var(--danger);
-        }
-
-        /* ─── FULL-SCREEN MEDIA VIEWER ─── */
-        /* PhotoSwipe overrides */
-        .pswp {
-            --pswp-bg: #000;
-            --pswp-root-z-index: 600;
-        }
-        .pswp__top-bar {
-            padding: 12px 16px;
-        }
-        .pswp__button {
-            width: 34px;
-            height: 34px;
-        }
-        .pswp__button svg {
-            width: 17px;
-            height: 17px;
-        }
-
-        /* ─── FULL-SCREEN VIDEO VIEWER ─── */
-        .fu-video-viewer {
-            position: fixed;
-            inset: 0;
-            z-index: 700;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity .2s;
-        }
-        .fu-video-viewer.open {
-            opacity: 1;
-            visibility: visible;
-        }
-        .fu-video-viewer video {
-            width: 100%;
-            max-height: 100vh;
-        }
-        .fv-close {
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, .15);
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-        .fv-close svg {
-            width: 17px;
-            height: 17px;
-            stroke: #fff;
-            fill: none;
-            stroke-width: 2.2;
-            stroke-linecap: round;
         }
 
         /* ─── SWIPE REPLY ICON ─── */
@@ -2876,6 +2799,182 @@
             cursor: pointer;
             text-decoration: underline;
         }
+
+        /* ─── FULL-SCREEN LIGHTBOX (matches FreeUpper demo) ─── */
+        .fu-lb {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 700;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity .25s ease, visibility .25s ease;
+        }
+        .fu-lb.open {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+        .fu-lb.hide-controls .fu-lb-header,
+        .fu-lb.hide-controls .fu-lb-scrubber,
+        .fu-lb.hide-controls .fu-lb-floating,
+        .fu-lb.hide-controls .fu-lb-thumbs,
+        .fu-lb.hide-controls .fu-lb-dock {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        .fu-lb-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: max(16px, env(safe-area-inset-top,0px)) 20px 8px;
+            z-index: 20;
+            background: linear-gradient(180deg, rgba(0,0,0,.85), transparent);
+            transition: opacity .25s ease;
+        }
+        .fu-lb-header button {
+            background: none; border: none; color: #fff; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; padding: 4px;
+        }
+        .fu-lb-header button svg { width: 26px; height: 26px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+        .fu-lb-user { text-align: center; }
+        .fu-lb-user .name { font-size: 15px; font-weight: 700; color: #fff; }
+        .fu-lb-user .time { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+        .fu-lb-scrubber {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            padding: 4px 20px 12px;
+            background: rgba(0,0,0,.85);
+            z-index: 20;
+            font-size: 12.5px;
+            color: #fff;
+            transition: opacity .25s ease;
+        }
+        .fu-lb-scrubber.active { display: flex; }
+        .fu-lb-scrubber input[type=range] {
+            flex: 1; height: 3px; accent-color: var(--p); cursor: pointer;
+        }
+        .fu-lb-stage {
+            position: relative;
+            flex: 1;
+            width: 100vw;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            touch-action: pan-y;
+        }
+        .fu-lb-stage img, .fu-lb-stage video {
+            width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            display: none;
+        }
+        .fu-lb-floating {
+            position: absolute;
+            bottom: 20px; left: 20px; right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 30;
+            transition: opacity .25s ease;
+        }
+        .fu-lb-react { position: relative; display: flex; align-items: center; }
+        .fu-lb-circle {
+            width: 44px; height: 44px; border-radius: 50%;
+            background: rgba(30,30,30,.85); backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,.15);
+            color: #fff; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-size: 20px;
+        }
+        .fu-lb-circle svg { width: 21px; height: 21px; stroke: #fff; fill: none; stroke-width: 2; }
+        .fu-lb-emoji-bar {
+            position: absolute;
+            bottom: 56px; left: 0;
+            background: rgba(28,28,30,.95); backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,.15);
+            border-radius: 28px; padding: 8px 14px;
+            display: flex; align-items: center; gap: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,.6);
+            opacity: 0; pointer-events: none; transform: translateY(10px);
+            transition: all .2s ease; z-index: 40;
+        }
+        .fu-lb-emoji-bar.active { opacity: 1; pointer-events: auto; transform: translateY(0); }
+        .fu-lb-emoji-bar span { font-size: 22px; cursor: pointer; transition: transform .15s ease; }
+        .fu-lb-emoji-bar span:active { transform: scale(1.3); }
+        .fu-lb-reply-pill {
+            height: 44px; padding: 0 20px; border-radius: 22px;
+            background: rgba(30,30,30,.85); backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,.15);
+            color: #fff; font-size: 15px; font-weight: 700;
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+        }
+        .fu-lb-reply-pill svg { width: 17px; height: 17px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+        .fu-lb-thumbs {
+            width: 100%; padding: 10px 0; background: #000;
+            overflow-x: auto; display: flex; gap: 6px;
+            justify-content: center; align-items: center;
+            scrollbar-width: none; transition: opacity .25s ease;
+        }
+        .fu-lb-thumbs::-webkit-scrollbar { display: none; }
+        .fu-lb-thumb {
+            width: 46px; height: 46px; border-radius: 6px; overflow: hidden;
+            flex-shrink: 0; cursor: pointer; opacity: .5; border: 2px solid transparent;
+            transition: all .2s ease; background: #111;
+        }
+        .fu-lb-thumb.active { opacity: 1; border-color: #fff; transform: scale(1.05); }
+        .fu-lb-thumb img, .fu-lb-thumb video { width: 100%; height: 100%; object-fit: cover; }
+        .fu-lb-dock {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 26px max(14px, env(safe-area-inset-bottom,0px));
+            background: #000; border-top: 1px solid rgba(255,255,255,.08);
+            z-index: 20; transition: opacity .25s ease;
+        }
+        .fu-lb-dock button {
+            background: none; border: none; color: #fff; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            padding: 6px; border-radius: 50%;
+        }
+        .fu-lb-dock button svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+        .fu-lb-dock-center { display: flex; gap: 32px; }
+        .fu-lb-reply-drawer {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: var(--bg3);
+            border-top: 1px solid var(--brd);
+            border-radius: 20px 20px 0 0;
+            padding: 16px 20px max(20px, env(safe-area-inset-bottom,0px));
+            display: flex; flex-direction: column; gap: 12px;
+            z-index: 40;
+            transform: translateY(100%);
+            transition: transform .25s cubic-bezier(.1,.9,.2,1);
+        }
+        .fu-lb-reply-drawer.active { transform: translateY(0); }
+        .fu-lb-reply-badge {
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--bg2); border-left: 3px solid var(--p);
+            border-radius: 8px; padding: 8px 12px;
+        }
+        .fu-lb-reply-badge .info { display: flex; flex-direction: column; gap: 2px; }
+        .fu-lb-reply-badge .who { font-size: 13px; font-weight: 700; color: var(--p); }
+        .fu-lb-reply-badge .sub { font-size: 12px; color: var(--muted); }
+        .fu-lb-reply-badge img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
+        .fu-lb-reply-input-row { display: flex; align-items: center; gap: 10px; }
+        .fu-lb-reply-input-row input {
+            flex: 1; height: 44px; background: var(--inp);
+            border-radius: 22px; border: 1.5px solid var(--brd);
+            padding: 0 16px; color: var(--text); font-size: 15px; outline: none;
+        }
+        .fu-lb-reply-send {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: var(--p); border: none; color: #fff;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
+        }
+        .fu-lb-reply-send svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2; }
     </style>
 </head>
 <body>
@@ -2941,7 +3040,7 @@
                         <div class="voice-record-bar" id="voiceRecordBar">
                             <div class="rec-dot"></div>
                             <span class="rec-time" id="recTime">0:00</span>
-                            <span class="rec-hint">Recording voice note…</span>
+                            <canvas id="recWaveCanvas" width="160" height="28" style="flex:1;height:28px;"></canvas>
                             <button class="rec-cancel" onclick="cancelVoiceRecording()">Cancel</button>
                         </div>
                         <button class="mic-btn visible" id="micBtn" onclick="startVoiceRecording()" title="Record voice note">
@@ -3356,6 +3455,71 @@
         </div>
     </div>
 
+    <!-- ===== FULLSCREEN LIGHTBOX (image/video, matches FreeUpper demo) ===== -->
+    <div class="fu-lb" id="fuLightbox">
+        <div class="fu-lb-header">
+            <button onclick="closeLightbox()"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <div class="fu-lb-user">
+                <div class="name" id="lbUserName"></div>
+                <div class="time" id="lbTimestamp"></div>
+            </div>
+            <button style="opacity:0;pointer-events:none;"><svg viewBox="0 0 24 24"></svg></button>
+        </div>
+
+        <div class="fu-lb-scrubber" id="lbScrubber">
+            <span id="lbCurTime">0:00</span>
+            <input type="range" id="lbProgress" value="0" min="0" max="100">
+            <span id="lbDur">-0:00</span>
+        </div>
+
+        <div class="fu-lb-stage" id="lbStage">
+            <img id="lbImg" alt="">
+            <video id="lbVideo" playsinline></video>
+
+            <div class="fu-lb-floating" id="lbFloating">
+                <div class="fu-lb-react">
+                    <div class="fu-lb-circle" id="lbEmojiToggle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
+                    <div class="fu-lb-emoji-bar" id="lbEmojiBar">
+                        <span onclick="lbReact('❤️')">❤️</span>
+                        <span onclick="lbReact('👍')">👍</span>
+                        <span onclick="lbReact('😂')">😂</span>
+                        <span onclick="lbReact('😮')">😮</span>
+                        <span onclick="lbReact('😢')">😢</span>
+                        <span onclick="lbReact('🙏')">🙏</span>
+                    </div>
+                </div>
+                <button class="fu-lb-reply-pill" onclick="openLbReplyDrawer()">
+                    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Reply
+                </button>
+            </div>
+        </div>
+
+        <div class="fu-lb-thumbs" id="lbThumbs"></div>
+
+        <div class="fu-lb-dock" id="lbDock">
+            <button onclick="downloadMedia(lbCurrentUrl())" title="Download"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+            <div class="fu-lb-dock-center">
+                <button onclick="forwardMessage(lbCurrentMsgId())" title="Forward"><svg viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg></button>
+                <button id="lbPlayPause" style="display:none;" onclick="lbTogglePlay()"><svg viewBox="0 0 24 24" id="lbPlayIcon"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+            </div>
+            <button id="lbDeleteBtn" onclick="lbDeleteCurrent()" title="Delete"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        </div>
+
+        <div class="fu-lb-reply-drawer" id="lbReplyDrawer">
+            <div class="fu-lb-reply-badge">
+                <div class="info">
+                    <div class="who" id="lbReplyAuthor"></div>
+                    <div class="sub" id="lbReplyType">Photo</div>
+                </div>
+                <img id="lbReplyThumb" alt="">
+            </div>
+            <div class="fu-lb-reply-input-row">
+                <input type="text" id="lbReplyInput" placeholder="Type a reply...">
+                <button class="fu-lb-reply-send" onclick="sendLbReply()"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+            </div>
+        </div>
+    </div>
+
     <script>
         (function() {
             'use strict';
@@ -3575,154 +3739,211 @@
             // ============================================================
             function renderImageGallery(urls, msgId) {
                 const n = urls.length;
-                if (n === 1) {
-                    return `<div class="fu-gallery single"><img src="${urls[0]}" loading="lazy" onclick="openImage('${urls[0]}','${msgId}')"></div>`;
-                }
-                if (n === 2) {
-                    return `<div class="fu-gallery two">${urls.map(u => `<img src="${u}" loading="lazy" onclick="openImage('${u}','${msgId}')">`).join('')}</div>`;
-                }
-                if (n === 3) {
-                    return `<div class="fu-gallery three">
-                                <img class="g-large" src="${urls[0]}" loading="lazy" onclick="openImage('${urls[0]}','${msgId}')">
-                                <div class="g-stack">
-                                    <img src="${urls[1]}" loading="lazy" onclick="openImage('${urls[1]}','${msgId}')">
-                                    <img src="${urls[2]}" loading="lazy" onclick="openImage('${urls[2]}','${msgId}')">
-                                </div>
-                            </div>`;
-                }
-                if (n === 4) {
-                    return `<div class="fu-gallery four">${urls.map(u => `<img src="${u}" loading="lazy" onclick="openImage('${u}','${msgId}')">`).join('')}</div>`;
-                }
-                // 5+
-                const visible = urls.slice(0, 4);
-                const remaining = n - 4;
-                return `<div class="fu-gallery four">
-                            ${visible.map((u, i) => i === 3
-                                ? `<div class="g-more" onclick="openImage('${u}','${msgId}')"><img src="${u}" loading="lazy"><div class="g-more-overlay">+${remaining}</div></div>`
-                                : `<img src="${u}" loading="lazy" onclick="openImage('${u}','${msgId}')">`
-                            ).join('')}
+                const displayLimit = n >= 5 ? 4 : n;
+                const cls = n > 4 ? 'count-more' : 'count-' + n;
+                let tiles = '';
+                for (let i = 0; i < displayLimit; i++) {
+                    const isLastOverflow = n >= 5 && i === 3;
+                    tiles += `
+                        <div class="fu-tile" onclick="openImage('${urls[i]}','${msgId}')">
+                            <img src="${urls[i]}" loading="lazy">
+                            ${isLastOverflow ? `<div class="fu-tile-more">+${n - 4}</div>` : ''}
                         </div>`;
+                }
+                return `<div class="fu-media-grid-wrap ${cls}">${tiles}</div>`;
             }
 
             // ============================================================
-            // PHOTOSWIPE + PLYR INTEGRATION
+            // UNIFIED FULLSCREEN LIGHTBOX (image + video, demo-matched)
             // ============================================================
-            let psLightbox = null;
-            let pswpCurrentMsgId = null;
-
-            function initPhotoSwipe(urls, startIndex) {
-                if (psLightbox) { psLightbox.destroy();
-                    psLightbox = null; }
-                const dataSource = urls.map(u => ({ src: u, width: 1600, height: 1600 }));
-
-                psLightbox = new PhotoSwipeLightbox({
-                    dataSource: dataSource,
-                    pswpModule: PhotoSwipe,
-                    bgOpacity: 0.95,
-                    showHideAnimationType: 'zoom',
-                });
-                psLightbox.on('uiRegister', function() {
-                    psLightbox.pswp.ui.registerElement({
-                        name: 'fu-download',
-                        ariaLabel: 'Download',
-                        order: 8,
-                        isButton: true,
-                        html: '<svg viewBox="0 0 24 24" style="width:19px;height:19px;stroke:#fff;fill:none;stroke-width:2;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
-                        onClick: () => {
-                            const curr = psLightbox.pswp.currSlide.data.src;
-                            downloadMedia(curr);
-                        }
-                    });
-                    const msg = messages.find(m => m.id === pswpCurrentMsgId);
-                    if (msg && msg.sender_id === currentUserId) {
-                        psLightbox.pswp.ui.registerElement({
-                            name: 'fu-delete',
-                            ariaLabel: 'Delete',
-                            order: 9,
-                            isButton: true,
-                            html: '<svg viewBox="0 0 24 24" style="width:19px;height:19px;stroke:#fff;fill:none;stroke-width:2;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-                            onClick: () => {
-                                psLightbox.pswp.close();
-                                if (pswpCurrentMsgId) deleteMessage(pswpCurrentMsgId, 'everyone');
-                            }
-                        });
-                    }
-                });
-                psLightbox.init();
-                psLightbox.loadAndOpen(startIndex);
-                document.body.classList.add('modal-lock');
-                psLightbox.on('close', () => { document.body.classList.remove('modal-lock'); });
-
-                dataSource.forEach((item, i) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        item.width = img.naturalWidth;
-                        item.height = img.naturalHeight;
-                        if (psLightbox.pswp) psLightbox.pswp.refreshSlideContent(i);
-                    };
-                    img.src = item.src;
-                });
-            }
-
-            window.openImage = function(url, msgId) {
-                pswpCurrentMsgId = msgId || null;
-                const msg = messages.find(m => m.id === msgId);
-                const urls = (msg && msg.media_urls && msg.media_urls.length) ? msg.media_urls : [url];
-                const startIndex = Math.max(0, urls.indexOf(url));
-                initPhotoSwipe(urls, startIndex);
-            };
-
-            // ===== FULL-SCREEN VIDEO VIEWER =====
-            window.openVideo = function(url, msgId) {
-                let modal = document.getElementById('fuVideoViewer');
-                if (modal) modal.remove();
-                const msg = messages.find(m => m.id === msgId);
-                const isMine = msg && msg.sender_id === currentUserId;
-                modal = document.createElement('div');
-                modal.id = 'fuVideoViewer';
-                modal.className = 'fu-video-viewer';
-                modal.innerHTML = `
-                            <button class="fv-close" style="position:absolute;top:max(16px,env(safe-area-inset-top,0px));left:16px;z-index:2;" onclick="closeVideoViewer()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-                            <div style="position:absolute;top:max(16px,env(safe-area-inset-top,0px));right:16px;z-index:2;display:flex;gap:10px;">
-                                <button class="fv-close" onclick="downloadMedia('${url}')"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:#fff;fill:none;stroke-width:2;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                                ${isMine ? `<button class="fv-close" onclick="closeVideoViewer();deleteMessage('${msgId}','everyone')"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:#fff;fill:none;stroke-width:2;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>` : ''}
-                            </div>
-                            <video id="fvVideoEl" src="${url}" playsinline autoplay data-plyr="true"></video>
-                        `;
-                document.body.appendChild(modal);
-                document.body.classList.add('modal-lock');
-                requestAnimationFrame(() => {
-                    modal.classList.add('open');
-                    new Plyr('#fvVideoEl', { controls: ['play-large', 'play', 'progress', 'current-time', 'mute',
-                            'volume', 'fullscreen'
-                        ] });
-                });
-            };
-
-            window.closeVideoViewer = function() {
-                const modal = document.getElementById('fuVideoViewer');
-                if (!modal) return;
-                modal.classList.remove('open');
-                document.body.classList.remove('modal-lock');
-                setTimeout(() => modal.remove(), 200);
-            };
-
-            function initPlyrPlayers() {
-                document.querySelectorAll('video[data-plyr]:not([data-plyr-ready])').forEach(video => {
-                    video.setAttribute('data-plyr-ready', 'true');
-                    new Plyr(video, {
-                        controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume',
-                            'fullscreen'
-                        ],
-                        clickToPlay: true,
-                    });
-                });
-            }
-
             function videoThumbUrl(url) {
                 if (!url) return '';
                 return url.replace(/\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i, '.jpg$2');
             }
+
+            let lbItems = [];
+            let lbIndex = 0;
+            let lbMsgId = null;
+            let lbTouchStartX = 0;
+
+            const lbEl = () => document.getElementById('fuLightbox');
+            const lbImgEl = () => document.getElementById('lbImg');
+            const lbVideoEl = () => document.getElementById('lbVideo');
+
+            window.lbCurrentUrl = function() { return (lbItems[lbIndex] || {}).url || ''; };
+            window.lbCurrentMsgId = function() { return lbMsgId; };
+
+            // items: [{url, type:'image'|'video'}]
+            window.openMediaLightbox = function(items, startIndex, msgId, authorName, createdAt) {
+                lbItems = items;
+                lbIndex = startIndex || 0;
+                lbMsgId = msgId || null;
+
+                document.getElementById('lbUserName').textContent = authorName || '';
+                document.getElementById('lbTimestamp').textContent = createdAt ? new Date(createdAt).toLocaleString() : '';
+
+                const msg = messages.find(m => m.id === msgId);
+                const isMine = msg && msg.sender_id === currentUserId;
+                document.getElementById('lbDeleteBtn').style.display = isMine ? 'flex' : 'none';
+
+                renderLbThumbs();
+                updateLbView();
+
+                lbEl().classList.remove('hide-controls');
+                document.getElementById('lbReplyDrawer').classList.remove('active');
+                document.getElementById('lbEmojiBar').classList.remove('active');
+                lbEl().classList.add('open');
+                lockBody();
+            };
+
+            window.closeLightbox = function() {
+                lbVideoEl().pause();
+                lbEl().classList.remove('open');
+                unlockBody();
+            };
+
+            function renderLbThumbs() {
+                const wrap = document.getElementById('lbThumbs');
+                if (lbItems.length <= 1) { wrap.innerHTML = ''; return; }
+                wrap.innerHTML = lbItems.map((it, idx) => `
+                    <div class="fu-lb-thumb ${idx === lbIndex ? 'active' : ''}" onclick="lbGoTo(${idx})">
+                        ${it.type === 'image' ? `<img src="${it.url}">` : `<video src="${it.url}" preload="metadata" muted></video>`}
+                    </div>
+                `).join('');
+            }
+
+            window.lbGoTo = function(idx) {
+                lbIndex = idx;
+                updateLbView();
+            };
+
+            function updateLbView() {
+                const item = lbItems[lbIndex];
+                if (!item) return;
+                const img = lbImgEl(), vid = lbVideoEl();
+                document.getElementById('lbEmojiToggle').innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>';
+
+                if (item.type === 'image') {
+                    vid.pause();
+                    vid.style.display = 'none';
+                    document.getElementById('lbScrubber').classList.remove('active');
+                    document.getElementById('lbPlayPause').style.display = 'none';
+                    img.src = item.url;
+                    img.style.display = 'block';
+                } else {
+                    img.style.display = 'none';
+                    vid.src = item.url;
+                    vid.style.display = 'block';
+                    document.getElementById('lbScrubber').classList.add('active');
+                    document.getElementById('lbPlayPause').style.display = 'flex';
+                    vid.play();
+                    document.getElementById('lbPlayIcon').outerHTML = '<svg viewBox="0 0 24 24" id="lbPlayIcon"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                }
+                document.querySelectorAll('.fu-lb-thumb').forEach((t, i) => {
+                    t.classList.toggle('active', i === lbIndex);
+                    if (i === lbIndex) t.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                });
+            }
+
+            lbVideoEl && document.addEventListener('DOMContentLoaded', () => {
+                const vid = lbVideoEl();
+                if (!vid) return;
+                vid.addEventListener('timeupdate', () => {
+                    if (!vid.duration) return;
+                    document.getElementById('lbProgress').value = (vid.currentTime / vid.duration) * 100;
+                    document.getElementById('lbCurTime').textContent = formatVoiceTime(vid.currentTime);
+                    document.getElementById('lbDur').textContent = '-' + formatVoiceTime(vid.duration - vid.currentTime);
+                });
+                document.getElementById('lbProgress').addEventListener('input', (e) => {
+                    if (vid.duration) vid.currentTime = (e.target.value / 100) * vid.duration;
+                });
+            });
+
+            window.lbTogglePlay = function() {
+                const vid = lbVideoEl();
+                if (vid.paused) {
+                    vid.play();
+                    document.getElementById('lbPlayIcon').outerHTML = '<svg viewBox="0 0 24 24" id="lbPlayIcon"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                } else {
+                    vid.pause();
+                    document.getElementById('lbPlayIcon').outerHTML = '<svg viewBox="0 0 24 24" id="lbPlayIcon"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                }
+            };
+
+            // Swipe between items on the stage
+            document.addEventListener('DOMContentLoaded', () => {
+                const stage = document.getElementById('lbStage');
+                if (!stage) return;
+                stage.addEventListener('touchstart', e => { lbTouchStartX = e.changedTouches[0].screenX; }, { passive: true });
+                stage.addEventListener('touchend', e => {
+                    const dx = e.changedTouches[0].screenX - lbTouchStartX;
+                    if (dx < -50 && lbIndex < lbItems.length - 1) { lbIndex++; updateLbView(); }
+                    else if (dx > 50 && lbIndex > 0) { lbIndex--; updateLbView(); }
+                }, { passive: true });
+                stage.addEventListener('click', e => {
+                    if (e.target.closest('#lbFloating') || e.target.closest('#lbReplyDrawer')) return;
+                    document.getElementById('lbEmojiBar').classList.remove('active');
+                    document.getElementById('lbReplyDrawer').classList.remove('active');
+                    lbEl().classList.toggle('hide-controls');
+                });
+            });
+
+            window.lbReact = function(emoji) {
+                if (lbMsgId) addReaction(lbMsgId, emoji);
+                document.getElementById('lbEmojiToggle').innerHTML = `<span style="font-size:20px;line-height:1;">${emoji}</span>`;
+                document.getElementById('lbEmojiBar').classList.remove('active');
+            };
+
+            document.addEventListener('click', function(e) {
+                if (e.target && e.target.id === 'lbEmojiToggle' || e.target.closest && e.target.closest('#lbEmojiToggle')) {
+                    e.stopPropagation();
+                    document.getElementById('lbEmojiBar').classList.toggle('active');
+                }
+            });
+
+            window.openLbReplyDrawer = function() {
+                const item = lbItems[lbIndex];
+                document.getElementById('lbReplyThumb').src = item.type === 'image' ? item.url : videoThumbUrl(item.url);
+                document.getElementById('lbReplyType').textContent = item.type === 'video' ? '🎬 Video' : '📷 Photo';
+                document.getElementById('lbReplyAuthor').textContent = document.getElementById('lbUserName').textContent;
+                document.getElementById('lbReplyDrawer').classList.add('active');
+                document.getElementById('lbReplyInput').focus();
+            };
+
+            window.sendLbReply = function() {
+                const input = document.getElementById('lbReplyInput');
+                const text = input.value.trim();
+                if (!text || !lbMsgId) return;
+                sendMessageToConv(text, 'text', null, lbMsgId).then(() => {
+                    sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selectedConversationId);
+                    loadConversations();
+                });
+                input.value = '';
+                document.getElementById('lbReplyDrawer').classList.remove('active');
+                closeLightbox();
+            };
+
+            window.lbDeleteCurrent = function() {
+                if (!lbMsgId) return;
+                closeLightbox();
+                deleteMessage(lbMsgId, 'everyone');
+            };
+
+            // Backwards-compatible wrappers so existing onclick calls keep working
+            window.openImage = function(url, msgId) {
+                const msg = messages.find(m => m.id === msgId);
+                const urls = (msg && msg.media_urls && msg.media_urls.length) ? msg.media_urls : [url];
+                const items = urls.map(u => ({ url: u, type: 'image' }));
+                const startIndex = Math.max(0, urls.indexOf(url));
+                const authorName = msg && msg.sender_id === currentUserId ? 'You' : chatPartnerName.textContent;
+                openMediaLightbox(items, startIndex, msgId, authorName, msg && msg.created_at);
+            };
+
+            window.openVideo = function(url, msgId) {
+                const msg = messages.find(m => m.id === msgId);
+                const authorName = msg && msg.sender_id === currentUserId ? 'You' : chatPartnerName.textContent;
+                openMediaLightbox([{ url, type: 'video' }], 0, msgId, authorName, msg && msg.created_at);
+            };
 
             // ============================================================
             // BLOCK STATE
@@ -4229,6 +4450,44 @@
             let currentAudioBtn = null;
             let voiceRAF = null;
 
+            const VOICE_WAVE_BAR_COUNT = 28;
+            const voiceWaveCache = {};
+
+            function seededWaveform(seed) {
+                if (voiceWaveCache[seed]) return voiceWaveCache[seed];
+                let x = 0;
+                for (let i = 0; i < seed.length; i++) x = (x * 31 + seed.charCodeAt(i)) >>> 0;
+                const bars = [];
+                for (let i = 0; i < VOICE_WAVE_BAR_COUNT; i++) {
+                    x = (x * 1103515245 + 12345) >>> 0;
+                    const h = 20 + (x % 100) * 0.8;
+                    bars.push(Math.min(100, h));
+                }
+                voiceWaveCache[seed] = bars;
+                return bars;
+            }
+
+            function renderVoiceWaveformBars(msgId) {
+                const heights = seededWaveform(msgId);
+                return heights.map(h => `<div class="vw-bar" style="height:${h}%;"></div>`).join('');
+            }
+
+            function updateVoiceWaveProgress(msgId, pct) {
+                const wave = document.getElementById('vwave-' + msgId);
+                if (!wave) return;
+                const bars = wave.querySelectorAll('.vw-bar');
+                const activeCount = Math.round((pct / 100) * bars.length);
+                bars.forEach((b, i) => b.classList.toggle('played', i < activeCount));
+            }
+
+            window.seekVoiceWave = function(event, msgId) {
+                if (currentAudioMsgId !== msgId || !currentAudio) return;
+                const wave = event.currentTarget;
+                const rect = wave.getBoundingClientRect();
+                const pct = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+                if (currentAudio.duration) currentAudio.currentTime = pct * currentAudio.duration;
+            };
+
             function formatVoiceTime(secs) {
                 if (!isFinite(secs) || secs < 0) secs = 0;
                 const m = Math.floor(secs / 60);
@@ -4245,6 +4504,7 @@
                     if (play) play.style.display = '';
                     if (pause) pause.style.display = 'none';
                 }
+                if (currentAudioMsgId) updateVoiceWaveProgress(currentAudioMsgId, 0);
                 currentAudio = null;
                 currentAudioBtn = null;
                 currentAudioMsgId = null;
@@ -4253,12 +4513,9 @@
             function tickVoiceProgress() {
                 if (!currentAudio || !currentAudioMsgId) return;
                 const pct = currentAudio.duration ? (currentAudio.currentTime / currentAudio.duration) * 100 : 0;
-                const fill = document.getElementById('vfill-' + currentAudioMsgId);
-                const knob = document.getElementById('vknob-' + currentAudioMsgId);
                 const dur = document.getElementById('vdur-' + currentAudioMsgId);
-                if (fill) fill.style.width = pct + '%';
-                if (knob) knob.style.left = pct + '%';
                 if (dur) dur.textContent = formatVoiceTime(currentAudio.duration - currentAudio.currentTime);
+                updateVoiceWaveProgress(currentAudioMsgId, pct);
                 voiceRAF = requestAnimationFrame(tickVoiceProgress);
             }
 
@@ -4284,14 +4541,6 @@
                 audio.play();
                 voiceRAF = requestAnimationFrame(tickVoiceProgress);
                 audio.onended = () => stopCurrentVoice();
-            };
-
-            window.seekVoice = function(event, msgId) {
-                if (currentAudioMsgId !== msgId || !currentAudio) return;
-                const track = event.currentTarget;
-                const rect = track.getBoundingClientRect();
-                const pct = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-                if (currentAudio.duration) currentAudio.currentTime = pct * currentAudio.duration;
             };
 
             // ============================================================
@@ -5124,17 +5373,15 @@
                                     ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
                                 `;
                     } else if (msg.message_type === 'voice' && msg.media_url) {
+                        const initialDur = msg.voice_duration ? formatVoiceTime(msg.voice_duration) : '0:00';
                         contentHtml = `
                                     <div class="voice-msg" data-voice-id="${msg.id}">
                                         <button class="play-btn" onclick="toggleVoicePlay(this, '${msg.media_url}', '${msg.id}')">
                                             <svg class="ic-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                                             <svg class="ic-pause" viewBox="0 0 24 24" style="display:none;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
                                         </button>
-                                        <div class="voice-track" onclick="seekVoice(event, '${msg.id}')">
-                                            <div class="voice-track-fill" id="vfill-${msg.id}"></div>
-                                            <div class="voice-track-knob" id="vknob-${msg.id}"></div>
-                                        </div>
-                                        <span class="voice-duration" id="vdur-${msg.id}">0:00</span>
+                                        <div class="voice-wave" id="vwave-${msg.id}" onclick="seekVoiceWave(event, '${msg.id}')">${renderVoiceWaveformBars(msg.id)}</div>
+                                        <span class="voice-duration" id="vdur-${msg.id}">${initialDur}</span>
                                         <button class="voice-dl-btn" onclick="downloadMedia('${msg.media_url}')" title="Download"><i class="ri-download-2-line"></i></button>
                                     </div>
                                     ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
@@ -5273,7 +5520,6 @@
                 });
 
                 messagesArea.innerHTML = html;
-                initPlyrPlayers();
 
                 messages.forEach(msg => {
                     if (msg._pendingUrls && msg._pendingUrls.length) {
@@ -5327,7 +5573,7 @@
             };
 
             async function sendMessageToConv(text, type = 'text', mediaUrl = null, replyTo = null, pollData = null,
-                mediaUrls = null) {
+                mediaUrls = null, voiceDurationSecs = null) {
                 if (!selectedConversationId || isBlockedConversation) return;
                 const payload = {
                     conversation_id: selectedConversationId,
@@ -5338,6 +5584,7 @@
                     reply_to: replyTo || null,
                     poll_data: pollData || null,
                     media_urls: mediaUrls || null,
+                    voice_duration: voiceDurationSecs || null,
                 };
                 const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
                 const tempMsg = { ...payload, id: tempId, created_at: new Date().toISOString() };
@@ -5370,7 +5617,7 @@
                 messages.splice(idx, 1);
                 renderMessages();
                 sendMessageToConv(msg.text, msg.message_type, msg.media_url, msg.reply_to, msg.poll_data, msg
-                .media_urls);
+                .media_urls, msg.voice_duration);
             };
 
             // ============================================================
@@ -5625,12 +5872,50 @@
             }
 
             // ============================================================
-            // VOICE RECORDER (new implementation with send button)
+            // VOICE RECORDER with live waveform
             // ============================================================
             let mediaRecorder = null;
             let recordedChunks = [];
             let recordStartTime = null;
             let recordTimerInterval = null;
+            let recAudioCtx = null;
+            let recAnalyser = null;
+            let recAnimFrame = null;
+            let recWaveBars = [];
+            const REC_MAX_BARS = 42;
+
+            function drawRecWaveform() {
+                const canvas = document.getElementById('recWaveCanvas');
+                if (!canvas || !recAnalyser) return;
+                const ctx = canvas.getContext('2d');
+                const dataArr = new Uint8Array(recAnalyser.frequencyBinCount);
+                recAnalyser.getByteTimeDomainData(dataArr);
+
+                let peak = 0;
+                for (let i = 0; i < dataArr.length; i++) {
+                    const v = Math.abs(dataArr[i] - 128) / 128;
+                    if (v > peak) peak = v;
+                }
+                recWaveBars.push(Math.max(0.06, Math.min(1, peak * 1.8)));
+                if (recWaveBars.length > REC_MAX_BARS) recWaveBars.shift();
+
+                const w = canvas.width, h = canvas.height;
+                ctx.clearRect(0, 0, w, h);
+                const barW = 2.5;
+                const gap = 1.5;
+                const totalW = recWaveBars.length * (barW + gap);
+                let x = w - totalW;
+                const purple = getComputedStyle(document.documentElement).getPropertyValue('--p').trim() || '#8b5cf6';
+                recWaveBars.forEach(amp => {
+                    const barH = Math.max(2, amp * h);
+                    ctx.fillStyle = purple;
+                    ctx.globalAlpha = 0.55 + amp * 0.45;
+                    ctx.fillRect(x, (h - barH) / 2, barW, barH);
+                    x += barW + gap;
+                });
+                ctx.globalAlpha = 1;
+                recAnimFrame = requestAnimationFrame(drawRecWaveform);
+            }
 
             window.startVoiceRecording = async function() {
                 try {
@@ -5639,21 +5924,32 @@
                     mediaRecorder = new MediaRecorder(stream);
                     mediaRecorder._cancelled = false;
 
+                    recAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const source = recAudioCtx.createMediaStreamSource(stream);
+                    recAnalyser = recAudioCtx.createAnalyser();
+                    recAnalyser.fftSize = 512;
+                    source.connect(recAnalyser);
+                    recWaveBars = [];
+
                     mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
 
                     mediaRecorder.onstop = async () => {
                         stream.getTracks().forEach(t => t.stop());
                         clearInterval(recordTimerInterval);
+                        cancelAnimationFrame(recAnimFrame);
+                        if (recAudioCtx) { recAudioCtx.close(); recAudioCtx = null; }
+                        recAnalyser = null;
                         document.getElementById('voiceRecordBar').classList.remove('active');
                         document.getElementById('messageInputArea').classList.remove('recording-mode');
 
                         if (mediaRecorder._cancelled || recordedChunks.length === 0) { recordedChunks = []; return; }
 
                         const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+                        const durationSecs = Math.floor((Date.now() - recordStartTime) / 1000);
                         try {
                             showToast('Sending voice note…', 'p');
                             const result = await uploadToCloudinary(blob, 'video');
-                            await sendMessageToConv('', 'voice', result.url, null);
+                            await sendMessageToConv('', 'voice', result.url, null, null, null, durationSecs);
                         } catch (err) {
                             showToast('Failed to send voice note', 'r');
                         }
@@ -5669,6 +5965,7 @@
                         const s = String(secs % 60).padStart(2, '0');
                         document.getElementById('recTime').textContent = `${m}:${s}`;
                     }, 250);
+                    recAnimFrame = requestAnimationFrame(drawRecWaveform);
                 } catch (err) {
                     showToast('Microphone access denied', 'r');
                 }
@@ -7260,7 +7557,7 @@
             });
 
             // ============================================================
-            // ONE-TIME GESTURE BINDING (fixes duplicate handlers)
+            // ONE-TIME GESTURE BINDING
             // ============================================================
             let gestureListenersBound = false;
 
@@ -7282,11 +7579,8 @@
             function unlockBody() { document.body.classList.remove('modal-lock'); }
 
             // ============================================================
-            // INIT
+            // WRAP ALL FULL-SCREEN MODALS WITH lockBody/unlockBody
             // ============================================================
-            let currentUserProfile = null;
-
-            // Wrap every full-screen (.fu-screen) and modal (.poll-modal) open/close pair
             const modalPairs = [
                 ['openChatProfile', 'closeChatProfileModal'],
                 ['openChatThemeModal', 'closeChatThemeModal'],
@@ -7321,6 +7615,20 @@
             const origPollClose = window.closePollModal;
             window.closePollModal = function() { unlockBody();
                 origPollClose(); };
+
+            // Block pinch/double-tap zoom app-wide (except PhotoSwipe which has its own pinch)
+            document.addEventListener('gesturestart', e => e.preventDefault());
+            let lastTouchEnd = 0;
+            document.addEventListener('touchend', e => {
+                const now = Date.now();
+                if (now - lastTouchEnd <= 300 && !e.target.closest('.pswp')) e.preventDefault();
+                lastTouchEnd = now;
+            }, { passive: false });
+
+            // ============================================================
+            // INIT
+            // ============================================================
+            let currentUserProfile = null;
 
             async function initChat() {
                 const user = getCurrentUser();
