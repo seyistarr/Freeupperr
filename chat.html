@@ -4288,6 +4288,7 @@
                             '';
                         const pinIcon = isPinned ? '<i class="ri-pushpin-2-fill" style="font-size:.7rem;color:var(--p);"></i>' :
                         '';
+                        const hasDisappearing = c.disappearing_duration > 0;
                         return `
                                     <div class="conv-swipe-wrap" data-conv-id="${c.id}">
                                         <div class="conv-swipe-actions left">
@@ -4298,7 +4299,7 @@
                                             <button class="swipe-btn archive-btn" onclick="event.stopPropagation();closeConvSwipe();archiveConversation('${c.id}')"><i class="ri-archive-line"></i><span>Archive</span></button>
                                         </div>
                                         <div class="conv-item ${active}" onclick="handleConvTap('${c.id}')">
-                                            <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}></div>
+                                            <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${hasDisappearing ? '<span class="disap-badge"><i class="ri-time-line"></i></span>' : ''}</div>
                                             <div class="conv-info">
                                                 <div class="conv-name">${pinIcon} ${escapeHtml(name)} ${badge} ${muteIcon}</div>
                                                 <div class="conv-last-msg">${readTick}<span>${escapeHtml(lastMsg)}</span></div>
@@ -4456,8 +4457,7 @@
 
                     if (error) throw error;
                     messages = (data || []).filter(m => !(m.deleted_for || []).includes(currentUserId) &&
-                        (m.expires_at === null || new Date(m.expires_at) > new Date()) &&
-                        !m.is_system);
+                        (m.expires_at === null || new Date(m.expires_at) > new Date()));
                     renderMessages();
                     scrollToBottom();
                     markVisibleMessagesRead(convId);
@@ -4687,8 +4687,8 @@
                         fuAudioEl.removeEventListener('loadedmetadata', onMeta);
                         const dur = document.getElementById('vdur-' + msgId);
                         if (dur) dur.textContent = formatVoiceTime(fuAudioEl.duration);
-                        startPlayback();
                     }, { once: true });
+                    startPlayback();
                 } else {
                     fuAudioEl.currentTime = 0;
                     startPlayback();
@@ -5136,11 +5136,11 @@
             let convSwipeStartX = 0;
             let convSwipeId = null;
             let convSwipeOpenId = null;
-            const CONV_REVEAL_THRESHOLD = 90;
-            const CONV_FULL_THRESHOLD = 190;
+            const CONV_REVEAL_THRESHOLD = 45;
+            const CONV_FULL_THRESHOLD = 140;
             const CONV_OPEN_LEFT = -160;
             const CONV_OPEN_RIGHT = 84;
-            const CONV_SWIPE_DEADZONE = 14;
+            const CONV_SWIPE_DEADZONE = 6;
 
             function closeAllConvSwipes() {
                 if (!convSwipeOpenId) return;
@@ -5202,12 +5202,12 @@
             convList.addEventListener('touchmove', function(e) {
                 if (!convSwipeEl) return;
                 const rawDx = e.touches[0].clientX - convSwipeStartX;
-                if (Math.abs(rawDx) > 10) convSwipeBlocked = true;
                 if (Math.abs(rawDx) < CONV_SWIPE_DEADZONE) {
                     convSwipeEl.style.transition = 'none';
                     convSwipeEl.style.transform = 'translateX(0)';
                     return;
                 }
+                convSwipeBlocked = true; // only block the tap once a real swipe is happening
                 const dx = rawDx > 0 ? rawDx - CONV_SWIPE_DEADZONE : rawDx + CONV_SWIPE_DEADZONE;
                 const clamped = Math.max(-220, Math.min(110, dx));
                 convSwipeEl.style.transition = 'none';
@@ -5215,7 +5215,7 @@
             }, { passive: true });
 
             convList.addEventListener('touchend', function() {
-                if (!convSwipeEl) return;
+                if (!convSwipeEl) { convSwipeBlocked = false; return; }
                 const match = convSwipeEl.style.transform.match(/-?\d+(\.\d+)?/);
                 const dx = match ? parseFloat(match[0]) : 0;
                 const id = convSwipeId;
@@ -5228,7 +5228,7 @@
                     convSwipeEl = null;
                     convSwipeId = null;
                     convSwipeOpenId = null;
-                    setTimeout(() => { convSwipeBlocked = false; }, 50);
+                    convSwipeBlocked = false;
                     return;
                 }
                 if (dx <= -CONV_REVEAL_THRESHOLD) {
@@ -5243,7 +5243,7 @@
                 }
                 convSwipeEl = null;
                 convSwipeId = null;
-                setTimeout(() => { convSwipeBlocked = false; }, 50);
+                convSwipeBlocked = false;
             });
 
             document.addEventListener('touchstart', function(e) {
