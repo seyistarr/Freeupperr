@@ -21,6 +21,25 @@
 
     <script src="https://unpkg.com/lucide@latest" defer></script>
 
+    <!-- Firebase (FIX #5) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCmAuJE-nvJunX-vXQH2l_zjjrcDt2DiA8",
+            authDomain: "freeupper-notifications.firebaseapp.com",
+            projectId: "freeupper-notifications",
+            storageBucket: "freeupper-notifications.firebasestorage.app",
+            messagingSenderId: "37328138260",
+            appId: "1:37328138260:web:f362538c37f279fccf7701"
+        };
+
+        const firebaseApp = initializeApp(firebaseConfig);
+        const messaging = getMessaging(firebaseApp);
+        window.FreeUpperFCM = { messaging, getToken, onMessage };
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer>
     </script>
     <script src="global.js" defer></script>
@@ -562,7 +581,7 @@
         .chat-view .chat-view-header .chat-actions .chat-options-btn {
             position: relative;
             background: var(--bg3);
-            border-radius: 16px 16px 4px 16px; /* chat-bubble tail corner */
+            border-radius: 16px 16px 4px 16px;
             overflow: visible;
         }
         .chat-view .chat-view-header .chat-actions .chat-options-btn::before {
@@ -582,7 +601,11 @@
             position: relative;
             z-index: 2;
         }
-        @keyframes snakeRotate { to { transform: rotate(360deg); } }
+        @keyframes snakeRotate {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         .chat-view .chat-view-header .chat-partner-avatar {
             width: 38px;
@@ -2440,8 +2463,13 @@
             transform: translateY(0);
         }
 
+        /* FIX #4: desktop side-panel for theme screens */
         @media (min-width: 769px) {
-            #fuProfileScreen {
+            #fuProfileScreen,
+            #fuThemeScreen,
+            #fuWallpaperScreen,
+            #fuBubbleScreen,
+            #disappearingScreen {
                 left: auto;
                 right: 0;
                 width: min(420px, 40vw);
@@ -2449,7 +2477,11 @@
                 box-shadow: -12px 0 40px rgba(0, 0, 0, .35);
                 transform: translateX(30px);
             }
-            #fuProfileScreen.open {
+            #fuProfileScreen.open,
+            #fuThemeScreen.open,
+            #fuWallpaperScreen.open,
+            #fuBubbleScreen.open,
+            #disappearingScreen.open {
                 transform: translateX(0);
             }
         }
@@ -4352,7 +4384,7 @@
             let blockedByMeIds = new Set();
             let messageSubscription = null;
             let conversationSubscription = null;
-            let presenceSubscription = null; // New for online status
+            let presenceSubscription = null; // for online status
             let typingTimeout = null;
             let replyTargetMessage = null;
             let userSearchDebounce = null;
@@ -4368,6 +4400,9 @@
             let groupMembersCache = [];
             let groupSenderNameCache = {};
             const SENDER_NAME_COLORS = ['#e17076', '#7bc862', '#65aadd', '#a695e7', '#ee7aae', '#6ec9cb', '#faa774', '#a6a6a6'];
+
+            // ─── FIX #1: presence heartbeat ───
+            let presenceHeartbeatInterval = null;
 
             // ===== AM (Add Members) state =====
             let amSelectedIds = new Set();
@@ -4390,9 +4425,7 @@
             // ─── Helper: can the current user send messages in a given conversation? ───
             async function canSendInConversation(conv) {
                 if (!conv.is_group || conv.is_note) return true;
-                // If permission is "everyone", anyone can send
                 if (conv.permissions?.send_messages === 'everyone') return true;
-                // Otherwise, only owners and admins can send
                 const { data: member } = await sb
                     .from('conversation_members')
                     .select('role')
@@ -4524,7 +4557,7 @@
                 return `onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'"`;
             }
 
-            // ─── Empty illustration helper (uses illustration.png) ───
+            // ─── Empty illustration helper ───
             function emptyChatIllustration() {
                 return '<img class="empty-illustration-img" src="illustration.png" alt="">';
             }
@@ -4534,6 +4567,19 @@
                 if (convSwipeBlocked) { convSwipeBlocked = false; return; }
                 selectConversation(convId);
             };
+
+            // ─── FIX #2: resolve message sender name for reply preview ───
+            function resolveMsgSenderName(senderId) {
+                if (senderId === currentUserId) return 'You';
+                const conv = currentConv();
+                if (conv && conv.is_group) {
+                    return (groupSenderNameCache[senderId] && groupSenderNameCache[senderId].name) || 'Member';
+                }
+                if (conv && !conv.is_group && conv.otherUser) {
+                    return getDisplayName(conv.otherUser);
+                }
+                return 'User';
+            }
 
             // ============================================================
             // TRUNCATION / RENDER HELPERS
@@ -4578,7 +4624,7 @@
             };
 
             // ============================================================
-            // MEDIA TIME OVERLAY (Change 2)
+            // MEDIA TIME OVERLAY
             // ============================================================
             function mediaTimeOverlayHtml(msg, isSent) {
                 let receipt = '';
@@ -4593,7 +4639,7 @@
             }
 
             // ============================================================
-            // EMOJI DETECTION (Changes 3 & 4)
+            // EMOJI DETECTION
             // ============================================================
             const SINGLE_EMOJI_ANIMATIONS = {
                 '😘': 'anim-kiss', '❤️': 'anim-heartbeat', '😂': 'anim-laugh',
@@ -4630,7 +4676,7 @@
             }
 
             // ============================================================
-            // REACTION SLATE (Changes 5-7)
+            // REACTION SLATE
             // ============================================================
             function renderReactionSlate(reactionList, msgId, mediaIndex) {
                 if (!reactionList.length) return '';
@@ -4683,7 +4729,7 @@
             };
 
             // ============================================================
-            // IMAGE GALLERY with per-tile reactions
+            // IMAGE GALLERY
             // ============================================================
             function renderImageGallery(urls, msgId) {
                 const msg = messages.find(m => m.id === msgId);
@@ -4730,7 +4776,7 @@
             };
 
             // ============================================================
-            // UNIFIED FULLSCREEN LIGHTBOX
+            // FULLSCREEN LIGHTBOX
             // ============================================================
             function videoThumbUrl(url) {
                 if (!url) return '';
@@ -5238,7 +5284,6 @@
                 } else {
                     chatPartnerName.textContent = other.display_name || other.username || 'User';
                     chatPartnerAvatar.src = getAvatar(other);
-                    // Update status via helper
                     renderPartnerStatus(conv);
                 }
 
@@ -5267,7 +5312,6 @@
                     return;
                 }
 
-                // ── Permission check ──
                 if (messageInputArea.classList.contains('blocked-input')) {
                     messageInputArea.classList.remove('blocked-input');
                     messageInputArea.innerHTML = messageInputArea.dataset.defaultHtml || messageInputArea.innerHTML;
@@ -5295,7 +5339,7 @@
                 renderConversations(convSearch.value);
             };
 
-            // ─── Helper: render partner status (online / last seen / typing) ───
+            // ─── Helper: render partner status ───
             function renderPartnerStatus(conv) {
                 if (!conv || conv.is_group || conv.is_note) return;
                 if (selectedConversationId !== conv.id) return;
@@ -5495,7 +5539,7 @@
             }
 
             // ============================================================
-            // RENDER MESSAGES (with emoji bubbles, reaction slates, media overlay)
+            // RENDER MESSAGES
             // ============================================================
             function renderMessages() {
                 if (!messages.length) {
@@ -5568,7 +5612,7 @@
                         msg._pendingUrls = urls;
                     }
 
-                    // Media (image/video) with timestamp overlay
+                    // Media
                     if (msg.message_type === 'image' && msg.media_url) {
                         const uploadSpinner = msg.uploading ?
                             `<div class="upload-spinner"><div class="ring"></div></div>` : '';
@@ -5674,8 +5718,8 @@
                     if (msg.reply_to) {
                         const replied = messages.find(m => m.id === msg.reply_to);
                         if (replied) {
-                            const replyAuthor = replied.sender_id === currentUserId ? 'You' : (replied.sender_name ||
-                                'User');
+                            // FIX #2: use resolveMsgSenderName instead of hardcoded fallback
+                            const replyAuthor = resolveMsgSenderName(replied.sender_id);
                             let replyThumb = '';
                             let replyLabel = escapeHtml(replied.text || '');
                             if (replied.message_type === 'image' && replied.media_url) {
@@ -5703,7 +5747,6 @@
                         }
                     }
 
-                    // Reaction slate (message-level)
                     const msgLevelReactions = (msg.message_reactions || []).filter(r => r.media_index === null || r
                     .media_index === undefined);
                     let reactionsHtml = renderReactionSlate(msgLevelReactions, msg.id, null);
@@ -5763,7 +5806,6 @@
 
                 messagesArea.innerHTML = html;
 
-                // Resolve pending link previews and Fu group cards
                 messages.forEach(msg => {
                     if (msg._pendingUrls && msg._pendingUrls.length) {
                         const msgEl = messagesArea.querySelector(`[data-msg-id="${msg.id}"]`);
@@ -6291,7 +6333,7 @@
             };
 
             // ============================================================
-            // REACTION (with media_index support, Change 5-7)
+            // REACTION
             // ============================================================
             window.addReaction = async function(msgId, emoji, mediaIndex) {
                 const msg = messages.find(m => m.id === msgId);
@@ -6826,18 +6868,15 @@
                         if (payload.eventType === 'UPDATE' && payload.new.id === selectedConversationId) {
                             const others = (payload.new.typing_users || []).filter(id => id !== currentUserId);
                             renderTypingIndicator(others.length > 0);
-                            // Update typing_users for status display
                             const conv = conversations.find(c => c.id === selectedConversationId);
                             if (conv) {
                                 conv.typing_users = payload.new.typing_users;
                                 if (!conv.is_group) renderPartnerStatus(conv);
                             }
-                            // Permission check
                             if (conv) {
                                 conv.permissions = payload.new.permissions;
                                 const nowCanSend = await canSendInConversation(conv);
                                 if (nowCanSend !== canSendMessages) {
-                                    // Permission changed while we're viewing the chat — re-run selection logic
                                     selectConversation(selectedConversationId);
                                 }
                             }
@@ -6847,17 +6886,15 @@
                     .subscribe();
             }
 
-            // ─── Presence subscription for partner online status ───
+            // ─── Presence subscription ───
             function subscribeToPartnerPresence() {
                 if (presenceSubscription) { sb.removeChannel(presenceSubscription);
                     presenceSubscription = null; }
                 presenceSubscription = sb.channel('profiles-presence')
                     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
                         const updated = payload.new;
-                        // Find any DM conversation where the other user's ID matches this updated profile
                         const conv = conversations.find(c => !c.is_group && c.otherUserId === updated.id);
                         if (conv) {
-                            // Merge the updated fields into the cached profile
                             conv.otherUser = { ...(conv.otherUser || {}), ...updated };
                             if (selectedConversationId === conv.id) {
                                 renderPartnerStatus(conv);
@@ -7970,7 +8007,7 @@
                 }
             };
 
-            // ─── Add Members (full-screen, with All Users tab) ───
+            // ─── Add Members ───
             window.openAddMembersScreen = async function() {
                 const conv = currentConv();
                 if (!conv || !conv.is_group || conv.is_note) return;
@@ -7989,8 +8026,6 @@
                     '<div class="fu-empty-tab">Search for anyone on FreeUpper to add them.</div>';
                 switchAddMembersTab('people');
 
-                // Always refresh from the DB — groupMembersCache may be stale or empty
-                // if the Members screen hasn't been opened yet this session.
                 groupMembersCache = await loadGroupMembers(conv.id);
                 const existingMemberIds = new Set(groupMembersCache.map(m => m.user_id));
                 const { data: friends } = await sb
@@ -8120,11 +8155,6 @@
                 const conv = currentConv();
                 if (!conv || amSelectedIds.size === 0) return;
 
-                // TODO(privacy): before adding a non-friend, check that user's
-                // "who can add me to groups" setting (e.g. profiles.addable_by:
-                // 'everyone' | 'friends_only' | 'nobody'). Skip/reject ids that
-                // opted out, and surface a toast telling the admin which
-                // selections were skipped for that reason.
                 const friendIds = new Set(amFriendsCache.map(p => p.id));
                 const rows = Array.from(amSelectedIds).map(uid => ({
                     conversation_id: conv.id, user_id: uid, role: amAddAsAdmin ? 'admin' : 'member'
@@ -8140,7 +8170,6 @@
                         }
                         throw error;
                     }
-
 
                     const allProfiles = { ...amAllUsersProfileCache };
                     amFriendsCache.forEach(p => { allProfiles[p.id] = p; });
@@ -8643,6 +8672,8 @@
             window.closeMediaLinksDocsModal = function() {
                 document.getElementById('fuMediaScreen').classList.remove('open');
             };
+
+            // FIX #3: fallback query for links tab
             window.switchMediaTab = async function(tab) {
                 document.querySelectorAll('#fuMediaTabs .fu-tab').forEach(t => t.classList.toggle('active', t.dataset.tab ===
                     tab));
@@ -8676,9 +8707,21 @@
                                     </div>`).join('')}</div>` :
                         `<div class="fu-empty-tab">No media shared yet.</div>`;
                 } else if (tab === 'links') {
-                    const { data } = await sb.from('messages').select('id, text, link_previews, created_at')
-                        .eq('conversation_id', conv.id).not('text', 'is', null).order('created_at', { ascending: false })
-                        .limit(200);
+                    // FIX #3: fallback if link_previews column doesn't exist
+                    let data = null;
+                    try {
+                        const res = await sb.from('messages').select('id, text, link_previews, created_at')
+                            .eq('conversation_id', conv.id).not('text', 'is', null).order('created_at', { ascending: false })
+                            .limit(200);
+                        if (res.error) throw res.error;
+                        data = res.data;
+                    } catch (err) {
+                        console.warn('link_previews query failed, falling back to text-only:', err);
+                        const res2 = await sb.from('messages').select('id, text, created_at')
+                            .eq('conversation_id', conv.id).not('text', 'is', null).order('created_at', { ascending: false })
+                            .limit(200);
+                        data = res2.data;
+                    }
                     const urlRe = /(https?:\/\/[^\s]+)/gi;
                     const links = [];
                     (data || []).forEach(m => {
@@ -8983,6 +9026,34 @@
             window.closePollModal = function() { unlockBody();
                 origPollClose(); };
 
+            // ─── FIX #5: Firebase push notifications setup ───
+            async function setupFreeUpperNotifications() {
+                try {
+                    if (!("Notification" in window) || !window.FreeUpperFCM) return;
+                    const permission = await Notification.requestPermission();
+                    if (permission !== "granted") return;
+
+                    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+                    const token = await window.FreeUpperFCM.getToken(window.FreeUpperFCM.messaging, {
+                        vapidKey: "BHmk5m_sPqAlX_JlLtLfHS0oPQgQFLtuANDGZhtBNEeamb760X",
+                        serviceWorkerRegistration: registration
+                    });
+                    if (!token) return;
+
+                    await sb.from('push_tokens').upsert(
+                        { user_id: currentUserId, token, platform: 'web', updated_at: new Date().toISOString() },
+                        { onConflict: 'token' }
+                    );
+
+                    window.FreeUpperFCM.onMessage(window.FreeUpperFCM.messaging, (payload) => {
+                        const n = payload.notification || {};
+                        showToast(`<b>${escapeHtml(n.title || 'FreeUpper')}:</b>&nbsp;${escapeHtml(n.body || '')}`, 'p');
+                    });
+                } catch (err) {
+                    console.error('FreeUpper notification setup failed:', err);
+                }
+            }
+
             // ============================================================
             // INIT
             // ============================================================
@@ -9003,11 +9074,27 @@
                 const { data: profile } = await sb.from('profiles').select('*').eq('id', currentUserId).single();
                 currentUserProfile = profile || {};
 
+                // ─── FIX #1: Presence heartbeat ───
+                await sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
+                presenceHeartbeatInterval = setInterval(() => {
+                    sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId).then(()=>{}).catch(()=>{});
+                }, 25000);
+                document.addEventListener('visibilitychange', () => {
+                    const online = document.visibilityState === 'visible';
+                    sb.from('profiles').update({ is_online: online, last_seen_at: new Date().toISOString() }).eq('id', currentUserId).then(()=>{}).catch(()=>{});
+                });
+                window.addEventListener('pagehide', () => {
+                    sb.from('profiles').update({ is_online: false, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
+                });
+
+                // ─── FIX #5: fire-and-forget notifications ───
+                setupFreeUpperNotifications();
+
                 await Promise.all([loadMutualFollowers(), loadMyBlockList()]);
                 await loadConversations();
                 subscribeToMessages();
                 subscribeToConversations();
-                subscribeToPartnerPresence(); // NEW: listen to profile changes for online status
+                subscribeToPartnerPresence();
 
                 const path = window.location.pathname;
                 const match = path.match(/\/join\/([a-z0-9]+)/i);
@@ -9047,7 +9134,6 @@
                         }
                         history.replaceState({}, '', window.location.pathname);
                     } else if (!selectedConversationId) {
-                        // Render the empty illustration on page load when no conversation is selected.
                         messagesArea.innerHTML = `
                             <div class="no-messages">
                                 ${emptyChatIllustration()}
