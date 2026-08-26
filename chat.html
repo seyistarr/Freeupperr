@@ -634,10 +634,10 @@
 
         /* ─── MESSAGES AREA ─── */
         .messages-area {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 16px 16px 8px;
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 16px 16px 8px;
             display: flex;
             flex-direction: column;
             gap: 2px;
@@ -1652,49 +1652,57 @@
             display: block;
             background: var(--bg3);
         }
-/* ─── MULTI-IMAGE GALLERY GRID ─── */
-.message-bubble .fu-media-grid-wrap {
-    display: grid;
-    gap: 2px;
-    border-radius: 10px;
-    overflow: hidden;
-    max-width: 260px;
-}
-.message-bubble .fu-media-grid-wrap.count-1 { grid-template-columns: 1fr; }
-.message-bubble .fu-media-grid-wrap.count-2 { grid-template-columns: 1fr 1fr; }
-.message-bubble .fu-media-grid-wrap.count-3 { grid-template-columns: 1fr 1fr; }
-.message-bubble .fu-media-grid-wrap.count-3 .fu-tile:first-child { grid-column: span 2; }
-.message-bubble .fu-media-grid-wrap.count-4,
-.message-bubble .fu-media-grid-wrap.count-more {
-    grid-template-columns: 1fr 1fr;
-}
+        /* ─── MULTI-IMAGE GALLERY GRID ─── */
+        .message-bubble .fu-media-grid-wrap {
+            display: grid;
+            gap: 2px;
+            border-radius: 10px;
+            overflow: hidden;
+            max-width: 260px;
+        }
+        .message-bubble .fu-media-grid-wrap.count-1 {
+            grid-template-columns: 1fr;
+        }
+        .message-bubble .fu-media-grid-wrap.count-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+        .message-bubble .fu-media-grid-wrap.count-3 {
+            grid-template-columns: 1fr 1fr;
+        }
+        .message-bubble .fu-media-grid-wrap.count-3 .fu-tile:first-child {
+            grid-column: span 2;
+        }
+        .message-bubble .fu-media-grid-wrap.count-4,
+        .message-bubble .fu-media-grid-wrap.count-more {
+            grid-template-columns: 1fr 1fr;
+        }
 
-.message-bubble .fu-tile {
-    position: relative;
-    aspect-ratio: 1;
-    overflow: hidden;
-    cursor: pointer;
-    background: #0c0c0e;
-}
-.message-bubble .fu-tile img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
-.message-bubble .fu-tile-more {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, .55);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.3rem;
-    font-weight: 800;
-}
+        .message-bubble .fu-tile {
+            position: relative;
+            aspect-ratio: 1;
+            overflow: hidden;
+            cursor: pointer;
+            background: #0c0c0e;
+        }
+        .message-bubble .fu-tile img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .message-bubble .fu-tile-more {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .55);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            font-weight: 800;
+        }
 
-        
+
         /* ─── DOCUMENT ─── */
         .message-bubble .msg-doc {
             display: flex;
@@ -4306,10 +4314,28 @@
             let currentInviteLink = '';
             let amAddAsAdmin = false;
 
+            // ===== Permission enforcement state =====
+            let canSendMessages = true;
+
             function senderColorFor(userId) {
                 let x = 0;
                 for (let i = 0; i < userId.length; i++) x = (x * 31 + userId.charCodeAt(i)) >>> 0;
                 return SENDER_NAME_COLORS[x % SENDER_NAME_COLORS.length];
+            }
+
+            // ─── Helper: can the current user send messages in a given conversation? ───
+            async function canSendInConversation(conv) {
+                if (!conv.is_group || conv.is_note) return true;
+                // If permission is "everyone", anyone can send
+                if (conv.permissions?.send_messages === 'everyone') return true;
+                // Otherwise, only owners and admins can send
+                const { data: member } = await sb
+                    .from('conversation_members')
+                    .select('role')
+                    .eq('conversation_id', conv.id)
+                    .eq('user_id', currentUserId)
+                    .single();
+                return member && (member.role === 'owner' || member.role === 'admin');
             }
 
             async function ensureGroupSenderNames(convId, senderIds) {
@@ -4651,10 +4677,6 @@
             };
 
             // ============================================================
-            // ADAPTIVE GALLERY (legacy)
-            // ============================================================
-
-            // ============================================================
             // UNIFIED FULLSCREEN LIGHTBOX
             // ============================================================
             function videoThumbUrl(url) {
@@ -4934,11 +4956,11 @@
                     }
 
                     let query = sb
-    .from('conversations')
-    .select(`
-            *,
-            messages:messages!messages_conversation_id_fkey( id, text, sender_id, created_at, message_type, media_url, reply_to )
-        `)
+                        .from('conversations')
+                        .select(`
+                            *,
+                            messages:messages!messages_conversation_id_fkey( id, text, sender_id, created_at, message_type, media_url, reply_to )
+                        `)
                         .order('updated_at', { ascending: false });
 
                     if (groupIdList.length) {
@@ -5191,16 +5213,28 @@
                     return;
                 }
 
+                // ── Permission check ──
                 if (messageInputArea.classList.contains('blocked-input')) {
                     messageInputArea.classList.remove('blocked-input');
                     messageInputArea.innerHTML = messageInputArea.dataset.defaultHtml || messageInputArea.innerHTML;
                     messageInput = document.getElementById('messageInput');
                     sendBtn = document.getElementById('sendBtn');
                 }
-                messageInput.disabled = false;
-                sendBtn.disabled = false;
-                sendBtn.classList.remove('visible');
-                messageInput.focus();
+
+                canSendMessages = await canSendInConversation(conv);
+
+                if (!canSendMessages) {
+                    if (!messageInputArea.dataset.defaultHtml) {
+                        messageInputArea.dataset.defaultHtml = messageInputArea.innerHTML;
+                    }
+                    messageInputArea.classList.add('blocked-input');
+                    messageInputArea.innerHTML = `<span>Only admins can send messages in this group</span>`;
+                } else {
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    sendBtn.classList.remove('visible');
+                    messageInput.focus();
+                }
 
                 await loadMessages(convId);
                 renderPinnedBar();
@@ -6552,7 +6586,7 @@
             // SEND MESSAGE
             // ============================================================
             window.sendMessage = async function() {
-                if (isBlockedConversation) return;
+                if (isBlockedConversation || !canSendMessages) return;
                 const input = document.getElementById('messageInput');
                 const text = input.value.trim();
                 if (!text) return;
@@ -6591,7 +6625,7 @@
 
             async function sendMessageToConv(text, type = 'text', mediaUrl = null, replyTo = null, pollData = null,
                 mediaUrls = null, voiceDurationSecs = null) {
-                if (!selectedConversationId || isBlockedConversation) return;
+                if (!selectedConversationId || isBlockedConversation || !canSendMessages) return;
                 const payload = {
                     conversation_id: selectedConversationId,
                     sender_id: currentUserId,
@@ -6718,16 +6752,26 @@
             }
 
             // ============================================================
-            // TYPING INDICATOR
+            // TYPING INDICATOR & LIVE PERMISSION UPDATES
             // ============================================================
             function subscribeToConversations() {
                 if (conversationSubscription) { sb.removeChannel(conversationSubscription);
                     conversationSubscription = null; }
                 conversationSubscription = sb.channel('conversations-chat')
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, async (payload) => {
                         if (payload.eventType === 'UPDATE' && payload.new.id === selectedConversationId) {
                             const others = (payload.new.typing_users || []).filter(id => id !== currentUserId);
                             renderTypingIndicator(others.length > 0);
+
+                            const conv = conversations.find(c => c.id === payload.new.id);
+                            if (conv) {
+                                conv.permissions = payload.new.permissions;
+                                const nowCanSend = await canSendInConversation(conv);
+                                if (nowCanSend !== canSendMessages) {
+                                    // Permission changed while we're viewing the chat — re-run selection logic
+                                    selectConversation(selectedConversationId);
+                                }
+                            }
                         }
                         loadConversations();
                     })
@@ -7006,7 +7050,7 @@
             // ATTACHMENT HANDLERS
             // ============================================================
             window.openAttachModal = function() {
-                if (isBlockedConversation) return;
+                if (isBlockedConversation || !canSendMessages) return;
                 document.getElementById('attachModal').classList.add('open');
             };
 
@@ -7016,7 +7060,7 @@
 
             window.handleAttach = function(type) {
                 closeAttachModal();
-                if (isBlockedConversation) return;
+                if (isBlockedConversation || !canSendMessages) return;
                 if (type === 'poll') { openPollModal(); return; }
                 if (type === 'voice') { startVoiceRecording(); return; }
                 if (type === 'media') {
@@ -7032,7 +7076,7 @@
             };
 
             fileInput.addEventListener('change', async function() {
-                if (isBlockedConversation) { this.value = ''; return; }
+                if (isBlockedConversation || !canSendMessages) { this.value = ''; return; }
                 const files = Array.from(this.files);
                 if (!files.length) return;
                 this.value = '';
@@ -7839,29 +7883,28 @@
 
             // ─── Add Members (full-screen, with All Users tab) ───
             window.openAddMembersScreen = async function() {
-    const conv = currentConv();
-    if (!conv || !conv.is_group || conv.is_note) return;
-    const canAdd = cpIsAdmin || conv.permissions?.add_members === 'everyone';
-    if (!canAdd) { showToast('Only admins can add members here', 'o'); return; }
+                const conv = currentConv();
+                if (!conv || !conv.is_group || conv.is_note) return;
+                const canAdd = cpIsAdmin || conv.permissions?.add_members === 'everyone';
+                if (!canAdd) { showToast('Only admins can add members here', 'o'); return; }
 
-    amSelectedIds = new Set();
-    amAllUsersProfileCache = {};
-    amAddAsAdmin = false;
-    document.getElementById('amAddAsAdminToggle').checked = false;
-    document.getElementById('amAddAsAdminToggle2').checked = false;
-    document.getElementById('amDoneBtn').textContent = 'Add (0)';
-    document.getElementById('amDoneBtn').disabled = true;
-    document.getElementById('amAllUsersSearchInput').value = '';
-    document.getElementById('amAllUsersList').innerHTML =
-        '<div class="fu-empty-tab">Search for anyone on FreeUpper to add them.</div>';
-    switchAddMembersTab('people');
+                amSelectedIds = new Set();
+                amAllUsersProfileCache = {};
+                amAddAsAdmin = false;
+                document.getElementById('amAddAsAdminToggle').checked = false;
+                document.getElementById('amAddAsAdminToggle2').checked = false;
+                document.getElementById('amDoneBtn').textContent = 'Add (0)';
+                document.getElementById('amDoneBtn').disabled = true;
+                document.getElementById('amAllUsersSearchInput').value = '';
+                document.getElementById('amAllUsersList').innerHTML =
+                    '<div class="fu-empty-tab">Search for anyone on FreeUpper to add them.</div>';
+                switchAddMembersTab('people');
 
-    // Always refresh from the DB — groupMembersCache may be stale or empty
-    // if the Members screen hasn't been opened yet this session.
-    groupMembersCache = await loadGroupMembers(conv.id);
-    const existingMemberIds = new Set(groupMembersCache.map(m => m.user_id));
-    const { data: friends } = await sb
-
+                // Always refresh from the DB — groupMembersCache may be stale or empty
+                // if the Members screen hasn't been opened yet this session.
+                groupMembersCache = await loadGroupMembers(conv.id);
+                const existingMemberIds = new Set(groupMembersCache.map(m => m.user_id));
+                const { data: friends } = await sb
                     .from('friends')
                     .select('friend_id, profiles!friends_friend_id_fkey(id, username, display_name, avatar_url)')
                     .eq('user_id', currentUserId);
@@ -7997,7 +8040,7 @@
                 const rows = Array.from(amSelectedIds).map(uid => ({
                     conversation_id: conv.id, user_id: uid, role: amAddAsAdmin ? 'admin' : 'member'
                 }));
-                                try {
+                try {
                     const { error } = await sb.from('conversation_members').insert(rows);
                     if (error) {
                         if (error.code === '23505') {
