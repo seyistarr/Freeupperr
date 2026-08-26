@@ -652,6 +652,35 @@
             width: 0;
         }
 
+        /* ─── Empty state (centered illustration) ─── */
+        .messages-area .no-messages {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 24px;
+            gap: 6px;
+            color: var(--muted);
+        }
+        .messages-area .no-messages img.empty-illustration-img {
+            width: min(320px, 60%);
+            height: auto;
+            margin-bottom: 8px;
+            opacity: .92;
+        }
+        .messages-area .no-messages h3 {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .messages-area .no-messages p {
+            font-size: .85rem;
+            max-width: 320px;
+            line-height: 1.5;
+        }
+
         /* ─── DATE DIVIDER ─── */
         .date-divider-row {
             display: flex;
@@ -3674,6 +3703,14 @@
             border-bottom: 1px solid var(--brd);
             cursor: pointer;
         }
+
+        /* ─── Empty illustration image ─── */
+        .messages-area .no-messages img.empty-illustration-img {
+            width: min(320px, 60%);
+            height: auto;
+            margin-bottom: 8px;
+            opacity: .92;
+        }
     </style>
 </head>
 <body>
@@ -4460,20 +4497,9 @@
                 return `onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'"`;
             }
 
+            // ─── Empty illustration helper (uses illustration.png) ───
             function emptyChatIllustration() {
-                return `
-                            <div class="empty-illustration">
-                                <svg viewBox="0 0 160 120" width="150" height="112">
-                                    <path d="M20 20h90a14 14 0 0 1 14 14v34a14 14 0 0 1-14 14H55l-22 18v-18H20a14 14 0 0 1-14-14V34a14 14 0 0 1 14-14z"
-                                        fill="var(--bg3)" stroke="var(--brd2)" stroke-width="2"/>
-                                    <path d="M62 46h72a12 12 0 0 1 12 12v26a12 12 0 0 1-12 12H98l-8 12v-12H62a12 12 0 0 1-12-12V58a12 12 0 0 1 12-12z"
-                                        fill="var(--p)" opacity="0.14" stroke="var(--p)" stroke-width="2"/>
-                                    <circle cx="82" cy="72" r="3.5" fill="var(--p)"/>
-                                    <circle cx="98" cy="72" r="3.5" fill="var(--p)"/>
-                                    <circle cx="114" cy="72" r="3.5" fill="var(--p)"/>
-                                </svg>
-                            </div>
-                        `;
+                return '<img class="empty-illustration-img" src="illustration.png" alt="">';
             }
 
             let convSwipeBlocked = false;
@@ -6098,7 +6124,7 @@
                                         Forward
                                     </button>
                                     <button class="fu-sheet-item" onclick="togglePinMessage('${msgId}');closeMessageActionSheet();">
-                                        <svg viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.4-5.6a2 2 0 0 0-.6-1L15 8V4h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0 2h1v4l-2 2.4a2 2 0 0 0-.6 1L5 17z"/></svg>
+                                        <svg viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.4-5.6a2 2 0 0 0-.6-1L15 8V4h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0-2h1v4l-2 2.4a2 2 0 0 0-.6 1L5 17z"/></svg>
                                         ${isPinned ? 'Unpin Message' : 'Pin Message'}
                                     </button>
                                     ${msg.text ? `<button class="fu-sheet-item" onclick="copyMessage('${msgId}');closeMessageActionSheet();">
@@ -6343,7 +6369,7 @@
                     <div class="fu-action-sheet">
                         <div class="fu-action-sheet-list">
                             <button class="fu-sheet-item" onclick="closeConvActionSheet();togglePinConversation('${convId}')">
-                                <svg viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.4-5.6a2 2 0 0 0-.6-1L15 8V4h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0 2h1v4l-2 2.4a2 2 0 0 0-.6 1L5 17z"/></svg>
+                                <svg viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.4-5.6a2 2 0 0 0-.6-1L15 8V4h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0-2h1v4l-2 2.4a2 2 0 0 0-.6 1L5 17z"/></svg>
                                 ${isPinned ? 'Unpin chat' : 'Pin chat'}
                             </button>
                             <button class="fu-sheet-item" onclick="closeConvActionSheet();archiveConversation('${convId}')">
@@ -8956,6 +8982,15 @@
                             if (!error && data) await startConversationWith(uid);
                         }
                         history.replaceState({}, '', window.location.pathname);
+                    } else if (!selectedConversationId) {
+                        // Render the empty illustration on page load when no conversation is selected.
+                        messagesArea.innerHTML = `
+                            <div class="no-messages">
+                                ${emptyChatIllustration()}
+                                <h3>No conversation selected</h3>
+                                <p>Choose a conversation from the list or start a new one.</p>
+                            </div>
+                        `;
                     }
                 }
             }
