@@ -7839,25 +7839,29 @@
 
             // ─── Add Members (full-screen, with All Users tab) ───
             window.openAddMembersScreen = async function() {
-                const conv = currentConv();
-                if (!conv || !conv.is_group || conv.is_note) return;
-                const canAdd = cpIsAdmin || conv.permissions?.add_members === 'everyone';
-                if (!canAdd) { showToast('Only admins can add members here', 'o'); return; }
+    const conv = currentConv();
+    if (!conv || !conv.is_group || conv.is_note) return;
+    const canAdd = cpIsAdmin || conv.permissions?.add_members === 'everyone';
+    if (!canAdd) { showToast('Only admins can add members here', 'o'); return; }
 
-                amSelectedIds = new Set();
-                amAllUsersProfileCache = {};
-                amAddAsAdmin = false;
-                document.getElementById('amAddAsAdminToggle').checked = false;
-                document.getElementById('amAddAsAdminToggle2').checked = false;
-                document.getElementById('amDoneBtn').textContent = 'Add (0)';
-                document.getElementById('amDoneBtn').disabled = true;
-                document.getElementById('amAllUsersSearchInput').value = '';
-                document.getElementById('amAllUsersList').innerHTML =
-                    '<div class="fu-empty-tab">Search for anyone on FreeUpper to add them.</div>';
-                switchAddMembersTab('people');
+    amSelectedIds = new Set();
+    amAllUsersProfileCache = {};
+    amAddAsAdmin = false;
+    document.getElementById('amAddAsAdminToggle').checked = false;
+    document.getElementById('amAddAsAdminToggle2').checked = false;
+    document.getElementById('amDoneBtn').textContent = 'Add (0)';
+    document.getElementById('amDoneBtn').disabled = true;
+    document.getElementById('amAllUsersSearchInput').value = '';
+    document.getElementById('amAllUsersList').innerHTML =
+        '<div class="fu-empty-tab">Search for anyone on FreeUpper to add them.</div>';
+    switchAddMembersTab('people');
 
-                const existingMemberIds = new Set(groupMembersCache.map(m => m.user_id));
-                const { data: friends } = await sb
+    // Always refresh from the DB — groupMembersCache may be stale or empty
+    // if the Members screen hasn't been opened yet this session.
+    groupMembersCache = await loadGroupMembers(conv.id);
+    const existingMemberIds = new Set(groupMembersCache.map(m => m.user_id));
+    const { data: friends } = await sb
+
                     .from('friends')
                     .select('friend_id, profiles!friends_friend_id_fkey(id, username, display_name, avatar_url)')
                     .eq('user_id', currentUserId);
@@ -7993,9 +7997,18 @@
                 const rows = Array.from(amSelectedIds).map(uid => ({
                     conversation_id: conv.id, user_id: uid, role: amAddAsAdmin ? 'admin' : 'member'
                 }));
-                try {
+                                try {
                     const { error } = await sb.from('conversation_members').insert(rows);
-                    if (error) throw error;
+                    if (error) {
+                        if (error.code === '23505') {
+                            showToast('One or more selected users are already in this group', 'o');
+                            closeAddMembersScreen();
+                            openMembersScreen(conv.id);
+                            return;
+                        }
+                        throw error;
+                    }
+
 
                     const allProfiles = { ...amAllUsersProfileCache };
                     amFriendsCache.forEach(p => { allProfiles[p.id] = p; });
