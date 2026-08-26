@@ -558,6 +558,32 @@
             stroke-width: 2;
             stroke-linecap: round;
         }
+        /* ─── Animated "snake" border on the three-dot button ─── */
+        .chat-view .chat-view-header .chat-actions .chat-options-btn {
+            position: relative;
+            background: var(--bg3);
+            border-radius: 16px 16px 4px 16px; /* chat-bubble tail corner */
+            overflow: visible;
+        }
+        .chat-view .chat-view-header .chat-actions .chat-options-btn::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: inherit;
+            padding: 2px;
+            background: conic-gradient(from 0deg, transparent 0%, var(--p) 18%, transparent 32%);
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            animation: snakeRotate 2.2s linear infinite;
+            pointer-events: none;
+        }
+        .chat-view .chat-view-header .chat-actions .chat-options-btn svg {
+            position: relative;
+            z-index: 2;
+        }
+        @keyframes snakeRotate { to { transform: rotate(360deg); } }
+
         .chat-view .chat-view-header .chat-partner-avatar {
             width: 38px;
             height: 38px;
@@ -3766,7 +3792,7 @@
                             <button onclick="openGroupSearch()" title="Search in conversation">
                                 <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                             </button>
-                            <button onclick="openChatProfile()" title="Chat options">
+                            <button class="chat-options-btn" onclick="openChatProfile()" title="Chat options">
                                 <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
                             </button>
                         </div>
@@ -4326,6 +4352,7 @@
             let blockedByMeIds = new Set();
             let messageSubscription = null;
             let conversationSubscription = null;
+            let presenceSubscription = null; // New for online status
             let typingTimeout = null;
             let replyTargetMessage = null;
             let userSearchDebounce = null;
@@ -5211,7 +5238,8 @@
                 } else {
                     chatPartnerName.textContent = other.display_name || other.username || 'User';
                     chatPartnerAvatar.src = getAvatar(other);
-                    chatPartnerStatus.textContent = other.is_online ? 'Online' : formatLastSeen(other.last_seen_at);
+                    // Update status via helper
+                    renderPartnerStatus(conv);
                 }
 
                 if (window.innerWidth <= 768) {
@@ -5266,6 +5294,16 @@
                 renderPinnedBar();
                 renderConversations(convSearch.value);
             };
+
+            // ─── Helper: render partner status (online / last seen / typing) ───
+            function renderPartnerStatus(conv) {
+                if (!conv || conv.is_group || conv.is_note) return;
+                if (selectedConversationId !== conv.id) return;
+                const others = (conv.typing_users || []).filter(id => id !== currentUserId);
+                if (others.length > 0) { chatPartnerStatus.textContent = 'Typing…'; return; }
+                const other = conv.otherUser || {};
+                chatPartnerStatus.textContent = other.is_online ? 'Online' : formatLastSeen(other.last_seen_at);
+            }
 
             async function populateGroupHeaderSubtitle(convId) {
                 try {
@@ -6788,8 +6826,13 @@
                         if (payload.eventType === 'UPDATE' && payload.new.id === selectedConversationId) {
                             const others = (payload.new.typing_users || []).filter(id => id !== currentUserId);
                             renderTypingIndicator(others.length > 0);
-
-                            const conv = conversations.find(c => c.id === payload.new.id);
+                            // Update typing_users for status display
+                            const conv = conversations.find(c => c.id === selectedConversationId);
+                            if (conv) {
+                                conv.typing_users = payload.new.typing_users;
+                                if (!conv.is_group) renderPartnerStatus(conv);
+                            }
+                            // Permission check
                             if (conv) {
                                 conv.permissions = payload.new.permissions;
                                 const nowCanSend = await canSendInConversation(conv);
@@ -6800,6 +6843,26 @@
                             }
                         }
                         loadConversations();
+                    })
+                    .subscribe();
+            }
+
+            // ─── Presence subscription for partner online status ───
+            function subscribeToPartnerPresence() {
+                if (presenceSubscription) { sb.removeChannel(presenceSubscription);
+                    presenceSubscription = null; }
+                presenceSubscription = sb.channel('profiles-presence')
+                    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+                        const updated = payload.new;
+                        // Find any DM conversation where the other user's ID matches this updated profile
+                        const conv = conversations.find(c => !c.is_group && c.otherUserId === updated.id);
+                        if (conv) {
+                            // Merge the updated fields into the cached profile
+                            conv.otherUser = { ...(conv.otherUser || {}), ...updated };
+                            if (selectedConversationId === conv.id) {
+                                renderPartnerStatus(conv);
+                            }
+                        }
                     })
                     .subscribe();
             }
@@ -8944,6 +9007,7 @@
                 await loadConversations();
                 subscribeToMessages();
                 subscribeToConversations();
+                subscribeToPartnerPresence(); // NEW: listen to profile changes for online status
 
                 const path = window.location.pathname;
                 const match = path.match(/\/join\/([a-z0-9]+)/i);
