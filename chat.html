@@ -147,6 +147,56 @@
             color: var(--p);
         }
 
+        /* ─── iOS ADD-TO-HOME-SCREEN BANNER ─── */
+        .ios-a2hs-banner {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: var(--pdim);
+            border-bottom: 1px solid var(--brd);
+            font-size: .8rem;
+            color: var(--text);
+            flex-shrink: 0;
+        }
+        .ios-a2hs-banner.show {
+            display: flex;
+        }
+        .ios-a2hs-banner .a2hs-ico {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: var(--p);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: .9rem;
+        }
+        .ios-a2hs-banner .a2hs-text {
+            flex: 1;
+            line-height: 1.4;
+        }
+        .ios-a2hs-banner .a2hs-text b {
+            font-weight: 800;
+        }
+        .ios-a2hs-banner .a2hs-close {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 4px;
+            flex-shrink: 0;
+        }
+        .ios-a2hs-banner .a2hs-close svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
         .app-body {
             flex: 1;
             overflow: hidden;
@@ -3783,6 +3833,12 @@
         <header class="chat-header">
             <div class="brand">Free<span>Upper</span></div>
         </header>
+
+        <div class="ios-a2hs-banner" id="iosA2hsBanner">
+            <div class="a2hs-ico"><i class="ri-share-forward-line"></i></div>
+            <div class="a2hs-text"><b>Get notifications:</b> Tap Share <i class="ri-share-forward-line"></i> then "Add to Home Screen" to enable push notifications on iPhone.</div>
+            <button class="a2hs-close" onclick="dismissIosA2hsBanner()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
 
         <!-- APP BODY -->
         <div class="app-body">
@@ -9026,9 +9082,34 @@
             window.closePollModal = function() { unlockBody();
                 origPollClose(); };
 
+            // ─── iOS Add-to-Home-Screen detection ───
+            function isIosDevice() {
+                return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+            }
+            function isStandalonePWA() {
+                return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+            }
+            window.dismissIosA2hsBanner = function() {
+                const banner = document.getElementById('iosA2hsBanner');
+                if (banner) banner.classList.remove('show');
+                try { localStorage.setItem('fu_a2hs_dismissed', '1'); } catch (e) {}
+            };
+            function maybeShowIosA2hsBanner() {
+                if (!isIosDevice() || isStandalonePWA()) return;
+                let dismissed = false;
+                try { dismissed = localStorage.getItem('fu_a2hs_dismissed') === '1'; } catch (e) {}
+                if (dismissed) return;
+                const banner = document.getElementById('iosA2hsBanner');
+                if (banner) banner.classList.add('show');
+            }
+
             // ─── FIX #5: Firebase push notifications setup ───
             async function setupFreeUpperNotifications() {
                 try {
+                    if (isIosDevice() && !isStandalonePWA()) {
+                        maybeShowIosA2hsBanner();
+                        return; // Skip FCM entirely — it will fail on iOS Safari tabs anyway
+                    }
                     if (!("Notification" in window) || !window.FreeUpperFCM) return;
                     const permission = await Notification.requestPermission();
                     if (permission !== "granted") return;
