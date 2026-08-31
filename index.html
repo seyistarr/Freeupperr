@@ -388,10 +388,11 @@
         /* ─── MEDIA SCROLL ROW ─── */
         .media-scroll-row {
             display: flex;
-            gap: 4px;
+            gap: 6px;
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
-            scroll-snap-type: x mandatory;
+            scroll-snap-type: x proximity;
+            scroll-padding-left: 16px;
             margin-top: 10px;
             padding: 0 16px;
         }
@@ -476,45 +477,36 @@
             background: none;
             border: none;
             color: #fff;
+            cursor: pointer;
         }
         .gallery-lightbox-counter {
             color: #fff;
             font-size: .85rem;
             font-weight: 700;
         }
-        .gallery-lightbox-more {
-            background: rgba(255, 255, 255, .12);
-            border: none;
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            cursor: pointer;
-        }
-        .gallery-lightbox-more svg {
-            width: 18px;
-            height: 18px;
-        }
         .gallery-lightbox-track {
             display: flex;
             width: 100%;
             height: 100%;
+            background: #000;
             transition: transform .3s ease;
         }
         .gallery-lightbox-slide {
             flex: 0 0 100%;
+            width: 100%;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
+            background: #000;
         }
         .gallery-lightbox-media {
-            max-width: 95vw;
-            max-height: 85vh;
+            max-width: 100vw;
+            max-height: 100dvh;
+            width: auto;
+            height: auto;
             object-fit: contain;
-            border-radius: 8px;
+            display: block;
         }
         .gallery-lightbox-dots {
             position: absolute;
@@ -1425,6 +1417,41 @@
             cursor: pointer;
         }
 
+        /* ─── REPLIES VIEWS LINE ─── */
+        .replies-views-line {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--muted);
+            font-size: .8rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            white-space: nowrap;
+        }
+        .replies-views-line svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+        }
+
+        /* ─── OWNER LIKE BADGE (inline, next to 3-dot menu) ─── */
+        .comment-menu-actions,
+        .reply-menu-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .owner-like-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .owner-like-badge svg {
+            width: 14px;
+            height: 14px;
+        }
+
         /* ─── COMMENTS OFF ─── */
         .comments-off-illustration {
             display: flex;
@@ -1562,13 +1589,12 @@
             position: fixed;
             inset: 0;
             z-index: 100;
-            background: rgba(0, 0, 0, .92);
+            background: #000;
             display: flex;
-            align-items: center;
-            justify-content: center;
             opacity: 0;
             pointer-events: none;
-            transition: opacity .3s;
+            transition: opacity .25s;
+            touch-action: none;
         }
         .lightbox-modal.show {
             opacity: 1;
@@ -2830,7 +2856,8 @@
             padding: 0 16px;
         }
         .suggested-people-header h3 {
-            font-size: 1rem;
+            font-family: 'Poppins', 'Inter', sans-serif;
+            font-size: 1.2rem;
             font-weight: 800;
             color: var(--text);
             margin-bottom: 2px;
@@ -2844,7 +2871,8 @@
             touch-action: pan-x;
             overscroll-behavior-x: contain;
             scroll-snap-type: x proximity;
-            padding: 0 20px 10px;
+            padding: 0 16px 10px;
+            scroll-padding-left: 16px;
         }
         .suggested-person-card {
             scroll-snap-align: start;
@@ -3242,25 +3270,6 @@
             color: var(--text);
         }
 
-        /* ─── OWNER LIKE OVERLAY ─── */
-        .owner-like-overlay {
-            position: absolute;
-            bottom: -2px;
-            right: -2px;
-            width: 16px;
-            height: 16px;
-            background: var(--bg2);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2px;
-        }
-        .owner-like-overlay svg {
-            width: 100%;
-            height: 100%;
-        }
-
         .similar-posts-section {
             padding: 12px 0 4px;
             border-bottom: 1px solid var(--brd);
@@ -3532,9 +3541,7 @@
         <div class="gallery-lightbox-header">
             <button class="lightbox-close" id="galleryLightboxClose">&times;</button>
             <span class="gallery-lightbox-counter" id="galleryLightboxCounter"></span>
-            <button class="gallery-lightbox-more" id="galleryLightboxMore">
-                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-            </button>
+            <span style="width:34px;"></span>
         </div>
         <div class="gallery-lightbox-track" id="galleryLightboxTrack"></div>
         <div class="gallery-lightbox-dots" id="galleryLightboxDots"></div>
@@ -4014,12 +4021,16 @@
                 if (opts.noPreview) {
                     return `<div class="content-text">${linkifyContent(text, mentions)}</div>`;
                 }
-                const pt = text.substring(0, 250);
                 const isLong = text.length > 250;
+                if (!isLong) {
+                    return `<div class="content-text full-text-${postId}">${linkifyContent(text, mentions)}</div>`;
+                }
+                const pt = text.substring(0, 250);
                 const renderedContent = linkifyContent(text, mentions);
                 const renderedPreview = linkifyContent(pt, mentions);
                 return `<div class="content-preview preview-text-${postId}">${renderedPreview}</div>
-                    ${isLong?`<div class="content-text full-text-${postId} hidden">${renderedContent}</div><button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm">Show more</button>`:`<div class="content-text full-text-${postId}">${renderedContent}</div>`}`;
+                    <div class="content-text full-text-${postId} hidden">${renderedContent}</div>
+                    <button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm">Show more</button>`;
             }
 
             function formatCount(n) {
@@ -4399,7 +4410,7 @@
                 const counter = el.querySelector('.scroll-media-count');
                 if (items.length <= 1 || !counter) return;
                 el.addEventListener('scroll', () => {
-                    const w = items[0].offsetWidth + 4;
+                    const w = items[0].offsetWidth + 6;
                     const idx = Math.round(el.scrollLeft / w);
                     counter.textContent = `${Math.min(idx + 1, items.length)}/${items.length}`;
                 }, { passive: true });
@@ -4414,7 +4425,7 @@
                 _galleryState = { items: mediaItems || [], index: startIndex || 0 };
                 renderGalleryTrack();
                 document.getElementById('lightbox').classList.add('show');
-                document.body.style.overflow = 'hidden';
+                lockBodyScroll();
                 pauseAllVideos();
             }
 
@@ -4451,41 +4462,8 @@
 
             function closeLightbox() {
                 document.getElementById('lightbox').classList.remove('show');
-                document.body.style.overflow = '';
+                unlockBodyScroll();
                 document.getElementById('galleryLightboxTrack').innerHTML = '';
-            }
-
-            function openGalleryMoreMenu() {
-                const item = _galleryState.items[_galleryState.index];
-                if (!item) return;
-                const isVideo = item.type === 'video';
-                const backdrop = document.createElement('div');
-                backdrop.className = 'action-sheet-backdrop';
-                backdrop.innerHTML = `<div class="action-sheet">
-                    <div class="action-sheet-handle"></div>
-                    <button data-action="save">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                        Save ${isVideo ? 'video' : 'image'}
-                    </button>
-                    <button class="action-sheet-cancel" data-action="cancel">Cancel</button>
-                </div>`;
-                document.body.appendChild(backdrop);
-                const sheet = backdrop.querySelector('.action-sheet');
-                requestAnimationFrame(() => { backdrop.classList.add('open'); sheet.classList.add('open'); });
-                const close = () => { backdrop.classList.remove('open'); sheet.classList.remove('open'); setTimeout(() => backdrop.remove(), 200); };
-                backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
-                sheet.querySelector('[data-action="save"]').onclick = () => {
-                    close();
-                    const a = document.createElement('a');
-                    a.href = item.url;
-                    a.download = '';
-                    a.target = '_blank';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    showToast('Saving...');
-                };
-                sheet.querySelector('[data-action="cancel"]').onclick = close;
             }
 
             (function setupGallerySwipe() {
@@ -4547,7 +4525,7 @@
             function setupVideoAutoplay(scope) {
                 if (videoObserver) videoObserver.disconnect();
                 const searchRoot = scope || document;
-                const selector = '.ig-video-wrap video, .video-container video, .media-carousel-slide video, .media-scroll-row video';
+                const selector = '.ig-video-wrap video, .video-container video, .media-scroll-row video';
                 const videoElements = searchRoot.querySelectorAll(selector);
                 videoObserver = new IntersectionObserver((entries) => {
                     entries.forEach(entry => {
@@ -4555,11 +4533,13 @@
                         const isVisible = entry.isIntersecting && entry.intersectionRatio >= 0.75;
                         if (isVisible) {
                             searchRoot.querySelectorAll(selector).forEach(other => {
-                                if (other !== vid) _pauseVideoEl(other);
+                                if (other !== vid) { _pauseVideoEl(other);
+                                    other.muted = true; }
                             });
                             if (currentlyPlayingVideo !== vid) _playVideoEl(vid);
                         } else {
                             _pauseVideoEl(vid);
+                            vid.muted = true;
                         }
                     });
                     const anyVisible = Array.from(entries).some(e => e.isIntersecting && e.intersectionRatio >=
@@ -6566,12 +6546,14 @@
                 return `<div class="comment-item" data-comment-id="${c.id}">
                         <div class="${avatarClass}" data-user-id="${c.userId}" data-username="${escapeHtml(username)}">
                             ${avatarHtml}
-                            ${(isPostOwner && isLiked) ? `<span class="owner-like-overlay"><svg viewBox="0 0 24 24" fill="#DC2626" stroke="#DC2626"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>` : ''}
                         </div>
                         <div class="comment-body">
                             <div class="comment-username-row">
                                 <div class="comment-username" data-user-id="${c.userId}">${pinnedBadgeHtml}${escapeHtml(username)} ${badgeHtml}</div>
-                                <button class="comment-menu-btn-top" onclick="openCommentActionsMenu(event, '${c.id}', ${isMine}, ${isPostOwner}, ${isPinned})">⋯</button>
+                                <div class="comment-menu-actions">
+                                    ${(isPostOwner && isLiked) ? `<span class="owner-like-badge"><svg viewBox="0 0 24 24" fill="#DC2626" stroke="#DC2626"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>` : ''}
+                                    <button class="comment-menu-btn-top" onclick="openCommentActionsMenu(event, '${c.id}', ${isMine}, ${isPostOwner}, ${isPinned})">⋯</button>
+                                </div>
                             </div>
                             <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${renderedMsg}${editedTagHtml}</div>
                             ${il?`<button class="comment-show-more">Show more</button>`:''}
@@ -6618,12 +6600,14 @@
                 return `<div class="reply-item" data-comment-id="${r.id}">
                         <div class="${avatarClass}" data-user-id="${r.userId}" data-username="${escapeHtml(username)}">
                             ${avatarHtml}
-                            ${(isPostOwner && isLiked) ? `<span class="owner-like-overlay"><svg viewBox="0 0 24 24" fill="#DC2626" stroke="#DC2626"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>` : ''}
                         </div>
                         <div class="reply-body">
                             <div class="reply-username-row">
                                 <div class="reply-username" data-user-id="${r.userId}">${escapeHtml(username)} ${badgeHtml}</div>
-                                <button class="reply-menu-btn-top" onclick="openCommentActionsMenu(event, '${r.id}', ${isMine}, ${isPostOwner}, false)">⋯</button>
+                                <div class="reply-menu-actions">
+                                    ${(isPostOwner && isLiked) ? `<span class="owner-like-badge"><svg viewBox="0 0 24 24" fill="#DC2626" stroke="#DC2626"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>` : ''}
+                                    <button class="reply-menu-btn-top" onclick="openCommentActionsMenu(event, '${r.id}', ${isMine}, ${isPostOwner}, false)">⋯</button>
+                                </div>
                             </div>
                             <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${renderedMsg}${editedTagHtml}</div>
                             ${il?`<button class="comment-show-more">Show more</button>`:''}
@@ -7216,14 +7200,12 @@
                         </div>
 
                         <div class="mt-1">
+                          <div class="replies-views-line">${svgEye()}<span>${formatCount(post.views||0)} views</span></div>
                           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                            <h3 class="font-heading font-bold text-base" style="color:var(--text);margin:0;">Replies</h3>
-                            <div style="display:flex;align-items:center;gap:10px;">
-                              <span class="views-count" style="color:var(--muted);">${svgEye()}<span>${formatCount(post.views||0)}</span></span>
-                              <button class="comment-sort-btn" id="commentSortBtn">
-                                <span id="commentSortLabel">${getCommentSort(post.id)==='recent'?'Recent':'Top'}</span>${svgChevronDown()}
-                              </button>
-                            </div>
+                            <h3 class="font-heading font-extrabold text-lg" style="color:var(--text);margin:0;">Replies</h3>
+                            <button class="comment-sort-btn" id="commentSortBtn">
+                              <span id="commentSortLabel">${getCommentSort(post.id)==='recent'?'Recent':'Top'}</span>${svgChevronDown()}
+                            </button>
                           </div>
                           <div id="comments-list">${commentSkeletons(3)}</div>
                           ${post.commentsHidden ? buildCommentsOffIllustration() : ''}
@@ -7546,9 +7528,6 @@
                     .like || 0)));
 
                 co.innerHTML = `<div class="max-w-2xl mx-auto px-3 py-3">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:0 6px;">
-                          <h2 class="font-heading font-extrabold text-lg" style="color:var(--text);">Explore</h2>
-                        </div>
                         <div class="explore-grid" id="explore-grid-content">${exploreSkeletonGrid()}</div>
                       </div>`;
 
@@ -7639,7 +7618,7 @@
 
             // ─── NAVIGATION & UI RENDERING ──────────────────────────────────
             function setTab(mode) {
-                const scrollY = window.scoryrollY;
+                const scrollY = window.scrollY;
                 if (uiPage === 'home') tabScrollPositions.home = scrollY;
                 else if (uiPage === 'explore') tabScrollPositions.explore = scrollY;
                 else if (uiPage === 'market') tabScrollPositions.market = scrollY;
@@ -7648,7 +7627,7 @@
                 currentCategoryFilter = '';
                 searchQuery = '';
                 feedPage = 1;
-                if (mode === 'fou') { currentSortMethod = 'foryou';
+                if (mode === 'foryou') { currentSortMethod = 'foryou';
                     uiPage = 'home'; } else if (mode === 'explore') { currentSortMethod = 'trending';
                     uiPage = 'explore'; } else if (mode === 'market') { uiPage = 'market'; }
 
@@ -8085,6 +8064,7 @@
 
             // ─── NAV SCROLL ──────────────────────────────────────────────────
             function handleNavScroll() {
+                if (uiPage === 'single-post-explore') return;
                 const currentScrollY = window.scrollY;
                 const scrollHidePages = (uiPage === 'home' || uiPage === 'explore' || uiPage === 'market');
                 const bottomNavEl = document.querySelector('.bottom-nav');
@@ -8332,7 +8312,6 @@
                 document.getElementById('explore-back-btn').addEventListener('click', closeExploreFullscreen);
 
                 document.getElementById('galleryLightboxClose').addEventListener('click', closeLightbox);
-                document.getElementById('galleryLightboxMore').addEventListener('click', openGalleryMoreMenu);
                 document.getElementById('lightbox').addEventListener('click', function(e) {
                     if (e.target === this) closeLightbox();
                 });
