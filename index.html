@@ -806,6 +806,16 @@
         }
 
         /* ─── EXPLORE GRID ─── */
+        .explore-page-wrap {
+            max-width: 672px;
+            margin: 0 auto;
+            padding-top: 12px;
+        }
+        @media (min-width: 1024px) {
+            .explore-page-wrap {
+                max-width: 1400px;
+            }
+        }
         .explore-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -818,16 +828,96 @@
                 gap: 12px;
             }
         }
+        @media (min-width: 1024px) {
+            .explore-grid {
+                grid-template-columns: repeat(5, 1fr);
+                gap: 14px;
+                padding: 16px;
+            }
+        }
+
+        /* ─── EXPLORE CATEGORY CHIPS (tablet/desktop/laptop only) ─── */
+        .explore-cat-chips-wrap {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 16px 14px;
+        }
+        @media (min-width: 768px) {
+            .explore-cat-chips-wrap {
+                display: flex;
+            }
+        }
+        .explore-chip-arrow {
+            flex-shrink: 0;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 1px solid var(--brd);
+            background: var(--bg3);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: opacity .15s, background .15s;
+        }
+        .explore-chip-arrow:hover {
+            background: var(--bg4);
+        }
+        .explore-chip-arrow.hidden {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+        }
+        .explore-chip-arrow svg {
+            width: 16px;
+            height: 16px;
+        }
+        .explore-cat-chips {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            scroll-behavior: smooth;
+            flex: 1;
+            min-width: 0;
+        }
+        .explore-cat-chips::-webkit-scrollbar {
+            display: none;
+        }
+        .explore-cat-chip {
+            background: none;
+            border: none;
+            font-size: .85rem;
+            font-weight: 600;
+            color: var(--muted);
+            white-space: nowrap;
+            cursor: pointer;
+            padding: 4px 0;
+            flex-shrink: 0;
+            transition: color .15s;
+        }
+        .explore-cat-chip.active {
+            color: var(--text);
+            font-weight: 800;
+        }
+
         .explore-card {
             display: flex;
             flex-direction: column;
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
+            background: var(--bg4);
+            border: 1px solid var(--brd);
+            border-radius: 14px;
+            overflow: hidden;
         }
         .explore-card-media {
             position: relative;
             aspect-ratio: 4 / 5;
-            border-radius: 14px;
             overflow: hidden;
             background: #151515;
         }
@@ -858,35 +948,19 @@
             fill: #fff;
         }
 
-        /* ─── EXPLORE CARD OVERLAY (TikTok-style) ─── */
-        .explore-card-overlay {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            padding: 30px 8px 8px;
-            background: linear-gradient(to top, rgba(0, 0, 0, .75), rgba(0, 0, 0, 0));
+        /* ─── EXPLORE CARD INFO PANEL (below media, TikTok-style) ─── */
+        .explore-card-info {
+            padding: 10px 10px 12px;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 8px;
         }
-        .explore-card-overlay .explore-card-title {
-            margin-top: 0;
-            color: #fff;
-        }
-        .explore-card-overlay .explore-card-author span,
-        .explore-card-overlay .explore-card-views {
-            color: rgba(255, 255, 255, .85);
-        }
-        .explore-card-overlay .explore-card-views svg {
-            stroke: rgba(255, 255, 255, .85);
-        }
-
         .explore-card-title {
             font-family: "Inter", sans-serif;
             font-size: .82rem;
             font-weight: 700;
             line-height: 1.3;
+            color: var(--text);
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -3906,6 +3980,9 @@
             // ─── COMMENT LIKE STATE ───
             let locallyLikedComments = new Map();
 
+            // ─── EXPLORE CHIPS CACHE ───
+            let _exploreInterestsCache = null;
+
             // ───────────────────────────────────────────────────────────────
             // HELPERS
             // ───────────────────────────────────────────────────────────────
@@ -4187,6 +4264,10 @@
             function svgChevronDown() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>'; }
 
             function svgChevronUp() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>'; }
+
+            function svgChevronLeft() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'; }
+
+            function svgChevronRight() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'; }
 
             function svgHeart(reacted) {
                 return reacted ?
@@ -7511,9 +7592,61 @@
                 });
             }
 
-            // ─── EXPLORE GRID ───────────────────────────────────────────────────
-            function renderExploreGrid() {
-                const co = document.getElementById('user-content');
+            // ─── EXPLORE CHIPS — full onboarding interest catalog ───────────
+            async function ensureExploreInterests() {
+                if (_exploreInterestsCache) return _exploreInterestsCache;
+                if (window.FreeUpperOnboarding && typeof window.FreeUpperOnboarding.getInterests === 'function') {
+                    _exploreInterestsCache = await window.FreeUpperOnboarding.getInterests();
+                } else {
+                    _exploreInterestsCache = [];
+                }
+                return _exploreInterestsCache;
+            }
+
+            function buildExploreCategoryChipsHTML(interests) {
+                if (!interests || !interests.length) return '';
+                const all = `<button class="explore-cat-chip ${!currentCategoryFilter?'active':''}" data-cat="">All</button>`;
+                const rest = interests.map(i =>
+                    `<button class="explore-cat-chip ${currentCategoryFilter===i.key?'active':''}" data-cat="${escapeHtml(i.key)}">${escapeHtml(i.label)}</button>`
+                ).join('');
+                return `<div class="explore-cat-chips-wrap" id="explore-cat-chips-wrap">
+                    <button class="explore-chip-arrow left hidden" id="exploreChipsPrev" aria-label="Scroll left">${svgChevronLeft()}</button>
+                    <div class="explore-cat-chips" id="explore-cat-chips">${all}${rest}</div>
+                    <button class="explore-chip-arrow right" id="exploreChipsNext" aria-label="Scroll right">${svgChevronRight()}</button>
+                </div>`;
+            }
+
+            function initExploreChipsArrows() {
+                const scroller = document.getElementById('explore-cat-chips');
+                const prevBtn = document.getElementById('exploreChipsPrev');
+                const nextBtn = document.getElementById('exploreChipsNext');
+                if (!scroller || !prevBtn || !nextBtn) return;
+
+                function updateArrows() {
+                    const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+                    prevBtn.classList.toggle('hidden', scroller.scrollLeft <= 4);
+                    nextBtn.classList.toggle('hidden', scroller.scrollLeft >= maxScroll - 4);
+                }
+                prevBtn.onclick = () => scroller.scrollBy({ left: -260, behavior: 'smooth' });
+                nextBtn.onclick = () => scroller.scrollBy({ left: 260, behavior: 'smooth' });
+                scroller.addEventListener('scroll', updateArrows, { passive: true });
+                updateArrows();
+            }
+
+            function applyExploreCategoryFilter(catKey) {
+                if (window.innerWidth < 768) return;
+                currentCategoryFilter = catKey || '';
+                document.querySelectorAll('.explore-cat-chip').forEach(btn => {
+                    btn.classList.toggle('active', (btn.dataset.cat || '') === currentCategoryFilter);
+                });
+                const gc = document.getElementById('explore-grid-content');
+                if (gc) gc.innerHTML = exploreSkeletonGrid();
+                setTimeout(() => {
+                    renderExploreCardsOnly();
+                }, 350);
+            }
+
+            function getExplorePostsFiltered() {
                 const currentUser = getCurrentUser();
                 let p = [...allPosts]
                     .filter(post => !hiddenPostsSet.has(post.id))
@@ -7526,31 +7659,56 @@
                     });
                 p.sort((a, b) => ((b.views || 0) + (b.reactions.like || 0)) - ((a.views || 0) + (a.reactions
                     .like || 0)));
+                if (window.FreeUpperAlgorithm && currentCategoryFilter) {
+                    p = p.filter(post => window.FreeUpperAlgorithm.getPostTopics(post).includes(currentCategoryFilter));
+                }
+                if (_shuffleExploreOnce) { p = shuffleArray(p);
+                    _shuffleExploreOnce = false; }
+                return p;
+            }
 
-                co.innerHTML = `<div class="max-w-2xl mx-auto px-3 py-3">
+            function renderExploreCardsOnly() {
+                const gc = document.getElementById('explore-grid-content');
+                if (!gc || uiPage !== 'explore') return;
+                const p = getExplorePostsFiltered();
+                if (p.length === 0) {
+                    gc.innerHTML =
+                        '<div class="flex flex-col items-center justify-center py-16 text-center" style="grid-column:1/-1;padding:0 12px;"><p class="text-sm" style="color:var(--muted);">No posts yet. Be the first to post!</p></div>';
+                    return;
+                }
+                gc.innerHTML = buildExploreCards(p);
+                gc.querySelectorAll('.explore-card').forEach(card => {
+                    card.addEventListener('click', () => { const pid = card.dataset.postId;
+                        if (pid) openExplorePost(pid, 'explore'); });
+                });
+                setTimeout(() => {
+                    setupExploreVideoAutoplay(gc);
+                }, 300);
+            }
+
+            // ─── EXPLORE GRID ───────────────────────────────────────────────────
+            function renderExploreGrid() {
+                const co = document.getElementById('user-content');
+                co.innerHTML = `<div class="explore-page-wrap">
+                        <div id="explore-cat-chips-slot"></div>
                         <div class="explore-grid" id="explore-grid-content">${exploreSkeletonGrid()}</div>
                       </div>`;
 
-                if (currentCategoryFilter) p = p.filter(post => post.category === currentCategoryFilter);
-                if (_shuffleExploreOnce) { p = shuffleArray(p);
-                    _shuffleExploreOnce = false; }
+                ensureExploreInterests().then(interests => {
+                    const slot = document.getElementById('explore-cat-chips-slot');
+                    if (!slot || uiPage !== 'explore') return;
+                    slot.innerHTML = buildExploreCategoryChipsHTML(interests);
+                    const wrap = document.getElementById('explore-cat-chips-wrap');
+                    if (wrap) {
+                        wrap.querySelectorAll('.explore-cat-chip').forEach(btn => {
+                            btn.addEventListener('click', () => applyExploreCategoryFilter(btn.dataset.cat));
+                        });
+                        initExploreChipsArrows();
+                    }
+                });
 
                 requestAnimationFrame(() => {
-                    const gc = document.getElementById('explore-grid-content');
-                    if (!gc || uiPage !== 'explore') return;
-                    if (p.length === 0) {
-                        gc.outerHTML =
-                            '<div class="flex flex-col items-center justify-center py-16 text-center col-span-2" style="grid-column:1/-1;"><p class="text-sm" style="color:var(--muted);">No posts yet. Be the first to post!</p></div>';
-                        return;
-                    }
-                    gc.innerHTML = buildExploreCards(p);
-                    gc.querySelectorAll('.explore-card').forEach(card => {
-                        card.addEventListener('click', () => { const pid = card.dataset.postId;
-                            if (pid) openExplorePost(pid, 'explore'); });
-                    });
-                    setTimeout(() => {
-                        setupExploreVideoAutoplay(gc);
-                    }, 300);
+                    renderExploreCardsOnly();
                 });
             }
 
@@ -7602,14 +7760,12 @@
                     const cc = nl ? 'explore-card loaded' : 'explore-card';
 
                     return `<div class="${cc}" data-post-id="${post.id}" ${mediaItems.length > 0 && mediaItems[0].type === 'video' ? 'data-video-card="true"' : ''}>
-                        <div class="explore-card-media">
-                            ${mh}${vb}
-                            <div class="explore-card-overlay">
-                                <div class="explore-card-title">${escapeHtml(post.title)}</div>
-                                <div class="explore-card-bottom">
-                                    <div class="explore-card-author">${ah}<span>${escapeHtml(au)}</span></div>
-                                    <div class="explore-card-views">${svgEye()}<span>${formatCount(post.views||0)}</span></div>
-                                </div>
+                        <div class="explore-card-media">${mh}${vb}</div>
+                        <div class="explore-card-info">
+                            <div class="explore-card-title">${escapeHtml(post.title)}</div>
+                            <div class="explore-card-bottom">
+                                <div class="explore-card-author">${ah}<span>${escapeHtml(au)}</span></div>
+                                <div class="explore-card-views">${svgEye()}<span>${formatCount(post.views||0)}</span></div>
                             </div>
                         </div>
                     </div>`;
