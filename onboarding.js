@@ -1,6 +1,6 @@
 // =====================================================================
 // onboarding.js
-// FreeUpper Onboarding — v4.0.0 (36-category taxonomy, sourced interests)
+// FreeUpper Onboarding — v4.0.1 (36-category taxonomy, sourced interests)
 // =====================================================================
 
 (function () {
@@ -11,6 +11,9 @@
 
   const MIN_SELECT = 3;
   const ONBOARDING_STRENGTH = 0.5; // moderate, not maximal — behavior earns the rest
+
+  // ─── CACHE ────────────────────────────────────────────────────────────────
+  let _cachedInterests = null;
 
   // ─── SVG ICONS ────────────────────────────────────────────────────────────
   // Keys must match freeupper_interests.key exactly (post-normalization).
@@ -103,6 +106,13 @@
     }
   }
 
+  // ─── CACHED GETTER ──────────────────────────────────────────────────────
+  async function getInterests(forceRefresh = false) {
+    if (_cachedInterests && !forceRefresh) return _cachedInterests;
+    _cachedInterests = await fetchInterests();
+    return _cachedInterests;
+  }
+
   // ─── SHOW ONBOARDING ──────────────────────────────────────────────────────
   async function showOnboarding() {
     const overlay = document.getElementById('onboardingOverlay');
@@ -124,7 +134,7 @@
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
 
-    const interests = await fetchInterests();
+    const interests = await getInterests(); // use cached getter
 
     if (!interests.length) {
       ERR('No interests returned — check freeupper_interests table/RLS.');
@@ -134,13 +144,10 @@
 
     const selected = new Set();
 
-        // ─── Fix layout overflow (horizontal only — vertical scroll must stay enabled) ──
+    // Fix layout overflow (horizontal only — vertical scroll must stay enabled)
     grid.style.overflowX = 'hidden';
     grid.style.maxWidth = '100%';
 
-
-    // No WIDE_KEYS — every pill is the same size; long labels wrap via CSS
-    // (.pill-label needs white-space: normal; overflow-wrap: break-word;)
     grid.innerHTML = interests.map(i => {
       const nk = normalizeKey(i.key);
       const icon = ICONS[nk] || FALLBACK_ICON;
@@ -212,6 +219,7 @@
     LOG('Onboarding rendered with', interests.length, 'options.');
   }
 
-  window.FreeUpperOnboarding = { showOnboarding };
+  // ─── EXPOSE ──────────────────────────────────────────────────────────────
+  window.FreeUpperOnboarding = { showOnboarding, getInterests };
   LOG('onboarding.js loaded.');
 })();
