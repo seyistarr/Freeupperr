@@ -218,11 +218,6 @@
         .top-header .header-actions .msg-btn svg {
             width: 22px;
             height: 22px;
-            stroke: var(--p);
-            fill: none;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
         }
         .top-header .header-actions .msg-btn .msg-badge {
             position: absolute;
@@ -539,9 +534,11 @@
         }
         .ig-media-container img {
             width: 100%;
+            max-height: 75vh;
             height: auto;
             display: block;
             object-fit: contain;
+            background: #000;
         }
         .ig-video-wrap {
             position: relative;
@@ -553,6 +550,7 @@
         }
         .ig-video-wrap video {
             width: 100%;
+            max-height: 75vh;
             display: block;
             object-fit: contain;
             background: #000;
@@ -1669,10 +1667,39 @@
             pointer-events: none;
             transition: opacity .25s;
             touch-action: none;
+            flex-direction: column;
         }
         .lightbox-modal.show {
             opacity: 1;
             pointer-events: auto;
+        }
+        .gallery-lightbox-footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 6;
+            padding: 10px 16px max(14px, env(safe-area-inset-bottom));
+            background: linear-gradient(to top, rgba(0, 0, 0, .75), transparent);
+        }
+        .gallery-lightbox-footer .post-actions-row {
+            margin-top: 0;
+        }
+        .gallery-lightbox-footer .post-actions-row .comment-btn,
+        .gallery-lightbox-footer .post-actions-row .reaction-btn,
+        .gallery-lightbox-footer .post-actions-row .views-count,
+        .gallery-lightbox-footer .post-actions-row .bookmark-badge,
+        .gallery-lightbox-footer .post-actions-row .share-btn,
+        .gallery-lightbox-footer .post-actions-row .repost-count-badge,
+        .gallery-lightbox-footer .post-actions-row .reaction-count,
+        .gallery-lightbox-footer .post-actions-row .comment-count,
+        .gallery-lightbox-footer .post-actions-row .share-count,
+        .gallery-lightbox-footer .post-actions-row .bookmark-count,
+        .gallery-lightbox-footer .post-actions-row .repost-count-num {
+            color: #fff !important;
+        }
+        .lightbox-modal.dragging .gallery-lightbox-track {
+            transition: none !important;
         }
 
         /* ─── EXPLORE FULLSCREEN ─── */
@@ -3555,7 +3582,12 @@
         </div>
         <div class="header-actions">
             <button class="msg-btn" id="topMsgBtn" aria-label="Messages">
-                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <svg viewBox="0 0 24 24" fill="currentColor" style="stroke:none;">
+                    <path d="M7.9 20A9 9 0 1 1 20 12a9 9 0 0 1-12.1 8L2 22Z"/>
+                    <circle cx="8" cy="12" r="1.15" fill="#fff"/>
+                    <circle cx="12" cy="12" r="1.15" fill="#fff"/>
+                    <circle cx="16" cy="12" r="1.15" fill="#fff"/>
+                </svg>
                 <span class="msg-badge"></span>
             </button>
         </div>
@@ -3569,21 +3601,6 @@
                 <button class="tab-pill" id="tab-explore">Explore</button>
                 <button class="tab-pill" id="tab-market">Market</button>
             </div>
-        </div>
-    </div>
-
-    <!-- ===== FILTER BACKDROP & DRAWER ===== -->
-    <div id="filter-backdrop" class="fixed inset-0 z-[90] bg-black bg-opacity-0 pointer-events-none transition-all duration-300"></div>
-    <div id="filter-drawer" class="fixed bottom-0 left-0 right-0 z-[95] bg-white rounded-t-2xl shadow-2xl transform translate-y-full transition-transform duration-300 ease-out max-h-[75vh] overflow-hidden flex flex-col" style="padding-bottom:var(--safe-bottom);">
-        <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b" style="border-color:var(--brd);">
-            <h3 class="font-heading font-bold text-base" id="drawer-title" style="color:var(--text);">Browse by category</h3>
-            <button class="w-8 h-8 rounded-full flex items-center justify-center" id="drawer-close-btn" style="background:var(--inp);color:var(--muted);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-        </div>
-        <div class="overflow-y-auto flex-1 px-5 py-4"><div id="drawer-categories" class="grid grid-cols-2 gap-2"></div></div>
-        <div class="px-5 py-4 border-t flex-shrink-0" style="border-color:var(--brd);">
-            <button class="w-full py-2.5 rounded-xl border text-sm font-semibold" id="clear-filter-btn" style="border-color:var(--brd);color:var(--muted);">Clear filter</button>
         </div>
     </div>
 
@@ -3898,8 +3915,8 @@
             const UCK = 'freeupper_user_categories';
             const REPLY_BATCH = 3,
                 PAGE_SIZE = 5;
-            const INITIAL_COMMENT_DISPLAY = 3;
-            const COMMENT_LOAD_MORE = 5;
+            const INITIAL_COMMENT_DISPLAY = 10;
+            const COMMENT_LOAD_MORE = 10;
 
             let allPosts = [];
             let appData = {
@@ -3972,7 +3989,7 @@
             const content = document.getElementById('user-content');
 
             // ─── GALLERY STATE ───
-            let _galleryState = { items: [], index: 0 };
+            let _galleryState = { items: [], index: 0, postId: null };
 
             // ─── COMMENT SORT ───
             let currentCommentSort = {};
@@ -3982,6 +3999,9 @@
 
             // ─── EXPLORE CHIPS CACHE ───
             let _exploreInterestsCache = null;
+
+            // ─── COMMENTS FETCH TOKEN ───
+            let _commentsFetchToken = {};
 
             // ───────────────────────────────────────────────────────────────
             // HELPERS
@@ -4502,8 +4522,8 @@
             }
 
             // ─── GALLERY LIGHTBOX ───────────────────────────────────────────
-            function openGalleryLightbox(mediaItems, startIndex) {
-                _galleryState = { items: mediaItems || [], index: startIndex || 0 };
+            function openGalleryLightbox(mediaItems, startIndex, postId) {
+                _galleryState = { items: mediaItems || [], index: startIndex || 0, postId: postId || null };
                 renderGalleryTrack();
                 document.getElementById('lightbox').classList.add('show');
                 lockBodyScroll();
@@ -4514,11 +4534,11 @@
                 const track = document.getElementById('galleryLightboxTrack');
                 const dots = document.getElementById('galleryLightboxDots');
                 const counter = document.getElementById('galleryLightboxCounter');
-                const { items, index } = _galleryState;
+                const { items, index, postId } = _galleryState;
                 track.innerHTML = items.map((it) => {
                     const isVideo = it.type === 'video' && !isYouTubeUrl(it.url || '');
                     return `<div class="gallery-lightbox-slide">${isVideo
-                        ? `<video src="${it.url}" controls playsinline class="gallery-lightbox-media"></video>`
+                        ? `<video src="${it.url}" controls playsinline autoplay muted class="gallery-lightbox-media"></video>`
                         : `<img src="${it.url}" class="gallery-lightbox-media" alt="">`}</div>`;
                 }).join('');
                 track.style.transition = 'none';
@@ -4528,6 +4548,41 @@
                 dots.innerHTML = items.length > 1
                     ? items.map((_, i) => `<span class="gallery-dot ${i === index ? 'active' : ''}"></span>`).join('')
                     : '';
+
+                const post = postId ? allPosts.find(p => p.id === postId) : null;
+                let footer = document.getElementById('galleryLightboxFooter');
+                if (post) {
+                    if (!footer) {
+                        footer = document.createElement('div');
+                        footer.id = 'galleryLightboxFooter';
+                        footer.className = 'gallery-lightbox-footer';
+                        document.getElementById('lightbox').appendChild(footer);
+                        footer.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const t = e.target;
+                            const pid = _galleryState.postId;
+                            if (!pid) return;
+                            if (t.closest('.reaction-btn')) { toggleReaction(pid); return; }
+                            if (t.closest('.bookmark-badge')) {
+                                const article = document.querySelector(`article[data-post-id="${pid}"]`) ||
+                                    document.querySelector(`.single-post-container[data-post-id="${pid}"]`);
+                                if (article) toggleBookmarkUI(article);
+                                return;
+                            }
+                            if (t.closest('.share-btn')) { openShareModal(pid); return; }
+                            if (t.closest('[data-repost-btn]')) { triggerRepostFromFeed(t.closest('[data-repost-btn]'), pid); return; }
+                            if (t.closest('.comment-btn')) {
+                                closeLightbox();
+                                openExplorePost(pid, window._fullscreenReturnPage || 'home', true);
+                                return;
+                            }
+                        });
+                    }
+                    footer.innerHTML = buildActionsRow(post);
+                    footer.style.display = 'block';
+                } else if (footer) {
+                    footer.style.display = 'none';
+                }
             }
 
             function galleryGoTo(i) {
@@ -4542,9 +4597,13 @@
             }
 
             function closeLightbox() {
+                const track = document.getElementById('galleryLightboxTrack');
+                track.querySelectorAll('video').forEach(v => v.pause());
                 document.getElementById('lightbox').classList.remove('show');
                 unlockBodyScroll();
-                document.getElementById('galleryLightboxTrack').innerHTML = '';
+                track.innerHTML = '';
+                const footer = document.getElementById('galleryLightboxFooter');
+                if (footer) footer.style.display = 'none';
             }
 
             (function setupGallerySwipe() {
@@ -4559,6 +4618,60 @@
                     dragging = false;
                     const dx = sx - e.changedTouches[0].clientX;
                     if (Math.abs(dx) > 40) galleryGoTo(_galleryState.index + (dx > 0 ? 1 : -1));
+                }, { passive: true });
+            })();
+
+            (function setupGalleryVerticalDismiss() {
+                const modal = document.getElementById('lightbox');
+                const track = document.getElementById('galleryLightboxTrack');
+                if (!modal || !track) return;
+                let startY = 0,
+                    startX = 0,
+                    dragging = false,
+                    dragged = false;
+
+                track.addEventListener('touchstart', e => {
+                    if (e.touches.length !== 1) return;
+                    startY = e.touches[0].clientY;
+                    startX = e.touches[0].clientX;
+                    dragging = true;
+                    dragged = false;
+                }, { passive: true });
+
+                track.addEventListener('touchmove', e => {
+                    if (!dragging || e.touches.length !== 1) return;
+                    const dy = e.touches[0].clientY - startY;
+                    const dx = e.touches[0].clientX - startX;
+                    if (Math.abs(dy) < 10 && Math.abs(dx) < 10) return;
+                    if (Math.abs(dy) <= Math.abs(dx)) return;
+                    dragged = true;
+                    modal.classList.add('dragging');
+                    const clamped = Math.max(0, dy);
+                    modal.style.transform = `translateY(${clamped}px)`;
+                    modal.style.opacity = String(Math.max(0.3, 1 - clamped / 400));
+                }, { passive: true });
+
+                track.addEventListener('touchend', e => {
+                    if (!dragging) return;
+                    dragging = false;
+                    modal.classList.remove('dragging');
+                    const dy = (e.changedTouches[0].clientY - startY);
+                    if (dragged && dy > 120) {
+                        modal.style.transition = 'transform .2s ease, opacity .2s ease';
+                        modal.style.transform = 'translateY(100%)';
+                        modal.style.opacity = '0';
+                        setTimeout(() => {
+                            modal.style.transition = '';
+                            modal.style.transform = '';
+                            modal.style.opacity = '';
+                            closeLightbox();
+                        }, 200);
+                    } else {
+                        modal.style.transition = 'transform .2s ease, opacity .2s ease';
+                        modal.style.transform = '';
+                        modal.style.opacity = '';
+                        setTimeout(() => { modal.style.transition = ''; }, 200);
+                    }
                 }, { passive: true });
             })();
 
@@ -6295,7 +6408,7 @@
                         e.stopPropagation();
                         const el = t.closest('[data-gallery-post]');
                         const post = allPosts.find(x => x.id === el.dataset.galleryPost);
-                        if (post) openGalleryLightbox(getMediaItems(post), Number(el.dataset.galleryIndex || 0));
+                        if (post) openGalleryLightbox(getMediaItems(post), Number(el.dataset.galleryIndex || 0), post.id);
                         return;
                     }
                     if (t.closest('[data-extlink]')) { e.stopPropagation();
@@ -6345,11 +6458,14 @@
                     fl = article.querySelector(`.full-text-${pid}`),
                     b = article.querySelector('.read-more-btn');
                 if (!pv || !fl) { isTogglingContent = false; return; }
+                const beforeTop = article.getBoundingClientRect().top;
                 if (fl.classList.contains('hidden')) { pv.classList.add('hidden');
                     fl.classList.remove('hidden');
                     b.textContent = 'Show less'; } else { pv.classList.remove('hidden');
                     fl.classList.add('hidden');
                     b.textContent = 'Show more'; }
+                const afterTop = article.getBoundingClientRect().top;
+                window.scrollBy(0, afterTop - beforeTop);
                 isTogglingContent = false;
             }
 
@@ -6414,13 +6530,6 @@
                 showToast(nb ? 'Saved' : 'Removed from saved');
                 pendingBookmarks.delete(pid);
             }
-
-            function filterCategory(c) { currentCategoryFilter = c;
-                searchQuery = '';
-                feedPage = 1;
-                uiPage = 'home';
-                currentSortMethod = 'trending';
-                renderUI(); }
 
             // ─── SHARE MODAL ──────────────────────────────────────────────────
             let sharePostId = null;
@@ -6598,7 +6707,7 @@
 
                 const ds = getAllDescendants(c.id, allComments),
                     hr = ds.length > 0,
-                    ec = expandedThreads.get(c.id) || 0;
+                    ec = expandedThreads.has(c.id) ? expandedThreads.get(c.id) : (ds.length > 0 ? 1 : 0);
                 let rh = '';
                 if (hr && ec > 0) {
                     const sh = ds.slice(0, ec),
@@ -7135,9 +7244,12 @@
                 if (!p) return;
                 const cl = document.getElementById(listId);
                 if (!cl) return;
+                const myToken = Symbol();
+                _commentsFetchToken[postId] = myToken;
                 cl.innerHTML = commentSkeletons(3);
                 try {
                     const comments = await window.PostsAPI.loadComments(postId);
+                    if (_commentsFetchToken[postId] !== myToken) return;
                     p.comments = comments;
                     const sortMode = getCommentSort(postId);
                     const sorted = [...comments].sort((a, b) => {
@@ -7147,9 +7259,11 @@
                             .likeCount || 0);
                         return new Date(a.time) - new Date(b.time);
                     });
+                    if (_commentsFetchToken[postId] !== myToken) return;
                     const vc = getVisibleComments(postId);
                     cl.innerHTML = renderCommentsHTML(sorted, postId, vc);
                 } catch (err) {
+                    if (_commentsFetchToken[postId] !== myToken) return;
                     console.error('refreshCommentsList failed:', err);
                     cl.innerHTML = '<p style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Could not load comments.</p>';
                 }
@@ -7321,6 +7435,7 @@
                     exploreVideoObserver = null; }
                 if (videoObserver) { videoObserver.disconnect();
                     videoObserver = null; }
+                if (observer) { observer.disconnect(); }
                 lockBodyScroll();
 
                 const fs = document.getElementById('explore-fullscreen'),
@@ -7407,17 +7522,6 @@
                             window._viewInFlight.delete(id);
                         });
                     }
-                    if (window.PostsAPI && window.PostsAPI.loadComments) {
-                        const cl = document.getElementById('comments-list');
-                        if (cl) cl.innerHTML = commentSkeletons(3);
-                        window.PostsAPI.loadComments(id).then(comments => {
-                            post.comments = comments;
-                            if (uiPage === 'single-post-explore' && currentPostId === id) {
-                                refreshCommentsList(id, 'comments-list');
-                                updateCommentCount(id);
-                            }
-                        }).catch(err => console.error('Failed to load comments:', err));
-                    }
                 }
 
                 if (post && !post.commentsHidden) {
@@ -7463,10 +7567,12 @@
 
                 const existingContainer = document.getElementById('feed-container');
                 if ((returnPage === 'home' || returnPage === 'explore') && existingContainer && existingContainer.children.length) {
+                    window.scrollTo(0, tabScrollPositions[returnPage] || 0);
                     setTimeout(() => {
                         const fc = document.getElementById('explore-fullscreen-content');
                         if (fc) fc.innerHTML = '';
                         setupVideoAutoplay(existingContainer);
+                        setupInfiniteScroll();
                         window.IndexRender?.rescan();
                     }, 400);
                     return;
@@ -7578,7 +7684,7 @@
                         e.stopPropagation();
                         const el = t.closest('[data-gallery-post]');
                         const post = allPosts.find(x => x.id === el.dataset.galleryPost);
-                        if (post) openGalleryLightbox(getMediaItems(post), Number(el.dataset.galleryIndex || 0));
+                        if (post) openGalleryLightbox(getMediaItems(post), Number(el.dataset.galleryIndex || 0), post.id);
                         return;
                     }
                     if (t.closest('[data-extlink]')) { openInAppWebView(decodeURIComponent(t.closest(
@@ -8042,41 +8148,6 @@
                 o.classList.add('hidden');
                 document.body.style.overflow = ''; }
 
-            function openFilterDrawer() {
-                refreshDrawerCategories();
-                const d = document.getElementById('filter-drawer'),
-                    b = document.getElementById('filter-backdrop');
-                d.classList.remove('translate-y-full');
-                b.classList.remove('bg-opacity-0', 'pointer-events-none');
-                b.classList.add('bg-opacity-40', 'pointer-events-auto');
-                document.body.style.overflow = 'hidden';
-            }
-
-            function closeFilterDrawer() {
-                const d = document.getElementById('filter-drawer'),
-                    b = document.getElementById('filter-backdrop');
-                d.classList.add('translate-y-full');
-                b.classList.add('bg-opacity-0', 'pointer-events-none');
-                b.classList.remove('bg-opacity-40', 'pointer-events-auto');
-                document.body.style.overflow = '';
-            }
-
-            function refreshDrawerCategories() {
-                const de = document.getElementById('drawer-categories');
-                if (!de) return;
-                const CATS = ["Technology", "Education", "Campus gist", "News & Updates", "Entertainment", "Movies",
-                    "Lifestyle", "Business & Finance", "Opinion / Thoughts", "Health & Fitness", "Travel & Culture",
-                    "Gaming", "Memes", "Science", "Fashion", "Music"
-                ];
-                de.innerHTML = CATS.map(c =>
-                    `<button class="drawer-cat-btn ${currentCategoryFilter===c?'drawer-cat-btn--active':''}" style="width:100%;text-align:left;padding:11px 14px;border-radius:10px;font-size:.875rem;font-weight:500;color:${currentCategoryFilter===c?'#7C3AED':'var(--muted)'};background:${currentCategoryFilter===c?'rgba(124,58,237,.08)':'var(--inp)'};border:1.5px solid ${currentCategoryFilter===c?'#7C3AED':'transparent'};cursor:pointer;">${escapeHtml(c)}</button>`
-                    ).join('');
-                de.querySelectorAll('button').forEach(btn => {
-                    btn.addEventListener('click', () => { closeFilterDrawer();
-                        filterCategory(btn.textContent.trim()); });
-                });
-            }
-
             // ─── showToast ───────────────────────────────────────────────────
             function showToast(msg, type) {
                 const t = document.getElementById('toast');
@@ -8431,14 +8502,6 @@
                     });
                 }
 
-                document.getElementById('filter-backdrop').addEventListener('click', closeFilterDrawer);
-                document.getElementById('drawer-close-btn').addEventListener('click', closeFilterDrawer);
-                document.getElementById('clear-filter-btn').addEventListener('click', () => { closeFilterDrawer();
-                    currentCategoryFilter = '';
-                    currentSortMethod = 'foryou';
-                    uiPage = 'home';
-                    renderUI(); });
-
                 const commentTextarea = document.getElementById('global-comment-textarea');
                 if (commentTextarea) {
                     commentTextarea.addEventListener('input', function() { this.style.height = 'auto';
@@ -8533,7 +8596,6 @@
                         closeShareModal();
                         if (document.getElementById('explore-fullscreen').classList.contains(
                             'open')) closeExploreFullscreen();
-                        closeFilterDrawer();
                         closeProductModal();
                         closeSeeAllModal();
                         closeFilterModal();
