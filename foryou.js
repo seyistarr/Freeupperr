@@ -240,7 +240,6 @@
                 window.initPlayers(co);
                 setupSentinel();
                 setupInfiniteScroll();
-                // Attach delegated click listener to the container once
                 setupPostEventDelegation(co);
                 window._currentFeedPosts = ps;
                 window.IndexRender?.rescan();
@@ -260,7 +259,6 @@
         while (t.firstChild) co.insertBefore(t.firstChild, s);
         requestAnimationFrame(() => {
             window.initPlayers(co);
-            // No need to attach listeners to new articles – delegation handles them
             feedPage++;
             isLoadingMore = false;
             window.IndexRender?.rescan();
@@ -269,7 +267,6 @@
 
     // ─── EVENT DELEGATION (single listener on #feed-container) ──────
     function setupPostEventDelegation(container) {
-        // Remove any existing listener to avoid duplicates
         container.removeEventListener('click', handlePostClick);
         container.addEventListener('click', handlePostClick);
     }
@@ -281,17 +278,13 @@
         const pid = article.dataset.postId;
         if (!pid) return;
 
-        // Clear any pending open timer
         if (openPostTimer) { clearTimeout(openPostTimer); openPostTimer = null; }
 
-        // Ignore clicks on Plyr controls
         if (t.closest('.plyr__controls') || t.closest('.plyr__control--overlaid')) return;
 
-        // Ripple effect on action buttons
         const actionEl = t.closest('.post-actions-row > *');
         if (actionEl) window.spawnRipple(actionEl, e);
 
-        // ---------- Action buttons ----------
         if (t.classList.contains('read-more-btn')) { e.stopPropagation(); toggleReadMore(article); return; }
         if (t.closest('.reaction-btn')) { e.stopPropagation(); window.toggleReaction(pid); return; }
         if (t.closest('.bookmark-badge')) { e.stopPropagation(); window.toggleBookmarkUI(article); return; }
@@ -360,23 +353,18 @@
             return;
         }
 
-        // ---------- Double-tap / single tap to open ----------
         const now = Date.now();
         const gap = now - lastDoubleTapTime;
         if (gap < 300 && gap > 0) {
-            // Double-tap => like
             e.preventDefault();
             window.toggleReaction(pid);
             lastDoubleTapTime = 0;
             return;
         }
         lastDoubleTapTime = now;
-        // Schedule single tap to open post after a short delay
         openPostTimer = setTimeout(() => {
             openPostTimer = null;
-            // Only open if no double-tap occurred (lastDoubleTapTime === now)
             if (lastDoubleTapTime === now) {
-                console.log('[foryou] Opening post:', pid); // <-- DEBUG: remove later
                 window.openExplorePost(pid, 'home');
             }
         }, 300);
@@ -497,5 +485,10 @@
     window.toggleSuggestedFollowHandler = toggleSuggestedFollowHandler;
     window.goToDiscoverPeople = goToDiscoverPeople;
     window.renderSkeletons = renderSkeletons;
+
+    // Expose a safe way to disconnect the infinite-scroll observer from the main script
+    window.disconnectForYouObserver = function () {
+        if (observer) observer.disconnect();
+    };
 
 })();
