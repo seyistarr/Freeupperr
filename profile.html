@@ -218,6 +218,7 @@
             stroke-linejoin: round;
         }
 
+        /* ★ VERIFIED BADGE — circle (reverted) */
         .verified-badge {
             width: 20px;
             height: 20px;
@@ -347,12 +348,13 @@
             transition: border-color .3s;
         }
 
+        /* ─── ROLE TAGS (original simple inline pills) ────── */
         .role-tags {
             display: flex;
             gap: 6px;
             flex-wrap: wrap;
             justify-content: center;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
         .role-tag {
             padding: 4px 12px;
@@ -363,19 +365,6 @@
             background: var(--pdim);
             border: 1.5px solid var(--pbrd);
             color: var(--pl);
-        }
-
-        /* ─── ACCOUNT TYPE PILL ────────────────────────────── */
-        .account-type-pill {
-            display: inline-block;
-            margin-bottom: 8px;
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--pl);
-            background: var(--pdim);
-            border: 1.5px solid var(--pbrd);
-            padding: 4px 12px;
-            border-radius: 100px;
         }
 
         .display-name-row {
@@ -2095,7 +2084,7 @@
                     <input type="file" id="coverFileInp" accept="image/*" style="display:none" onchange="handleCoverUpload(event)">
                 </div>
 
-                <!-- Hero -->
+                <!-- Hero (reverted) -->
                 <div class="profile-hero">
                     <div class="avatar-wrap" id="avatarWrap" onclick="handleAvatarTap()">
                         <div class="avatar-ring"></div>
@@ -2103,8 +2092,10 @@
                         <img class="avatar-img" id="profileAvatar" src="" alt="" onerror="this.style.background='linear-gradient(135deg,#1a1035,#3b1a6b)';this.removeAttribute('src');">
                         <div class="online-dot" id="onlineDot" style="display:none"></div>
                     </div>
+
+                    <!-- Role tags (original) -->
                     <div class="role-tags" id="roleTags"></div>
-                    <div class="account-type-pill" id="accountTypePill" style="display:none;"></div>
+
                     <div class="display-name-row">
                         <span class="display-name" id="displayName"></span>
                         <button class="edit-pen fw-owner-only" onclick="openEditModal()" title="Edit profile">
@@ -2112,6 +2103,7 @@
                         </button>
                     </div>
                     <p class="hero-bio" id="heroBio"></p>
+
                     <div class="action-row" id="actionRow"></div>
                 </div>
 
@@ -2627,8 +2619,6 @@
             var _sugOffset = 0;
             var _profileUserPosts = [];
             var _profileLoadedOnce = false;
-            // ★ Step 4f.5 – account type icon map
-            var accountTypeIconMap = {};
 
             var _fwPageIdx = 0;
             var _fwPageState = [
@@ -2756,19 +2746,6 @@
                     return window.AuthUser.getCurrentUser();
                 }
                 return null;
-            }
-
-            // ★ Step 4f.5 – load account type icons from DB
-            async function loadAccountTypeIcons() {
-                try {
-                    var res = await window.sb.from('account_types').select('key, icon_svg').eq('is_active', true);
-                    if (res.error) throw res.error;
-                    var map = {};
-                    (res.data || []).forEach(function(t) { map[t.key] = t.icon_svg || ''; });
-                    accountTypeIconMap = map;
-                } catch (e) {
-                    console.warn('loadAccountTypeIcons failed:', e);
-                }
             }
 
             function getTargetUserFromUrl() {
@@ -3238,31 +3215,11 @@
                 var bioEl = document.getElementById('heroBio');
                 bioEl.innerHTML = linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
 
+                // ─── ROLE TAGS (original simple inline pills) ──────────
                 var tags = profile.tags || [];
                 document.getElementById('roleTags').innerHTML = tags.map(function(t) {
                     return '<span class="role-tag">' + escapeHtml(t) + '</span>';
                 }).join('');
-
-                // ─── ACCOUNT TYPE PILL ──────────────────────────────────────
-                var atPill = document.getElementById('accountTypePill');
-                if (atPill) {
-                    var acctType = profile.account_type || 'personal';
-                    if (acctType !== 'personal' && profile.verified) {
-                        var label = acctType.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-                        var iconHtml = '';
-                        if (profile.account_icon_url) {
-                            iconHtml = '<img src="' + escapeHtml(profile.account_icon_url) + '" style="width:14px;height:14px;border-radius:4px;object-fit:cover;vertical-align:-2px;margin-right:5px;" onerror="this.style.display=\'none\'">';
-                        } else if (accountTypeIconMap[acctType]) {
-                            iconHtml = '<span style="display:inline-flex;width:14px;height:14px;vertical-align:-2px;margin-right:5px;">' + accountTypeIconMap[acctType] + '</span>';
-                        }
-                        atPill.innerHTML = iconHtml + escapeHtml(label);
-                        atPill.style.display = 'inline-flex';
-                        atPill.style.alignItems = 'center';
-                    } else {
-                        atPill.style.display = 'none';
-                        atPill.innerHTML = '';
-                    }
-                }
 
                 var badge = document.getElementById('verifiedBadge');
                 if (profile.verified) badge.classList.remove('hidden');
@@ -3328,7 +3285,7 @@
                         pp2.classList.add('active');
                     }
                 } else {
-                    // ===== FIX 4 REVERTED: settings-driven tab visibility only =====
+                    // ===== settings-driven tab visibility only =====
                     document.querySelectorAll('#tabsBar .tab').forEach(function(tabBtn) {
                         var key = tabBtn.getAttribute('data-tab');
                         var isHidden = (key === 'posts' ? postsForceHidden : hiddenTabs.indexOf(key) !== -1);
@@ -4672,10 +4629,7 @@
                 if (!window.AuthUser) {
                     await new Promise(function(resolve) { setTimeout(resolve, 300); });
                 }
-                // ★ Step 4f.5 – load account type icons before rendering profile
-                await loadAccountTypeIcons();
                 await renderProfile();
-                // Restore return state after profile loads
                 restoreProfileReturnState();
                 if (typeof window.setupProfileSync === 'function') {
                     window.setupProfileSync(function() { renderProfile(); });
@@ -4751,9 +4705,6 @@
             window.applyUsernameSuggestion = applyUsernameSuggestion;
             window.canonicalizeUsername = canonicalizeUsername;
             // ===== navigation functions exposed =====
-            // openPostFromGrid and openMarketFromGrid are already globally exposed above.
-            // The restore function is already exposed globally as well.
-            // We keep these for clarity.
             window.restoreProfileReturnState = restoreProfileReturnState;
         })();
     </script>
