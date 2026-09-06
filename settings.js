@@ -52,7 +52,6 @@
     if (updates.showInSuggestions !== undefined) payload.show_in_suggestions = updates.showInSuggestions;
     if (updates.hiddenTabs !== undefined) payload.hidden_tabs = updates.hiddenTabs;
     if (updates.city !== undefined) payload.city = updates.city;
-    // ★ NEW: Hide All Posts toggle
     if (updates.hideAllPosts !== undefined) payload.hide_all_posts = updates.hideAllPosts;
 
     var { error } = await sb.from('profiles').update(payload).eq('id', user.id);
@@ -105,18 +104,9 @@
     }
   }
 
-  // ─── VERIFICATION ──────────────────────────────────────────
-  async function getAccountTypes() {
-    var { data, error } = await sb
-      .from('account_types')
-      .select('key, name, description, icon_svg')
-      .eq('is_active', true)
-      .order('name');
-    if (error) throw error;
-    return data || [];
-  }
-
-  async function submitVerification(payload) {
+  // ─── VERIFICATION (SIMPLE ORIGINAL VERSION) ──────────────
+  // getAccountTypes has been removed – no longer needed.
+  async function submitVerification({ category, reason, link }) {
     var user = getCurrentUser();
     if (!user || !user.isLoggedIn) throw new Error('Please sign in to request verification.');
 
@@ -129,36 +119,9 @@
 
     if (existing) throw new Error('You already have a pending request');
 
-    var { data: profileRow } = await sb
-      .from('profiles')
-      .select('account_type')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    // ★ Step 4f.2 – added logo_url field
-    var insertPayload = {
-      user_id: user.id,
-      category: payload.requestedAccountType,
-      requested_account_type: payload.requestedAccountType,
-      current_account_type: (profileRow && profileRow.account_type) || 'personal',
-      reason: payload.reason || '',
-      link: payload.website || '',
-      legal_name: payload.legalName || null,
-      registration_number: payload.registrationNumber || null,
-      country: payload.country || null,
-      website: payload.website || null,
-      business_email: payload.businessEmail || null,
-      phone_number: payload.phoneNumber || null,
-      address: payload.address || null,
-      authorized_rep_name: payload.authorizedRepName || null,
-      document_urls: payload.documentUrls || [],
-      identity_document_url: payload.identityDocumentUrl || null,
-      logo_url: payload.logoUrl || null
-    };
-
     var { data, error } = await sb
       .from('verification_requests')
-      .insert(insertPayload)
+      .insert({ user_id: user.id, category: category, reason: reason, link: link || '' })
       .select()
       .single();
 
@@ -456,7 +419,7 @@
     changePassword,
     saveProfile,
 
-    getAccountTypes,
+    // Verification (simple version – getAccountTypes removed)
     submitVerification,
     withdrawVerification,
     getVerificationStatus,
