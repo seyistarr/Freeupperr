@@ -37,7 +37,9 @@
       ),
       isLoggedIn: false,
       verified: false,
-      verificationStatus: 'none'
+      verificationStatus: 'none',
+      accountType: 'personal',
+      accountIconUrl: ''
     };
   }
 
@@ -105,6 +107,8 @@
         isLoggedIn: true,
         verified: false,
         verificationStatus: 'none',
+        accountType: 'personal',
+        accountIconUrl: '',
         isPrivate: false,
         hideFollowerCount: false,
         activityStatus: true,
@@ -122,7 +126,9 @@
         username: user.user_metadata?.username || user.email.split('@')[0],
         avatar_url: user.user_metadata?.avatar_url || null,
         cover_url: null,
-        verified_status: 'none'
+        verified_status: 'none',
+        account_type: 'personal',
+        account_icon_url: ''
       };
       const { data: newProfile, error: insertError } = await sb
         .from('profiles')
@@ -150,6 +156,8 @@
                  profile.verified_status === 'staff' ||
                  profile.verified_status === 'business',
       verificationStatus: profile.verified_status || 'none',
+      accountType: profile.account_type || 'personal',
+      accountIconUrl: profile.account_icon_url || '',
       isPrivate: profile.is_private || false,
       hideFollowerCount: profile.hide_follower_count || false,
       activityStatus: profile.activity_status !== undefined ? profile.activity_status : true,
@@ -188,7 +196,9 @@
           username: authUser.user_metadata?.username || authUser.email.split('@')[0],
           avatar_url: authUser.user_metadata?.avatar_url || null,
           cover_url: null,
-          verified_status: 'none'
+          verified_status: 'none',
+          account_type: 'personal',
+          account_icon_url: ''
         };
         const { data: inserted, error: insertError } = await sb
           .from('profiles')
@@ -216,6 +226,8 @@
                    finalProfile.verified_status === 'staff' ||
                    finalProfile.verified_status === 'business',
         verificationStatus: finalProfile.verified_status || 'none',
+        accountType: finalProfile.account_type || 'personal',
+        accountIconUrl: finalProfile.account_icon_url || '',
         isPrivate: finalProfile.is_private || false,
         hideFollowerCount: finalProfile.hide_follower_count || false,
         activityStatus: finalProfile.activity_status !== undefined ? finalProfile.activity_status : true,
