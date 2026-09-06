@@ -240,6 +240,52 @@
             stroke-linejoin: round;
         }
 
+        /* ─── COVER PHOTO ────────────────────────────────────── */
+        .profile-cover {
+            position: relative;
+            width: calc(100% + 32px);
+            margin-left: -16px;
+            margin-right: -16px;
+            height: 150px;
+            background: linear-gradient(135deg, #4c1d95, #7c3aed 55%, #a78bfa);
+            overflow: hidden;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .profile-cover .cover-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .cover-edit-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, .45);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            z-index: 2;
+            border: none;
+            cursor: pointer;
+        }
+        .cover-edit-btn svg {
+            width: 17px;
+            height: 17px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
         .profile-hero {
             display: flex;
             flex-direction: column;
@@ -256,8 +302,10 @@
             position: relative;
             width: clamp(92px, 22vw, 110px);
             height: clamp(92px, 22vw, 110px);
+            margin-top: -44px;
             margin-bottom: 14px;
             cursor: pointer;
+            z-index: 2;
         }
         .avatar-ring {
             position: absolute;
@@ -2025,6 +2073,15 @@
                     </div>
                 </div>
 
+                <!-- Cover Photo -->
+                <div class="profile-cover" id="profileCoverWrap" onclick="handleCoverTap()">
+                    <img class="cover-img" id="profileCover" src="" alt="" style="display:none" onerror="this.style.display='none'">
+                    <div class="cover-edit-btn fw-owner-only" id="coverEditBtn" title="Change cover photo">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </div>
+                    <input type="file" id="coverFileInp" accept="image/*" style="display:none" onchange="handleCoverUpload(event)">
+                </div>
+
                 <!-- Hero -->
                 <div class="profile-hero">
                     <div class="avatar-wrap" id="avatarWrap" onclick="handleAvatarTap()">
@@ -3131,6 +3188,18 @@
                 document.getElementById('qrAvatar').src = avatarSrc;
                 updateNavAvatar();
 
+                // ─── COVER PHOTO ───────────────────────────────────────────
+                var coverEl = document.getElementById('profileCover');
+                if (coverEl) {
+                    if (profile.cover_url) {
+                        coverEl.src = profile.cover_url;
+                        coverEl.style.display = 'block';
+                    } else {
+                        coverEl.removeAttribute('src');
+                        coverEl.style.display = 'none';
+                    }
+                }
+
                 // ===== display_username instead of raw username =====
                 document.getElementById('displayName').textContent = profile.display_name || 'Guest';
                 document.getElementById('headerUsername').textContent = profile.display_username || profile.username || '@user';
@@ -3761,6 +3830,31 @@
                     }
                 } else {
                     openAvatarViewer(document.getElementById('profileAvatar').src);
+                }
+            };
+
+            // ─── COVER PHOTO UPLOAD ───────────────────────────────
+            window.handleCoverTap = function() {
+                if (!isOwner) return;
+                var inp = document.getElementById('coverFileInp');
+                if (inp) inp.click();
+            };
+
+            window.handleCoverUpload = async function(e) {
+                var file = e.target.files[0];
+                if (!file) return;
+                e.target.value = '';
+                try {
+                    showToast('Uploading cover photo…', 'p');
+                    var url = await window.AuthUser.uploadCoverPhoto(file);
+                    var coverEl = document.getElementById('profileCover');
+                    if (coverEl && url) {
+                        coverEl.src = url;
+                        coverEl.style.display = 'block';
+                    }
+                    showToast('Cover photo updated', 'g');
+                } catch (err) {
+                    showToast(err.message || 'Failed to upload cover photo', 'r');
                 }
             };
 
@@ -4586,6 +4680,8 @@
             window.handleAvatarTap = handleAvatarTap;
             window.openAvatarViewer = openAvatarViewer;
             window.closeAvatarViewer = closeAvatarViewer;
+            window.handleCoverTap = handleCoverTap;
+            window.handleCoverUpload = handleCoverUpload;
             window.shareProfileOther = shareProfileOther;
             window.reportUser = reportUser;
             window.openShareOtherModal = openShareOtherModal;
