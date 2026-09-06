@@ -1371,7 +1371,7 @@
             bottom: 0;
             right: 0;
             border-width: 0 3px 3px 0;
-            border-radius: 0 0 8px 0;
+            border-radius: 0 8px 0 0;
         }
         .scan-line {
             position: absolute;
@@ -2627,6 +2627,8 @@
             var _sugOffset = 0;
             var _profileUserPosts = [];
             var _profileLoadedOnce = false;
+            // ★ Step 4f.5 – account type icon map
+            var accountTypeIconMap = {};
 
             var _fwPageIdx = 0;
             var _fwPageState = [
@@ -2754,6 +2756,19 @@
                     return window.AuthUser.getCurrentUser();
                 }
                 return null;
+            }
+
+            // ★ Step 4f.5 – load account type icons from DB
+            async function loadAccountTypeIcons() {
+                try {
+                    var res = await window.sb.from('account_types').select('key, icon_svg').eq('is_active', true);
+                    if (res.error) throw res.error;
+                    var map = {};
+                    (res.data || []).forEach(function(t) { map[t.key] = t.icon_svg || ''; });
+                    accountTypeIconMap = map;
+                } catch (e) {
+                    console.warn('loadAccountTypeIcons failed:', e);
+                }
             }
 
             function getTargetUserFromUrl() {
@@ -3233,10 +3248,19 @@
                 if (atPill) {
                     var acctType = profile.account_type || 'personal';
                     if (acctType !== 'personal' && profile.verified) {
-                        atPill.textContent = acctType.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-                        atPill.style.display = 'inline-block';
+                        var label = acctType.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+                        var iconHtml = '';
+                        if (profile.account_icon_url) {
+                            iconHtml = '<img src="' + escapeHtml(profile.account_icon_url) + '" style="width:14px;height:14px;border-radius:4px;object-fit:cover;vertical-align:-2px;margin-right:5px;" onerror="this.style.display=\'none\'">';
+                        } else if (accountTypeIconMap[acctType]) {
+                            iconHtml = '<span style="display:inline-flex;width:14px;height:14px;vertical-align:-2px;margin-right:5px;">' + accountTypeIconMap[acctType] + '</span>';
+                        }
+                        atPill.innerHTML = iconHtml + escapeHtml(label);
+                        atPill.style.display = 'inline-flex';
+                        atPill.style.alignItems = 'center';
                     } else {
                         atPill.style.display = 'none';
+                        atPill.innerHTML = '';
                     }
                 }
 
@@ -4648,6 +4672,8 @@
                 if (!window.AuthUser) {
                     await new Promise(function(resolve) { setTimeout(resolve, 300); });
                 }
+                // ★ Step 4f.5 – load account type icons before rendering profile
+                await loadAccountTypeIcons();
                 await renderProfile();
                 // Restore return state after profile loads
                 restoreProfileReturnState();
