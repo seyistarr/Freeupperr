@@ -156,8 +156,6 @@
                  profile.verified_status === 'staff' ||
                  profile.verified_status === 'business',
       verificationStatus: profile.verified_status || 'none',
-      accountType: profile.account_type || 'personal',
-      accountIconUrl: profile.account_icon_url || '',
       isPrivate: profile.is_private || false,
       hideFollowerCount: profile.hide_follower_count || false,
       activityStatus: profile.activity_status !== undefined ? profile.activity_status : true,
@@ -226,8 +224,6 @@
                    finalProfile.verified_status === 'staff' ||
                    finalProfile.verified_status === 'business',
         verificationStatus: finalProfile.verified_status || 'none',
-        accountType: finalProfile.account_type || 'personal',
-        accountIconUrl: finalProfile.account_icon_url || '',
         isPrivate: finalProfile.is_private || false,
         hideFollowerCount: finalProfile.hide_follower_count || false,
         activityStatus: finalProfile.activity_status !== undefined ? finalProfile.activity_status : true,
