@@ -19,7 +19,7 @@
     const UCK = 'freeupper_user_categories';
     const PAGE_SIZE = 5;
 
-    // ─── LOCAL STATE (feed-scroll specific, no other module touches these) ───
+    // ─── LOCAL STATE ──────────────────────────────────────────────
     let feedPage = 1;
     let observer = null, sentinel = null, loader = null;
     let isTogglingContent = false;
@@ -240,7 +240,8 @@
                 window.initPlayers(co);
                 setupSentinel();
                 setupInfiniteScroll();
-                co.querySelectorAll('article').forEach(a => setupPostEventDelegation(a));
+                // Attach delegated click listener to the container once
+                setupPostEventDelegation(co);
                 window._currentFeedPosts = ps;
                 window.IndexRender?.rescan();
             });
@@ -259,105 +260,126 @@
         while (t.firstChild) co.insertBefore(t.firstChild, s);
         requestAnimationFrame(() => {
             window.initPlayers(co);
-            co.querySelectorAll('article:not([data-events-set])').forEach(a => { setupPostEventDelegation(a); a.dataset.eventsSet = 'true'; });
+            // No need to attach listeners to new articles – delegation handles them
             feedPage++;
             isLoadingMore = false;
             window.IndexRender?.rescan();
         });
     }
 
-    // ─── POST EVENT DELEGATION ───────────────────────────────────────
-    function setupPostEventDelegation(article) {
-        article.addEventListener('click', function (e) {
-            const t = e.target, pid = article.dataset.postId;
+    // ─── EVENT DELEGATION (single listener on #feed-container) ──────
+    function setupPostEventDelegation(container) {
+        // Remove any existing listener to avoid duplicates
+        container.removeEventListener('click', handlePostClick);
+        container.addEventListener('click', handlePostClick);
+    }
 
-            if (openPostTimer) { clearTimeout(openPostTimer); openPostTimer = null; }
+    function handlePostClick(e) {
+        const t = e.target;
+        const article = t.closest('.feed-post');
+        if (!article) return;
+        const pid = article.dataset.postId;
+        if (!pid) return;
 
-            if (t.closest('.plyr__controls') || t.closest('.plyr__control--overlaid')) { e.stopPropagation(); return; }
+        // Clear any pending open timer
+        if (openPostTimer) { clearTimeout(openPostTimer); openPostTimer = null; }
 
-            const actionEl = t.closest('.post-actions-row > *');
-            if (actionEl) window.spawnRipple(actionEl, e);
+        // Ignore clicks on Plyr controls
+        if (t.closest('.plyr__controls') || t.closest('.plyr__control--overlaid')) return;
 
-            if (t.classList.contains('read-more-btn')) { e.stopPropagation(); toggleReadMore(article); return; }
-            if (t.closest('.reaction-btn')) { e.stopPropagation(); window.toggleReaction(pid); return; }
-            if (t.closest('.bookmark-badge')) { e.stopPropagation(); window.toggleBookmarkUI(article); return; }
-            if (t.closest('.share-btn')) {
-                e.stopPropagation();
-                const btn = t.closest('.share-btn');
-                const postId = btn.dataset.sharePost || pid;
-                btn.classList.add('share-bounce');
-                setTimeout(() => btn.classList.remove('share-bounce'), 450);
-                window.haptic(6);
-                window.openShareModal(postId);
-                return;
+        // Ripple effect on action buttons
+        const actionEl = t.closest('.post-actions-row > *');
+        if (actionEl) window.spawnRipple(actionEl, e);
+
+        // ---------- Action buttons ----------
+        if (t.classList.contains('read-more-btn')) { e.stopPropagation(); toggleReadMore(article); return; }
+        if (t.closest('.reaction-btn')) { e.stopPropagation(); window.toggleReaction(pid); return; }
+        if (t.closest('.bookmark-badge')) { e.stopPropagation(); window.toggleBookmarkUI(article); return; }
+        if (t.closest('.share-btn')) {
+            e.stopPropagation();
+            const btn = t.closest('.share-btn');
+            const postId = btn.dataset.sharePost || pid;
+            btn.classList.add('share-bounce');
+            setTimeout(() => btn.classList.remove('share-bounce'), 450);
+            window.haptic(6);
+            window.openShareModal(postId);
+            return;
+        }
+        if (t.closest('[data-repost-btn]')) {
+            e.stopPropagation();
+            const btn = t.closest('[data-repost-btn]');
+            window.triggerRepostFromFeed(btn, btn.dataset.repostBtn);
+            return;
+        }
+        if (t.closest('.comment-btn')) {
+            e.stopPropagation();
+            const btn = t.closest('.comment-btn');
+            btn.classList.add('comment-pop');
+            setTimeout(() => btn.classList.remove('comment-pop'), 260);
+            window.haptic(6);
+            const p = window.getAllPosts().find(x => x.id === pid);
+            window.openExplorePost(pid, 'home', !(p && p.commentsHidden));
+            return;
+        }
+        if (t.closest('.mention-link')) {
+            e.stopPropagation();
+            const uid = t.closest('.mention-link').dataset.userid;
+            if (uid) window.Router.openProfile(uid);
+            return;
+        }
+        if (t.closest('.user-mini-avatar') || t.closest('.font-bold.text-sm')) {
+            e.stopPropagation();
+            const p = window.getAllPosts().find(p => p.id === pid);
+            if (p && p.user_id) window.Router.openProfile(p.user_id);
+            return;
+        }
+        if (t.closest('[data-gallery-post]')) {
+            e.stopPropagation();
+            const el = t.closest('[data-gallery-post]');
+            const post = window.getAllPosts().find(x => x.id === el.dataset.galleryPost);
+            if (post) window.openGalleryLightbox(window.getMediaItems(post), Number(el.dataset.galleryIndex || 0), post.id);
+            return;
+        }
+        if (t.closest('[data-extlink]')) { e.stopPropagation(); window.openInAppWebView(decodeURIComponent(t.closest('[data-extlink]').dataset.extlink)); return; }
+        if (t.closest('.tag-badge')) {
+            e.stopPropagation();
+            const tag = t.textContent.replace('#', '').trim();
+            if (tag) window.Router.openHashtag(tag);
+            return;
+        }
+        if (t.closest('[data-repost-avatar]')) {
+            e.stopPropagation();
+            const uid = t.closest('[data-repost-avatar]').dataset.userId;
+            if (uid) window.Router.openProfile(uid);
+            return;
+        }
+        if (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')) {
+            e.stopPropagation();
+            const pid2 = (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')).dataset.postId;
+            if (pid2) window.openRepostersSheet(pid2);
+            return;
+        }
+
+        // ---------- Double-tap / single tap to open ----------
+        const now = Date.now();
+        const gap = now - lastDoubleTapTime;
+        if (gap < 300 && gap > 0) {
+            // Double-tap => like
+            e.preventDefault();
+            window.toggleReaction(pid);
+            lastDoubleTapTime = 0;
+            return;
+        }
+        lastDoubleTapTime = now;
+        // Schedule single tap to open post after a short delay
+        openPostTimer = setTimeout(() => {
+            openPostTimer = null;
+            // Only open if no double-tap occurred (lastDoubleTapTime === now)
+            if (lastDoubleTapTime === now) {
+                console.log('[foryou] Opening post:', pid); // <-- DEBUG: remove later
+                window.openExplorePost(pid, 'home');
             }
-            if (t.closest('[data-repost-btn]')) {
-                e.stopPropagation();
-                const btn = t.closest('[data-repost-btn]');
-                window.triggerRepostFromFeed(btn, btn.dataset.repostBtn);
-                return;
-            }
-            if (t.closest('.comment-btn')) {
-                e.stopPropagation();
-                const btn = t.closest('.comment-btn');
-                btn.classList.add('comment-pop');
-                setTimeout(() => btn.classList.remove('comment-pop'), 260);
-                window.haptic(6);
-                const p = window.getAllPosts().find(x => x.id === pid);
-                window.openExplorePost(pid, 'home', !(p && p.commentsHidden));
-                return;
-            }
-            if (t.closest('.mention-link')) {
-                e.stopPropagation();
-                const uid = t.closest('.mention-link').dataset.userid;
-                if (uid) window.Router.openProfile(uid);
-                return;
-            }
-            if (t.closest('.user-mini-avatar') || t.closest('.font-bold.text-sm')) {
-                e.stopPropagation();
-                const p = window.getAllPosts().find(p => p.id === pid);
-                if (p && p.user_id) window.Router.openProfile(p.user_id);
-                return;
-            }
-            if (t.closest('[data-gallery-post]')) {
-                e.stopPropagation();
-                const el = t.closest('[data-gallery-post]');
-                const post = window.getAllPosts().find(x => x.id === el.dataset.galleryPost);
-                if (post) window.openGalleryLightbox(window.getMediaItems(post), Number(el.dataset.galleryIndex || 0), post.id);
-                return;
-            }
-            if (t.closest('[data-extlink]')) { e.stopPropagation(); window.openInAppWebView(decodeURIComponent(t.closest('[data-extlink]').dataset.extlink)); return; }
-            if (t.closest('.tag-badge')) {
-                e.stopPropagation();
-                const tag = t.textContent.replace('#', '').trim();
-                if (tag) window.Router.openHashtag(tag);
-                return;
-            }
-            if (t.closest('[data-repost-avatar]')) {
-                e.stopPropagation();
-                const uid = t.closest('[data-repost-avatar]').dataset.userId;
-                if (uid) window.Router.openProfile(uid);
-                return;
-            }
-            if (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')) {
-                e.stopPropagation();
-                const pid2 = (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')).dataset.postId;
-                if (pid2) window.openRepostersSheet(pid2);
-                return;
-            }
-            const now = Date.now(), gap = now - lastDoubleTapTime;
-            if (gap < 300 && gap > 0) {
-                e.preventDefault();
-                window.toggleReaction(pid);
-                lastDoubleTapTime = 0;
-                return;
-            }
-            lastDoubleTapTime = now;
-            openPostTimer = setTimeout(() => {
-                openPostTimer = null;
-                if (lastDoubleTapTime === now) window.openExplorePost(pid, 'home');
-            }, 300);
-        });
+        }, 300);
     }
 
     function toggleReadMore(article) {
@@ -474,6 +496,6 @@
     window.dismissSuggestedPerson = dismissSuggestedPerson;
     window.toggleSuggestedFollowHandler = toggleSuggestedFollowHandler;
     window.goToDiscoverPeople = goToDiscoverPeople;
-    window.renderSkeletons = renderSkeletons;   // <--- added for initial skeleton rendering
+    window.renderSkeletons = renderSkeletons;
 
 })();
