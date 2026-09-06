@@ -3919,6 +3919,7 @@
     <script src="bottom-nav.js" defer></script>
     <script src="side-nav.js" defer></script>
     <script src="market.js" defer></script>
+    <script src="explore.js" defer></script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 
     <script type="module">
@@ -3976,7 +3977,6 @@
                 bottomNavHidden = false;
 
             let _feedShuffleSeed = 0;
-            let _shuffleExploreOnce = false;
             let _shuffleHomeOnce = false;
 
             let _lockedScrollY = 0;
@@ -3990,9 +3990,6 @@
 
             // ─── COMMENT LIKE STATE ───
             let locallyLikedComments = new Map();
-
-            // ─── EXPLORE CHIPS CACHE ───
-            let _exploreInterestsCache = null;
 
             // ─── COMMENTS FETCH TOKEN ───
             let _commentsFetchToken = {};
@@ -4276,10 +4273,6 @@
             function svgChevronDown() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>'; }
 
             function svgChevronUp() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>'; }
-
-            function svgChevronLeft() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'; }
-
-            function svgChevronRight() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'; }
 
             function svgHeart(reacted) {
                 return reacted ?
@@ -4675,7 +4668,6 @@
             // ─── VIDEO AUTO-PLAY ─────────────────────────────────────────────
             let videoObserver = null;
             let currentlyPlayingVideo = null;
-            let exploreVideoObserver = null;
 
             function _pauseVideoEl(vid) {
                 if (!vid) return;
@@ -4749,23 +4741,6 @@
                     }
                 }, { threshold: [0, 0.75, 1], rootMargin: '0px 0px -10% 0px' });
                 videoElements.forEach(vid => videoObserver.observe(vid));
-            }
-
-            function setupExploreVideoAutoplay(container) {
-                if (exploreVideoObserver) exploreVideoObserver.disconnect();
-                const videoEls = container.querySelectorAll('video.explore-card-thumb');
-                if (!videoEls.length) return;
-                exploreVideoObserver = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        const vid = entry.target;
-                        if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
-                            vid.play().catch(() => {});
-                        } else {
-                            vid.pause();
-                        }
-                    });
-                }, { threshold: [0, 0.6, 1] });
-                videoEls.forEach(vid => exploreVideoObserver.observe(vid));
             }
 
             // ─── FOLLOW, BOOKMARK, SHARE ───────────────────────────────────
@@ -5093,12 +5068,6 @@
             }
 
             // ─── SKELETON BUILDERS ──────────────────────────────────────────
-            function exploreSkeletonGrid() {
-                let h = '';
-                for (let i = 0; i < 8; i++) h +=
-                    '<div class="explore-skeleton-card"><div class="explore-skeleton-thumb"></div></div>';
-                return h;
-            }
 
             // ─── REACTIONS ───────────────────────────────────────────────────────
             async function toggleReaction(postId) {
@@ -6727,8 +6696,7 @@
                 else if (originPage === 'market') tabScrollPositions.market = window.scrollY;
 
                 pauseAllVideos();
-                if (exploreVideoObserver) { exploreVideoObserver.disconnect();
-                    exploreVideoObserver = null; }
+                window.disconnectExploreVideoObserver?.();
                 if (videoObserver) { videoObserver.disconnect();
                     videoObserver = null; }
                 if (observer) { observer.disconnect(); }
@@ -6993,194 +6961,13 @@
                 });
             }
 
-            // ─── EXPLORE CHIPS — full onboarding interest catalog ───────────
-            async function ensureExploreInterests() {
-                if (_exploreInterestsCache) return _exploreInterestsCache;
-                if (window.FreeUpperOnboarding && typeof window.FreeUpperOnboarding.getInterests === 'function') {
-                    _exploreInterestsCache = await window.FreeUpperOnboarding.getInterests();
-                } else {
-                    _exploreInterestsCache = [];
-                }
-                return _exploreInterestsCache;
-            }
-
-            function buildExploreCategoryChipsHTML(interests) {
-                if (!interests || !interests.length) return '';
-                const all = `<button class="explore-cat-chip ${!currentCategoryFilter?'active':''}" data-cat="">All</button>`;
-                const rest = interests.map(i =>
-                    `<button class="explore-cat-chip ${currentCategoryFilter===i.key?'active':''}" data-cat="${escapeHtml(i.key)}">${escapeHtml(i.label)}</button>`
-                ).join('');
-                return `<div class="explore-cat-chips-wrap" id="explore-cat-chips-wrap">
-                    <button class="explore-chip-arrow left hidden" id="exploreChipsPrev" aria-label="Scroll left">${svgChevronLeft()}</button>
-                    <div class="explore-cat-chips" id="explore-cat-chips">${all}${rest}</div>
-                    <button class="explore-chip-arrow right" id="exploreChipsNext" aria-label="Scroll right">${svgChevronRight()}</button>
-                </div>`;
-            }
-
-            function initExploreChipsArrows() {
-                const scroller = document.getElementById('explore-cat-chips');
-                const prevBtn = document.getElementById('exploreChipsPrev');
-                const nextBtn = document.getElementById('exploreChipsNext');
-                if (!scroller || !prevBtn || !nextBtn) return;
-
-                function updateArrows() {
-                    const maxScroll = scroller.scrollWidth - scroller.clientWidth;
-                    prevBtn.classList.toggle('hidden', scroller.scrollLeft <= 4);
-                    nextBtn.classList.toggle('hidden', scroller.scrollLeft >= maxScroll - 4);
-                }
-                prevBtn.onclick = () => scroller.scrollBy({ left: -260, behavior: 'smooth' });
-                nextBtn.onclick = () => scroller.scrollBy({ left: 260, behavior: 'smooth' });
-                scroller.addEventListener('scroll', updateArrows, { passive: true });
-                updateArrows();
-            }
-
-            function applyExploreCategoryFilter(catKey) {
-                if (window.innerWidth < 768) return;
-                currentCategoryFilter = catKey || '';
-                document.querySelectorAll('.explore-cat-chip').forEach(btn => {
-                    btn.classList.toggle('active', (btn.dataset.cat || '') === currentCategoryFilter);
-                });
-                const gc = document.getElementById('explore-grid-content');
-                if (gc) gc.innerHTML = exploreSkeletonGrid();
-                setTimeout(() => {
-                    renderExploreCardsOnly();
-                }, 350);
-            }
-
-            function getExplorePostsFiltered() {
-                const currentUser = getCurrentUser();
-                let p = [...allPosts]
-                    .filter(post => !hiddenPostsSet.has(post.id))
-                    .filter(post => !blockedSet.has(post.user_id))
-                    .filter(post => {
-                        if (post.user_id === currentUser.id) return true;
-                        if (post.is_hidden) return false;
-                        const profile = post.profile || {};
-                        return !profile.is_private;
-                    });
-                p.sort((a, b) => ((b.views || 0) + (b.reactions.like || 0)) - ((a.views || 0) + (a.reactions
-                    .like || 0)));
-                if (window.FreeUpperAlgorithm && currentCategoryFilter) {
-                    p = p.filter(post => window.FreeUpperAlgorithm.getPostTopics(post).includes(currentCategoryFilter));
-                }
-                if (_shuffleExploreOnce) { p = shuffleArray(p);
-                    _shuffleExploreOnce = false; }
-                return p;
-            }
-
-            function renderExploreCardsOnly() {
-                const gc = document.getElementById('explore-grid-content');
-                if (!gc || uiPage !== 'explore') return;
-                const p = getExplorePostsFiltered();
-                if (p.length === 0) {
-                    gc.innerHTML =
-                        '<div class="flex flex-col items-center justify-center py-16 text-center" style="grid-column:1/-1;padding:0 12px;"><p class="text-sm" style="color:var(--muted);">No posts yet. Be the first to post!</p></div>';
-                    return;
-                }
-                gc.innerHTML = buildExploreCards(p);
-                gc.querySelectorAll('.explore-card').forEach(card => {
-                    card.addEventListener('click', () => { const pid = card.dataset.postId;
-                        if (pid) openExplorePost(pid, 'explore'); });
-                });
-                setTimeout(() => {
-                    setupExploreVideoAutoplay(gc);
-                }, 300);
-            }
-
-            // ─── EXPLORE GRID ───────────────────────────────────────────────────
-            function renderExploreGrid() {
-                const co = document.getElementById('user-content');
-                co.innerHTML = `<div class="explore-page-wrap">
-                        <div id="explore-cat-chips-slot"></div>
-                        <div class="explore-grid" id="explore-grid-content">${exploreSkeletonGrid()}</div>
-                      </div>`;
-
-                ensureExploreInterests().then(interests => {
-                    const slot = document.getElementById('explore-cat-chips-slot');
-                    if (!slot || uiPage !== 'explore') return;
-                    slot.innerHTML = buildExploreCategoryChipsHTML(interests);
-                    const wrap = document.getElementById('explore-cat-chips-wrap');
-                    if (wrap) {
-                        wrap.querySelectorAll('.explore-cat-chip').forEach(btn => {
-                            btn.addEventListener('click', () => applyExploreCategoryFilter(btn.dataset.cat));
-                        });
-                        initExploreChipsArrows();
-                    }
-                });
-
-                requestAnimationFrame(() => {
-                    renderExploreCardsOnly();
-                });
-            }
-
-            function buildExploreCards(posts) {
-                return posts.map(post => {
-                    const author = window.getAuthorFromProfile(post.profile);
-                    const av = author.avatar;
-                    const au = author.name;
-                    const mediaItems = getMediaItems(post);
-                    let mh = '';
-                    if (mediaItems.length > 0) {
-                        const first = mediaItems[0];
-                        const url = first.url;
-                        const isVideo = first.type === 'video' || (url && isYouTubeUrl(url));
-                        if (url) {
-                            if (isVideo && isYouTubeUrl(url)) {
-                                const ytId = extractYouTubeId(url);
-                                if (ytId) {
-                                    mh =
-                                        `<div class="ig-video-wrap" style="width:100%;margin:0;height:100%;position:relative;background:#000;"><div class="yt-wrap" style="padding-bottom:56.25%;height:0;position:relative;width:100%;"><iframe style="pointer-events:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;" src="https://www.youtube.com/embed/${ytId}?autoplay=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0" allow="autoplay; encrypted-media" loading="lazy"></iframe></div></div>`;
-                                } else {
-                                    mh =
-                                        `<video src="${url}" muted playsinline loop preload="none" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
-                                }
-                            } else if (isVideo) {
-                                mh =
-                                    `<video src="${url}" muted playsinline loop preload="none" class="explore-card-thumb" style="pointer-events:none;" onloadeddata="this.closest('.explore-card').classList.add('loaded')"></video>`;
-                            } else {
-                                mh =
-                                    `<img src="${url}" class="explore-card-thumb" loading="lazy" alt="" onload="this.closest('.explore-card').classList.add('loaded')" onerror="this.closest('.explore-card').classList.add('loaded');this.outerHTML='<div class=\\'explore-card-no-media loaded\\'><div class=\\'explore-card-no-media-text\\'>${escapeHtml(post.title).replace(/'/g,"\\'")}</div></div>'">`;
-                            }
-                        } else {
-                            mh =
-                                `<div class="explore-card-no-media loaded"><div class="explore-card-no-media-text">${escapeHtml(post.title)}</div></div>`;
-                        }
-                    } else {
-                        mh =
-                            `<div class="explore-card-no-media loaded"><div class="explore-card-no-media-text">${escapeHtml(post.title)}</div></div>`;
-                    }
-
-                    const vb = mediaItems.length > 0 && (mediaItems[0].type === 'video' || (mediaItems[0].url && isYouTubeUrl(mediaItems[0].url))) ?
-                        `<div class="explore-card-badge"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>` :
-                        '';
-
-                    const ah = av ?
-                        `<img src="${av}" class="explore-card-avatar" alt="" onerror="this.style.display='none'">` :
-                        `<div class="explore-card-avatar" style="display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#9CA3AF;">${au.charAt(0).toUpperCase()}</div>`;
-                    const nl = !post.mediaUrl && mediaItems.length === 0;
-                    const cc = nl ? 'explore-card loaded' : 'explore-card';
-
-                    return `<div class="${cc}" data-post-id="${post.id}" ${mediaItems.length > 0 && mediaItems[0].type === 'video' ? 'data-video-card="true"' : ''}>
-                        <div class="explore-card-media">${mh}${vb}</div>
-                        <div class="explore-card-info">
-                            <div class="explore-card-title">${escapeHtml(post.title)}</div>
-                            <div class="explore-card-bottom">
-                                <div class="explore-card-author">${ah}<span>${escapeHtml(au)}</span></div>
-                                <div class="explore-card-views">${svgEye()}<span>${formatCount(post.views||0)}</span></div>
-                            </div>
-                        </div>
-                    </div>`;
-                }).join('');
-            }
-
             // ─── NAVIGATION & UI RENDERING ──────────────────────────────────
             function setTab(mode) {
                 const scrollY = window.scrollY;
                 if (uiPage === 'home') tabScrollPositions.home = scrollY;
                 else if (uiPage === 'explore') tabScrollPositions.explore = scrollY;
                 else if (uiPage === 'market') tabScrollPositions.market = scrollY;
-                if (exploreVideoObserver) { exploreVideoObserver.disconnect();
-                    exploreVideoObserver = null; }
+                window.disconnectExploreVideoObserver?.();
                 currentCategoryFilter = '';
                 searchQuery = '';
                 feedPage = 1;
@@ -7205,7 +6992,7 @@
                 if (!co) return;
 
                 if (uiPage === 'explore') {
-                    renderExploreGrid();
+                    window.renderExploreTab(co);
                     setCommentBarVisible(false);
                     refreshTabStates();
                     setTimeout(() => window.scrollTo(0, tabScrollPositions.explore || 0), 80);
@@ -7367,7 +7154,7 @@
             async function refreshCurrentTab() {
                 setCommentBarVisible(false);
                 if (uiPage === 'explore') {
-                    _shuffleExploreOnce = true;
+                    window.triggerExploreRefresh();
                     await reloadData();
                     renderUI();
                     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -7556,6 +7343,89 @@
                     }
                 }
             });
+
+            // ─── SUGGESTED PEOPLE ──────────────────────────────────────────
+            async function loadSuggestedPeople() {
+                const cu = getCurrentUser();
+                if (!cu || !cu.isLoggedIn) return [];
+                const followingIds = Array.from(followingSet);
+                let dismissed = [];
+                try { dismissed = JSON.parse(localStorage.getItem('freeupper_dismissed_suggestions') || '[]'); } catch (_) {}
+                const excludeIds = [...new Set([...followingIds, ...dismissed])];
+                let query = window.sb
+                    .from('profiles')
+                    .select('id, display_name, username, avatar_url, bio, verified_status')
+                    .neq('id', cu.id)
+                    .limit(15);
+                if (excludeIds.length) {
+                    query = query.not('id', 'in', `(${excludeIds.join(',')})`);
+                }
+                const { data, error } = await query;
+                if (error) { console.warn('loadSuggestedPeople error:', error); return []; }
+                return data || [];
+            }
+
+            function truncateBio(bio, max = 60) {
+                bio = bio || '';
+                return bio.length > max ? bio.slice(0, max).trim() + '…' : bio;
+            }
+
+            function buildSuggestedPeopleHTML(people) {
+                if (!people.length) return '';
+                const cards = people.map(p => {
+                    const name = truncateName(p.display_name || 'User', 14);
+                    const username = truncateName(p.username || '', 16);
+                    const bio = truncateBio(p.bio, 40);
+                    const avatarHtml = p.avatar_url
+                        ? `<img src="${p.avatar_url}" alt="">`
+                        : `<div class="suggested-person-avatar-fallback"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8.5" r="3.3"/><path d="M4.8 19c.6-4 3.6-6.3 7.2-6.3s6.6 2.3 7.2 6.3c-2 1.8-4.6 2.8-7.2 2.8s-5.2-1-7.2-2.8z"/></svg></div>`;
+                    const vs = p.verified_status || 'none';
+                    const badgeHtml2 = (vs !== 'none' && window.getVerifiedBadgeHTML) ? window.getVerifiedBadgeHTML(vs) :
+                    '';
+                    return `<div class="suggested-person-card" data-user-id="${p.id}" onclick="window.Router.openProfile('${p.id}')">
+                        <div class="suggested-person-cancel" onclick="dismissSuggestedPerson(event, '${p.id}')"><i class="ri-close-line"></i></div>
+                        <div class="suggested-avatar-wrap">${avatarHtml}${badgeHtml2 ? `<span class="suggested-badge-overlay">${badgeHtml2}</span>` : ''}</div>
+                        <div class="suggested-person-name">${escapeHtml(name)}</div>
+                        <div class="suggested-person-username">@${escapeHtml(username)}</div>
+                        <div class="suggested-person-bio">${escapeHtml(bio)}</div>
+                        <button class="follow-btn rel-none" data-user-id="${p.id}" onclick="toggleSuggestedFollowHandler(event, '${p.id}')">Follow</button>
+                    </div>`;
+                }).join('');
+                return `<div class="suggested-people-section">
+                    <div class="suggested-people-header">
+                        <div class="suggested-people-header-text">
+                            <h3>Suggested for you</h3>
+                        </div>
+                    </div>
+                    <div class="suggested-people-scroll" id="suggested-people-scroll">${cards}</div>
+                </div>`;
+            }
+
+            window.dismissSuggestedPerson = function(e, userId) {
+                e.stopPropagation();
+                let dismissed = [];
+                try { dismissed = JSON.parse(localStorage.getItem('freeupper_dismissed_suggestions') || '[]'); } catch (_) {}
+                if (!dismissed.includes(userId)) dismissed.push(userId);
+                localStorage.setItem('freeupper_dismissed_suggestions', JSON.stringify(dismissed));
+                const card = document.querySelector(`.suggested-person-card[data-user-id="${userId}"]`);
+                if (!card) return;
+                card.classList.add('dismissing');
+                setTimeout(() => card.remove(), 200);
+            };
+
+            window.toggleSuggestedFollowHandler = async function(e, userId) {
+                e.stopPropagation();
+                const btn = e.currentTarget;
+                await toggleFollowUser(userId);
+                const newState = getRelationshipState(userId);
+                btn.textContent = (newState === 'following' || newState === 'friends') ? 'Following' : relLabel(newState);
+                btn.className = `follow-btn rel-${newState}`;
+                showToast(newState === 'following' || newState === 'friends' ? 'Following ✓' : 'Unfollowed');
+            };
+
+            function goToDiscoverPeople() {
+                showToast('Coming soon!');
+            }
 
             // ─── INIT ─────────────────────────────────────────────────────────
             async function init() {
@@ -7779,95 +7649,22 @@
                 setupKeyboardAvoidance();
             }
 
-            // ─── SUGGESTED PEOPLE ──────────────────────────────────────────
-            async function loadSuggestedPeople() {
-                const cu = getCurrentUser();
-                if (!cu || !cu.isLoggedIn) return [];
-                const followingIds = Array.from(followingSet);
-                let dismissed = [];
-                try { dismissed = JSON.parse(localStorage.getItem('freeupper_dismissed_suggestions') || '[]'); } catch (_) {}
-                const excludeIds = [...new Set([...followingIds, ...dismissed])];
-                let query = window.sb
-                    .from('profiles')
-                    .select('id, display_name, username, avatar_url, bio, verified_status')
-                    .neq('id', cu.id)
-                    .limit(15);
-                if (excludeIds.length) {
-                    query = query.not('id', 'in', `(${excludeIds.join(',')})`);
-                }
-                const { data, error } = await query;
-                if (error) { console.warn('loadSuggestedPeople error:', error); return []; }
-                return data || [];
-            }
-
-            function buildSuggestedPeopleHTML(people) {
-                if (!people.length) return '';
-                const cards = people.map(p => {
-                    const name = truncateName(p.display_name || 'User', 14);
-                    const username = truncateName(p.username || '', 16);
-                    const bio = truncateBio(p.bio, 40);
-                    const avatarHtml = p.avatar_url
-                        ? `<img src="${p.avatar_url}" alt="">`
-                        : `<div class="suggested-person-avatar-fallback"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8.5" r="3.3"/><path d="M4.8 19c.6-4 3.6-6.3 7.2-6.3s6.6 2.3 7.2 6.3c-2 1.8-4.6 2.8-7.2 2.8s-5.2-1-7.2-2.8z"/></svg></div>`;
-                    const vs = p.verified_status || 'none';
-                    const badgeHtml2 = (vs !== 'none' && window.getVerifiedBadgeHTML) ? window.getVerifiedBadgeHTML(vs) :
-                    '';
-                    return `<div class="suggested-person-card" data-user-id="${p.id}" onclick="window.Router.openProfile('${p.id}')">
-                        <div class="suggested-person-cancel" onclick="dismissSuggestedPerson(event, '${p.id}')"><i class="ri-close-line"></i></div>
-                        <div class="suggested-avatar-wrap">${avatarHtml}${badgeHtml2 ? `<span class="suggested-badge-overlay">${badgeHtml2}</span>` : ''}</div>
-                        <div class="suggested-person-name">${escapeHtml(name)}</div>
-                        <div class="suggested-person-username">@${escapeHtml(username)}</div>
-                        <div class="suggested-person-bio">${escapeHtml(bio)}</div>
-                        <button class="follow-btn rel-none" data-user-id="${p.id}" onclick="toggleSuggestedFollowHandler(event, '${p.id}')">Follow</button>
-                    </div>`;
-                }).join('');
-                return `<div class="suggested-people-section">
-                    <div class="suggested-people-header">
-                        <div class="suggested-people-header-text">
-                            <h3>Suggested for you</h3>
-                        </div>
-                    </div>
-                    <div class="suggested-people-scroll" id="suggested-people-scroll">${cards}</div>
-                </div>`;
-            }
-
-            function truncateBio(bio, max = 60) {
-                bio = bio || '';
-                return bio.length > max ? bio.slice(0, max).trim() + '…' : bio;
-            }
-
-            window.dismissSuggestedPerson = function(e, userId) {
-                e.stopPropagation();
-                let dismissed = [];
-                try { dismissed = JSON.parse(localStorage.getItem('freeupper_dismissed_suggestions') || '[]'); } catch (_) {}
-                if (!dismissed.includes(userId)) dismissed.push(userId);
-                localStorage.setItem('freeupper_dismissed_suggestions', JSON.stringify(dismissed));
-                const card = document.querySelector(`.suggested-person-card[data-user-id="${userId}"]`);
-                if (!card) return;
-                card.classList.add('dismissing');
-                setTimeout(() => card.remove(), 200);
-            };
-
-            window.toggleSuggestedFollowHandler = async function(e, userId) {
-                e.stopPropagation();
-                const btn = e.currentTarget;
-                await toggleFollowUser(userId);
-                const newState = getRelationshipState(userId);
-                btn.textContent = (newState === 'following' || newState === 'friends') ? 'Following' : relLabel(newState);
-                btn.className = `follow-btn rel-${newState}`;
-                showToast(newState === 'following' || newState === 'friends' ? 'Following ✓' : 'Unfollowed');
-            };
-
-            function goToDiscoverPeople() {
-                showToast('Coming soon!');
-            }
-
             // ─── EXPOSE GLOBALLY ──────────────────────────────────────────────
             window.getCurrentUser = getCurrentUser;
             window.escapeHtml = escapeHtml;
             window.copyTextToClipboard = copyTextToClipboard;
             window.lockBodyScroll = lockBodyScroll;
             window.unlockBodyScroll = unlockBodyScroll;
+            window.getUiPage = () => uiPage;
+            window.getCategoryFilter = () => currentCategoryFilter;
+            window.setCategoryFilter = (v) => { currentCategoryFilter = v; };
+            window.getAllPosts = () => allPosts;
+            window.getHiddenPostsSet = () => hiddenPostsSet;
+            window.getBlockedSet = () => blockedSet;
+            window.getMediaItems = getMediaItems;
+            window.isYouTubeUrl = isYouTubeUrl;
+            window.extractYouTubeId = extractYouTubeId;
+            window.formatCount = formatCount;
             window.toggleReaction = toggleReaction;
             window.openExplorePost = openExplorePost;
             window.closeExploreFullscreen = closeExploreFullscreen;
