@@ -31,6 +31,7 @@
       username: '',
       displayName: 'Guest',
       bio: '',
+      coverUrl: '',
       avatar: 'data:image/svg+xml,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
       ),
@@ -98,6 +99,7 @@
         username: user.user_metadata?.username || '',
         displayName: user.user_metadata?.display_name || 'User',
         bio: '',
+        coverUrl: '',
         avatar: user.user_metadata?.avatar_url || defaultGuest().avatar,
         email: user.email,
         isLoggedIn: true,
@@ -119,6 +121,7 @@
         display_name: user.user_metadata?.display_name || user.email.split('@')[0],
         username: user.user_metadata?.username || user.email.split('@')[0],
         avatar_url: user.user_metadata?.avatar_url || null,
+        cover_url: null,
         verified_status: 'none'
       };
       const { data: newProfile, error: insertError } = await sb
@@ -138,6 +141,7 @@
       username: profile.username || '',
       displayName: profile.display_name || 'User',
       bio: profile.bio || '',
+      coverUrl: profile.cover_url || '',
       avatar: profile.avatar_url || defaultGuest().avatar,
       email: user.email,
       isLoggedIn: true,
@@ -183,6 +187,7 @@
           display_name: authUser.user_metadata?.display_name || authUser.email.split('@')[0],
           username: authUser.user_metadata?.username || authUser.email.split('@')[0],
           avatar_url: authUser.user_metadata?.avatar_url || null,
+          cover_url: null,
           verified_status: 'none'
         };
         const { data: inserted, error: insertError } = await sb
@@ -202,6 +207,7 @@
         username: finalProfile.username || '',
         displayName: finalProfile.display_name || 'User',
         bio: finalProfile.bio || '',
+        coverUrl: finalProfile.cover_url || '',
         avatar: finalProfile.avatar_url || defaultGuest().avatar,
         email: authUser.email,
         isLoggedIn: true,
@@ -692,6 +698,66 @@
     }
   }
 
+  // ─── COVER PHOTO UPLOAD ────────────────────────────────────
+  async function uploadCoverPhoto(file, onProgress) {
+    const user = getCurrentUser();
+    if (!user.isLoggedIn) {
+      openModal('signup');
+      return null;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      throw new Error('Please choose an image file');
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      throw new Error('Image too large (max 8MB)');
+    }
+
+    const url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_AVATAR_PRESET);
+
+    const data = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.upload.onprogress = function (e) {
+        if (onProgress && e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+      xhr.onload = function () {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300 && !res.error) {
+            resolve(res);
+          } else {
+            reject(new Error(res.error?.message || 'Cover photo upload failed'));
+          }
+        } catch (e) {
+          reject(new Error('Cover photo upload failed'));
+        }
+      };
+      xhr.onerror = function () {
+        reject(new Error('Network error during upload'));
+      };
+      xhr.send(formData);
+    });
+
+    if (onProgress) onProgress(100);
+
+    const { data: updatedProfile, error: updateError } = await sb
+      .from('profiles')
+      .update({ cover_url: data.secure_url })
+      .eq('id', user.id)
+      .select()
+      .single();
+    if (updateError) throw new Error('Failed to update cover photo: ' + updateError.message);
+    const updated = Object.assign({}, user, { coverUrl: updatedProfile.cover_url });
+    writeLocalUser(updated);
+    return updatedProfile.cover_url;
+  }
+
   // ─── SIGN OUT ──────────────────────────────────────────────
   async function signOut() {
     await sb.auth.signOut();
@@ -730,6 +796,7 @@
     getAuthenticatedUser,
     requireAuth,
     uploadAvatar,
+    uploadCoverPhoto,
     signOut,
     openModal,
     closeModal,
