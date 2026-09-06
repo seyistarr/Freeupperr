@@ -135,6 +135,7 @@
       .eq('id', user.id)
       .maybeSingle();
 
+    // ★ Step 4f.2 – added logo_url field
     var insertPayload = {
       user_id: user.id,
       category: payload.requestedAccountType,
@@ -151,7 +152,8 @@
       address: payload.address || null,
       authorized_rep_name: payload.authorizedRepName || null,
       document_urls: payload.documentUrls || [],
-      identity_document_url: payload.identityDocumentUrl || null
+      identity_document_url: payload.identityDocumentUrl || null,
+      logo_url: payload.logoUrl || null
     };
 
     var { data, error } = await sb
