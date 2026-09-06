@@ -218,10 +218,12 @@
             stroke-linejoin: round;
         }
 
+        /* ★ HEXAGON verified badge */
         .verified-badge {
             width: 20px;
             height: 20px;
-            border-radius: 50%;
+            border-radius: 6px;
+            clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
             background: linear-gradient(135deg, var(--p), var(--pd));
             display: inline-flex;
             align-items: center;
@@ -347,12 +349,90 @@
             transition: border-color .3s;
         }
 
+        /* ─── ACCOUNT TYPE PILL ────────────────────────────── */
+        .account-type-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+        .account-type-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 100px;
+            background: var(--pdim);
+            border: 1.5px solid var(--pbrd);
+        }
+        .account-type-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--p), var(--pd));
+            flex-shrink: 0;
+            margin: 3px;
+        }
+        .account-type-icon svg {
+            width: 18px;
+            height: 18px;
+            stroke: #fff;
+            fill: #fff;
+        }
+        .account-type-icon img {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .account-type-text {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--pl);
+            padding: 0 16px 0 8px;
+        }
+        .account-type-caption {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--muted2);
+        }
+
+        /* ─── ROLE TAGS ──────────────────────────────────────── */
+        .role-tags-wrap {
+            width: 100%;
+            max-width: 380px;
+            margin: 4px 0 14px;
+        }
+        .role-tags-heading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .role-tags-heading span:not(.rt-label) {
+            flex: 1;
+            height: 1px;
+            background: var(--brd);
+        }
+        .role-tags-heading .rt-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            white-space: nowrap;
+        }
         .role-tags {
             display: flex;
             gap: 6px;
             flex-wrap: wrap;
             justify-content: center;
-            margin-bottom: 8px;
         }
         .role-tag {
             padding: 4px 12px;
@@ -363,19 +443,6 @@
             background: var(--pdim);
             border: 1.5px solid var(--pbrd);
             color: var(--pl);
-        }
-
-        /* ─── ACCOUNT TYPE PILL ────────────────────────────── */
-        .account-type-pill {
-            display: inline-block;
-            margin-bottom: 8px;
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--pl);
-            background: var(--pdim);
-            border: 1.5px solid var(--pbrd);
-            padding: 4px 12px;
-            border-radius: 100px;
         }
 
         .display-name-row {
@@ -2103,8 +2170,16 @@
                         <img class="avatar-img" id="profileAvatar" src="" alt="" onerror="this.style.background='linear-gradient(135deg,#1a1035,#3b1a6b)';this.removeAttribute('src');">
                         <div class="online-dot" id="onlineDot" style="display:none"></div>
                     </div>
-                    <div class="role-tags" id="roleTags"></div>
-                    <div class="account-type-pill" id="accountTypePill" style="display:none;"></div>
+
+                    <!-- Account Type Pill -->
+                    <div class="account-type-wrap" id="accountTypeWrap" style="display:none">
+                        <div class="account-type-pill" id="accountTypePill">
+                            <span class="account-type-icon" id="accountTypeIcon"></span>
+                            <span class="account-type-text" id="accountTypeText"></span>
+                        </div>
+                        <div class="account-type-caption">Account Type</div>
+                    </div>
+
                     <div class="display-name-row">
                         <span class="display-name" id="displayName"></span>
                         <button class="edit-pen fw-owner-only" onclick="openEditModal()" title="Edit profile">
@@ -2112,6 +2187,13 @@
                         </button>
                     </div>
                     <p class="hero-bio" id="heroBio"></p>
+
+                    <!-- Role Tags -->
+                    <div class="role-tags-wrap" id="roleTagsWrap" style="display:none">
+                        <div class="role-tags-heading"><span></span><span class="rt-label">Role Tags</span><span></span></div>
+                        <div class="role-tags" id="roleTags"></div>
+                    </div>
+
                     <div class="action-row" id="actionRow"></div>
                 </div>
 
@@ -3238,29 +3320,35 @@
                 var bioEl = document.getElementById('heroBio');
                 bioEl.innerHTML = linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
 
+                // ─── ROLE TAGS ────────────────────────────────────────────
                 var tags = profile.tags || [];
+                var roleTagsWrap = document.getElementById('roleTagsWrap');
                 document.getElementById('roleTags').innerHTML = tags.map(function(t) {
                     return '<span class="role-tag">' + escapeHtml(t) + '</span>';
                 }).join('');
+                if (roleTagsWrap) roleTagsWrap.style.display = tags.length ? 'block' : 'none';
 
                 // ─── ACCOUNT TYPE PILL ──────────────────────────────────────
-                var atPill = document.getElementById('accountTypePill');
-                if (atPill) {
+                var atWrap = document.getElementById('accountTypeWrap');
+                var atIcon = document.getElementById('accountTypeIcon');
+                var atText = document.getElementById('accountTypeText');
+                if (atWrap && atIcon && atText) {
                     var acctType = profile.account_type || 'personal';
                     if (acctType !== 'personal' && profile.verified) {
-                        var label = acctType.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-                        var iconHtml = '';
+                        var label = acctType.replace(/_/g, ' ').toUpperCase();
                         if (profile.account_icon_url) {
-                            iconHtml = '<img src="' + escapeHtml(profile.account_icon_url) + '" style="width:14px;height:14px;border-radius:4px;object-fit:cover;vertical-align:-2px;margin-right:5px;" onerror="this.style.display=\'none\'">';
+                            atIcon.innerHTML = '<img src="' + escapeHtml(profile.account_icon_url) + '" alt="" onerror="this.style.display=\'none\'">';
                         } else if (accountTypeIconMap[acctType]) {
-                            iconHtml = '<span style="display:inline-flex;width:14px;height:14px;vertical-align:-2px;margin-right:5px;">' + accountTypeIconMap[acctType] + '</span>';
+                            atIcon.innerHTML = accountTypeIconMap[acctType];
+                        } else {
+                            atIcon.innerHTML = '';
                         }
-                        atPill.innerHTML = iconHtml + escapeHtml(label);
-                        atPill.style.display = 'inline-flex';
-                        atPill.style.alignItems = 'center';
+                        atText.textContent = label;
+                        atWrap.style.display = 'flex';
                     } else {
-                        atPill.style.display = 'none';
-                        atPill.innerHTML = '';
+                        atWrap.style.display = 'none';
+                        atIcon.innerHTML = '';
+                        atText.textContent = '';
                     }
                 }
 
