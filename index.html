@@ -3920,6 +3920,7 @@
     <script src="side-nav.js" defer></script>
     <script src="market.js" defer></script>
     <script src="explore.js" defer></script>
+    <script src="foryou.js" defer></script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 
     <script type="module">
@@ -3931,9 +3932,7 @@
             // ───────────────────────────────────────────────────────────────
 
             const CVK = 'freeupper_comments_visible';
-            const UCK = 'freeupper_user_categories';
-            const REPLY_BATCH = 3,
-                PAGE_SIZE = 5;
+            const REPLY_BATCH = 3;
             const INITIAL_COMMENT_DISPLAY = 10;
             const COMMENT_LOAD_MORE = 10;
 
@@ -3958,19 +3957,11 @@
             let currentCategoryFilter = '';
             let currentSortMethod = 'foryou';
             let searchQuery = '';
-            let feedPage = 1;
-            let observer = null,
-                sentinel = null,
-                loader = null,
-                isTogglingContent = false,
-                isLoadingMore = false;
 
             let currentPostId = null,
                 replyTarget = null,
                 exploreReplyTarget = null,
-                expandedThreads = new Map(),
-                lastDoubleTapTime = 0,
-                openPostTimer = null;
+                expandedThreads = new Map();
 
             const tabScrollPositions = { home: 0, explore: 0, market: 0 };
             let lastScrollY = 0,
@@ -5067,8 +5058,6 @@
                 }, { once: true });
             }
 
-            // ─── SKELETON BUILDERS ──────────────────────────────────────────
-
             // ─── REACTIONS ───────────────────────────────────────────────────────
             async function toggleReaction(postId) {
                 const post = appData.posts.find(p => p.id === postId);
@@ -5343,166 +5332,6 @@
                 }
             }
 
-            // ─── BUILD POST HTML ─────────────────────────────────────────────
-            function buildPostHTML(p, index) {
-                const author = window.getAuthorFromProfile(p.profile);
-                const da = truncateName(author.name, 22);
-                const aa = author.avatar;
-                const verifiedStatus = author.verified_status;
-
-                const repostBanner = buildRepostBanner(p);
-
-                const hd = p.description && p.description.trim().length > 0;
-                const rawContent = p.content || '';
-                const hasMedia = getMediaItems(p).length > 0;
-                const th = p.tags && p.tags.length > 0 ?
-                    `<div class="flex flex-wrap gap-1 mt-2">${p.tags.map(t => 
-                        `<span class="tag-badge" style="display:inline-block;padding:3px 9px;border-radius:20px;font-size:.7rem;font-weight:600;background:rgba(124,58,237,.08);color:#7C3AED;cursor:pointer;" onclick="event.stopPropagation();window.Router.openHashtag('${escapeHtml(t)}')">#${escapeHtml(t)}</span>`
-                    ).join('')}</div>` :
-                    '';
-                const mh = buildMediaHTML(p, index);
-                const followBtn = buildFollowButton(p.user_id, da);
-                const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
-
-                const cuForLock = getCurrentUser();
-                const lockPill = (p.is_hidden && p.user_id === cuForLock.id)
-                    ? '<span style="display:inline-flex;align-items:center;gap:3px;font-size:.68rem;font-weight:700;color:#7C3AED;background:rgba(124,58,237,.1);padding:2px 8px;border-radius:20px;margin-left:4px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Only you</span>'
-                    : '';
-
-                const isRepostClass = repostBanner ? 'is-repost' : '';
-
-                return `<article class="feed-post ${isRepostClass}" data-post-id="${p.id}" data-author-id="${author.id}">
-                        ${repostBanner}
-                        <div class="flex items-start gap-3" style="padding:0 16px;">
-                          <div class="avatar-plus-wrap">
-                            <img data-author-avatar src="${aa}" class="user-mini-avatar" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;cursor:pointer;flex-shrink:0;">
-                            ${buildFollowPlusButton(p.user_id)}
-                          </div>
-                          <div style="min-width:0;flex:1;">
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                              <span data-author-name class="font-bold text-sm cursor-pointer hover:underline" style="color:var(--text);">${escapeHtml(da)}</span>
-                              <span data-author-badge-wrapper>${badgeHtml}</span>
-                              <span class="text-xs" style="color:var(--muted);">· ${formatRelativeTime(p.timestamp || p.date)}</span>
-                              ${lockPill}
-                            </div>
-                            <div class="cursor-pointer mt-0.5">${renderPostTitle(p.title, { hasMedia, mentions: p.mentions })}</div>
-                            ${hd?`<p class="text-sm mt-1 leading-relaxed" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(p.description)}</p>`:''}
-                            <div class="mt-1" id="post-content-${p.id}">
-                              ${buildContentBlockHTML(p.id, rawContent, hasMedia, { mentions: p.mentions })}
-                            </div>
-                          </div>
-                        </div>
-                        ${mh}
-                        <div style="padding:0 16px;">
-                          ${th}
-                          <div class="post-actions-row" style="position:relative;">
-                            ${buildActionsRow(p)}
-                          </div>
-                        </div>
-                      </article>`;
-            }
-
-            // ─── FEED / EXPLORE RENDER ──────────────────────────────────────
-            function getUserCategories() { const r = localStorage.getItem(UCK); return r ? JSON.parse(r) : []; }
-
-            function getFilteredSortedPosts() {
-                const currentUser = getCurrentUser();
-                let p = [...allPosts];
-                p = p.filter(post => !hiddenPostsSet.has(post.id));
-                p = p.filter(post => !blockedSet.has(post.user_id));
-                p = p.filter(post => {
-                    if (post.user_id === currentUser.id) return true;
-                    if (post.is_hidden) return false;
-                    const profile = post.profile || {};
-                    return !profile.is_private;
-                });
-                if (currentCategoryFilter) p = p.filter(p => p.category === currentCategoryFilter);
-                if (searchQuery) {
-                    const q = searchQuery.toLowerCase();
-                    p = p.filter(p => p.title.toLowerCase().includes(q) || (p.content || '').toLowerCase()
-                        .includes(q) || (p.description || '').toLowerCase().includes(q) || (p.tags && p.tags
-                        .some(t => t.toLowerCase().includes(q))));
-                }
-                if (currentSortMethod === 'trending') p.sort((a, b) => (b.views || 0) - (a.views || 0));
-                else if (currentSortMethod === 'foryou') {
-                    if (_shuffleHomeOnce) {
-                        p = shuffleArray(p);
-                        _shuffleHomeOnce = false;
-                    } else if (window.FreeUpperAlgorithm && window.FreeUpperFeed) {
-                        const profile = window.FreeUpperFeed.getProfile();
-                        const creatorScores = window.FreeUpperFeed.getCreatorScores
-                            ? window.FreeUpperFeed.getCreatorScores()
-                            : new Map();
-                        p = window.FreeUpperAlgorithm.rank(p, profile, creatorScores);
-                    } else {
-                        const uc = getUserCategories();
-                        const jitter = new Map(p.map(post => [post.id, ((hashStr(post.id + _feedShuffleSeed) % 1000) /
-                            1000) * 0.25]));
-                        p.sort((a, b) => {
-                            const score = p => {
-                                const ah = (Date.now() - new Date(p.timestamp || p.date)) / 36e5;
-                                const commentCount = Array.isArray(p.comments) ? p.comments.filter(c => c
-                                    .approved !== false).length : (p.comments || 0);
-                                const eg = (p.views || 0) + ((p.reactions.like || 0) * 2) + (commentCount *
-                                2);
-                                return (eg / Math.pow(ah + 2, 1.5)) * (1 + (jitter.get(p.id) || 0));
-                            };
-                            return (score(b) * (uc.includes(b.category) ? 1.4 : 1)) - (score(a) * (uc
-                                .includes(a.category) ? 1.4 : 1));
-                        });
-                    }
-                } else p.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
-                return p;
-            }
-
-            function renderFeedContainer() {
-                const ps = getFilteredSortedPosts(),
-                    hf = searchQuery || currentCategoryFilter;
-                const hh = hf ?
-                    `<div class="mb-4 px-4 pt-3"><h1 class="text-xl font-heading font-bold" style="color:var(--text);">${searchQuery?'Search results':currentCategoryFilter}</h1><p class="text-sm" style="color:var(--muted);">${ps.length} post(s)</p></div>` :
-                    '';
-                return `<div class="max-w-2xl mx-auto"><div>${hh}</div><div id="feed-container" class="px-0"></div></div>`;
-            }
-
-            function renderSkeletons(c = 3) {
-                let h = '';
-                for (let i = 0; i < c; i++) h +=
-                    `<div class="skeleton-post"><div class="flex gap-3" style="padding:0 16px;align-items:flex-start;">
-                        <div class="skeleton skeleton-avatar"></div>
-                        <div style="flex:1;min-width:0;">
-                            <div class="skeleton skeleton-line" style="width:35%;height:10px"></div>
-                            <div class="skeleton skeleton-title"></div>
-                            ${i===0?'<div class="skeleton skeleton-image"></div>':''}
-                            <div class="skeleton skeleton-line" style="width:100%"></div>
-                            <div class="skeleton skeleton-line" style="width:60%;margin-bottom:0"></div>
-                            <div class="skeleton skeleton-reactions"></div>
-                        </div>
-                    </div></div>`;
-                return h;
-            }
-
-            function getSentinel() { if (!sentinel) { sentinel = document.createElement('div');
-                    sentinel.id = 'sentinel';
-                    sentinel.style.height = '1px'; } return sentinel; }
-
-            function getLoader() { if (!loader) { loader = document.createElement('div');
-                    loader.id = 'feed-loader';
-                    loader.className = 'hidden';
-                    loader.innerHTML =
-                    '<div style="text-align:center;padding:20px;"><div class="spinner" style="margin:0 auto;"></div></div>'; } return loader; }
-
-            function setupSentinel() { const co = document.getElementById('feed-container'); if (co && !co.contains(
-                    getSentinel())) co.appendChild(getSentinel()); const l = getLoader(); if (co && !co.contains(l))
-                    co.insertBefore(l, getSentinel()); }
-
-            function setupInfiniteScroll() {
-                if (observer) observer.disconnect();
-                observer = new IntersectionObserver(es => { if (isTogglingContent || isLoadingMore) return; if (es[
-                        0].isIntersecting) loadMorePosts(); }, { root: null, rootMargin: '200px',
-                    threshold: 0 });
-                observer.observe(getSentinel());
-            }
-
             function initPlayers(root) {
                 root.querySelectorAll('.ig-video-wrap video:not([data-plyr-init]), .video-container video:not([data-plyr-init]), .media-scroll-row video:not([data-plyr-init])')
                     .forEach(vid => {
@@ -5548,183 +5377,6 @@
                         }
                     }, 400);
                 }, 300);
-            }
-
-            function loadInitialFeed() {
-                feedPage = 1;
-                isLoadingMore = false;
-                if (observer) observer.disconnect();
-                const co = document.getElementById('feed-container');
-                if (!co) return;
-                co.innerHTML = renderSkeletons(3);
-                requestAnimationFrame(() => {
-                    const ps = getFilteredSortedPosts();
-                    co.innerHTML = '';
-                    if (ps.length === 0) { co.innerHTML =
-                            '<div class="flex flex-col items-center justify-center py-20 text-center"><p class="text-sm" style="color:var(--muted);">No posts yet. Create your first post!</p></div>';
-                        return; }
-                    const fb = ps.slice(0, PAGE_SIZE);
-                    const postsHtml = fb.map((p, i) => buildPostHTML(p, i));
-                    postsHtml.splice(2, 0, '<div id="suggested-people-slot"></div>');
-                    co.innerHTML = postsHtml.join('');
-                    requestAnimationFrame(() => {
-                        initPlayers(co);
-                        setupSentinel();
-                        setupInfiniteScroll();
-                        co.querySelectorAll('article').forEach(a => setupPostEventDelegation(a));
-                        window._currentFeedPosts = ps;
-                        window.IndexRender?.rescan();
-                    });
-                });
-            }
-
-            function loadMorePosts() {
-                if (isLoadingMore) return;
-                const ps = window._currentFeedPosts || getFilteredSortedPosts();
-                const start = feedPage * PAGE_SIZE,
-                    nb = ps.slice(start, start + PAGE_SIZE);
-                if (nb.length === 0) { if (observer && sentinel) observer.unobserve(sentinel); return; }
-                isLoadingMore = true;
-                const co = document.getElementById('feed-container'),
-                    s = getSentinel();
-                const t = document.createElement('div');
-                t.innerHTML = nb.map((p, i) => buildPostHTML(p, start + i)).join('');
-                while (t.firstChild) co.insertBefore(t.firstChild, s);
-                requestAnimationFrame(() => {
-                    initPlayers(co);
-                    co.querySelectorAll('article:not([data-events-set])').forEach(a => { setupPostEventDelegation(
-                            a);
-                        a.dataset.eventsSet = 'true'; });
-                    feedPage++;
-                    isLoadingMore = false;
-                    window.IndexRender?.rescan();
-                });
-            }
-
-            // ─── setupPostEventDelegation ───────────────────────────────────
-            function setupPostEventDelegation(article) {
-                article.addEventListener('click', function(e) {
-                    const t = e.target,
-                        pid = article.dataset.postId;
-
-                    if (openPostTimer) { clearTimeout(openPostTimer);
-                        openPostTimer = null; }
-
-                    if (t.closest('.plyr__controls') || t.closest('.plyr__control--overlaid')) {
-                        e.stopPropagation();
-                        return;
-                    }
-
-                    const actionEl = t.closest('.post-actions-row > *');
-                    if (actionEl) spawnRipple(actionEl, e);
-
-                    if (t.classList.contains('read-more-btn')) { e.stopPropagation();
-                        toggleReadMore(article); return; }
-                    if (t.closest('.reaction-btn')) { e.stopPropagation();
-                        toggleReaction(pid); return; }
-                    if (t.closest('.bookmark-badge')) { e.stopPropagation();
-                        toggleBookmarkUI(article); return; }
-                    if (t.closest('.share-btn')) {
-                        e.stopPropagation();
-                        const btn = t.closest('.share-btn');
-                        const postId = btn.dataset.sharePost || pid;
-                        btn.classList.add('share-bounce');
-                        setTimeout(() => btn.classList.remove('share-bounce'), 450);
-                        haptic(6);
-                        openShareModal(postId);
-                        return;
-                    }
-                    if (t.closest('[data-repost-btn]')) {
-                        e.stopPropagation();
-                        const btn = t.closest('[data-repost-btn]');
-                        triggerRepostFromFeed(btn, btn.dataset.repostBtn);
-                        return;
-                    }
-                    if (t.closest('.comment-btn')) {
-                        e.stopPropagation();
-                        const btn = t.closest('.comment-btn');
-                        btn.classList.add('comment-pop');
-                        setTimeout(() => btn.classList.remove('comment-pop'), 260);
-                        haptic(6);
-                        const p = allPosts.find(x => x.id === pid);
-                        openExplorePost(pid, 'home', !(p && p.commentsHidden));
-                        return;
-                    }
-                    if (t.closest('.mention-link')) {
-                        e.stopPropagation();
-                        const uid = t.closest('.mention-link').dataset.userid;
-                        if (uid) window.Router.openProfile(uid);
-                        return;
-                    }
-                    if (t.closest('.user-mini-avatar') || t.closest('.font-bold.text-sm')) {
-                        e.stopPropagation();
-                        const p = allPosts.find(p => p.id === pid);
-                        if (p && p.user_id) window.Router.openProfile(p.user_id);
-                        return;
-                    }
-                    if (t.closest('[data-gallery-post]')) {
-                        e.stopPropagation();
-                        const el = t.closest('[data-gallery-post]');
-                        const post = allPosts.find(x => x.id === el.dataset.galleryPost);
-                        if (post) openGalleryLightbox(getMediaItems(post), Number(el.dataset.galleryIndex || 0), post.id);
-                        return;
-                    }
-                    if (t.closest('[data-extlink]')) { e.stopPropagation();
-                        openInAppWebView(decodeURIComponent(t.closest('[data-extlink]').dataset
-                        .extlink)); return; }
-                    if (t.closest('.tag-badge')) {
-                        e.stopPropagation();
-                        const tag = t.textContent.replace('#', '').trim();
-                        if (tag) window.Router.openHashtag(tag);
-                        return;
-                    }
-                    if (t.closest('[data-repost-avatar]')) {
-                        e.stopPropagation();
-                        const uid = t.closest('[data-repost-avatar]').dataset.userId;
-                        if (uid) window.Router.openProfile(uid);
-                        return;
-                    }
-                    if (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')) {
-                        e.stopPropagation();
-                        const pid2 = (t.closest('[data-repost-name]') || t.closest('[data-repost-tag]')).dataset
-                            .postId;
-                        if (pid2) openRepostersSheet(pid2);
-                        return;
-                    }
-                    const now = Date.now(),
-                        gap = now - lastDoubleTapTime;
-                    if (gap < 300 && gap > 0) {
-                        e.preventDefault();
-                        toggleReaction(pid);
-                        lastDoubleTapTime = 0;
-                        return;
-                    }
-                    lastDoubleTapTime = now;
-                    openPostTimer = setTimeout(() => {
-                        openPostTimer = null;
-                        if (lastDoubleTapTime === now) {
-                            openExplorePost(pid, 'home');
-                        }
-                    }, 300);
-                });
-            }
-
-            function toggleReadMore(article) {
-                isTogglingContent = true;
-                const pid = article.dataset.postId;
-                const pv = article.querySelector(`.preview-text-${pid}`),
-                    fl = article.querySelector(`.full-text-${pid}`),
-                    b = article.querySelector('.read-more-btn');
-                if (!pv || !fl) { isTogglingContent = false; return; }
-                const beforeTop = article.getBoundingClientRect().top;
-                if (fl.classList.contains('hidden')) { pv.classList.add('hidden');
-                    fl.classList.remove('hidden');
-                    b.textContent = 'Show less'; } else { pv.classList.remove('hidden');
-                    fl.classList.add('hidden');
-                    b.textContent = 'Show more'; }
-                const afterTop = article.getBoundingClientRect().top;
-                window.scrollBy(0, afterTop - beforeTop);
-                isTogglingContent = false;
             }
 
             // ─── toggleBookmarkUI ──────────────────────────────────────────
@@ -6520,6 +6172,7 @@
                     if (_commentsFetchToken[postId] !== myToken) return;
                     const vc = getVisibleComments(postId);
                     cl.innerHTML = renderCommentsHTML(sorted, postId, vc);
+                    updateCommentCount(postId);
                 } catch (err) {
                     if (_commentsFetchToken[postId] !== myToken) return;
                     console.error('refreshCommentsList failed:', err);
@@ -6832,7 +6485,7 @@
                         const fc = document.getElementById('explore-fullscreen-content');
                         if (fc) fc.innerHTML = '';
                         setupVideoAutoplay(existingContainer);
-                        setupInfiniteScroll();
+                        window.setupForYouInfiniteScroll?.();
                         window.IndexRender?.rescan();
                     }, 400);
                     return;
@@ -6970,7 +6623,6 @@
                 window.disconnectExploreVideoObserver?.();
                 currentCategoryFilter = '';
                 searchQuery = '';
-                feedPage = 1;
                 if (mode === 'foryou') { currentSortMethod = 'foryou';
                     uiPage = 'home'; } else if (mode === 'explore') { currentSortMethod = 'trending';
                     uiPage = 'explore'; } else if (mode === 'market') { uiPage = 'market'; }
@@ -7026,8 +6678,7 @@
                     return;
                 }
 
-                co.innerHTML = renderFeedContainer();
-                loadInitialFeed();
+                window.renderForYouTab(co);
                 setCommentBarVisible(false);
                 refreshTabStates();
                 setTimeout(() => window.scrollTo(0, tabScrollPositions.home || 0), 80);
@@ -7090,6 +6741,15 @@
                     pi = document.getElementById('pull-icon');
 
                 document.addEventListener('touchstart', e => {
+                    const blocked = uiPage === 'single-post-explore' ||
+                        (e.target.closest && (
+                            e.target.closest('#explore-fullscreen') ||
+                            e.target.closest('#lightbox') ||
+                            e.target.closest('#fullscreenLightbox') ||
+                            e.target.closest('#productModal') ||
+                            e.target.closest('#seeAllModal')
+                        ));
+                    if (blocked) { tracking = false; return; }
                     sy = e.touches[0].clientY;
                     sx = e.touches[0].clientX;
                     tracking = window.scrollY <= 0;
@@ -7144,7 +6804,6 @@
                 currentCategoryFilter = '';
                 searchQuery = '';
                 currentSortMethod = 'foryou';
-                feedPage = 1;
                 uiPage = 'home';
                 renderUI();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -7344,89 +7003,6 @@
                 }
             });
 
-            // ─── SUGGESTED PEOPLE ──────────────────────────────────────────
-            async function loadSuggestedPeople() {
-                const cu = getCurrentUser();
-                if (!cu || !cu.isLoggedIn) return [];
-                const followingIds = Array.from(followingSet);
-                let dismissed = [];
-                try { dismissed = JSON.parse(localStorage.getItem('freeupper_dismissed_suggestions') || '[]'); } catch (_) {}
-                const excludeIds = [...new Set([...followingIds, ...dismissed])];
-                let query = window.sb
-                    .from('profiles')
-                    .select('id, display_name, username, avatar_url, bio, verified_status')
-                    .neq('id', cu.id)
-                    .limit(15);
-                if (excludeIds.length) {
-                    query = query.not('id', 'in', `(${excludeIds.join(',')})`);
-                }
-                const { data, error } = await query;
-                if (error) { console.warn('loadSuggestedPeople error:', error); return []; }
-                return data || [];
-            }
-
-            function truncateBio(bio, max = 60) {
-                bio = bio || '';
-                return bio.length > max ? bio.slice(0, max).trim() + '…' : bio;
-            }
-
-            function buildSuggestedPeopleHTML(people) {
-                if (!people.length) return '';
-                const cards = people.map(p => {
-                    const name = truncateName(p.display_name || 'User', 14);
-                    const username = truncateName(p.username || '', 16);
-                    const bio = truncateBio(p.bio, 40);
-                    const avatarHtml = p.avatar_url
-                        ? `<img src="${p.avatar_url}" alt="">`
-                        : `<div class="suggested-person-avatar-fallback"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8.5" r="3.3"/><path d="M4.8 19c.6-4 3.6-6.3 7.2-6.3s6.6 2.3 7.2 6.3c-2 1.8-4.6 2.8-7.2 2.8s-5.2-1-7.2-2.8z"/></svg></div>`;
-                    const vs = p.verified_status || 'none';
-                    const badgeHtml2 = (vs !== 'none' && window.getVerifiedBadgeHTML) ? window.getVerifiedBadgeHTML(vs) :
-                    '';
-                    return `<div class="suggested-person-card" data-user-id="${p.id}" onclick="window.Router.openProfile('${p.id}')">
-                        <div class="suggested-person-cancel" onclick="dismissSuggestedPerson(event, '${p.id}')"><i class="ri-close-line"></i></div>
-                        <div class="suggested-avatar-wrap">${avatarHtml}${badgeHtml2 ? `<span class="suggested-badge-overlay">${badgeHtml2}</span>` : ''}</div>
-                        <div class="suggested-person-name">${escapeHtml(name)}</div>
-                        <div class="suggested-person-username">@${escapeHtml(username)}</div>
-                        <div class="suggested-person-bio">${escapeHtml(bio)}</div>
-                        <button class="follow-btn rel-none" data-user-id="${p.id}" onclick="toggleSuggestedFollowHandler(event, '${p.id}')">Follow</button>
-                    </div>`;
-                }).join('');
-                return `<div class="suggested-people-section">
-                    <div class="suggested-people-header">
-                        <div class="suggested-people-header-text">
-                            <h3>Suggested for you</h3>
-                        </div>
-                    </div>
-                    <div class="suggested-people-scroll" id="suggested-people-scroll">${cards}</div>
-                </div>`;
-            }
-
-            window.dismissSuggestedPerson = function(e, userId) {
-                e.stopPropagation();
-                let dismissed = [];
-                try { dismissed = JSON.parse(localStorage.getItem('freeupper_dismissed_suggestions') || '[]'); } catch (_) {}
-                if (!dismissed.includes(userId)) dismissed.push(userId);
-                localStorage.setItem('freeupper_dismissed_suggestions', JSON.stringify(dismissed));
-                const card = document.querySelector(`.suggested-person-card[data-user-id="${userId}"]`);
-                if (!card) return;
-                card.classList.add('dismissing');
-                setTimeout(() => card.remove(), 200);
-            };
-
-            window.toggleSuggestedFollowHandler = async function(e, userId) {
-                e.stopPropagation();
-                const btn = e.currentTarget;
-                await toggleFollowUser(userId);
-                const newState = getRelationshipState(userId);
-                btn.textContent = (newState === 'following' || newState === 'friends') ? 'Following' : relLabel(newState);
-                btn.className = `follow-btn rel-${newState}`;
-                showToast(newState === 'following' || newState === 'friends' ? 'Following ✓' : 'Unfollowed');
-            };
-
-            function goToDiscoverPeople() {
-                showToast('Coming soon!');
-            }
-
             // ─── INIT ─────────────────────────────────────────────────────────
             async function init() {
                 renderInitialSkeleton();
@@ -7616,10 +7192,7 @@
                         .subscribe();
                 }
 
-                loadSuggestedPeople().then(people => {
-                    const slot = document.getElementById('suggested-people-slot');
-                    if (slot && people.length) slot.innerHTML = buildSuggestedPeopleHTML(people);
-                });
+                window.loadSuggestedPeopleIntoSlot?.();
 
                 const urlParams = new URLSearchParams(window.location.search);
                 const postIdParam = urlParams.get('post');
@@ -7655,6 +7228,30 @@
             window.copyTextToClipboard = copyTextToClipboard;
             window.lockBodyScroll = lockBodyScroll;
             window.unlockBodyScroll = unlockBodyScroll;
+            window.getSortMethod = () => currentSortMethod;
+            window.getSearchQuery = () => searchQuery;
+            window.shouldShuffleHomeOnce = () => { const v = _shuffleHomeOnce; _shuffleHomeOnce = false; return v; };
+            window.getFeedShuffleSeed = () => _feedShuffleSeed;
+            window.getFollowingSet = () => followingSet;
+            window.toggleFollowUser = toggleFollowUser;
+            window.getRelationshipState = getRelationshipState;
+            window.relLabel = relLabel;
+            window.buildRepostBanner = buildRepostBanner;
+            window.buildMediaHTML = buildMediaHTML;
+            window.buildFollowButton = buildFollowButton;
+            window.buildFollowPlusButton = buildFollowPlusButton;
+            window.renderPostTitle = renderPostTitle;
+            window.buildContentBlockHTML = buildContentBlockHTML;
+            window.buildActionsRow = buildActionsRow;
+            window.truncateName = truncateName;
+            window.formatRelativeTime = formatRelativeTime;
+            window.initPlayers = initPlayers;
+            window.toggleBookmarkUI = toggleBookmarkUI;
+            window.triggerRepostFromFeed = triggerRepostFromFeed;
+            window.openRepostersSheet = openRepostersSheet;
+            window.spawnRipple = spawnRipple;
+            window.haptic = haptic;
+            window.openInAppWebView = openInAppWebView;
             window.getUiPage = () => uiPage;
             window.getCategoryFilter = () => currentCategoryFilter;
             window.setCategoryFilter = (v) => { currentCategoryFilter = v; };
@@ -7687,9 +7284,6 @@
             window.togglePinCommentUI = togglePinCommentUI;
             window.reportCommentUI = reportCommentUI;
             window.loadSimilarPosts = loadSimilarPosts;
-            window.dismissSuggestedPerson = dismissSuggestedPerson;
-            window.toggleSuggestedFollowHandler = toggleSuggestedFollowHandler;
-            window.goToDiscoverPeople = goToDiscoverPeople;
             window.reportPostFromShare = reportPostFromShare;
             window.deletePostFromShare = deletePostFromShare;
             window.openGalleryLightbox = openGalleryLightbox;
