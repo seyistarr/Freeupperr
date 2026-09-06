@@ -474,5 +474,6 @@
     window.dismissSuggestedPerson = dismissSuggestedPerson;
     window.toggleSuggestedFollowHandler = toggleSuggestedFollowHandler;
     window.goToDiscoverPeople = goToDiscoverPeople;
+    window.renderSkeletons = renderSkeletons;   // <--- added for initial skeleton rendering
 
 })();
