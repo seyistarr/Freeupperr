@@ -1395,6 +1395,19 @@
         .text-center {
             text-align: center;
         }
+        /* ─── LOGO PREVIEW ──────────────────────────────────────────── */
+        .logo-preview {
+            width: 64px;
+            height: 64px;
+            border-radius: 14px;
+            object-fit: cover;
+            background: var(--surface2);
+            display: block;
+            margin-bottom: 6px;
+        }
+        .logo-preview[src=""] {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -2209,7 +2222,7 @@
                 renderRequests();
             };
 
-            // ─── OPEN REQUEST DETAIL (FIXED: avatar size, image sizing) ──────
+            // ─── OPEN REQUEST DETAIL (Step 4f.4: added logo_url preview) ─────
             window.openRequestDetail = function(requestId) {
                 const req = requests.find(r => r.id === requestId);
                 if (!req) return;
@@ -2233,6 +2246,18 @@
                         }
                         return `<div style="margin-bottom:6px;"><a href="${escapeHtml(url)}" target="_blank" style="color:var(--primary);">View document</a></div>`;
                     }).join('');
+                }
+
+                // --- Step 4f.4: Add logo card if present ---
+                let logoHtml = '';
+                if (req.logo_url) {
+                    logoHtml = `
+                            <div class="info-card">
+                                <div class="ic-title">Submitted Logo</div>
+                                <img src="${escapeHtml(req.logo_url)}" class="logo-preview" onerror="this.style.display='none'">
+                                <div style="margin-top:6px;"><a href="${escapeHtml(req.logo_url)}" target="_blank" style="color:var(--primary);font-size:12px;">${escapeHtml(req.logo_url)}</a></div>
+                            </div>
+                        `;
                 }
 
                 main.innerHTML = `
@@ -2276,6 +2301,8 @@
                                 <div class="kv-row"><span class="k">Registration / office ID</span><span class="v">${escapeHtml(req.registration_number || '—')}</span></div>
                                 <div class="kv-row"><span class="k">Authorized rep</span><span class="v">${escapeHtml(req.authorized_rep_name || '—')}</span></div>
                             </div>
+
+                            ${logoHtml}
 
                             ${docHtml ? `
                             <div class="info-card">
@@ -3291,7 +3318,7 @@
                         `;
             }
 
-            // ─── VERIFICATION FUNCTIONS ──────────────────────────────────────
+            // ─── VERIFICATION FUNCTIONS (Step 4f.4: copy logo_url) ──────────
             window.approveRequest = async function(requestId) {
                 if (!confirm('Approve this verification request?')) return;
                 try {
@@ -3310,6 +3337,10 @@
                     const profileUpdate = { verified: true, verified_status: 'verified' };
                     if (reqData.requested_account_type) {
                         profileUpdate.account_type = reqData.requested_account_type;
+                    }
+                    // Step 4f.4: copy logo_url if present
+                    if (reqData.logo_url) {
+                        profileUpdate.account_icon_url = reqData.logo_url;
                     }
                     const { data: updatedProfile, error: profileError } = await sb
                         .from('profiles')
