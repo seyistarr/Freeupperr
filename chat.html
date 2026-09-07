@@ -7603,49 +7603,59 @@
             };
 
             window.createGroup = async function() {
-                const name = document.getElementById('groupNameInput').value.trim();
-                if (!name) { showToast('Please enter a group name', 'o'); return; }
+    const name = document.getElementById('groupNameInput').value.trim();
+    if (!name) { showToast('Please enter a group name', 'o'); return; }
 
-                try {
-                    const { data: conv, error: convErr } = await sb
-                        .from('conversations')
-                        .insert({
-                            is_group: true,
-                            group_name: name,
-                            created_by: currentUserId,
-                            owner_id: currentUserId,
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString(),
-                            typing_users: [],
-                            permissions: {
-                                edit_group_info: 'admins',
-                                send_messages: 'everyone',
-                                add_members: 'admins',
-                                invite_via_link: 'admins',
-                                approve_new_members: false
-                            }
-                        })
-                        .select()
-                        .single();
-                    if (convErr) throw convErr;
+    try {
+        const conversationId = crypto.randomUUID();
 
-                    const memberRows = [
-                        { conversation_id: conv.id, user_id: currentUserId, role: 'owner' },
-                        ...Array.from(selectedGroupMembers).map(uid => ({ conversation_id: conv.id, user_id: uid,
-                            role: 'member' })),
-                    ];
-                    const { error: memErr } = await sb.from('conversation_members').insert(memberRows);
-                    if (memErr) throw memErr;
-
-                    closeCreateGroupModal();
-                    await loadConversations();
-                    selectConversation(conv.id);
-                    showToast('Group created', 'g');
-                } catch (err) {
-                    console.error('createGroup error:', err);
-                    showToast('Failed to create group', 'r');
+        const { error: convErr } = await sb
+            .from('conversations')
+            .insert({
+                id: conversationId,
+                is_group: true,
+                group_name: name,
+                created_by: currentUserId,
+                owner_id: currentUserId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                typing_users: [],
+                permissions: {
+                    edit_group_info: 'admins',
+                    send_messages: 'everyone',
+                    add_members: 'admins',
+                    invite_via_link: 'admins',
+                    approve_new_members: false
                 }
-            };
+            });
+
+        if (convErr) throw convErr;
+
+        const memberRows = [
+            { conversation_id: conversationId, user_id: currentUserId, role: 'owner' },
+            ...Array.from(selectedGroupMembers).map(uid => ({
+                conversation_id: conversationId,
+                user_id: uid,
+                role: 'member'
+            })),
+        ];
+
+        const { error: memErr } = await sb
+            .from('conversation_members')
+            .insert(memberRows);
+
+        if (memErr) throw memErr;
+
+        closeCreateGroupModal();
+        await loadConversations();
+        selectConversation(conversationId);
+        showToast('Group created', 'g');
+
+    } catch (err) {
+        console.error('createGroup error:', err);
+        showToast('Failed to create group', 'r');
+    }
+};
 
             // ============================================================
             // FREEUPPER NOTE
