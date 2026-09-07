@@ -2178,7 +2178,6 @@
                     const username = user ? user.username : '';
                     const statusClass = getStatusBadgeClass(req.status);
                     const statusLabel = getStatusLabel(req.status);
-                    const requestedLabel = req.requested_account_type || req.category || 'Verification';
 
                     return `
                                 <div class="card" style="cursor:pointer;" onclick="openRequestDetail('${req.id}')">
@@ -2186,7 +2185,7 @@
                                         ${renderAvatar(user, '')}
                                         <div class="info">
                                             <div class="name">${username ? '@' + escapeHtml(username) : escapeHtml(name)}</div>
-                                            <div class="handle">Requesting: ${escapeHtml(requestedLabel)}</div>
+                                            <div class="handle">Verification request</div>
                                         </div>
                                         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
                                             <div class="time" style="color:var(--text-tertiary);font-size:11px;">${timeAgo(req.created_at)}</div>
@@ -2222,7 +2221,7 @@
                 renderRequests();
             };
 
-            // ─── OPEN REQUEST DETAIL (Step 4f.4: added logo_url preview) ─────
+            // ─── OPEN REQUEST DETAIL (reverted to pre-Step-4) ──────────────────
             window.openRequestDetail = function(requestId) {
                 const req = requests.find(r => r.id === requestId);
                 if (!req) return;
@@ -2230,107 +2229,53 @@
                 const name = user ? user.display_name : 'Unknown';
                 const username = user ? user.username : '';
                 const isPending = req.status === 'pending';
-                const docUrls = Array.isArray(req.document_urls) ? req.document_urls : [];
-
-                // Build document preview with smaller images if they are image URLs
-                let docHtml = '';
-                if (req.identity_document_url || docUrls.length) {
-                    const allDocs = [];
-                    if (req.identity_document_url) allDocs.push(req.identity_document_url);
-                    allDocs.push(...docUrls);
-                    docHtml = allDocs.map(url => {
-                        const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg|tiff|ico|avif|heic|heif|jfif|pjpeg|pjp)$/i
-                            .test(url);
-                        if (isImage) {
-                            return `<div style="margin-bottom:8px;"><img src="${escapeHtml(url)}" class="detail-image detail-image-sm" alt="Document" onerror="this.outerHTML='<a href=\\'${escapeHtml(url)}\\' target=\\'_blank\\' style=\\'color:var(--primary);\\'>View document</a>'"></div>`;
-                        }
-                        return `<div style="margin-bottom:6px;"><a href="${escapeHtml(url)}" target="_blank" style="color:var(--primary);">View document</a></div>`;
-                    }).join('');
-                }
-
-                // --- Step 4f.4: Add logo card if present ---
-                let logoHtml = '';
-                if (req.logo_url) {
-                    logoHtml = `
-                            <div class="info-card">
-                                <div class="ic-title">Submitted Logo</div>
-                                <img src="${escapeHtml(req.logo_url)}" class="logo-preview" onerror="this.style.display='none'">
-                                <div style="margin-top:6px;"><a href="${escapeHtml(req.logo_url)}" target="_blank" style="color:var(--primary);font-size:12px;">${escapeHtml(req.logo_url)}</a></div>
-                            </div>
-                        `;
-                }
 
                 main.innerHTML = `
-                            <div class="page-header">
-                                <div class="left">
-                                    <button class="icon-btn" onclick="switchTab('requests')">${ICONS.back}</button>
-                                    <div class="title-block"><div class="title">Request Detail</div></div>
-                                </div>
+                        <div class="page-header">
+                            <div class="left">
+                                <button class="icon-btn" onclick="switchTab('requests')">${ICONS.back}</button>
+                                <div class="title-block"><div class="title">Request Detail</div></div>
                             </div>
+                        </div>
 
-                            <div class="detail-hero">
-                                ${renderAvatar(user, 'md')}
-                                <div class="name">${username ? '@' + escapeHtml(username) : escapeHtml(name)} ${user && user.verified ? '✓' : ''}</div>
-                                <div class="sub">Requesting: ${escapeHtml(req.requested_account_type || req.category || '—')}</div>
-                            </div>
+                        <div class="detail-hero">
+                            ${renderAvatar(user, 'lg')}
+                            <div class="name">${username ? '@' + escapeHtml(username) : escapeHtml(name)} ${user && user.verified ? '✓' : ''}</div>
+                            <div class="sub">Verification Request</div>
+                        </div>
 
-                            <div class="info-card">
-                                <div class="ic-title">Account Type</div>
-                                <div class="kv-row"><span class="k">Current</span><span class="v">${escapeHtml(req.current_account_type || 'personal')}</span></div>
-                                <div class="kv-row"><span class="k">Requested</span><span class="v">${escapeHtml(req.requested_account_type || req.category || '—')}</span></div>
-                            </div>
+                        <div class="info-card">
+                            <div class="ic-title">Submitted</div>
+                            <div class="ic-body">${formatDateTime(req.created_at)}</div>
+                        </div>
 
-                            <div class="info-card">
-                                <div class="ic-title">Submitted</div>
-                                <div class="ic-body">${formatDateTime(req.created_at)}</div>
-                            </div>
+                        <div class="info-card">
+                            <div class="ic-title">Reason</div>
+                            <div class="ic-body">${escapeHtml(req.reason || '—')}</div>
+                            ${req.link ? `<div style="margin-top:8px;"><a href="${escapeHtml(req.link)}" target="_blank" style="color:var(--primary);font-size:13px;">Supporting link</a></div>` : ''}
+                        </div>
 
-                            <div class="info-card">
-                                <div class="ic-title">Application Statement</div>
-                                <div class="ic-body">${escapeHtml(req.reason || '—')}</div>
-                            </div>
+                        <div class="info-card">
+                            <div class="ic-title">Account Info</div>
+                            <div class="kv-row"><span class="k">Full Name</span><span class="v">${escapeHtml(name)}</span></div>
+                            <div class="kv-row"><span class="k">Username</span><span class="v">@${escapeHtml(username || '—')}</span></div>
+                            <div class="kv-row"><span class="k">Joined</span><span class="v">${formatDate(user && user.created_at)}</span></div>
+                            <div class="kv-row"><span class="k">Posts</span><span class="v">${posts.filter(p => p.user_id === req.user_id).length}</span></div>
+                        </div>
 
-                            <div class="info-card">
-                                <div class="ic-title">Application Details</div>
-                                <div class="kv-row"><span class="k">Legal / full name</span><span class="v">${escapeHtml(req.legal_name || '—')}</span></div>
-                                <div class="kv-row"><span class="k">Website</span><span class="v">${req.website ? `<a href="${escapeHtml(req.website)}" target="_blank" style="color:var(--primary)">${escapeHtml(req.website)}</a>` : '—'}</span></div>
-                                <div class="kv-row"><span class="k">Business email</span><span class="v">${escapeHtml(req.business_email || '—')}</span></div>
-                                <div class="kv-row"><span class="k">Phone</span><span class="v">${escapeHtml(req.phone_number || '—')}</span></div>
-                                <div class="kv-row"><span class="k">Country / region</span><span class="v">${escapeHtml(req.country || '—')}</span></div>
-                                <div class="kv-row"><span class="k">Address</span><span class="v">${escapeHtml(req.address || '—')}</span></div>
-                                <div class="kv-row"><span class="k">Registration / office ID</span><span class="v">${escapeHtml(req.registration_number || '—')}</span></div>
-                                <div class="kv-row"><span class="k">Authorized rep</span><span class="v">${escapeHtml(req.authorized_rep_name || '—')}</span></div>
-                            </div>
+                        ${req.reviewed_at ? `
+                        <div class="info-card">
+                            <div class="ic-title">Review</div>
+                            <div class="kv-row"><span class="k">Reviewed</span><span class="v">${formatDateTime(req.reviewed_at)}</span></div>
+                            ${req.rejection_reason ? `<div class="kv-row"><span class="k">Reason</span><span class="v" style="color:var(--danger);">${escapeHtml(req.rejection_reason)}</span></div>` : ''}
+                        </div>` : ''}
 
-                            ${logoHtml}
-
-                            ${docHtml ? `
-                            <div class="info-card">
-                                <div class="ic-title">Documents</div>
-                                ${docHtml}
-                            </div>` : ''}
-
-                            <div class="info-card">
-                                <div class="ic-title">Account Info</div>
-                                <div class="kv-row"><span class="k">Full Name</span><span class="v">${escapeHtml(name)}</span></div>
-                                <div class="kv-row"><span class="k">Username</span><span class="v">@${escapeHtml(username || '—')}</span></div>
-                                <div class="kv-row"><span class="k">Joined</span><span class="v">${formatDate(user && user.created_at)}</span></div>
-                                <div class="kv-row"><span class="k">Posts</span><span class="v">${posts.filter(p => p.user_id === req.user_id).length}</span></div>
-                            </div>
-
-                            ${req.reviewed_at ? `
-                            <div class="info-card">
-                                <div class="ic-title">Review</div>
-                                <div class="kv-row"><span class="k">Reviewed</span><span class="v">${formatDateTime(req.reviewed_at)}</span></div>
-                                ${req.rejection_reason ? `<div class="kv-row"><span class="k">Reason</span><span class="v" style="color:var(--danger);">${escapeHtml(req.rejection_reason)}</span></div>` : ''}
-                            </div>` : ''}
-
-                            ${isPending ? `
-                            <div class="detail-actionbar">
-                                <button class="btn-success" onclick="approveRequest('${req.id}')">✓ Approve</button>
-                                <button class="btn-danger" onclick="openRejectSheet('${req.id}')">✕ Reject</button>
-                            </div>` : ''}
-                        `;
+                        ${isPending ? `
+                        <div class="detail-actionbar">
+                            <button class="btn-success" onclick="approveRequest('${req.id}')">✓ Approve</button>
+                            <button class="btn-danger" onclick="openRejectSheet('${req.id}')">✕ Reject</button>
+                        </div>` : ''}
+                    `;
             };
 
             // ─── USERS ─────────────────────────────────────────────────────────
@@ -3318,40 +3263,29 @@
                         `;
             }
 
-            // ─── VERIFICATION FUNCTIONS (Step 4f.4: copy logo_url) ──────────
+            // ─── VERIFICATION FUNCTIONS (reverted to pre-Step-4) ────────────
             window.approveRequest = async function(requestId) {
                 if (!confirm('Approve this verification request?')) return;
                 try {
                     const { data: reqData, error: reqError } = await sb.from('verification_requests').select('*').eq('id',
                         requestId).single();
                     if (reqError) throw reqError;
-                    const admin = getCurrentUser();
                     const { data: updatedReq, error: updateReqError } = await sb
                         .from('verification_requests')
-                        .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: admin.id })
+                        .update({ status: 'approved', reviewed_at: new Date().toISOString() })
                         .eq('id', requestId)
                         .select();
                     if (updateReqError) throw updateReqError;
                     if (!updatedReq || updatedReq.length === 0) throw new Error('Request update failed – check RLS.');
-
-                    const profileUpdate = { verified: true, verified_status: 'verified' };
-                    if (reqData.requested_account_type) {
-                        profileUpdate.account_type = reqData.requested_account_type;
-                    }
-                    // Step 4f.4: copy logo_url if present
-                    if (reqData.logo_url) {
-                        profileUpdate.account_icon_url = reqData.logo_url;
-                    }
                     const { data: updatedProfile, error: profileError } = await sb
                         .from('profiles')
-                        .update(profileUpdate)
+                        .update({ verified: true, verified_status: 'verified' })
                         .eq('id', reqData.user_id)
                         .select();
                     if (profileError) throw profileError;
                     if (!updatedProfile || updatedProfile.length === 0) throw new Error('Profile update failed – check RLS.');
                     showToast('✅ Verification approved!', 'g');
                     await loadData();
-                    switchTab('requests');
                 } catch (err) {
                     showToast('Failed to approve: ' + err.message, 'r');
                 }
