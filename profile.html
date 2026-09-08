@@ -2547,6 +2547,20 @@
         (function() {
             'use strict';
 
+            // ─── FORCE-LOAD FONT WEIGHTS EARLY (fixes emoji/name pop-in) ───
+            var _fontsReadyPromise = (function() {
+                if (!document.fonts || !document.fonts.load) return Promise.resolve();
+                var specs = [
+                    '800 24px "Plus Jakarta Sans"',
+                    '700 16px "Plus Jakarta Sans"',
+                    '600 14px "Plus Jakarta Sans"',
+                    '500 14px "Plus Jakarta Sans"'
+                ];
+                return Promise.all(specs.map(function(s) {
+                    return document.fonts.load(s).catch(function() {});
+                }));
+            })();
+
             // ─── THEME COLOR META SYNC ──────────────────────────────────
             function syncThemeColorMeta() {
                 var meta = document.getElementById('themeColorMeta');
@@ -2640,6 +2654,14 @@
 
             window.addEventListener('pageshow', function(e) {
                 restoreProfileReturnState();
+                // ─── BFCACHE RESTORE: refresh follow modal if open ───
+                if (e.persisted) {
+                    followModalData = null;
+                    var fm = document.getElementById('followModal');
+                    if (fm && fm.classList.contains('open')) {
+                        openFollowModal(_fwCurTab);
+                    }
+                }
             });
 
             function linkifyBio(text) {
@@ -2686,6 +2708,9 @@
             var FW_ROW_H = 76;
             var FW_BUFFER = 4;
             var followModalData = null;
+            var _lastKnownFriendsCount = 0;
+            var _lastKnownSuggestionsCount = 0;
+            var _fwRefreshing = false;
 
             var marketSubView = 'mine';
             var savedMarketItemsCache = [];
@@ -3152,11 +3177,11 @@
                     var _applyUI = function() {
                         updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner);
                     };
-                    if (document.fonts && document.fonts.ready) {
-                        document.fonts.ready.then(_applyUI);
-                    } else {
-                        _applyUI();
-                    }
+                    // ─── FIX: wait for font load with timeout ───
+                    Promise.race([
+                        _fontsReadyPromise,
+                        new Promise(function(resolve) { setTimeout(resolve, 300); })
+                    ]).then(_applyUI);
                 } catch (err) {
                     console.error('Error rendering profile:', err);
                     hideProfileSkeleton();
@@ -3376,11 +3401,21 @@
                 var marketItems = data?.marketItems || marketItemsCache;
 
                 switch (tab) {
-                    case 'posts': renderPosts(container, userPosts); break;
-                    case 'love': renderLove(container, userPosts, likedIds); break;
-                    case 'share': renderReposts(container, repostedIds); break;
-                    case 'star': renderStar(container, userPosts, bookmarkedIds); break;
-                    case 'market': renderMarket(container, marketItems); break;
+                    case 'posts':
+                        renderPosts(container, userPosts);
+                        break;
+                    case 'love':
+                        renderLove(container, userPosts, likedIds);
+                        break;
+                    case 'share':
+                        renderReposts(container, repostedIds);
+                        break;
+                    case 'star':
+                        renderStar(container, userPosts, bookmarkedIds);
+                        break;
+                    case 'market':
+                        renderMarket(container, marketItems);
+                        break;
                 }
             }
 
@@ -4302,7 +4337,7 @@
                 } catch (err) { showToast(err.message, 'r'); }
             };
 
-            // ─── FOLLOW MODAL ──────────────────────────────────────────
+            // ─── FOLLOW MODAL (self-healing) ──────────────────────────
             async function fetchFollowLists(userId) {
                 var followers = await fetchFollowers(userId);
                 var following = await fetchFollowing(userId);
@@ -4334,39 +4369,7 @@
                 return data;
             }
 
-            window.openFollowModal = async function(tab) {
-                tab = tab || 'followers';
-                if (!isOwner && targetUser && targetUser.hide_follower_count) {
-                    openFS('followModal');
-                    document.getElementById('fsPagesTrack').innerHTML =
-                        '<div style="display:flex;flex-direction:column;align-items:center;padding:70px 28px;gap:14px;width:100%">' +
-                        '<svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="1" y1="1" x2="23" y2="23" stroke="var(--danger)"/></svg>' +
-                        '<h3 style="font-size:17px;font-weight:800">Followers Hidden</h3>' +
-                        '<p style="font-size:13px;color:var(--muted);text-align:center;max-width:240px">This user has chosen to keep their follower list private.</p>' +
-                        '</div>';
-                    return;
-                }
-                if (!followModalData) {
-                    try {
-                        followModalData = await fetchFollowListsWithRetry(targetUserId);
-                        var friendsCount = followModalData.friends.length;
-                        var frCountEl = document.getElementById('fsTabFrCount');
-                        if (frCountEl) frCountEl.textContent = fmtNum(friendsCount);
-                    } catch (err) { showToast('Failed to load followers', 'r'); return; }
-                }
-                openFS('followModal');
-                var idx = ['followers', 'following', 'friends', 'suggestions'].indexOf(tab);
-                if (idx < 0) idx = 0;
-                if (!isOwner && idx > 1) idx = 0;
-                tabTap(idx);
-                requestAnimationFrame(function() { _fwPositionBar(idx); });
-            };
-
-            function tabTap(idx) {
-                idx = Math.max(0, Math.min(idx, 3));
-                _fwPageIdx = idx;
-                var tabs = ['followers', 'following', 'friends', 'suggestions'];
-                _fwCurTab = tabs[idx];
+            function _fwBuildListFromCache(idx) {
                 var dataSource = [];
                 if (followModalData) {
                     if (idx === 0) dataSource = followModalData.followers;
@@ -4385,6 +4388,39 @@
                         isMutual: false
                     };
                 });
+            }
+
+            async function _fwEnsureFreshData(idx) {
+                if (_fwRefreshing) return;
+                var needsRefresh = false;
+                if (idx === 0 && (_profileCounts.followers || 0) > 0 && _fwList.length === 0) needsRefresh = true;
+                if (idx === 1 && (_profileCounts.following || 0) > 0 && _fwList.length === 0) needsRefresh = true;
+                if (idx === 2 && _lastKnownFriendsCount > 0 && _fwList.length === 0) needsRefresh = true;
+                if (idx === 3 && _lastKnownSuggestionsCount > 0 && _fwList.length === 0) needsRefresh = true;
+                if (!needsRefresh) return;
+                _fwRefreshing = true;
+                try {
+                    followModalData = await fetchFollowLists(targetUserId);
+                    if (followModalData.friends.length > 0) _lastKnownFriendsCount = followModalData.friends.length;
+                    if (followModalData.suggestions.length > 0) _lastKnownSuggestionsCount = followModalData.suggestions.length;
+                    if (_fwPageIdx === idx) {
+                        _fwBuildListFromCache(idx);
+                        _fwApplyFilter();
+                        _fwRenderVisible();
+                    }
+                } catch (e) {
+                    // silent - keep whatever was showing
+                } finally {
+                    _fwRefreshing = false;
+                }
+            }
+
+            function tabTap(idx) {
+                idx = Math.max(0, Math.min(idx, 3));
+                _fwPageIdx = idx;
+                var tabs = ['followers', 'following', 'friends', 'suggestions'];
+                _fwCurTab = tabs[idx];
+                _fwBuildListFromCache(idx);
                 _fwPageState[idx].loaded = true;
                 for (var i = 0; i < 4; i++) {
                     var pg = document.getElementById('fsPage' + i);
@@ -4393,6 +4429,7 @@
                 _fwPositionBar(idx);
                 _fwApplyFilter();
                 _fwRenderVisible();
+                _fwEnsureFreshData(idx);
             }
 
             function _fwPositionBar(idx) {
@@ -4608,6 +4645,37 @@
             window.onFollowScrollPage = function(pageIdx) {
                 if (pageIdx !== _fwPageIdx) return;
                 _fwRenderVisible();
+            };
+
+            // ─── FOLLOW MODAL OPENER ──────────────────────────────────
+            window.openFollowModal = async function(tab) {
+                tab = tab || 'followers';
+                if (!isOwner && targetUser && targetUser.hide_follower_count) {
+                    openFS('followModal');
+                    document.getElementById('fsPagesTrack').innerHTML =
+                        '<div style="display:flex;flex-direction:column;align-items:center;padding:70px 28px;gap:14px;width:100%">' +
+                        '<svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="1" y1="1" x2="23" y2="23" stroke="var(--danger)"/></svg>' +
+                        '<h3 style="font-size:17px;font-weight:800">Followers Hidden</h3>' +
+                        '<p style="font-size:13px;color:var(--muted);text-align:center;max-width:240px">This user has chosen to keep their follower list private.</p>' +
+                        '</div>';
+                    return;
+                }
+                if (!followModalData) {
+                    try {
+                        followModalData = await fetchFollowListsWithRetry(targetUserId);
+                        var friendsCount = followModalData.friends.length;
+                        if (friendsCount > 0) _lastKnownFriendsCount = friendsCount;
+                        if (followModalData.suggestions.length > 0) _lastKnownSuggestionsCount = followModalData.suggestions.length;
+                        var frCountEl = document.getElementById('fsTabFrCount');
+                        if (frCountEl) frCountEl.textContent = fmtNum(friendsCount);
+                    } catch (err) { showToast('Failed to load followers', 'r'); return; }
+                }
+                openFS('followModal');
+                var idx = ['followers', 'following', 'friends', 'suggestions'].indexOf(tab);
+                if (idx < 0) idx = 0;
+                if (!isOwner && idx > 1) idx = 0;
+                tabTap(idx);
+                requestAnimationFrame(function() { _fwPositionBar(idx); });
             };
 
             // ─── AVATAR PICKER ──────────────────────────────────────────
