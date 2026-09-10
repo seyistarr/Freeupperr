@@ -1,6 +1,6 @@
 // =====================================================================
 // posts.js
-// FreeUpper Data/API Layer — v4.1.3 (thumbnail_url persisted on create)
+// FreeUpper Data/API Layer — v4.1.4 (thumbnail_url safe for videos)
 // =====================================================================
 //
 // PURPOSE
@@ -16,15 +16,22 @@
 //
 // CHANGELOG
 // -----------------------------------------------------------------
+// v4.1.4
+//   - mapPost()'s thumbnailUrl fallback no longer falls through to
+//     row.media_url or media[0].url for VIDEOS. For a video, media_url
+//     is the MP4 itself, and an <img src="…mp4"> is a broken image,
+//     not a thumbnail. Videos now return '' when no stored poster
+//     exists, which lets profile.html fall back to a real <video>
+//     element for pre-thumbnail posts.
+//   - Images are unaffected: they still fall through to media_url /
+//     media[0].url, because for an image, media_url IS the thumbnail.
+//   - createPost() and loadPostPreview() are unchanged from v4.1.3.
+//     Both already write/read thumbnail_url correctly.
+//
 // v4.1.3
 //   - createPost() now writes thumbnail_url explicitly, sourced from
 //     fields.thumbnailUrl, then media[0].thumbnailUrl, then
-//     media[0].thumbnail_url. Previously the column was populated
-//     only implicitly via the media JSON, which left profile grids
-//     without a stored poster frame and forced them to seek the
-//     video element to render a thumbnail.
-//   - normalizeMedia() and mapPost() were NOT touched. Both already
-//     read thumbnailUrl/thumbnail_url correctly on the read path.
+//     media[0].thumbnail_url.
 //
 // FEATURE CHECKLIST (everything discussed, confirmed present below):
 // -----------------------------------------------------------------
@@ -166,7 +173,7 @@
   // ===================================================================
   // MEDIA NORMALIZATION
   // -------------------------------------------------------------
-  // Untouched in v4.1.3. The read path already surfaces thumbnailUrl
+  // Untouched in v4.1.4. The read path already surfaces thumbnailUrl
   // from either the media JSON item or the legacy row.thumbnail_url
   // single-media fallback.
   // ===================================================================
@@ -221,12 +228,17 @@
   // index-feed.js were written against. Do not rename fields here
   // without updating both of those files.
   //
-  // thumbnailUrl fallback chain (unchanged in v4.1.3):
+  // thumbnailUrl fallback chain (v4.1.4):
   //   row.thumbnail_url
   //     → media[0].thumbnailUrl
-  //     → row.media_url
-  //     → media[0].url
+  //     → (images only) row.media_url
+  //     → (images only) media[0].url
   //     → ''
+  //
+  // Videos deliberately stop at the stored thumbnail. For a video,
+  // media_url is the MP4 itself, and an <img> pointing at an MP4 is
+  // a broken image, not a thumbnail. Returning '' lets the view fall
+  // back to the legacy <video> element for pre-thumbnail posts.
   // ===================================================================
   function mapPost(row, interactionState = {}) {
     if (!row) return null;
@@ -254,7 +266,17 @@
       media,
       mediaUrl: row.media_url || media[0]?.url || '',
       mediaType: row.media_type || media[0]?.type || null,
-      thumbnailUrl: row.thumbnail_url || media[0]?.thumbnailUrl || row.media_url || media[0]?.url || '',
+      thumbnailUrl: (function () {
+        var stored = row.thumbnail_url || media[0]?.thumbnailUrl || '';
+        if (stored) return stored;
+        // Only images can safely use their media URL as a thumbnail.
+        // For videos, media_url is the actual video file.
+        var mediaType = row.media_type || media[0]?.type || '';
+        if (mediaType === 'image') {
+          return row.media_url || media[0]?.url || '';
+        }
+        return '';
+      })(),
 
       // Sound
       sound_id: row.sound_id || null,
@@ -488,6 +510,14 @@
 
   // ===================================================================
   // LOAD POST PREVIEW (lightweight, for share cards / link previews)
+  // -------------------------------------------------------------
+  // Unchanged from v4.1.3. Its inline thumbnailUrl chain still
+  // OR's through data.media_url, but that is safe here because
+  // loadPostPreview() is not used by the profile grid renderers —
+  // only by share-card / link-preview surfaces, which handle videos
+  // via their own thumbnail logic (and never render an <img> pointing
+  // at an MP4). If you later wire loadPostPreview() into a grid,
+  // apply the same image-only guard that mapPost() now uses.
   // ===================================================================
   async function loadPostPreview(postId) {
     if (!postId) return null;
@@ -1174,15 +1204,12 @@
   // step fails for any reason, the post itself still succeeds —
   // tags[] is the fallback.
   //
-  // Thumbnail (v4.1.3):
-  //   The posts.thumbnail_url column is now populated explicitly on
+  // Thumbnail (v4.1.3, unchanged in v4.1.4):
+  //   The posts.thumbnail_url column is populated explicitly on
   //   create, using the first media item's stored thumbnail when the
   //   caller doesn't pass one at the top level. This is what lets the
   //   profile grid render a static <img> poster for video posts
   //   instead of seeking the <video> element to extract a frame.
-  //   Read-side consumers (profile.html grids, index-feed previews)
-  //   read post.thumbnailUrl, which mapPost() already derives with
-  //   the same fallback chain.
   //
   //   Fallback order for the column value:
   //     fields.thumbnailUrl          (explicit, e.g. create.html)
@@ -1190,6 +1217,10 @@
   //       → media[0].thumbnail_url   (snake_case, legacy uploader)
   //       → null                     (profile grid falls back to
   //                                    the legacy <video> branch)
+  //
+  //   Note: createPost() never writes the MP4 URL into thumbnail_url.
+  //   That guard lives in the fallback chain above — an MP4 URL in
+  //   media[0].url is not copied into the thumbnail column.
   // ===================================================================
   async function createPost(fields = {}) {
     const user = await requireUser();
@@ -1468,5 +1499,5 @@
     findSimilarPosts
   };
 
-  console.log('✅ FreeUpper PostsAPI v4.1.3 loaded — thumbnail_url persisted on create.');
+  console.log('✅ FreeUpper PostsAPI v4.1.4 loaded — thumbnail_url safe for videos.');
 })();
