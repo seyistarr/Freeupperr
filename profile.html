@@ -317,7 +317,7 @@
             flex-direction: column;
             align-items: center;
             padding: 4px 0 20px;
-            animation: fadeUp .5s ease both;
+            /* animation removed — profile identity must render instantly */
         }
 
         .avatar-wrap {
@@ -626,6 +626,14 @@
             height: 100%;
             object-fit: cover;
             display: block;
+        }
+        .grid-card video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            background: #000;
+            pointer-events: none;
         }
         .grid-card .no-media {
             width: 100%;
@@ -2640,7 +2648,6 @@
 
             window.addEventListener('pageshow', function(e) {
                 restoreProfileReturnState();
-                // ─── BFCACHE RESTORE: refresh follow modal if open ───
                 if (e.persisted) {
                     followModalData = null;
                     var fm = document.getElementById('followModal');
@@ -2680,6 +2687,7 @@
             var _profileUserPosts = [];
             var _profileLoadedOnce = false;
             var _profileCounts = { followers: 0, following: 0 };
+            var _secondaryDataLoaded = false;
 
             var _fwPageIdx = 0;
             var _fwPageState = [
@@ -2825,7 +2833,7 @@
                 var actionRow = document.getElementById('actionRow');
                 if (actionRow) actionRow.innerHTML = '<div class="skl-block skl-btn"></div><div class="skl-block skl-btn"></div>';
                 var postsPanel = document.getElementById('panel-posts');
-                if (postsPanel) postsPanel.innerHTML = buildGridSkeleton();
+                if (postsPanel && !postsPanel.innerHTML.trim()) postsPanel.innerHTML = buildGridSkeleton();
             }
 
             function hideProfileSkeleton() {
@@ -2966,7 +2974,45 @@
                 }
             }
 
+            // ─── VIDEO THUMBNAIL ENFORCER ─────────────────────────────
+            // Videos in a grid can show a black rectangle until metadata + a
+            // decoded frame is available. We use preload="metadata" + #t=0.1
+            // on the src, then seek to 0.1s after metadata loads to force the
+            // browser to decode and display the first frame as a thumbnail.
+            function forceVideoThumbnails(rootEl) {
+                if (!rootEl) return;
+                var vids = rootEl.querySelectorAll('video');
+                for (var i = 0; i < vids.length; i++) {
+                    (function(v) {
+                        try {
+                            v.preload = 'metadata';
+                            v.muted = true;
+                            v.playsInline = true;
+                            var seek = function() {
+                                try {
+                                    if (v.duration && !isNaN(v.duration) && v.duration > 0.1) {
+                                        v.currentTime = 0.1;
+                                    }
+                                } catch (e) {}
+                            };
+                            if (v.readyState >= 1) {
+                                seek();
+                            } else {
+                                v.addEventListener('loadedmetadata', seek, { once: true });
+                            }
+                        } catch (e) {}
+                    })(vids[i]);
+                }
+            }
+
             // ─── BUILD GRID POST CARD ────────────────────────────────
+            function buildVideoTag(url) {
+                // Append #t=0.1 to force first-frame decode as thumbnail
+                var src = url || '';
+                if (src && src.indexOf('#') === -1) src += '#t=0.1';
+                return '<video src="' + src + '" preload="metadata" muted playsinline webkit-playsinline style="width:100%;height:100%;object-fit:cover;display:block;background:#000;pointer-events:none;"></video>';
+            }
+
             function buildGridPostCard(post, opts) {
                 opts = opts || {};
                 var mediaHtml = '';
@@ -2978,7 +3024,7 @@
                     if (ytMatch) {
                         mediaHtml = '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                     } else {
-                        mediaHtml = '<video src="' + post.mediaUrl + '" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>';
+                        mediaHtml = buildVideoTag(post.mediaUrl);
                     }
                 } else {
                     mediaHtml = '<div class="no-media">' + escapeHtml(post.title) + '</div>';
@@ -3012,7 +3058,7 @@
                     if (ytMatch) {
                         mediaHtml = '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                     } else {
-                        mediaHtml = '<video src="' + post.mediaUrl + '" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>';
+                        mediaHtml = buildVideoTag(post.mediaUrl);
                     }
                 } else {
                     mediaHtml = '<div class="no-media">' + escapeHtml(post.title) + '</div>';
@@ -3085,7 +3131,10 @@
                 renderTab('market');
             };
 
-            // ─── RENDER PROFILE ────────────────────────────────────────
+            // ─── RENDER PROFILE — PHASE 1: IDENTITY (immediate) ────────
+            // Fetches only the profile row + block status, then renders the
+            // avatar/cover/name/bio/tags/badge instantly. Secondary data
+            // (counts, posts, market, relationship) is fired afterwards.
             async function renderProfile() {
                 if (!_profileLoadedOnce) showProfileSkeleton();
                 var user = getCurrentUser();
@@ -3103,78 +3152,189 @@
 
                 targetUserId = targetId;
                 isOwner = targetId === user?.id;
+                _secondaryDataLoaded = false;
 
                 try {
-                    var profile = await fetchProfile(targetId);
-                    targetUser = profile;
+                    var profile, iBlockedThem = false, theyBlockedMe = false;
+                    var canCheckBlocks = !isOwner && user && user.isLoggedIn;
 
-                    if (!isOwner) {
-                        var viewerId = user && user.isLoggedIn ? user.id : null;
-                        if (viewerId) {
-                            var iBlockedThem = false;
-                            if (window.SettingsAPI) {
+                    if (canCheckBlocks) {
+                        var results = await Promise.all([
+                            fetchProfile(targetId),
+                            (async function() {
+                                if (!window.SettingsAPI) return false;
                                 try {
                                     var blockedList = await window.SettingsAPI.listBlockedUsers();
-                                    iBlockedThem = blockedList.some(function(b) { return b.id === targetId; });
-                                } catch (e) {}
-                            }
-                            if (iBlockedThem) {
-                                renderFrozenBlockedProfile(profile, 'blocked-by-me');
-                                return;
-                            }
-                            var theyBlockedMe = await didUserBlockMe(targetId, viewerId);
-                            if (theyBlockedMe) {
-                                renderFrozenBlockedProfile(profile, 'blocked-by-them');
-                                return;
-                            }
-                        }
+                                    return blockedList.some(function(b) { return b.id === targetId; });
+                                } catch (e) { return false; }
+                            })(),
+                            didUserBlockMe(targetId, user.id)
+                        ]);
+                        profile = results[0];
+                        iBlockedThem = results[1];
+                        theyBlockedMe = results[2];
+                    } else {
+                        profile = await fetchProfile(targetId);
                     }
 
-                    var counts = await fetchFollowCounts(targetId);
+                    targetUser = profile;
 
-                    var userPosts = await window.PostsAPI.loadPostsByUserId(targetId);
-                    if (!isOwner) {
-                        userPosts = userPosts.filter(function(p) { return !p.is_hidden; });
-                    }
-                    _profileUserPosts = userPosts;
+                    if (iBlockedThem) { renderFrozenBlockedProfile(profile, 'blocked-by-me'); return; }
+                    if (theyBlockedMe) { renderFrozenBlockedProfile(profile, 'blocked-by-them'); return; }
 
-                    var likedIds = [],
-                        bookmarkedIds = [],
-                        repostedIds = [];
-                    if (isOwner && user && user.isLoggedIn) {
-                        likedIds = await getUserLikes(targetId);
-                        bookmarkedIds = await getUserBookmarks(targetId);
-                        repostedIds = await getUserReposts(targetId);
-                    }
-                    repostedPostIds = repostedIds;
-                    likedPostIds = likedIds;
-                    bookmarkedPostIds = bookmarkedIds;
-                    var marketItems = await getUserMarketItems(targetId);
-                    marketItemsCache = marketItems;
+                    // ── Phase 1: identity renders NOW ──
+                    renderProfileIdentity(profile);
 
-                    var viewerFollowsOwner = false;
-                    if (!isOwner && user && user.isLoggedIn) {
-                        try {
-                            var rel = await getRelationship(user.id, targetId);
-                            viewerFollowsOwner = rel.iFollowThem;
-                        } catch (e) {}
-                    }
-
-                    // Render immediately — no font-gate, no artificial delay.
-                    updateProfileUI(
-                        profile,
-                        counts,
-                        userPosts,
-                        likedIds,
-                        bookmarkedIds,
-                        repostedIds,
-                        marketItems,
-                        viewerFollowsOwner
-                    );
+                    // ── Phase 2: secondary data loads independently ──
+                    loadAndRenderSecondaryData();
                 } catch (err) {
                     console.error('Error rendering profile:', err);
                     hideProfileSkeleton();
                     showToast('Failed to load profile', 'r');
+                }
+            }
+
+            // ─── IDENTITY RENDER (synchronous) ────────────────────────
+            function renderProfileIdentity(profile) {
+                hideProfileSkeleton();
+                _profileLoadedOnce = true;
+
+                var avatarSrc = getAvatar(profile);
+                document.getElementById('profileAvatar').src = avatarSrc;
+                document.getElementById('editAv').src = avatarSrc;
+                document.getElementById('qrAvatar').src = avatarSrc;
+                updateNavAvatar();
+
+                var coverEl = document.getElementById('profileCover');
+                if (coverEl) {
+                    if (profile.cover_url) {
+                        coverEl.src = profile.cover_url;
+                        coverEl.style.display = 'block';
+                    } else {
+                        coverEl.removeAttribute('src');
+                        coverEl.style.display = 'none';
+                    }
+                }
+
+                // Name — the moment data is available, hand it to the browser.
+                document.getElementById('displayName').textContent = profile.display_name || 'Guest';
+                document.getElementById('headerUsername').textContent = profile.display_username || profile.username || '@user';
+                document.getElementById('qrName').textContent = profile.display_name || 'Guest';
+                document.getElementById('qrHandle').textContent = '@' + (profile.display_username || profile.username || 'user');
+
+                // Bio — same instant render.
+                var bioEl = document.getElementById('heroBio');
+                bioEl.innerHTML = linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
+
+                var tags = profile.tags || [];
+                document.getElementById('roleTags').innerHTML = tags.map(function(t) {
+                    return '<span class="role-tag">' + escapeHtml(t) + '</span>';
+                }).join('');
+
+                var badge = document.getElementById('verifiedBadge');
+                if (profile.verified) badge.classList.remove('hidden');
+                else badge.classList.add('hidden');
+
+                document.getElementById('onlineDot').style.display = profile.activity_status ? 'block' : 'none';
+                document.getElementById('blockUsernameTarget').textContent = profile.display_username || profile.username || 'user';
+
+                document.body.classList.toggle('is-owner', isOwner);
+                document.querySelectorAll('.fw-owner-only').forEach(function(el) {
+                    el.style.display = isOwner ? '' : 'none';
+                });
+
+                var followModal = document.getElementById('followModal');
+                if (isOwner) followModal.classList.add('is-owner');
+                else followModal.classList.remove('is-owner');
+
+                var shareBtn = document.getElementById('shareProfileBtn');
+                if (shareBtn) {
+                    shareBtn.onclick = function() {
+                        if (isOwner) openShareModal();
+                        else openShareOtherModal();
+                    };
+                }
+
+                // Action row: show skeleton while relationship loads (background),
+                // then renderActionRow() swaps in the real buttons.
+                if (!isOwner) {
+                    var row = document.getElementById('actionRow');
+                    row.innerHTML = '<div class="skl-block skl-btn"></div><div class="skl-block skl-btn"></div>';
+                    renderActionRow();
+                } else {
+                    document.getElementById('actionRow').innerHTML = '';
+                }
+
+                // Stat counts stay at "—" until secondary data arrives.
+                document.getElementById('statPosts').textContent = '—';
+                document.getElementById('statFollowers').textContent = '—';
+                document.getElementById('statFollowing').textContent = '—';
+            }
+
+            // ─── SECONDARY DATA LOAD (all in parallel) ────────────────
+            async function loadAndRenderSecondaryData() {
+                var user = getCurrentUser();
+                var targetId = targetUserId;
+                var isOwnerLocal = isOwner;
+
+                try {
+                    var promises = [
+                        fetchFollowCounts(targetId),
+                        (window.PostsAPI && window.PostsAPI.loadPostsByUserId)
+                            ? window.PostsAPI.loadPostsByUserId(targetId).catch(function() { return []; })
+                            : Promise.resolve([]),
+                        getUserMarketItems(targetId)
+                    ];
+
+                    if (isOwnerLocal && user && user.isLoggedIn) {
+                        promises.push(getUserLikes(targetId).catch(function() { return []; }));
+                        promises.push(getUserBookmarks(targetId).catch(function() { return []; }));
+                        promises.push(getUserReposts(targetId).catch(function() { return []; }));
+                    } else {
+                        promises.push(Promise.resolve([]));
+                        promises.push(Promise.resolve([]));
+                        promises.push(Promise.resolve([]));
+                    }
+
+                    if (!isOwnerLocal && user && user.isLoggedIn) {
+                        promises.push(getRelationship(user.id, targetId).catch(function() {
+                            return { iFollowThem: false, theyFollowMe: false };
+                        }));
+                    } else {
+                        promises.push(Promise.resolve({ iFollowThem: false, theyFollowMe: false }));
+                    }
+
+                    var results = await Promise.all(promises);
+                    var counts = results[0] || { followers: 0, following: 0 };
+                    var userPosts = results[1] || [];
+                    var marketItems = results[2] || [];
+                    var likedIds = results[3] || [];
+                    var bookmarkedIds = results[4] || [];
+                    var repostedIds = results[5] || [];
+                    var rel = results[6] || { iFollowThem: false, theyFollowMe: false };
+
+                    if (!isOwnerLocal) {
+                        userPosts = userPosts.filter(function(p) { return !p.is_hidden; });
+                    }
+
+                    _profileUserPosts = userPosts;
+                    repostedPostIds = repostedIds;
+                    likedPostIds = likedIds;
+                    bookmarkedPostIds = bookmarkedIds;
+                    marketItemsCache = marketItems;
+                    _profileCounts = counts;
+                    _secondaryDataLoaded = true;
+
+                    document.getElementById('statPosts').textContent = fmtNum(userPosts.length);
+                    document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
+                    document.getElementById('statFollowing').textContent = fmtNum(counts.following);
+                    document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
+                    document.getElementById('fsTabFgCount').textContent = fmtNum(counts.following);
+                    document.getElementById('fsTabFrCount').textContent = '';
+
+                    applyPrivacyAndTabs(targetUser, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, rel.iFollowThem);
+                } catch (err) {
+                    console.error('Secondary load error:', err);
                 }
             }
 
@@ -3188,6 +3348,7 @@
             function renderFrozenBlockedProfile(profile, reason) {
                 hideProfileSkeleton();
                 _profileLoadedOnce = true;
+                _secondaryDataLoaded = true;
                 var defaultAvatar = 'data:image/svg+xml,' + encodeURIComponent(
                     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
                 );
@@ -3248,58 +3409,13 @@
                 }
             }
 
-            // ─── UPDATE PROFILE UI ─────────────────────────────────────
-            function updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner) {
-                hideProfileSkeleton();
-                _profileLoadedOnce = true;
-                _profileCounts = counts;
-                var avatarSrc = getAvatar(profile);
-                document.getElementById('profileAvatar').src = avatarSrc;
-                document.getElementById('editAv').src = avatarSrc;
-                document.getElementById('qrAvatar').src = avatarSrc;
-                updateNavAvatar();
-
-                var coverEl = document.getElementById('profileCover');
-                if (coverEl) {
-                    if (profile.cover_url) {
-                        coverEl.src = profile.cover_url;
-                        coverEl.style.display = 'block';
-                    } else {
-                        coverEl.removeAttribute('src');
-                        coverEl.style.display = 'none';
-                    }
-                }
-
-                document.getElementById('displayName').textContent = profile.display_name || 'Guest';
-                document.getElementById('headerUsername').textContent = profile.display_username || profile.username || '@user';
-                document.getElementById('qrName').textContent = profile.display_name || 'Guest';
-                document.getElementById('qrHandle').textContent = '@' + (profile.display_username || profile.username || 'user');
-
-                var bioEl = document.getElementById('heroBio');
-                bioEl.innerHTML = linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
-
-                var tags = profile.tags || [];
-                document.getElementById('roleTags').innerHTML = tags.map(function(t) {
-                    return '<span class="role-tag">' + escapeHtml(t) + '</span>';
-                }).join('');
-
-                var badge = document.getElementById('verifiedBadge');
-                if (profile.verified) badge.classList.remove('hidden');
-                else badge.classList.add('hidden');
-
-                document.getElementById('statPosts').textContent = fmtNum(userPosts.length);
-                document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
-                document.getElementById('statFollowing').textContent = fmtNum(counts.following);
-
-                document.getElementById('onlineDot').style.display = profile.activity_status ? 'block' : 'none';
-                document.getElementById('blockUsernameTarget').textContent = profile.display_username || profile.username || 'user';
-
-                renderActionRow();
-
+            // ─── PRIVACY + TABS (after secondary data) ────────────────
+            function applyPrivacyAndTabs(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner) {
                 var isPrivate = !!profile.is_private;
                 var viewerBlocked = isPrivate && !isOwner && !viewerFollowsOwner;
                 viewerIsBlockedByPrivacy = viewerBlocked;
                 var tabs = ['panel-posts', 'panel-love', 'panel-share', 'panel-star', 'panel-market'];
+
                 if (viewerBlocked) {
                     var privateIllustration = buildPrivateAccountIllustration();
                     tabs.forEach(function(id) {
@@ -3317,11 +3433,6 @@
                     document.getElementById('statFollowingBox').onclick = function() { openFollowModal('following'); };
                     renderTab(activeTab, { userPosts: userPosts, likedIds: likedIds, bookmarkedIds: bookmarkedIds, repostedIds: repostedIds, marketItems: marketItems });
                 }
-
-                document.body.classList.toggle('is-owner', isOwner);
-                document.querySelectorAll('.fw-owner-only').forEach(function(el) {
-                    el.style.display = isOwner ? '' : 'none';
-                });
 
                 var hiddenTabs = (!isOwner && profile.hidden_tabs) ? profile.hidden_tabs : [];
                 var postsForceHidden = !isOwner && !!profile.hide_all_posts;
@@ -3360,22 +3471,6 @@
                         if (pp) pp.innerHTML = '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><h3>Posts hidden</h3><p>This user has chosen to hide their posts.</p></div>';
                     }
                 }
-
-                document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
-                document.getElementById('fsTabFgCount').textContent = fmtNum(counts.following);
-                document.getElementById('fsTabFrCount').textContent = '';
-
-                var followModal = document.getElementById('followModal');
-                if (isOwner) followModal.classList.add('is-owner');
-                else followModal.classList.remove('is-owner');
-
-                var shareBtn = document.getElementById('shareProfileBtn');
-                if (shareBtn) {
-                    shareBtn.onclick = function() {
-                        if (isOwner) openShareModal();
-                        else openShareOtherModal();
-                    };
-                }
             }
 
             // ─── RENDER TAB ────────────────────────────────────────────
@@ -3405,6 +3500,11 @@
                     case 'market':
                         renderMarket(container, marketItems);
                         break;
+                }
+
+                // Force video first-frames to become visible thumbnails.
+                if (tab === 'posts' || tab === 'love' || tab === 'share' || tab === 'star') {
+                    requestAnimationFrame(function() { forceVideoThumbnails(container); });
                 }
             }
 
@@ -3591,6 +3691,7 @@
                 document.getElementById('panel-' + tab).classList.add('active');
                 activeTab = tab;
                 if (viewerIsBlockedByPrivacy) return;
+                if (!_secondaryDataLoaded) return;
                 renderTab(tab);
             };
 
@@ -4905,7 +5006,7 @@
                             var updated = payload.new;
                             if (updated.id === targetUserId) {
                                 targetUser = updated;
-                                renderProfile();
+                                renderProfileIdentity(updated);
                             }
                         })
                     .subscribe();
@@ -4997,6 +5098,7 @@
             window.applyUsernameSuggestion = applyUsernameSuggestion;
             window.canonicalizeUsername = canonicalizeUsername;
             window.restoreProfileReturnState = restoreProfileReturnState;
+            window.forceVideoThumbnails = forceVideoThumbnails;
         })();
     </script>
 </body>
