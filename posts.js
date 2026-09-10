@@ -1,6 +1,6 @@
 // =====================================================================
 // posts.js
-// FreeUpper Data/API Layer — v4.1.2 (FIXED guest view dedup + server-authoritative counting)
+// FreeUpper Data/API Layer — v4.1.3 (thumbnail_url persisted on create)
 // =====================================================================
 //
 // PURPOSE
@@ -13,6 +13,18 @@
 //   index-render.js      → never queries anything, pure coordinator
 //   index-interactions.js→ never queries anything, pure notifier
 //   index.html           → calls index-feed.js, which calls this file
+//
+// CHANGELOG
+// -----------------------------------------------------------------
+// v4.1.3
+//   - createPost() now writes thumbnail_url explicitly, sourced from
+//     fields.thumbnailUrl, then media[0].thumbnailUrl, then
+//     media[0].thumbnail_url. Previously the column was populated
+//     only implicitly via the media JSON, which left profile grids
+//     without a stored poster frame and forced them to seek the
+//     video element to render a thumbnail.
+//   - normalizeMedia() and mapPost() were NOT touched. Both already
+//     read thumbnailUrl/thumbnail_url correctly on the read path.
 //
 // FEATURE CHECKLIST (everything discussed, confirmed present below):
 // -----------------------------------------------------------------
@@ -153,6 +165,10 @@
 
   // ===================================================================
   // MEDIA NORMALIZATION
+  // -------------------------------------------------------------
+  // Untouched in v4.1.3. The read path already surfaces thumbnailUrl
+  // from either the media JSON item or the legacy row.thumbnail_url
+  // single-media fallback.
   // ===================================================================
   function normalizeMedia(row) {
     let media = safeArray(row.media);
@@ -204,6 +220,13 @@
   // This exact shape is the contract index-algorithm.js and
   // index-feed.js were written against. Do not rename fields here
   // without updating both of those files.
+  //
+  // thumbnailUrl fallback chain (unchanged in v4.1.3):
+  //   row.thumbnail_url
+  //     → media[0].thumbnailUrl
+  //     → row.media_url
+  //     → media[0].url
+  //     → ''
   // ===================================================================
   function mapPost(row, interactionState = {}) {
     if (!row) return null;
@@ -1150,6 +1173,23 @@
   // trending, and hashtag detail pages). If the relational linking
   // step fails for any reason, the post itself still succeeds —
   // tags[] is the fallback.
+  //
+  // Thumbnail (v4.1.3):
+  //   The posts.thumbnail_url column is now populated explicitly on
+  //   create, using the first media item's stored thumbnail when the
+  //   caller doesn't pass one at the top level. This is what lets the
+  //   profile grid render a static <img> poster for video posts
+  //   instead of seeking the <video> element to extract a frame.
+  //   Read-side consumers (profile.html grids, index-feed previews)
+  //   read post.thumbnailUrl, which mapPost() already derives with
+  //   the same fallback chain.
+  //
+  //   Fallback order for the column value:
+  //     fields.thumbnailUrl          (explicit, e.g. create.html)
+  //       → media[0].thumbnailUrl    (camelCase, canonical)
+  //       → media[0].thumbnail_url   (snake_case, legacy uploader)
+  //       → null                     (profile grid falls back to
+  //                                    the legacy <video> branch)
   // ===================================================================
   async function createPost(fields = {}) {
     const user = await requireUser();
@@ -1165,9 +1205,18 @@
       content: fields.content || '',
       category: fields.category || CONFIG.DEFAULT_CATEGORY,
       tags: safeArray(fields.tags),
+      // Keep the complete media objects, including thumbnailUrl.
       media,
+      // Keep the main media URL/type for compatibility.
       media_url: fields.mediaUrl || firstMedia?.url || null,
       media_type: fields.mediaType || firstMedia?.type || null,
+      // Explicitly persist the thumbnail in the dedicated column so
+      // grid renderers don't have to dig into the media JSON to find it.
+      thumbnail_url:
+        fields.thumbnailUrl ||
+        firstMedia?.thumbnailUrl ||
+        firstMedia?.thumbnail_url ||
+        null,
       mentions: safeArray(fields.mentions),
       comments_hidden: !!fields.commentsHidden,
       sound_id: fields.sound_id || null,
@@ -1419,5 +1468,5 @@
     findSimilarPosts
   };
 
-  console.log('✅ FreeUpper PostsAPI v4.1.2 loaded — guest view dedup and server-authoritative counting fixed.');
+  console.log('✅ FreeUpper PostsAPI v4.1.3 loaded — thumbnail_url persisted on create.');
 })();
