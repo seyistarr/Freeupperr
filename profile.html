@@ -2974,16 +2974,57 @@
                 }
             }
 
-            // ─── VIDEO THUMBNAIL — legacy <video> fallback only ──────
-            // buildVideoTag() is now used ONLY for posts whose thumbnailUrl
-            // is missing (media created before the create.html thumbnail
-            // pipeline existed). New posts carry a stored poster JPG and
-            // render as <img> with no video decoding at all.
+            // ─── VIDEO THUMBNAIL ENFORCER (legacy fallback) ──────────
+            // Videos in a grid can show a black rectangle until metadata
+            // and a decoded first frame are available. This walks the
+            // rendered grid and forces each <video> to seek to 0.1s once
+            // its metadata is ready, so the tile shows a frame instead
+            // of a black box.
             //
-            // The function kept its original preload="metadata" + #t=0.1
-            // behaviour deliberately: it is the slow path, and it should
-            // only ever run for legacy media, never for new uploads.
+            // This is now a LEGACY path only. New posts carry a stored
+            // poster JPG (posts.thumbnail_url) and render as <img> with
+            // no video decoding at all. This function only does work
+            // when a tile fell through to <video> — i.e. a pre-thumbnail
+            // post whose posts.thumbnail_url is null.
+            //
+            // Kept deliberately until every historical video has been
+            // backfilled with a thumbnail. When that day comes, this
+            // function, its call in renderTab(), and the export at the
+            // bottom of the file can all be deleted in one pass — the
+            // <video> fallback branches in buildGridPostCard and
+            // buildGridLoveCard would become `mediaHtml = noMediaFallback;`.
+            function forceVideoThumbnails(rootEl) {
+                if (!rootEl) return;
+                var vids = rootEl.querySelectorAll('video');
+                for (var i = 0; i < vids.length; i++) {
+                    (function(v) {
+                        try {
+                            v.preload = 'metadata';
+                            v.muted = true;
+                            v.playsInline = true;
+                            var seek = function() {
+                                try {
+                                    if (v.duration && !isNaN(v.duration) && v.duration > 0.1) {
+                                        v.currentTime = 0.1;
+                                    }
+                                } catch (e) {}
+                            };
+                            if (v.readyState >= 1) {
+                                seek();
+                            } else {
+                                v.addEventListener('loadedmetadata', seek, { once: true });
+                            }
+                        } catch (e) {}
+                    })(vids[i]);
+                }
+            }
+
+            // ─── VIDEO TAG (legacy <video> fallback) ──────────────────
+            // Only reached when a post has no stored poster thumbnail.
+            // New posts carry a poster JPG and render as <img>; this
+            // function exists solely for pre-thumbnail media.
             function buildVideoTag(url) {
+                // Append #t=0.1 to force first-frame decode as thumbnail
                 var src = url || '';
                 if (src && src.indexOf('#') === -1) src += '#t=0.1';
                 return '<video src="' + src + '" preload="metadata" muted playsinline webkit-playsinline style="width:100%;height:100%;object-fit:cover;display:block;background:#000;pointer-events:none;"></video>';
@@ -2991,11 +3032,16 @@
 
             // ─── BUILD GRID POST CARD ────────────────────────────────
             // Video rendering strategy:
-            //   1. post.thumbnailUrl present  → <img> poster (fast path)
-            //   2. thumbnailUrl missing       → legacy <video> (slow path,
-            //                                    only for pre-thumbnail media)
-            // Never point an <img> at an MP4 — an <img> with an MP4 src is
-            // a broken image, not a fallback.
+            //   1. post.thumbnailUrl present (and not equal to the video
+            //      URL) → <img> poster. This is the fast path.
+            //   2. Otherwise → legacy <video> element. Only reached for
+            //      pre-thumbnail media or (defensively) for a row where
+            //      posts.thumbnail_url was accidentally set to the MP4.
+            //
+            // The hasPoster guard below is what makes (2) safe: an
+            // <img src="…mp4"> is a broken image, not a fallback, so we
+            // refuse to point an <img> at the video URL even if the
+            // stored thumbnail happens to equal it.
             function buildGridPostCard(post, opts) {
                 opts = opts || {};
                 var mediaHtml = '';
@@ -3004,7 +3050,13 @@
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
                     var thumbnailUrl = post.thumbnailUrl || '';
-                    if (thumbnailUrl) {
+                    // A thumbnail is only usable as an <img> if it differs
+                    // from the video URL. mapPost() already returns '' for
+                    // videos without a stored poster, but this guards against
+                    // any legacy rows where the MP4 URL ended up in
+                    // thumbnail_url. An <img src="…mp4"> is a broken image.
+                    var hasPoster = thumbnailUrl && thumbnailUrl !== post.mediaUrl;
+                    if (hasPoster) {
                         mediaHtml =
                             '<img src="' + escapeHtml(thumbnailUrl) + '"' +
                             ' alt="Video thumbnail"' +
@@ -3014,7 +3066,7 @@
                             ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
                             noMediaFallback;
                     } else {
-                        // Legacy videos created before thumbnails existed.
+                        // Legacy video without a stored thumbnail.
                         mediaHtml = buildVideoTag(post.mediaUrl);
                     }
                 } else {
@@ -3046,7 +3098,10 @@
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
                     var thumbnailUrl = post.thumbnailUrl || '';
-                    if (thumbnailUrl) {
+                    // Same guard as buildGridPostCard: an MP4 must never
+                    // become an <img src>.
+                    var hasPoster = thumbnailUrl && thumbnailUrl !== post.mediaUrl;
+                    if (hasPoster) {
                         mediaHtml =
                             '<img src="' + escapeHtml(thumbnailUrl) + '"' +
                             ' alt="Video thumbnail"' +
@@ -3056,7 +3111,7 @@
                             ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
                             noMediaFallback;
                     } else {
-                        // Legacy videos created before thumbnails existed.
+                        // Legacy video without a stored thumbnail.
                         mediaHtml = buildVideoTag(post.mediaUrl);
                     }
                 } else {
@@ -3501,8 +3556,15 @@
                         break;
                 }
 
-                // Video grids use stored poster thumbnails.
-                // Do not load/decode the video just to create a thumbnail.
+                // Video grids prefer stored poster thumbnails (rendered as
+                // <img> by buildGridPostCard / buildGridLoveCard). For any
+                // legacy video tile that still fell through to a <video>
+                // element — i.e. posts.thumbnail_url is null on a
+                // pre-thumbnail post — this forces the first frame so it
+                // isn't a black box. No-op when every tile is an <img>.
+                if (tab === 'posts' || tab === 'love' || tab === 'share' || tab === 'star') {
+                    requestAnimationFrame(function() { forceVideoThumbnails(container); });
+                }
             }
 
             function renderPosts(container, userPosts) {
@@ -5095,10 +5157,11 @@
             window.applyUsernameSuggestion = applyUsernameSuggestion;
             window.canonicalizeUsername = canonicalizeUsername;
             window.restoreProfileReturnState = restoreProfileReturnState;
-            // NOTE: window.forceVideoThumbnails intentionally removed in v2.3.
-            // Video grids now render stored poster thumbnails as <img>, with
-            // a legacy <video> fallback only for media created before the
-            // create.html thumbnail pipeline existed.
+            // Legacy-path utility: seeks any grid <video> to its first
+            // frame. Exported for parity with prior versions and for the
+            // renderTab() call above. Remove this export alongside the
+            // function itself once every historical video has a poster.
+            window.forceVideoThumbnails = forceVideoThumbnails;
         })();
     </script>
 </body>
