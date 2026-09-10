@@ -2205,30 +2205,33 @@
         /**
          * ================================================================
          *  CREATE PAGE — Freeupper
-         *  Version: 2.3 (thumbnail_url persisted via create pipeline)
+         *  Version: 2.4 (YouTube thumbs use hqdefault)
          *  Description: Full-featured post & marketplace listing composer
          *  with live purple highlighting for @mentions and #hashtags.
          *
+         *  v2.4 changes
+         *  ----------------------------------------------------------------
+         *  - YouTube thumbnail URL switched from maxresdefault.jpg to
+         *    hqdefault.jpg in both buildYouTubeThumb() and the composer's
+         *    YouTube-link branch. maxres only exists for HD uploads, so
+         *    Shorts, vertical, older, and most music videos 404'd and
+         *    fell through to the no-media placeholder. hqdefault always
+         *    exists. Any 4:3 letterbox bars on 16:9 videos are cropped
+         *    by the grid tile's object-fit: cover.
+         *  - No other behaviour changed from v2.3.
+         *
          *  v2.3 changes
          *  ----------------------------------------------------------------
-         *  - Added three thumbnail helpers (buildCloudinaryVideoThumb,
-         *    buildYouTubeThumb, resolveMediaThumbnail) directly under
-         *    CONFIG. These produce a static JPG poster URL for any
-         *    video source (Cloudinary or YouTube) so profile grids can
-         *    render an <img> without decoding the video.
-         *  - uploadToCloudinary() now resolves with thumbnailUrl so
-         *    every uploaded video carries its own poster frame from
-         *    the moment the upload completes.
-         *  - handlePostUpload() stores thumbnailUrl on the media entry
-         *    and re-renders the grid, keeping the composer preview and
-         *    the saved media[] entry in sync.
-         *  - previewPostMedia() now attaches thumbnailUrl to YouTube
-         *    links (maxresdefault) and to external image links (the URL
-         *    itself), so all three media sources — upload, YouTube,
-         *    external image — carry the same field.
+         *  - Added thumbnail helpers (buildCloudinaryVideoThumb,
+         *    buildYouTubeThumb, resolveMediaThumbnail) under CONFIG.
+         *  - uploadToCloudinary() resolves with thumbnailUrl so every
+         *    uploaded video carries its own poster frame.
+         *  - handlePostUpload() stores thumbnailUrl on the media entry.
+         *  - previewPostMedia() attaches thumbnailUrl to YouTube links
+         *    and external image links.
          *  - submitPost() maps thumbnailUrl into each media entry and
-         *    passes thumbnailUrl at the top level of PostsAPI.createPost
-         *    so posts.js can persist posts.thumbnail_url directly.
+         *    passes it at the top level of PostsAPI.createPost so
+         *    posts.js can persist posts.thumbnail_url directly.
          * ================================================================
          */
 
@@ -2272,11 +2275,12 @@
         // .jpg. The so_auto parameter picks the best frame; w/h/c_fill
         // gives us a square crop matching the profile grid aspect.
         //
-        // YouTube: img.youtube.com serves four quality variants of a
-        // video's poster. maxresdefault is the highest quality that
-        // still exists for most videos. If it 404s, the profile grid's
-        // onerror falls back to the no-media placeholder — same as
-        // any other broken image.
+        // YouTube: img.youtube.com serves several quality variants of a
+        // video's poster. hqdefault is used because it always exists.
+        // maxresdefault only exists for HD uploads and 404s for Shorts,
+        // vertical, older, and most music videos. hqdefault is 480×360
+        // with tiny 4:3 letterbox bars on 16:9 videos; the grid tile's
+        // object-fit: cover crops those bars away.
         // ──────────────────────────────────────────────────────────────
 
         function buildCloudinaryVideoThumb(videoUrl) {
@@ -2301,7 +2305,7 @@
                 /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
             );
             return match
-                ? 'https://img.youtube.com/vi/' + match[1] + '/maxresdefault.jpg'
+                ? 'https://img.youtube.com/vi/' + match[1] + '/hqdefault.jpg'
                 : '';
         }
 
@@ -2932,7 +2936,7 @@
         // ──────────────────────────────────────────────────────────────
         // 15. CLOUDINARY UPLOAD
         // --------------------------------------------------------------
-        // Now also resolves with a thumbnailUrl:
+        // Resolves with a thumbnailUrl:
         //   - video → a Cloudinary-generated poster JPG at 0s
         //   - image → the image URL itself (thumbnail of an image IS the
         //             image; the <img> in the grid can just use it)
@@ -3011,10 +3015,10 @@
         // ──────────────────────────────────────────────────────────────
         // 16. POST MEDIA HANDLING
         // --------------------------------------------------------------
-        // Every branch that pushes into state.postMedia now also stores
-        // a thumbnailUrl, so submitPost() can forward the field without
+        // Every branch that pushes into state.postMedia also stores a
+        // thumbnailUrl, so submitPost() can forward the field without
         // having to guess it from the URL afterward:
-        //   - YouTube link    → maxresdefault.jpg
+        //   - YouTube link    → hqdefault.jpg
         //   - external image  → the image URL itself
         //   - uploaded file   → Cloudinary poster JPG (via upload helper)
         // ──────────────────────────────────────────────────────────────
@@ -3043,7 +3047,7 @@
                     url: videoUrl,
                     type: 'video',
                     public_id: 'youtube_' + ytMatch[1],
-                    thumbnailUrl: 'https://img.youtube.com/vi/' + ytMatch[1] + '/maxresdefault.jpg',
+                    thumbnailUrl: 'https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg',
                     uploading: false
                 }];
                 state.postEmbeddings = [null];
@@ -3633,7 +3637,7 @@
         // ──────────────────────────────────────────────────────────────
         // 24. SUBMIT POST
         // --------------------------------------------------------------
-        // The media mapping now writes thumbnailUrl into every entry via
+        // The media mapping writes thumbnailUrl into every entry via
         // resolveMediaThumbnail(), which handles all three sources:
         //   - already-set m.thumbnailUrl (uploaded / YouTube / external)
         //   - video URL with no thumbnail → Cloudinary/YouTube inference
@@ -3690,7 +3694,7 @@
             btn.classList.add('loading');
             btn.disabled = true;
 
-            // Each media entry now carries thumbnailUrl. resolveMediaThumbnail()
+            // Each media entry carries thumbnailUrl. resolveMediaThumbnail()
             // is the single source of truth for the fallback chain, so this
             // mapping is safe even for legacy media objects that don't
             // already have thumbnailUrl set.
