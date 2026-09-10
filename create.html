@@ -2205,9 +2205,30 @@
         /**
          * ================================================================
          *  CREATE PAGE — Freeupper
-         *  Version: 2.2 (live highlight restored + min-height fix)
+         *  Version: 2.3 (thumbnail_url persisted via create pipeline)
          *  Description: Full-featured post & marketplace listing composer
          *  with live purple highlighting for @mentions and #hashtags.
+         *
+         *  v2.3 changes
+         *  ----------------------------------------------------------------
+         *  - Added three thumbnail helpers (buildCloudinaryVideoThumb,
+         *    buildYouTubeThumb, resolveMediaThumbnail) directly under
+         *    CONFIG. These produce a static JPG poster URL for any
+         *    video source (Cloudinary or YouTube) so profile grids can
+         *    render an <img> without decoding the video.
+         *  - uploadToCloudinary() now resolves with thumbnailUrl so
+         *    every uploaded video carries its own poster frame from
+         *    the moment the upload completes.
+         *  - handlePostUpload() stores thumbnailUrl on the media entry
+         *    and re-renders the grid, keeping the composer preview and
+         *    the saved media[] entry in sync.
+         *  - previewPostMedia() now attaches thumbnailUrl to YouTube
+         *    links (maxresdefault) and to external image links (the URL
+         *    itself), so all three media sources — upload, YouTube,
+         *    external image — carry the same field.
+         *  - submitPost() maps thumbnailUrl into each media entry and
+         *    passes thumbnailUrl at the top level of PostsAPI.createPost
+         *    so posts.js can persist posts.thumbnail_url directly.
          * ================================================================
          */
 
@@ -2237,6 +2258,66 @@
                 search: 300,
             }
         };
+
+        // ──────────────────────────────────────────────────────────────
+        // 1b. VIDEO THUMBNAIL HELPERS
+        // --------------------------------------------------------------
+        // These run client-side at upload time. The generated URL is
+        // stored on the media item and later lands in posts.thumbnail_url
+        // via posts.js. Profile grids then render an <img> for video
+        // posts instead of decoding the <video> to grab a first frame.
+        //
+        // Cloudinary: swap /video/upload/ for a transformation that
+        // extracts a poster JPG at 0s, then change the extension to
+        // .jpg. The so_auto parameter picks the best frame; w/h/c_fill
+        // gives us a square crop matching the profile grid aspect.
+        //
+        // YouTube: img.youtube.com serves four quality variants of a
+        // video's poster. maxresdefault is the highest quality that
+        // still exists for most videos. If it 404s, the profile grid's
+        // onerror falls back to the no-media placeholder — same as
+        // any other broken image.
+        // ──────────────────────────────────────────────────────────────
+
+        function buildCloudinaryVideoThumb(videoUrl) {
+            if (!videoUrl || typeof videoUrl !== 'string') return '';
+            if (!/res\.cloudinary\.com\/.+\/video\/upload\//.test(videoUrl)) {
+                return '';
+            }
+            return videoUrl
+                .replace(
+                    '/video/upload/',
+                    '/video/upload/so_auto,w_800,h_800,c_fill/'
+                )
+                .replace(
+                    /\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i,
+                    '.jpg'
+                );
+        }
+
+        function buildYouTubeThumb(videoUrl) {
+            if (!videoUrl) return '';
+            var match = videoUrl.match(
+                /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+            );
+            return match
+                ? 'https://img.youtube.com/vi/' + match[1] + '/maxresdefault.jpg'
+                : '';
+        }
+
+        function resolveMediaThumbnail(media) {
+            if (!media) return '';
+            if (media.thumbnailUrl) {
+                return media.thumbnailUrl;
+            }
+            if (media.type === 'video') {
+                return (
+                    buildYouTubeThumb(media.url) ||
+                    buildCloudinaryVideoThumb(media.url)
+                );
+            }
+            return media.url || '';
+        }
 
         // ──────────────────────────────────────────────────────────────
         // 2.  STATE
@@ -2850,6 +2931,13 @@
 
         // ──────────────────────────────────────────────────────────────
         // 15. CLOUDINARY UPLOAD
+        // --------------------------------------------------------------
+        // Now also resolves with a thumbnailUrl:
+        //   - video → a Cloudinary-generated poster JPG at 0s
+        //   - image → the image URL itself (thumbnail of an image IS the
+        //             image; the <img> in the grid can just use it)
+        // This means every completed upload carries a ready-to-use
+        // poster without any further processing.
         // ──────────────────────────────────────────────────────────────
 
         function uploadToCloudinary(file, mode = 'post', onProgress) {
@@ -2881,7 +2969,14 @@
                     if (xhr.status === 200) {
                         try {
                             const data = JSON.parse(xhr.responseText);
-                            resolve({ url: data.secure_url, type: resourceType, public_id: data.public_id });
+                            resolve({
+                                url: data.secure_url,
+                                type: resourceType,
+                                public_id: data.public_id,
+                                thumbnailUrl: resourceType === 'video'
+                                    ? buildCloudinaryVideoThumb(data.secure_url)
+                                    : data.secure_url
+                            });
                         } catch (e) {
                             reject(new Error('Invalid response from Cloudinary'));
                         }
@@ -2915,6 +3010,13 @@
 
         // ──────────────────────────────────────────────────────────────
         // 16. POST MEDIA HANDLING
+        // --------------------------------------------------------------
+        // Every branch that pushes into state.postMedia now also stores
+        // a thumbnailUrl, so submitPost() can forward the field without
+        // having to guess it from the URL afterward:
+        //   - YouTube link    → maxresdefault.jpg
+        //   - external image  → the image URL itself
+        //   - uploaded file   → Cloudinary poster JPG (via upload helper)
         // ──────────────────────────────────────────────────────────────
 
         function previewPostMedia() {
@@ -2937,7 +3039,13 @@
                     return;
                 }
                 const videoUrl = `https://www.youtube.com/embed/${ytMatch[1]}`;
-                state.postMedia = [{ url: videoUrl, type: 'video', public_id: 'youtube_' + ytMatch[1], uploading: false }];
+                state.postMedia = [{
+                    url: videoUrl,
+                    type: 'video',
+                    public_id: 'youtube_' + ytMatch[1],
+                    thumbnailUrl: 'https://img.youtube.com/vi/' + ytMatch[1] + '/maxresdefault.jpg',
+                    uploading: false
+                }];
                 state.postEmbeddings = [null];
                 input.value = '🎬 Video linked';
                 input.style.color = 'var(--pl)';
@@ -2961,7 +3069,13 @@
                     return;
                 }
                 const idx = state.postMedia.length;
-                state.postMedia.push({ url, type: 'image', public_id: 'external_' + Date.now(), uploading: false });
+                state.postMedia.push({
+                    url,
+                    type: 'image',
+                    public_id: 'external_' + Date.now(),
+                    thumbnailUrl: url,
+                    uploading: false
+                });
                 state.postEmbeddings.push(null);
                 input.value = '';
                 renderPostImageGrid();
@@ -3045,8 +3159,20 @@
                     const result = await uploadToCloudinary(file, 'post', (percent) => { bar.style.width = percent +
                             '%'; });
                     URL.revokeObjectURL(localUrl);
-                    state.postMedia[idx] = { url: result.url, type: result.type, public_id: result.public_id,
-                        uploading: false };
+                    state.postMedia[idx] = {
+                        url: result.url,
+                        type: result.type,
+                        public_id: result.public_id,
+                        // uploadToCloudinary() already computed this —
+                        // fall back to the resolver only if it somehow
+                        // came back empty (older uploader response).
+                        thumbnailUrl: result.thumbnailUrl || (
+                            result.type === 'video'
+                                ? buildCloudinaryVideoThumb(result.url)
+                                : result.url
+                        ),
+                        uploading: false
+                    };
                     renderPostImageGrid();
                     showToast('Uploaded!', 'g');
                     if (isImage) {
@@ -3083,6 +3209,10 @@
             showToast('Media removed', 'o');
         }
 
+        // Composer preview tile — kept as-is. This is the composer
+        // showing the user what they just picked; the video branch is
+        // a local blob URL or a Cloudinary URL, and seeking the frame
+        // here is intentional. The profile-grid fix does NOT touch this.
         function renderPostImageGrid() {
             const grid = document.getElementById('postImageGrid');
             if (!grid) return;
@@ -3502,6 +3632,15 @@
 
         // ──────────────────────────────────────────────────────────────
         // 24. SUBMIT POST
+        // --------------------------------------------------------------
+        // The media mapping now writes thumbnailUrl into every entry via
+        // resolveMediaThumbnail(), which handles all three sources:
+        //   - already-set m.thumbnailUrl (uploaded / YouTube / external)
+        //   - video URL with no thumbnail → Cloudinary/YouTube inference
+        //   - image URL with no thumbnail → the URL itself
+        // We also pass thumbnailUrl at the TOP LEVEL of the createPost
+        // call so posts.js can persist posts.thumbnail_url directly,
+        // without having to dig into media[0] on the server side.
         // ──────────────────────────────────────────────────────────────
 
         async function submitPost() {
@@ -3551,7 +3690,16 @@
             btn.classList.add('loading');
             btn.disabled = true;
 
-            const media = state.postMedia.map(m => ({ url: m.url, type: m.type, public_id: m.public_id || '' }));
+            // Each media entry now carries thumbnailUrl. resolveMediaThumbnail()
+            // is the single source of truth for the fallback chain, so this
+            // mapping is safe even for legacy media objects that don't
+            // already have thumbnailUrl set.
+            const media = state.postMedia.map(m => ({
+                url: m.url,
+                type: m.type,
+                public_id: m.public_id || '',
+                thumbnailUrl: resolveMediaThumbnail(m)
+            }));
             const firstItem = media[0] || {};
 
             // Average embeddings
@@ -3570,6 +3718,9 @@
                     media: media,
                     mediaUrl: firstItem.url || '',
                     mediaType: firstItem.type || '',
+                    // Explicit top-level thumbnail so posts.js can write
+                    // posts.thumbnail_url directly, without inspecting media[].
+                    thumbnailUrl: firstItem.thumbnailUrl || null,
                     mentions: mentions,
                     commentsHidden: hideComments,
                     source: 'composer',
