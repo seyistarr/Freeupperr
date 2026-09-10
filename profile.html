@@ -2974,45 +2974,28 @@
                 }
             }
 
-            // ─── VIDEO THUMBNAIL ENFORCER ─────────────────────────────
-            // Videos in a grid can show a black rectangle until metadata + a
-            // decoded frame is available. We use preload="metadata" + #t=0.1
-            // on the src, then seek to 0.1s after metadata loads to force the
-            // browser to decode and display the first frame as a thumbnail.
-            function forceVideoThumbnails(rootEl) {
-                if (!rootEl) return;
-                var vids = rootEl.querySelectorAll('video');
-                for (var i = 0; i < vids.length; i++) {
-                    (function(v) {
-                        try {
-                            v.preload = 'metadata';
-                            v.muted = true;
-                            v.playsInline = true;
-                            var seek = function() {
-                                try {
-                                    if (v.duration && !isNaN(v.duration) && v.duration > 0.1) {
-                                        v.currentTime = 0.1;
-                                    }
-                                } catch (e) {}
-                            };
-                            if (v.readyState >= 1) {
-                                seek();
-                            } else {
-                                v.addEventListener('loadedmetadata', seek, { once: true });
-                            }
-                        } catch (e) {}
-                    })(vids[i]);
-                }
-            }
-
-            // ─── BUILD GRID POST CARD ────────────────────────────────
+            // ─── VIDEO THUMBNAIL — legacy <video> fallback only ──────
+            // buildVideoTag() is now used ONLY for posts whose thumbnailUrl
+            // is missing (media created before the create.html thumbnail
+            // pipeline existed). New posts carry a stored poster JPG and
+            // render as <img> with no video decoding at all.
+            //
+            // The function kept its original preload="metadata" + #t=0.1
+            // behaviour deliberately: it is the slow path, and it should
+            // only ever run for legacy media, never for new uploads.
             function buildVideoTag(url) {
-                // Append #t=0.1 to force first-frame decode as thumbnail
                 var src = url || '';
                 if (src && src.indexOf('#') === -1) src += '#t=0.1';
                 return '<video src="' + src + '" preload="metadata" muted playsinline webkit-playsinline style="width:100%;height:100%;object-fit:cover;display:block;background:#000;pointer-events:none;"></video>';
             }
 
+            // ─── BUILD GRID POST CARD ────────────────────────────────
+            // Video rendering strategy:
+            //   1. post.thumbnailUrl present  → <img> poster (fast path)
+            //   2. thumbnailUrl missing       → legacy <video> (slow path,
+            //                                    only for pre-thumbnail media)
+            // Never point an <img> at an MP4 — an <img> with an MP4 src is
+            // a broken image, not a fallback.
             function buildGridPostCard(post, opts) {
                 opts = opts || {};
                 var mediaHtml = '';
@@ -3020,10 +3003,18 @@
                 if (post.mediaType === 'image' && post.mediaUrl) {
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
-                    var ytMatch = post.mediaUrl.match(/(?:youtube\.com\/embed\/|youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/);
-                    if (ytMatch) {
-                        mediaHtml = '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
+                    var thumbnailUrl = post.thumbnailUrl || '';
+                    if (thumbnailUrl) {
+                        mediaHtml =
+                            '<img src="' + escapeHtml(thumbnailUrl) + '"' +
+                            ' alt="Video thumbnail"' +
+                            ' loading="eager"' +
+                            ' decoding="async"' +
+                            ' style="width:100%;height:100%;object-fit:cover;display:block;background:#000;"' +
+                            ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                            noMediaFallback;
                     } else {
+                        // Legacy videos created before thumbnails existed.
                         mediaHtml = buildVideoTag(post.mediaUrl);
                     }
                 } else {
@@ -3054,10 +3045,18 @@
                 if (post.mediaType === 'image' && post.mediaUrl) {
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
-                    var ytMatch = post.mediaUrl.match(/(?:youtube\.com\/embed\/|youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/);
-                    if (ytMatch) {
-                        mediaHtml = '<img src="https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
+                    var thumbnailUrl = post.thumbnailUrl || '';
+                    if (thumbnailUrl) {
+                        mediaHtml =
+                            '<img src="' + escapeHtml(thumbnailUrl) + '"' +
+                            ' alt="Video thumbnail"' +
+                            ' loading="eager"' +
+                            ' decoding="async"' +
+                            ' style="width:100%;height:100%;object-fit:cover;display:block;background:#000;"' +
+                            ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                            noMediaFallback;
                     } else {
+                        // Legacy videos created before thumbnails existed.
                         mediaHtml = buildVideoTag(post.mediaUrl);
                     }
                 } else {
@@ -3502,10 +3501,8 @@
                         break;
                 }
 
-                // Force video first-frames to become visible thumbnails.
-                if (tab === 'posts' || tab === 'love' || tab === 'share' || tab === 'star') {
-                    requestAnimationFrame(function() { forceVideoThumbnails(container); });
-                }
+                // Video grids use stored poster thumbnails.
+                // Do not load/decode the video just to create a thumbnail.
             }
 
             function renderPosts(container, userPosts) {
@@ -5098,7 +5095,10 @@
             window.applyUsernameSuggestion = applyUsernameSuggestion;
             window.canonicalizeUsername = canonicalizeUsername;
             window.restoreProfileReturnState = restoreProfileReturnState;
-            window.forceVideoThumbnails = forceVideoThumbnails;
+            // NOTE: window.forceVideoThumbnails intentionally removed in v2.3.
+            // Video grids now render stored poster thumbnails as <img>, with
+            // a legacy <video> fallback only for media created before the
+            // create.html thumbnail pipeline existed.
         })();
     </script>
 </body>
