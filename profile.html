@@ -2547,20 +2547,6 @@
         (function() {
             'use strict';
 
-            // ─── FORCE-LOAD FONT WEIGHTS EARLY (fixes emoji/name pop-in) ───
-            var _fontsReadyPromise = (function() {
-                if (!document.fonts || !document.fonts.load) return Promise.resolve();
-                var specs = [
-                    '800 24px "Plus Jakarta Sans"',
-                    '700 16px "Plus Jakarta Sans"',
-                    '600 14px "Plus Jakarta Sans"',
-                    '500 14px "Plus Jakarta Sans"'
-                ];
-                return Promise.all(specs.map(function(s) {
-                    return document.fonts.load(s).catch(function() {});
-                }));
-            })();
-
             // ─── THEME COLOR META SYNC ──────────────────────────────────
             function syncThemeColorMeta() {
                 var meta = document.getElementById('themeColorMeta');
@@ -3174,14 +3160,16 @@
                         } catch (e) {}
                     }
 
-                    var _applyUI = function() {
-                        updateProfileUI(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner);
-                    };
-                    // ─── FIX: wait for font load with timeout ───
-                    Promise.race([
-                        _fontsReadyPromise,
-                        new Promise(function(resolve) { setTimeout(resolve, 300); })
-                    ]).then(_applyUI);
+                    updateProfileUI(
+                        profile,
+                        counts,
+                        userPosts,
+                        likedIds,
+                        bookmarkedIds,
+                        repostedIds,
+                        marketItems,
+                        viewerFollowsOwner
+                    );
                 } catch (err) {
                     console.error('Error rendering profile:', err);
                     hideProfileSkeleton();
