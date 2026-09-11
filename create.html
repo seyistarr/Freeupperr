@@ -2205,19 +2205,35 @@
         /**
          * ================================================================
          *  CREATE PAGE — Freeupper
-         *  Version: 2.4 (YouTube thumbs use hqdefault)
+         *  Version: 2.5 (composer video tiles render stored posters)
          *  Description: Full-featured post & marketplace listing composer
          *  with live purple highlighting for @mentions and #hashtags.
+         *
+         *  v2.5 changes
+         *  ----------------------------------------------------------------
+         *  - renderPostImageGrid() now prefers m.thumbnailUrl when
+         *    present, rendering video tiles as <img> instead of a raw
+         *    <video> with no poster. Previously a freshly uploaded
+         *    video's tile stayed a black rectangle until the browser
+         *    finished decoding a frame, even though Cloudinary had
+         *    already returned a perfect JPG poster that was sitting
+         *    unused on the media object.
+         *  - Added forceComposerVideoThumbnails() — composer twin of
+         *    profile.html's forceVideoThumbnails(). Runs at the end of
+         *    every render and seeks any remaining <video> tiles to
+         *    their first frame. Only matters during the blob-URL window
+         *    (before Cloudinary responds) or if a poster failed to
+         *    generate server-side. No-op when every video tile is an
+         *    <img>.
+         *  - The <img src="…mp4"> trap is avoided by the same
+         *    hasPoster guard used on the profile side: thumbnailUrl
+         *    must differ from the video URL to be used as an <img>.
          *
          *  v2.4 changes
          *  ----------------------------------------------------------------
          *  - YouTube thumbnail URL switched from maxresdefault.jpg to
          *    hqdefault.jpg in both buildYouTubeThumb() and the composer's
-         *    YouTube-link branch. maxres only exists for HD uploads, so
-         *    Shorts, vertical, older, and most music videos 404'd and
-         *    fell through to the no-media placeholder. hqdefault always
-         *    exists. Any 4:3 letterbox bars on 16:9 videos are cropped
-         *    by the grid tile's object-fit: cover.
+         *    YouTube-link branch.
          *  - No other behaviour changed from v2.3.
          *
          *  v2.3 changes
@@ -2267,19 +2283,21 @@
         // --------------------------------------------------------------
         // These run client-side at upload time. The generated URL is
         // stored on the media item and later lands in posts.thumbnail_url
-        // via posts.js. Profile grids then render an <img> for video
-        // posts instead of decoding the <video> to grab a first frame.
+        // via posts.js. Profile grids and the composer grid both render
+        // an <img> for video posts instead of decoding the <video>.
         //
         // Cloudinary: swap /video/upload/ for a transformation that
         // extracts a poster JPG at 0s, then change the extension to
         // .jpg. The so_auto parameter picks the best frame; w/h/c_fill
-        // gives us a square crop matching the profile grid aspect.
+        // gives us a square crop matching the grid aspect. If your
+        // Cloudinary plan rejects so_auto, swap it for so_0 — see the
+        // note in buildCloudinaryVideoThumb below.
         //
         // YouTube: img.youtube.com serves several quality variants of a
         // video's poster. hqdefault is used because it always exists.
         // maxresdefault only exists for HD uploads and 404s for Shorts,
         // vertical, older, and most music videos. hqdefault is 480×360
-        // with tiny 4:3 letterbox bars on 16:9 videos; the grid tile's
+        // with tiny 4:3 letterbox bars on 16:9 videos; the tile's
         // object-fit: cover crops those bars away.
         // ──────────────────────────────────────────────────────────────
 
@@ -2288,6 +2306,12 @@
             if (!/res\.cloudinary\.com\/.+\/video\/upload\//.test(videoUrl)) {
                 return '';
             }
+            // so_auto requires a Cloudinary plan that supports smart
+            // frame extraction. If you see 400/404 responses on the
+            // generated JPG, swap 'so_auto' for 'so_0' below — that
+            // extracts the literal frame at t=0 and is universally
+            // supported. The tradeoff is a potentially dark poster if
+            // the video opens on a fade-from-black.
             return videoUrl
                 .replace(
                     '/video/upload/',
@@ -3213,10 +3237,17 @@
             showToast('Media removed', 'o');
         }
 
-        // Composer preview tile — kept as-is. This is the composer
-        // showing the user what they just picked; the video branch is
-        // a local blob URL or a Cloudinary URL, and seeking the frame
-        // here is intentional. The profile-grid fix does NOT touch this.
+        // Composer preview tile.
+        //
+        // Video tiles now prefer m.thumbnailUrl (the Cloudinary poster
+        // JPG or a YouTube hqdefault) and render as <img>. This is the
+        // same fast path the profile grid uses — no video decode, no
+        // black rectangle. The <video> fallback below is only reached
+        // during the brief blob-URL window before Cloudinary responds,
+        // or if a poster generation failed server-side.
+        //
+        // The hasPoster guard (thumbnailUrl !== m.url) prevents an
+        // <img src="…mp4">, which browsers would refuse to decode.
         function renderPostImageGrid() {
             const grid = document.getElementById('postImageGrid');
             if (!grid) return;
@@ -3224,9 +3255,19 @@
             const hasVideo = state.postMedia.some(m => m.type === 'video');
 
             const thumbHtml = state.postMedia.map((m, i) => {
-                const inner = m.type === 'video' ?
-                    `<video src="${m.url}" style="width:100%;height:100%;object-fit:cover;" muted></video>` :
-                    `<img src="${m.url}" alt="" loading="lazy">`;
+                var inner;
+                if (m.type === 'video') {
+                    var thumbnailUrl = m.thumbnailUrl || '';
+                    var hasPoster = thumbnailUrl && thumbnailUrl !== m.url;
+                    if (hasPoster) {
+                        inner = `<img src="${thumbnailUrl}" alt="" loading="eager" decoding="async" style="width:100%;height:100%;object-fit:cover;display:block;background:#000;">`;
+                    } else {
+                        // Local blob URL (still uploading) — decode first frame.
+                        inner = `<video src="${m.url}" preload="metadata" muted playsinline webkit-playsinline style="width:100%;height:100%;object-fit:cover;background:#000;"></video>`;
+                    }
+                } else {
+                    inner = `<img src="${m.url}" alt="" loading="lazy">`;
+                }
                 return `<div class="image-thumb" onclick="${m.type === 'image' ? `openPostFullscreen(${i})` : ''}" role="listitem">
                             ${inner}
                             ${m.uploading ? `<div class="uploading-overlay"><div class="spinner"></div></div>` : ''}
@@ -3243,6 +3284,42 @@
                 '';
 
             grid.innerHTML = thumbHtml + addBtn;
+
+            // For any tile that fell through to <video> — the blob
+            // window before Cloudinary responds, or a failed poster
+            // generation — force a seek to 0.1s once metadata loads so
+            // the tile shows a first frame instead of a black box.
+            forceComposerVideoThumbnails(grid);
+        }
+
+        // Composer-side twin of profile.html's forceVideoThumbnails().
+        // Only touches <video> tiles; <img> tiles are left alone. No-op
+        // when every video tile is an <img> (which is the normal state
+        // after Cloudinary has responded).
+        function forceComposerVideoThumbnails(rootEl) {
+            if (!rootEl) return;
+            var vids = rootEl.querySelectorAll('video');
+            for (var i = 0; i < vids.length; i++) {
+                (function(v) {
+                    try {
+                        v.preload = 'metadata';
+                        v.muted = true;
+                        v.playsInline = true;
+                        var seek = function() {
+                            try {
+                                if (v.duration && !isNaN(v.duration) && v.duration > 0.1) {
+                                    v.currentTime = 0.1;
+                                }
+                            } catch (e) {}
+                        };
+                        if (v.readyState >= 1) {
+                            seek();
+                        } else {
+                            v.addEventListener('loadedmetadata', seek, { once: true });
+                        }
+                    } catch (e) {}
+                })(vids[i]);
+            }
         }
 
         // ──────────────────────────────────────────────────────────────
