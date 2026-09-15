@@ -572,11 +572,9 @@
             transition: none !important;
         }
 
-        /* ─── FULL-WIDTH MEDIA (single) — now with Threads-style inset ─── */
+        /* ─── FULL-WIDTH MEDIA (single) — Threads-style inset via parent padding ─── */
         .ig-media-container {
-            width: calc(100% - 32px);
-            margin-left: 16px;
-            margin-right: 16px;
+            width: 100%;
             border-radius: 16px !important;
             overflow: hidden;
             margin-top: 10px;
@@ -592,9 +590,7 @@
         }
         .ig-video-wrap {
             position: relative;
-            width: calc(100% - 32px);
-            margin-left: 16px;
-            margin-right: 16px;
+            width: 100%;
             background: #000;
             border-radius: 16px !important;
             overflow: hidden;
@@ -2759,7 +2755,6 @@
                 margin-bottom: 0;
                 border-radius: 0;
             }
-            /* Media keeps rounded corners on mobile now (Threads-style inset) */
             .ig-media-container,
             .ig-video-wrap {
                 border-radius: 16px !important;
@@ -6353,65 +6348,81 @@
                 const aa = author.avatar;
                 const da = truncateName(author.name, 22);
                 const verifiedStatus = author.verified_status;
-                let mh = buildMediaHTML(post, 'single');
+                const mh = buildMediaHTML(post, 'single');
                 const mediaCount = getMediaItems(post).length;
                 const hasMedia = mediaCount > 0;
                 const bm = isBookmarked(post.id);
-                const comments = [];
                 const vc = getVisibleComments(post.id);
                 const followBtn = buildFollowButton(post.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
 
-                const hasCaption = (post.title && post.title.trim()) || (post.description && post.description.trim()) || (post.content && post.content.trim());
+                const hasTitle = !!(post.title && post.title.trim());
+                const hasDesc = !!(post.description && post.description.trim());
+                const hasContent = !!(post.content && post.content.trim());
+                const hasCaption = hasTitle || hasDesc || hasContent;
 
-                return `<div class="max-w-2xl mx-auto py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
-                        <article>
-                          <div class="flex items-center gap-2 mb-2" style="width:100%;padding:0 16px;">
-                            <img data-author-avatar src="${aa}" class="w-10 h-10 rounded-full object-cover cursor-pointer" style="flex-shrink:0;">
-                            <div style="flex:1;min-width:0;">
-                              <div class="flex items-center gap-1.5 flex-wrap" style="width:100%;">
-                                <span data-author-name class="font-bold text-sm cursor-pointer hover:underline" style="color:var(--text);">${escapeHtml(da)}</span>
-                                <span data-author-badge-wrapper>${badgeHtml}</span>
-                              </div>
-                              <div class="text-xs flex items-center gap-1" style="color:var(--muted);">${svgClock()} ${formatRelativeTime(post.timestamp || post.date)}</div>
-                            </div>
-                            <div style="flex-shrink:0;margin-left:8px;">${followBtn}</div>
-                          </div>
-                          ${mh}
-                        </article>
-                        ${hasCaption ? `<div class="mt-2" style="padding:0 16px;">
-                          ${renderPostTitle(post.title, { noClamp: true, hasMedia, mentions: post.mentions })}
-                          ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
-                          ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true, mentions: post.mentions })}</div>` : ''}
-                        </div>` : ''}
-                        <div class="post-actions-row" style="max-width:100%;padding:0 16px;" data-post-reactions="${post.id}">
-                          <span class="comment-btn ${post.commentsHidden?'comments-off':''}">${post.commentsHidden?svgCommentOff():svgComment()}<span class="comment-count" id="comments-count-${post.id}">${formatCount(0)}</span></span>
-                          ${buildReactionButton(post.id)}
-                          <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}<span class="share-count">${formatCount(post.shareCount||0)}</span></span>
-                          <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}<span class="bookmark-count">${formatCount(post.bookmarkCount||0)}</span></span>
-                          ${repostCountBadge(post)}
-                        </div>
-                        <div style="padding:0 16px;">
-                          <hr class="my-4" style="border-color:var(--brd);">
+                let captionHTML = '';
+                if (hasCaption) {
+                    const titleHTML = hasTitle
+                        ? renderPostTitle(post.title, { noClamp: true, hasMedia, mentions: post.mentions })
+                        : '';
+                    const descHTML = hasDesc
+                        ? '<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">' + escapeHtml(post.description) + '</p>'
+                        : '';
+                    const contentHTML = hasContent
+                        ? '<div class="mt-1">' + buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true, mentions: post.mentions }) + '</div>'
+                        : '';
+                    captionHTML =
+                        '<div class="mt-2" style="padding:0 16px;">' +
+                        titleHTML + descHTML + contentHTML +
+                        '</div>';
+                }
 
-                          <div id="similarPostsSection-${post.id}" class="similar-posts-section" style="display:none;">
-                            <div class="similar-posts-title">More like this</div>
-                            <div class="similar-posts-scroll" id="similarPostsScroll-${post.id}"></div>
-                          </div>
-
-                          <div class="mt-1">
-                            <div class="replies-views-line">${svgEye()}<span>${formatCount(post.views||0)} views</span></div>
-                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                              <h3 class="font-heading font-extrabold text-lg" style="color:var(--text);margin:0;">Replies</h3>
-                              <button class="comment-sort-btn" id="commentSortBtn">
-                                <span id="commentSortLabel">${getCommentSort(post.id)==='recent'?'Recent':'Top'}</span>${svgChevronDown()}
-                              </button>
-                            </div>
-                            <div id="comments-list">${commentSkeletons(3)}</div>
-                            ${post.commentsHidden ? buildCommentsOffIllustration() : ''}
-                          </div>
-                        </div>
-                      </div>`;
+                return '<div class="max-w-2xl mx-auto py-4 single-post-container" data-post-id="' + post.id + '" data-author-id="' + author.id + '">' +
+                    '<article>' +
+                      '<div class="flex items-center gap-2 mb-2" style="width:100%;padding:0 16px;">' +
+                        '<img data-author-avatar src="' + aa + '" class="w-10 h-10 rounded-full object-cover cursor-pointer" style="flex-shrink:0;">' +
+                        '<div style="flex:1;min-width:0;">' +
+                          '<div class="flex items-center gap-1.5 flex-wrap" style="width:100%;">' +
+                            '<span data-author-name class="font-bold text-sm cursor-pointer hover:underline" style="color:var(--text);">' + escapeHtml(da) + '</span>' +
+                            '<span data-author-badge-wrapper>' + badgeHtml + '</span>' +
+                          '</div>' +
+                          '<div class="text-xs flex items-center gap-1" style="color:var(--muted);">' + svgClock() + ' ' + formatRelativeTime(post.timestamp || post.date) + '</div>' +
+                        '</div>' +
+                        '<div style="flex-shrink:0;margin-left:8px;">' + followBtn + '</div>' +
+                      '</div>' +
+                      mh +
+                    '</article>' +
+                    captionHTML +
+                    '<div class="post-actions-row" style="max-width:100%;padding:0 16px;" data-post-reactions="' + post.id + '">' +
+                      '<span class="comment-btn ' + (post.commentsHidden ? 'comments-off' : '') + '">' +
+                        (post.commentsHidden ? svgCommentOff() : svgComment()) +
+                        '<span class="comment-count" id="comments-count-' + post.id + '">' + formatCount(0) + '</span>' +
+                      '</span>' +
+                      buildReactionButton(post.id) +
+                      '<span class="share-btn" id="single-share-btn" data-share-post="' + post.id + '">' + svgShare() + '<span class="share-count">' + formatCount(post.shareCount || 0) + '</span></span>' +
+                      '<span class="bookmark-badge ' + (bm ? 'bookmarked' : '') + '" id="single-bookmark-' + post.id + '">' + bookmarkIcon(bm) + '<span class="bookmark-count">' + formatCount(post.bookmarkCount || 0) + '</span></span>' +
+                      repostCountBadge(post) +
+                    '</div>' +
+                    '<div style="padding:0 16px;">' +
+                      '<hr class="my-4" style="border-color:var(--brd);">' +
+                      '<div id="similarPostsSection-' + post.id + '" class="similar-posts-section" style="display:none;">' +
+                        '<div class="similar-posts-title">More like this</div>' +
+                        '<div class="similar-posts-scroll" id="similarPostsScroll-' + post.id + '"></div>' +
+                      '</div>' +
+                      '<div class="mt-1">' +
+                        '<div class="replies-views-line">' + svgEye() + '<span>' + formatCount(post.views || 0) + ' views</span></div>' +
+                        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
+                          '<h3 class="font-heading font-extrabold text-lg" style="color:var(--text);margin:0;">Replies</h3>' +
+                          '<button class="comment-sort-btn" id="commentSortBtn">' +
+                            '<span id="commentSortLabel">' + (getCommentSort(post.id) === 'recent' ? 'Recent' : 'Top') + '</span>' + svgChevronDown() +
+                          '</button>' +
+                        '</div>' +
+                        '<div id="comments-list">' + commentSkeletons(3) + '</div>' +
+                        (post.commentsHidden ? buildCommentsOffIllustration() : '') +
+                      '</div>' +
+                    '</div>' +
+                  '</div>';
             }
 
             function applyCommentBarLockState(isOff) {
@@ -7005,9 +7016,9 @@
                     const nearBottom = (currentScrollY + viewportHeight) >= (docHeight - 160);
                     const scrollDelta = Math.abs(currentScrollY - lastScrollY);
 
-                    if (nearTop || nearBottom 'number)') {
-                        show {Nav();
-                    } post else if (scroll.reDelta > 4) {
+                    if (nearTop || nearBottom) {
+                        showNav();
+                    } else if (scrollDelta > 4) {
                         hideNav();
                     }
                 }
@@ -7054,7 +7065,7 @@
 
                 post.views = (typeof row.views === 'number') ? row.views : post.views;
                 post.reactions = post.reactions || {};
-                if (typeof row.like_count ===actions.like = row.like_count;
+                if (typeof row.like_count === 'number') { post.reactions.like = row.like_count;
                     post.likes = row.like_count; }
                 if (typeof row.comment_count === 'number') post.comments = row.comment_count;
                 if (typeof row.bookmark_count === 'number') post.bookmarkCount = row.bookmark_count;
@@ -7235,22 +7246,24 @@
                 document.getElementById('inapp-webview-overlay').addEventListener('click', function(e) { if (
                         e.target === this) closeInAppWebView(); });
 
-                document.getElementById('share-close-btn').addEventListener('click', closeShareModal);
-                document.getElementById('share-modal').addEventListener('click', function(e) {
-                    if (e.target === this) closeShareModal();
-                });
-                document.querySelectorAll('.share-option').forEach(btn => {
-                    btn.addEventListener('click', () => {
+                document.getElementById('share-close-btn'). =>addEventListener('click', closeShareModal);
+                document.getElementById('share-modal'). eaddEventListener('click', function(e) {
+.stop                    if (e.target === this) closeShareModal();
+Prop                });
+                document.querySelectorAll('.share-option').agationforEach(btn => {
+                    btn.addEventListener('click',());
+
+ () => {
                         const action = btn.dataset.share;
-                        if (action) handleShareAction(action);
-                    });
+                                       if (action) handleShareAction(action);
+ document                    });
                 });
 
-                document.getElementById('share-report-btn').addEventListener('click', () => {
-                    if (sharePostId) {
-                        reportPostFromShare(sharePostId);
+                document.getElementById('share-report-btn')..getElementByIdaddEventListener('click', () => {
+                    if(' (sharePostId) {
+                        reportPostFromShare(resharePostId);
                     } else {
-                        showToast('No post selected to report');
+                        showToast('postNo post selected to report');
                     }
                 });
 
@@ -7272,9 +7285,7 @@
                 document.getElementById('tagsModal').addEventListener('click', function(e) {
                     if (e.target === this) closeTagsModal();
                 });
-                document.querySelector('#tagsModal .tags-sheet').addEventListener('click', e => e.stopPropagation());
-
-                document.getElementById('repostersModalOverlay').addEventListener('click', function(e) {
+                document.querySelector('#tagsModal .tags-sheet').addEventListener('click', eersModalOverlay').addEventListener('click', function(e) {
                     if (e.target === this) closeRepostersSheet();
                 });
                 document.querySelector('.reposters-sheet').addEventListener('click', e => e.stopPropagation());
