@@ -412,13 +412,13 @@
             cursor: pointer;
         }
         .media-scroll-row.single-media {
-            padding: 0 16px;
+            padding: 0;
         }
         .media-scroll-row.single-media .scroll-media-item {
             width: 100%;
             max-width: 100%;
             aspect-ratio: auto;
-            border-radius: 16px;
+            border-radius: 0;
         }
         .media-scroll-row .scroll-media-item img,
         .media-scroll-row .scroll-media-item video {
@@ -572,10 +572,10 @@
             transition: none !important;
         }
 
-        /* ─── FULL-WIDTH MEDIA (single) — Threads-style inset via parent padding ─── */
+        /* ─── FULL-WIDTH MEDIA (single) ─── */
         .ig-media-container {
             width: 100%;
-            border-radius: 16px !important;
+            border-radius: 0 !important;
             overflow: hidden;
             margin-top: 10px;
             background: #000;
@@ -592,7 +592,7 @@
             position: relative;
             width: 100%;
             background: #000;
-            border-radius: 16px !important;
+            border-radius: 0 !important;
             overflow: hidden;
             margin-top: 10px;
         }
@@ -2756,11 +2756,11 @@
                 border-radius: 0;
             }
             .ig-media-container,
-            .ig-video-wrap {
-                border-radius: 16px !important;
+            .ig-video-wrap,
+            .media-scroll-row .scroll-media-item {
+                border-radius: 0 !important;
             }
             .media-scroll-row .scroll-media-item {
-                border-radius: 14px;
                 width: 78%;
                 max-width: 280px;
             }
@@ -6348,81 +6348,63 @@
                 const aa = author.avatar;
                 const da = truncateName(author.name, 22);
                 const verifiedStatus = author.verified_status;
-                const mh = buildMediaHTML(post, 'single');
+                let mh = buildMediaHTML(post, 'single');
                 const mediaCount = getMediaItems(post).length;
                 const hasMedia = mediaCount > 0;
                 const bm = isBookmarked(post.id);
+                const comments = [];
                 const vc = getVisibleComments(post.id);
                 const followBtn = buildFollowButton(post.user_id, da);
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
 
-                const hasTitle = !!(post.title && post.title.trim());
-                const hasDesc = !!(post.description && post.description.trim());
-                const hasContent = !!(post.content && post.content.trim());
-                const hasCaption = hasTitle || hasDesc || hasContent;
+                const hasCaption = (post.title && post.title.trim()) || (post.description && post.description.trim()) || (post.content && post.content.trim());
 
-                let captionHTML = '';
-                if (hasCaption) {
-                    const titleHTML = hasTitle
-                        ? renderPostTitle(post.title, { noClamp: true, hasMedia, mentions: post.mentions })
-                        : '';
-                    const descHTML = hasDesc
-                        ? '<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">' + escapeHtml(post.description) + '</p>'
-                        : '';
-                    const contentHTML = hasContent
-                        ? '<div class="mt-1">' + buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true, mentions: post.mentions }) + '</div>'
-                        : '';
-                    captionHTML =
-                        '<div class="mt-2" style="padding:0 16px;">' +
-                        titleHTML + descHTML + contentHTML +
-                        '</div>';
-                }
+                return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
+                        <article>
+                          <div class="flex items-center gap-2 mb-2" style="width:100%;">
+                            <img data-author-avatar src="${aa}" class="w-10 h-10 rounded-full object-cover cursor-pointer" style="flex-shrink:0;">
+                            <div style="flex:1;min-width:0;">
+                              <div class="flex items-center gap-1.5 flex-wrap" style="width:100%;">
+                                <span data-author-name class="font-bold text-sm cursor-pointer hover:underline" style="color:var(--text);">${escapeHtml(da)}</span>
+                                <span data-author-badge-wrapper>${badgeHtml}</span>
+                              </div>
+                              <div class="text-xs flex items-center gap-1" style="color:var(--muted);">${svgClock()} ${formatRelativeTime(post.timestamp || post.date)}</div>
+                            </div>
+                            <div style="flex-shrink:0;margin-left:8px;">${followBtn}</div>
+                          </div>
+                          ${mh}
+                        </article>
+                        ${hasCaption ? `<div class="mt-2">
+                          ${renderPostTitle(post.title, { noClamp: true, hasMedia, mentions: post.mentions })}
+                          ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
+                          ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true, mentions: post.mentions })}</div>` : ''}
+                        </div>` : ''}
+                        <div class="post-actions-row" style="max-width:100%;padding:0 4px;" data-post-reactions="${post.id}">
+                          <span class="comment-btn ${post.commentsHidden?'comments-off':''}">${post.commentsHidden?svgCommentOff():svgComment()}<span class="comment-count" id="comments-count-${post.id}">${formatCount(0)}</span></span>
+                          ${buildReactionButton(post.id)}
+                          <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}<span class="share-count">${formatCount(post.shareCount||0)}</span></span>
+                          <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}<span class="bookmark-count">${formatCount(post.bookmarkCount||0)}</span></span>
+                          ${repostCountBadge(post)}
+                        </div>
+                        <hr class="my-4" style="border-color:var(--brd);">
 
-                return '<div class="max-w-2xl mx-auto py-4 single-post-container" data-post-id="' + post.id + '" data-author-id="' + author.id + '">' +
-                    '<article>' +
-                      '<div class="flex items-center gap-2 mb-2" style="width:100%;padding:0 16px;">' +
-                        '<img data-author-avatar src="' + aa + '" class="w-10 h-10 rounded-full object-cover cursor-pointer" style="flex-shrink:0;">' +
-                        '<div style="flex:1;min-width:0;">' +
-                          '<div class="flex items-center gap-1.5 flex-wrap" style="width:100%;">' +
-                            '<span data-author-name class="font-bold text-sm cursor-pointer hover:underline" style="color:var(--text);">' + escapeHtml(da) + '</span>' +
-                            '<span data-author-badge-wrapper>' + badgeHtml + '</span>' +
-                          '</div>' +
-                          '<div class="text-xs flex items-center gap-1" style="color:var(--muted);">' + svgClock() + ' ' + formatRelativeTime(post.timestamp || post.date) + '</div>' +
-                        '</div>' +
-                        '<div style="flex-shrink:0;margin-left:8px;">' + followBtn + '</div>' +
-                      '</div>' +
-                      mh +
-                    '</article>' +
-                    captionHTML +
-                    '<div class="post-actions-row" style="max-width:100%;padding:0 16px;" data-post-reactions="' + post.id + '">' +
-                      '<span class="comment-btn ' + (post.commentsHidden ? 'comments-off' : '') + '">' +
-                        (post.commentsHidden ? svgCommentOff() : svgComment()) +
-                        '<span class="comment-count" id="comments-count-' + post.id + '">' + formatCount(0) + '</span>' +
-                      '</span>' +
-                      buildReactionButton(post.id) +
-                      '<span class="share-btn" id="single-share-btn" data-share-post="' + post.id + '">' + svgShare() + '<span class="share-count">' + formatCount(post.shareCount || 0) + '</span></span>' +
-                      '<span class="bookmark-badge ' + (bm ? 'bookmarked' : '') + '" id="single-bookmark-' + post.id + '">' + bookmarkIcon(bm) + '<span class="bookmark-count">' + formatCount(post.bookmarkCount || 0) + '</span></span>' +
-                      repostCountBadge(post) +
-                    '</div>' +
-                    '<div style="padding:0 16px;">' +
-                      '<hr class="my-4" style="border-color:var(--brd);">' +
-                      '<div id="similarPostsSection-' + post.id + '" class="similar-posts-section" style="display:none;">' +
-                        '<div class="similar-posts-title">More like this</div>' +
-                        '<div class="similar-posts-scroll" id="similarPostsScroll-' + post.id + '"></div>' +
-                      '</div>' +
-                      '<div class="mt-1">' +
-                        '<div class="replies-views-line">' + svgEye() + '<span>' + formatCount(post.views || 0) + ' views</span></div>' +
-                        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
-                          '<h3 class="font-heading font-extrabold text-lg" style="color:var(--text);margin:0;">Replies</h3>' +
-                          '<button class="comment-sort-btn" id="commentSortBtn">' +
-                            '<span id="commentSortLabel">' + (getCommentSort(post.id) === 'recent' ? 'Recent' : 'Top') + '</span>' + svgChevronDown() +
-                          '</button>' +
-                        '</div>' +
-                        '<div id="comments-list">' + commentSkeletons(3) + '</div>' +
-                        (post.commentsHidden ? buildCommentsOffIllustration() : '') +
-                      '</div>' +
-                    '</div>' +
-                  '</div>';
+                        <div id="similarPostsSection-${post.id}" class="similar-posts-section" style="display:none;">
+                          <div class="similar-posts-title">More like this</div>
+                          <div class="similar-posts-scroll" id="similarPostsScroll-${post.id}"></div>
+                        </div>
+
+                        <div class="mt-1">
+                          <div class="replies-views-line">${svgEye()}<span>${formatCount(post.views||0)} views</span></div>
+                          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                            <h3 class="font-heading font-extrabold text-lg" style="color:var(--text);margin:0;">Replies</h3>
+                            <button class="comment-sort-btn" id="commentSortBtn">
+                              <span id="commentSortLabel">${getCommentSort(post.id)==='recent'?'Recent':'Top'}</span>${svgChevronDown()}
+                            </button>
+                          </div>
+                          <div id="comments-list">${commentSkeletons(3)}</div>
+                          ${post.commentsHidden ? buildCommentsOffIllustration() : ''}
+                        </div>
+                      </div>`;
             }
 
             function applyCommentBarLockState(isOff) {
@@ -7132,11 +7114,11 @@
             // ─── VISIBILITY CHANGE ───────────────────────────────────────────
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') {
-                    Promise.all([loadFollows(), loadBookmarks function(), loadShares()]).catch(() => {});
-                    if (uiPage === 'single-post-explore()' && currentPostId) {
-                        const post = allPosts.find {(p => p.id === currentPostId);
-                        if (post this) {
-                            refreshCommentsList(currentPostId, 'comments-list.style');
+                    Promise.all([loadFollows(), loadBookmarks(), loadShares()]).catch(() => {});
+                    if (uiPage === 'single-post-explore' && currentPostId) {
+                        const post = allPosts.find(p => p.id === currentPostId);
+                        if (post) {
+                            refreshCommentsList(currentPostId, 'comments-list');
                             updateCommentCount(currentPostId);
                         }
                     }
@@ -7209,7 +7191,7 @@
 
                 const commentTextarea = document.getElementById('global-comment-textarea');
                 if (commentTextarea) {
-                    commentTextarea.addEventListener('input',.height = 'auto';
+                    commentTextarea.addEventListener('input', function() { this.style.height = 'auto';
                         this.style.height = Math.min(this.scrollHeight, 100) + 'px'; });
                     commentTextarea.addEventListener('keydown', function(e) {
                         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault();
