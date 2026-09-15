@@ -644,14 +644,14 @@
                             <h2 class="text-lg font-bold text-gray-900 flex items-center gap-1.5">Featured Today 🔥</h2>
                             <button onclick="openSeeAllModal('Featured Today 🔥', true)" class="text-sm font-semibold text-brand-600 hover:underline">See all</button>
                         </div>
-                        <div class="grid grid-cols-2 gap-3 sm:gap-4" id="featuredGrid"></div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4" id="featuredGrid"></div>
                     </section>
                     <section id="newlySection" class="px-4 sm:px-6 mb-8">
                         <div class="flex justify-between items-center mb-3">
                             <h2 class="text-lg font-bold text-gray-900 flex items-center gap-1.5">Newly Listed ✨</h2>
                             <button onclick="openSeeAllModal('Newly Listed ✨', false)" class="text-sm font-semibold text-brand-600 hover:underline">See all</button>
                         </div>
-                        <div class="grid grid-cols-2 gap-3 sm:gap-4" id="newlyGrid"></div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4" id="newlyGrid"></div>
                     </section>
                     <section class="px-4 sm:px-6 mb-8">
                         <div class="bg-brand-50 rounded-2xl p-4 flex items-center justify-between gap-3 border border-brand-100">
