@@ -412,13 +412,13 @@
             cursor: pointer;
         }
         .media-scroll-row.single-media {
-            padding: 0;
+            padding: 0 16px;
         }
         .media-scroll-row.single-media .scroll-media-item {
             width: 100%;
             max-width: 100%;
             aspect-ratio: auto;
-            border-radius: 0;
+            border-radius: 16px;
         }
         .media-scroll-row .scroll-media-item img,
         .media-scroll-row .scroll-media-item video {
@@ -572,10 +572,12 @@
             transition: none !important;
         }
 
-        /* ─── FULL-WIDTH MEDIA (single) ─── */
+        /* ─── FULL-WIDTH MEDIA (single) — now with Threads-style inset ─── */
         .ig-media-container {
-            width: 100%;
-            border-radius: 0 !important;
+            width: calc(100% - 32px);
+            margin-left: 16px;
+            margin-right: 16px;
+            border-radius: 16px !important;
             overflow: hidden;
             margin-top: 10px;
             background: #000;
@@ -590,9 +592,11 @@
         }
         .ig-video-wrap {
             position: relative;
-            width: 100%;
+            width: calc(100% - 32px);
+            margin-left: 16px;
+            margin-right: 16px;
             background: #000;
-            border-radius: 0 !important;
+            border-radius: 16px !important;
             overflow: hidden;
             margin-top: 10px;
         }
@@ -2755,12 +2759,13 @@
                 margin-bottom: 0;
                 border-radius: 0;
             }
+            /* Media keeps rounded corners on mobile now (Threads-style inset) */
             .ig-media-container,
-            .ig-video-wrap,
-            .media-scroll-row .scroll-media-item {
-                border-radius: 0 !important;
+            .ig-video-wrap {
+                border-radius: 16px !important;
             }
             .media-scroll-row .scroll-media-item {
+                border-radius: 14px;
                 width: 78%;
                 max-width: 280px;
             }
@@ -6359,9 +6364,9 @@
 
                 const hasCaption = (post.title && post.title.trim()) || (post.description && post.description.trim()) || (post.content && post.content.trim());
 
-                return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
+                return `<div class="max-w-2xl mx-auto py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
                         <article>
-                          <div class="flex items-center gap-2 mb-2" style="width:100%;">
+                          <div class="flex items-center gap-2 mb-2" style="width:100%;padding:0 16px;">
                             <img data-author-avatar src="${aa}" class="w-10 h-10 rounded-full object-cover cursor-pointer" style="flex-shrink:0;">
                             <div style="flex:1;min-width:0;">
                               <div class="flex items-center gap-1.5 flex-wrap" style="width:100%;">
@@ -6374,35 +6379,37 @@
                           </div>
                           ${mh}
                         </article>
-                        ${hasCaption ? `<div class="mt-2">
+                        ${hasCaption ? `<div class="mt-2" style="padding:0 16px;">
                           ${renderPostTitle(post.title, { noClamp: true, hasMedia, mentions: post.mentions })}
                           ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
                           ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true, mentions: post.mentions })}</div>` : ''}
                         </div>` : ''}
-                        <div class="post-actions-row" style="max-width:100%;padding:0 4px;" data-post-reactions="${post.id}">
+                        <div class="post-actions-row" style="max-width:100%;padding:0 16px;" data-post-reactions="${post.id}">
                           <span class="comment-btn ${post.commentsHidden?'comments-off':''}">${post.commentsHidden?svgCommentOff():svgComment()}<span class="comment-count" id="comments-count-${post.id}">${formatCount(0)}</span></span>
                           ${buildReactionButton(post.id)}
                           <span class="share-btn" id="single-share-btn" data-share-post="${post.id}">${svgShare()}<span class="share-count">${formatCount(post.shareCount||0)}</span></span>
                           <span class="bookmark-badge ${bm?'bookmarked':''}" id="single-bookmark-${post.id}">${bookmarkIcon(bm)}<span class="bookmark-count">${formatCount(post.bookmarkCount||0)}</span></span>
                           ${repostCountBadge(post)}
                         </div>
-                        <hr class="my-4" style="border-color:var(--brd);">
+                        <div style="padding:0 16px;">
+                          <hr class="my-4" style="border-color:var(--brd);">
 
-                        <div id="similarPostsSection-${post.id}" class="similar-posts-section" style="display:none;">
-                          <div class="similar-posts-title">More like this</div>
-                          <div class="similar-posts-scroll" id="similarPostsScroll-${post.id}"></div>
-                        </div>
-
-                        <div class="mt-1">
-                          <div class="replies-views-line">${svgEye()}<span>${formatCount(post.views||0)} views</span></div>
-                          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                            <h3 class="font-heading font-extrabold text-lg" style="color:var(--text);margin:0;">Replies</h3>
-                            <button class="comment-sort-btn" id="commentSortBtn">
-                              <span id="commentSortLabel">${getCommentSort(post.id)==='recent'?'Recent':'Top'}</span>${svgChevronDown()}
-                            </button>
+                          <div id="similarPostsSection-${post.id}" class="similar-posts-section" style="display:none;">
+                            <div class="similar-posts-title">More like this</div>
+                            <div class="similar-posts-scroll" id="similarPostsScroll-${post.id}"></div>
                           </div>
-                          <div id="comments-list">${commentSkeletons(3)}</div>
-                          ${post.commentsHidden ? buildCommentsOffIllustration() : ''}
+
+                          <div class="mt-1">
+                            <div class="replies-views-line">${svgEye()}<span>${formatCount(post.views||0)} views</span></div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                              <h3 class="font-heading font-extrabold text-lg" style="color:var(--text);margin:0;">Replies</h3>
+                              <button class="comment-sort-btn" id="commentSortBtn">
+                                <span id="commentSortLabel">${getCommentSort(post.id)==='recent'?'Recent':'Top'}</span>${svgChevronDown()}
+                              </button>
+                            </div>
+                            <div id="comments-list">${commentSkeletons(3)}</div>
+                            ${post.commentsHidden ? buildCommentsOffIllustration() : ''}
+                          </div>
                         </div>
                       </div>`;
             }
@@ -6998,9 +7005,9 @@
                     const nearBottom = (currentScrollY + viewportHeight) >= (docHeight - 160);
                     const scrollDelta = Math.abs(currentScrollY - lastScrollY);
 
-                    if (nearTop || nearBottom) {
-                        showNav();
-                    } else if (scrollDelta > 4) {
+                    if (nearTop || nearBottom 'number)') {
+                        show {Nav();
+                    } post else if (scroll.reDelta > 4) {
                         hideNav();
                     }
                 }
@@ -7047,7 +7054,7 @@
 
                 post.views = (typeof row.views === 'number') ? row.views : post.views;
                 post.reactions = post.reactions || {};
-                if (typeof row.like_count === 'number') { post.reactions.like = row.like_count;
+                if (typeof row.like_count ===actions.like = row.like_count;
                     post.likes = row.like_count; }
                 if (typeof row.comment_count === 'number') post.comments = row.comment_count;
                 if (typeof row.bookmark_count === 'number') post.bookmarkCount = row.bookmark_count;
