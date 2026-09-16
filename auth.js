@@ -634,6 +634,44 @@
     openModal('signup', fn);
   }
 
+  // ─── CLOUDINARY UPLOAD HELPER (shared) ────────────────────
+  // Private. Not exposed on window.AuthUser.
+  // Returns the parsed Cloudinary JSON response (contains secure_url).
+  // `fallbackError` preserves caller-specific error strings.
+  async function uploadToCloudinary(file, onProgress, fallbackError) {
+    const url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_AVATAR_PRESET);
+    const data = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.upload.onprogress = function (e) {
+        if (onProgress && e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+      xhr.onload = function () {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300 && !res.error) {
+            resolve(res);
+          } else {
+            reject(new Error(res.error?.message || fallbackError));
+          }
+        } catch (e) {
+          reject(new Error(fallbackError));
+        }
+      };
+      xhr.onerror = function () {
+        reject(new Error('Network error during upload'));
+      };
+      xhr.send(formData);
+    });
+    if (onProgress) onProgress(100);
+    return data;
+  }
+
   // ─── AVATAR UPLOAD ────────────────────────────────────────
   async function uploadAvatar(file, onProgress) {
     const user = getCurrentUser();
@@ -649,38 +687,11 @@
       throw new Error('Image too large (max 5MB)');
     }
 
-    const url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_AVATAR_PRESET);
-
-    const data = await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', url);
-      xhr.upload.onprogress = function (e) {
-        if (onProgress && e.lengthComputable) {
-          onProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      };
-      xhr.onload = function () {
-        try {
-          const res = JSON.parse(xhr.responseText);
-          if (xhr.status >= 200 && xhr.status < 300 && !res.error) {
-            resolve(res);
-          } else {
-            reject(new Error(res.error?.message || 'Avatar upload failed'));
-          }
-        } catch (e) {
-          reject(new Error('Avatar upload failed'));
-        }
-      };
-      xhr.onerror = function () {
-        reject(new Error('Network error during upload'));
-      };
-      xhr.send(formData);
-    });
-
-    if (onProgress) onProgress(100);
+    const data = await uploadToCloudinary(
+      file,
+      onProgress,
+      'Avatar upload failed'
+    );
 
     try {
       const { data: updatedProfileArr, error: rpcError } = await sb.rpc('update_avatar', {
@@ -721,38 +732,11 @@
       throw new Error('Image too large (max 8MB)');
     }
 
-    const url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_AVATAR_PRESET);
-
-    const data = await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', url);
-      xhr.upload.onprogress = function (e) {
-        if (onProgress && e.lengthComputable) {
-          onProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      };
-      xhr.onload = function () {
-        try {
-          const res = JSON.parse(xhr.responseText);
-          if (xhr.status >= 200 && xhr.status < 300 && !res.error) {
-            resolve(res);
-          } else {
-            reject(new Error(res.error?.message || 'Cover photo upload failed'));
-          }
-        } catch (e) {
-          reject(new Error('Cover photo upload failed'));
-        }
-      };
-      xhr.onerror = function () {
-        reject(new Error('Network error during upload'));
-      };
-      xhr.send(formData);
-    });
-
-    if (onProgress) onProgress(100);
+    const data = await uploadToCloudinary(
+      file,
+      onProgress,
+      'Cover photo upload failed'
+    );
 
     const { data: updatedProfile, error: updateError } = await sb
       .from('profiles')
