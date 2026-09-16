@@ -242,23 +242,18 @@
     function notifyMentionedUsers(targetType, targetId, mentions, senderId, parentId = null) {
         if (!mentions || mentions.length === 0) return;
 
-        const notifications = mentions.map(m => ({
-            receiver_id: m.userId,
-            sender_id: senderId,
-            target_type: targetType,
-            target_id: targetId,
-            parent_id: parentId,
-            read: false,
-            created_at: new Date().toISOString()
-        }));
+        const postId = targetType === 'post' ? targetId : parentId;
+        const commentId = targetType === 'comment' ? targetId : null;
 
-        // Batch insert
-        window.sb
-            .from('mention_notifications')
-            .insert(notifications)
-            .then(({ error }) => {
+        mentions.forEach(m => {
+            window.sb.rpc('create_mention_notification', {
+                p_receiver_id: m.userId,
+                p_post_id: postId,
+                p_comment_id: commentId
+            }).then(({ error }) => {
                 if (error) console.error('Mention notification error:', error);
             });
+        });
     }
 
     // ─── INTERNAL UI HELPERS ──────────────────────────────────
