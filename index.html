@@ -6288,13 +6288,28 @@
                 if (!message && !globalCommentMedia) return showToast('Reply cannot be empty.');
                 const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = replyTarget ? replyTarget.commentId : null;
-                ta.value = '';
-                ta.style.height = '40px';
-                replyTarget = null;
-                updateReplyContextUI();
-                clearCommentMedia('global');
+                const mediaFile = globalCommentMedia?.file || null;
                 try {
-                    await addComment(currentPostId, pi, message, mentions);
+                    let imageUrl = '';
+                    if (mediaFile) {
+                        showToast('Uploading media...');
+                        imageUrl = await window.AuthUser.uploadCommentMedia(
+                            mediaFile,
+                            (progress) => {
+                                // Upload progress is available here for future UI.
+                                // Keep the current toast simple for now.
+                            }
+                        ) || '';
+                        if (!imageUrl) {
+                            throw new Error('Media upload failed.');
+                        }
+                    }
+                    await addComment(currentPostId, pi, message, mentions, imageUrl);
+                    ta.value = '';
+                    ta.style.height = '40px';
+                    replyTarget = null;
+                    updateReplyContextUI();
+                    clearCommentMedia('global');
                     if (!pi) {
                         setCommentsVisible(currentPostId, getVisibleComments(currentPostId) + 1);
                     } else {
@@ -6318,13 +6333,28 @@
                 if (!message && !exploreCommentMedia) return showToast('Reply cannot be empty.');
                 const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = exploreReplyTarget ? exploreReplyTarget.commentId : null;
-                ta.value = '';
-                ta.style.height = '40px';
-                exploreReplyTarget = null;
-                updateExploreReplyContextUI();
-                clearCommentMedia('explore');
+                const mediaFile = exploreCommentMedia?.file || null;
                 try {
-                    await addComment(currentPostId, pi, message, mentions);
+                    let imageUrl = '';
+                    if (mediaFile) {
+                        showToast('Uploading media...');
+                        imageUrl = await window.AuthUser.uploadCommentMedia(
+                            mediaFile,
+                            (progress) => {
+                                // Upload progress is available here for future UI.
+                                // Keep the current toast simple for now.
+                            }
+                        ) || '';
+                        if (!imageUrl) {
+                            throw new Error('Media upload failed.');
+                        }
+                    }
+                    await addComment(currentPostId, pi, message, mentions, imageUrl);
+                    ta.value = '';
+                    ta.style.height = '40px';
+                    exploreReplyTarget = null;
+                    updateExploreReplyContextUI();
+                    clearCommentMedia('explore');
                     if (!pi) {
                         setCommentsVisible(currentPostId, getVisibleComments(currentPostId) + 1);
                     } else {
@@ -6411,14 +6441,21 @@
                 return typeof post.comments === 'number' ? post.comments : 0;
             }
 
-            async function addComment(postId, parentId, message, mentions = []) {
+            // ─── addComment (Step 2E) ───────────────────────────────────────
+            async function addComment(postId, parentId, message, mentions = [], imageUrl = '') {
                 const p = appData.posts.find(p => p.id === postId);
                 if (!p) return;
                 if (window.AuthUser && window.AuthUser.requireAuth) {
                     return new Promise((resolve, reject) => {
                         window.AuthUser.requireAuth(async () => {
                             try {
-                                const comment = await window.PostsAPI.addComment(postId, parentId, message, mentions);
+                                const comment = await window.PostsAPI.addComment(
+                                    postId,
+                                    parentId,
+                                    message,
+                                    mentions,
+                                    imageUrl
+                                );
                                 p.comments = getCommentCount(p) + 1;
                                 const user = getCurrentUser();
                                 if (comment.id && mentions.length > 0 && window.Mentions) {
@@ -6442,8 +6479,12 @@
                     const cu = getCurrentUser();
                     const comment = {
                         id: 'temp-' + Date.now(),
-                        profile: { display_name: cu.displayName, avatar_url: cu.avatar },
+                        profile: {
+                            display_name: cu.displayName,
+                            avatar_url: cu.avatar
+                        },
                         message,
+                        imageUrl: imageUrl || '',
                         mentions: mentions || [],
                         time: new Date().toISOString(),
                         approved: true,
