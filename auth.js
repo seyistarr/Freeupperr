@@ -672,6 +672,31 @@
     return data;
   }
 
+  // ─── COMMENT MEDIA UPLOAD (public wrapper) ────────────────
+  // Keeps Cloudinary config private; index.html only sends a File.
+  // Returns the secure_url string, or null if the user is not signed in.
+  async function uploadCommentMedia(file, onProgress) {
+    const user = await getAuthenticatedUser();
+    if (!user || !user.isLoggedIn) {
+      if (typeof openModal === 'function') {
+        openModal('signup');
+      }
+      return null;
+    }
+    if (!file || !/^image\//.test(file.type || '')) {
+      throw new Error('Unsupported media type.');
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      throw new Error('Media must be under 10MB.');
+    }
+    const data = await uploadToCloudinary(
+      file,
+      onProgress,
+      'Comment media upload failed'
+    );
+    return data.secure_url || null;
+  }
+
   // ─── AVATAR UPLOAD ────────────────────────────────────────
   async function uploadAvatar(file, onProgress) {
     const user = getCurrentUser();
@@ -789,6 +814,7 @@
     requireAuth,
     uploadAvatar,
     uploadCoverPhoto,
+    uploadCommentMedia,
     signOut,
     openModal,
     closeModal,
