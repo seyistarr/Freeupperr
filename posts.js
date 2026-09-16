@@ -1,6 +1,6 @@
 // =====================================================================
 // posts.js
-// FreeUpper Data/API Layer — v4.1.4 (thumbnail_url safe for videos)
+// FreeUpper Data/API Layer — v4.2.0 (comment image_url support)
 // =====================================================================
 //
 // PURPOSE
@@ -16,6 +16,25 @@
 //
 // CHANGELOG
 // -----------------------------------------------------------------
+// v4.2.0
+//   - mapComment() now surfaces the database column `image_url` as
+//     `comment.imageUrl` (empty string when absent), so comment rows
+//     can carry an optional attached image from the same Cloudinary
+//     pipeline used by posts.
+//   - addComment() now accepts a fifth argument `imageUrl` and writes
+//     it to `comments.image_url` on insert. A comment may now be
+//     either text, image, or both — the empty-check is now
+//     `!text && !mediaUrl` instead of `!text`.
+//   - COMMENT_SELECT unchanged (uses `*`, so image_url flows through
+//     automatically once the column exists).
+//
+//   ⚠️  REQUIRES DB MIGRATION: `comments.image_url` (text, nullable)
+//       must exist before addComment() will succeed with an image.
+//       Text-only comments continue to work without the column, but
+//       the insert will still fail because PostgREST validates the
+//       whole payload — apply the migration before deploying this
+//       build to production.
+//
 // v4.1.4
 //   - mapPost()'s thumbnailUrl fallback no longer falls through to
 //     row.media_url or media[0].url for VIDEOS. For a video, media_url
@@ -39,6 +58,7 @@
 //   ✅ Single post load / preview
 //   ✅ Create / delete post
 //   ✅ Comments: load, add (with parent_id for replies)
+//   ✅ Comments: image attachment (optional, via image_url)
 //   ✅ Comments: reply_count tracked on parent
 //   ✅ Comments: edit (ownership-checked via edit_comment RPC)
 //   ✅ Comments: delete (ownership-checked via delete_comment RPC —
@@ -173,7 +193,7 @@
   // ===================================================================
   // MEDIA NORMALIZATION
   // -------------------------------------------------------------
-  // Untouched in v4.1.4. The read path already surfaces thumbnailUrl
+  // Untouched in v4.2.0. The read path already surfaces thumbnailUrl
   // from either the media JSON item or the legacy row.thumbnail_url
   // single-media fallback.
   // ===================================================================
@@ -326,7 +346,11 @@
   // MAP DATABASE COMMENT → FREEUPPER COMMENT
   // -------------------------------------------------------------
   // Shared shape for both top-level comments and replies — a reply is
-  // just a comment row with parent_id set. Includes pinned/edited state.
+  // just a comment row with parent_id set. Includes pinned/edited state
+  // and the optional image attachment (image_url → imageUrl).
+  //
+  // v4.2.0: imageUrl added. Empty string when the comment has no
+  // attached image, so callers can truthy-check safely.
   // ===================================================================
   function mapComment(row, likedByMe = false) {
     if (!row) return null;
@@ -334,6 +358,7 @@
       id: row.id,
       postId: row.post_id,
       message: row.message || '',
+      imageUrl: row.image_url || '',
       parentId: row.parent_id || null,
       userId: row.user_id,
       time: safeDate(row.created_at),
@@ -511,7 +536,7 @@
   // ===================================================================
   // LOAD POST PREVIEW (lightweight, for share cards / link previews)
   // -------------------------------------------------------------
-  // Unchanged from v4.1.3. Its inline thumbnailUrl chain still
+  // Unchanged from v4.1.4. Its inline thumbnailUrl chain still
   // OR's through data.media_url, but that is safe here because
   // loadPostPreview() is not used by the profile grid renderers —
   // only by share-card / link-preview surfaces, which handle videos
@@ -713,7 +738,8 @@
   // -------------------------------------------------------------
   // Returns BOTH top-level comments and replies flat in one array,
   // differentiated by parentId (null = top-level, set = reply).
-  // includes replyCount, pinned, edited, updatedAt on every row.
+  // Includes replyCount, pinned, edited, updatedAt, and imageUrl
+  // (v4.2.0) on every row.
   // ===================================================================
   async function loadComments(postId) {
     if (!postId) return [];
@@ -751,19 +777,29 @@
   }
 
   // ===================================================================
-  // COMMENTS — ADD (handles both top-level comments and replies)
+  // COMMENTS — ADD (handles top-level comments, replies, and optional image)
   // -------------------------------------------------------------
   // parentId null      → top-level comment on the post
   // parentId <comment> → reply to that comment
   //
+  // v4.2.0: a fifth argument `imageUrl` may carry a Cloudinary
+  // secure_url for an attached image. Text is now optional — a
+  // comment is valid as long as EITHER text or imageUrl is present.
+  //
+  // ⚠️ Requires the `comments.image_url` column to exist. If the
+  // column is missing, PostgREST will reject the insert (text-only
+  // comments included, because the payload still names the column).
+  // Apply the migration before deploying.
+  //
   // increment_comment_count bumps post.comment_count AND, when this
   // is a reply, the parent comment's reply_count in one atomic RPC call.
   // ===================================================================
-  async function addComment(postId, parentId, message, mentions = []) {
+  async function addComment(postId, parentId, message, mentions = [], imageUrl = '') {
     const user = await requireUser();
     const text = String(message || '').trim();
+    const mediaUrl = String(imageUrl || '').trim();
 
-    if (!text) {
+    if (!text && !mediaUrl) {
       throw new Error('Comment cannot be empty.');
     }
 
@@ -784,6 +820,7 @@
         user_id: user.id,
         parent_id: parentId || null,
         message: text,
+        image_url: mediaUrl || null,
         mentions: safeArray(mentions),
         like_count: 0,
         reply_count: 0
@@ -813,6 +850,10 @@
   // fields (id, message, updatedAt, edited); merge into your existing
   // rendered comment object rather than expecting a full mapComment
   // shape, since the RPC doesn't re-fetch the joined profile data.
+  //
+  // Note: image edits are not handled here — an edited comment keeps
+  // whatever image_url it was created with. If you later want image
+  // swap-on-edit, extend the edit_comment RPC and this wrapper.
   // ===================================================================
   async function editComment(commentId, message) {
     const user = await requireUser();
@@ -1204,7 +1245,7 @@
   // step fails for any reason, the post itself still succeeds —
   // tags[] is the fallback.
   //
-  // Thumbnail (v4.1.3, unchanged in v4.1.4):
+  // Thumbnail (v4.1.3, unchanged in v4.2.0):
   //   The posts.thumbnail_url column is populated explicitly on
   //   create, using the first media item's stored thumbnail when the
   //   caller doesn't pass one at the top level. This is what lets the
@@ -1397,7 +1438,7 @@
   }
 
   // ===================================================================
-  // LEGACY REPOST-ONLY SUBSCRIPTION (FIXED: payload is now passed)
+  // LEGACY REPOST-ONLY SUBSCRIPTION
   // ===================================================================
   let repostChannel = null;
   let repostCallbacks = [];
@@ -1499,5 +1540,5 @@
     findSimilarPosts
   };
 
-  console.log('✅ FreeUpper PostsAPI v4.1.4 loaded — thumbnail_url safe for videos.');
+  console.log('✅ FreeUpper PostsAPI v4.2.0 loaded — comment image_url support enabled.');
 })();
