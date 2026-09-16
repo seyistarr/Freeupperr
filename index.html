@@ -1775,6 +1775,61 @@
             opacity: .5;
             cursor: not-allowed;
         }
+        .comment-media-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            flex-shrink: 0;
+            border: none;
+            border-radius: 50%;
+            background: var(--inp);
+            color: var(--muted);
+            cursor: pointer;
+            transition: background .15s, color .15s;
+        }
+        .comment-media-btn:hover {
+            background: var(--pdim);
+            color: #7C3AED;
+        }
+        .comment-media-btn svg {
+            width: 19px;
+            height: 19px;
+        }
+        .comment-media-preview {
+            position: relative;
+            display: inline-flex;
+            margin-bottom: 8px;
+        }
+        .comment-media-preview img {
+            width: 72px;
+            height: 72px;
+            object-fit: cover;
+            border-radius: 12px;
+            border: 1px solid var(--brd);
+            display: block;
+        }
+        .comment-media-preview button {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #000;
+            color: #fff;
+            border: 2px solid var(--bg2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 0;
+        }
+        .comment-media-preview button svg {
+            width: 12px;
+            height: 12px;
+        }
 
         /* ─── LIGHTBOX ─── */
         .lightbox-modal {
@@ -3695,8 +3750,18 @@
     <!-- ===== GLOBAL COMMENT BAR ===== -->
     <div id="global-comment-bar">
         <div id="reply-context-banner"><span>Replying to</span> <span id="reply-context-username"></span> <button id="reply-cancel-btn">&#10005;</button></div>
+        <div id="global-comment-media-preview" class="comment-media-preview" style="display:none;">
+            <img id="global-comment-media-preview-img" src="" alt="">
+            <button type="button" id="global-comment-media-remove-btn" aria-label="Remove media">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
         <div class="global-comment-row">
-            <textarea id="global-comment-textarea" placeholder="Post your reply..." rows="1"></textarea>
+            <input type="file" id="global-comment-media-input" accept="image/*" hidden>
+            <button type="button" id="global-comment-media-btn" class="comment-media-btn" aria-label="Add media" title="Add media">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            </button>
+            <textarea id="global-comment-textarea" placeholder="Write a reply..." rows="1"></textarea>
             <button type="button" id="global-comment-submit-btn">Post</button>
         </div>
     </div>
@@ -3822,8 +3887,18 @@
                 <span>Replying to</span><span id="explore-reply-username" style="font-weight:700;color:var(--p);"></span>
                 <button id="explore-reply-cancel-btn" style="margin-left:auto;cursor:pointer;background:none;border:none;font-size:1rem;color:var(--muted);padding:2px 6px;border-radius:4px;line-height:1;">&#10005;</button>
             </div>
+            <div id="explore-comment-media-preview" class="comment-media-preview" style="display:none;">
+                <img id="explore-comment-media-preview-img" src="" alt="">
+                <button type="button" id="explore-comment-media-remove-btn" aria-label="Remove media">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
             <div style="display:flex;gap:8px;align-items:flex-end;">
-                <textarea id="explore-comment-textarea" placeholder="Post your reply..." rows="1" style="flex:1;border:1.5px solid var(--brd);border-radius:20px;padding:9px 14px;font-size:.9rem;resize:none;outline:none;font-family:inherit;background:var(--inp);color:var(--text);line-height:1.45;min-height:40px;max-height:100px;box-sizing:border-box;height:40px;"></textarea>
+                <input type="file" id="explore-comment-media-input" accept="image/*" hidden>
+                <button type="button" id="explore-comment-media-btn" class="comment-media-btn" aria-label="Add media" title="Add media">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                </button>
+                <textarea id="explore-comment-textarea" placeholder="Write a reply..." rows="1" style="flex:1;border:1.5px solid var(--brd);border-radius:20px;padding:9px 14px;font-size:.9rem;resize:none;outline:none;font-family:inherit;background:var(--inp);color:var(--text);line-height:1.45;min-height:40px;max-height:100px;box-sizing:border-box;height:40px;"></textarea>
                 <button type="button" id="explore-comment-submit-btn" style="background:var(--p);color:#fff;border:none;border-radius:999px;padding:9px 18px;font-size:.85rem;font-weight:700;cursor:pointer;flex-shrink:0;align-self:flex-end;">Post</button>
             </div>
         </div>
@@ -4031,6 +4106,11 @@
                 replyTarget = null,
                 exploreReplyTarget = null,
                 expandedThreads = new Map();
+
+            // ─── COMMENT MEDIA (Step 2B — selection/preview only, no upload yet) ───
+            let globalCommentMedia = null;
+            let exploreCommentMedia = null;
+            const COMMENT_MEDIA_MAX_BYTES = 10 * 1024 * 1024; // 10MB, covers GIFs/animated stickers
 
             const tabScrollPositions = { home: 0, explore: 0, market: 0 };
             let lastScrollY = 0,
@@ -6146,17 +6226,73 @@
                 updateExploreReplyContextUI(); const ta = document.getElementById('explore-comment-textarea'); if (
                     ta) ta.value = ''; }
 
+            // ─── COMMENT MEDIA HELPERS ───────────────────────────────────────
+            function isSupportedCommentMediaType(file) {
+                return !!file && /^image\//.test(file.type || '');
+            }
+
+            function renderCommentMediaPreview(kind) {
+                const wrap = document.getElementById(kind + '-comment-media-preview');
+                const img = document.getElementById(kind + '-comment-media-preview-img');
+                const media = kind === 'global' ? globalCommentMedia : exploreCommentMedia;
+                if (!wrap || !img) return;
+                if (media) {
+                    img.src = media.url;
+                    wrap.style.display = 'inline-flex';
+                } else {
+                    img.src = '';
+                    wrap.style.display = 'none';
+                }
+            }
+
+            function clearCommentMedia(kind) {
+                if (kind === 'global') {
+                    if (globalCommentMedia && globalCommentMedia.url) URL.revokeObjectURL(globalCommentMedia.url);
+                    globalCommentMedia = null;
+                    const input = document.getElementById('global-comment-media-input');
+                    if (input) input.value = '';
+                } else {
+                    if (exploreCommentMedia && exploreCommentMedia.url) URL.revokeObjectURL(exploreCommentMedia.url);
+                    exploreCommentMedia = null;
+                    const input = document.getElementById('explore-comment-media-input');
+                    if (input) input.value = '';
+                }
+                renderCommentMediaPreview(kind);
+            }
+
+            function handleCommentMediaSelect(file, kind) {
+                if (!file) return;
+                if (!isSupportedCommentMediaType(file)) {
+                    showToast('Unsupported file type. Choose an image, GIF or sticker.', 'o');
+                    return;
+                }
+                if (file.size > COMMENT_MEDIA_MAX_BYTES) {
+                    showToast('Media must be under 10MB.', 'o');
+                    return;
+                }
+                const url = URL.createObjectURL(file);
+                if (kind === 'global') {
+                    if (globalCommentMedia && globalCommentMedia.url) URL.revokeObjectURL(globalCommentMedia.url);
+                    globalCommentMedia = { file, url };
+                } else {
+                    if (exploreCommentMedia && exploreCommentMedia.url) URL.revokeObjectURL(exploreCommentMedia.url);
+                    exploreCommentMedia = { file, url };
+                }
+                renderCommentMediaPreview(kind);
+            }
+
             // ─── submitCommentFromBar ────────────────────────────────────────
             async function submitCommentFromBar() {
                 const ta = document.getElementById('global-comment-textarea');
                 const message = ta.value.trim();
-                if (!message) return showToast('Reply cannot be empty.');
+                if (!message && !globalCommentMedia) return showToast('Reply cannot be empty.');
                 const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = replyTarget ? replyTarget.commentId : null;
                 ta.value = '';
                 ta.style.height = '40px';
                 replyTarget = null;
                 updateReplyContextUI();
+                clearCommentMedia('global');
                 try {
                     await addComment(currentPostId, pi, message, mentions);
                     if (!pi) {
@@ -6179,13 +6315,14 @@
             async function submitExploreComment() {
                 const ta = document.getElementById('explore-comment-textarea');
                 const message = ta.value.trim();
-                if (!message) return showToast('Reply cannot be empty.');
+                if (!message && !exploreCommentMedia) return showToast('Reply cannot be empty.');
                 const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = exploreReplyTarget ? exploreReplyTarget.commentId : null;
                 ta.value = '';
                 ta.style.height = '40px';
                 exploreReplyTarget = null;
                 updateExploreReplyContextUI();
+                clearCommentMedia('explore');
                 try {
                     await addComment(currentPostId, pi, message, mentions);
                     if (!pi) {
@@ -6413,7 +6550,7 @@
                 bar.classList.toggle('comments-locked', !!isOff);
                 ta.disabled = !!isOff;
                 btn.disabled = !!isOff;
-                ta.placeholder = isOff ? 'Comments are turned off for this post' : 'Post your reply...';
+                ta.placeholder = isOff ? 'Comments are turned off for this post' : 'Write a reply...';
                 if (isOff) { ta.value = '';
                     exploreReplyTarget = null;
                     updateExploreReplyContextUI(); }
@@ -7200,6 +7337,15 @@
                     submitCommentFromBar);
                 document.getElementById('reply-cancel-btn').addEventListener('click', cancelReply);
 
+                document.getElementById('global-comment-media-btn').addEventListener('click', () => {
+                    document.getElementById('global-comment-media-input').click();
+                });
+                document.getElementById('global-comment-media-input').addEventListener('change', (e) => {
+                    handleCommentMediaSelect(e.target.files && e.target.files[0], 'global');
+                });
+                document.getElementById('global-comment-media-remove-btn').addEventListener('click', () =>
+                    clearCommentMedia('global'));
+
                 const exploreCommentTextarea = document.getElementById('explore-comment-textarea');
                 if (exploreCommentTextarea) {
                     exploreCommentTextarea.addEventListener('input', function() { this.style.height = 'auto';
@@ -7213,6 +7359,16 @@
                     submitExploreComment);
                 document.getElementById('explore-reply-cancel-btn').addEventListener('click',
                 cancelExploreReply);
+
+                document.getElementById('explore-comment-media-btn').addEventListener('click', () => {
+                    document.getElementById('explore-comment-media-input').click();
+                });
+                document.getElementById('explore-comment-media-input').addEventListener('change', (e) => {
+                    handleCommentMediaSelect(e.target.files && e.target.files[0], 'explore');
+                });
+                document.getElementById('explore-comment-media-remove-btn').addEventListener('click', () =>
+                    clearCommentMedia('explore'));
+
                 document.getElementById('explore-back-btn').addEventListener('click', closeExploreFullscreen);
 
                 document.getElementById('galleryLightboxClose').addEventListener('click', closeLightbox);
