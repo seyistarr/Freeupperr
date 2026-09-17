@@ -557,7 +557,7 @@
             transition: opacity .22s ease, transform .22s ease;
         }
 
-        /* ─── LIGHTBOX SCRUBBER, MUTE, EXPAND, SHEET HEADER, DESKTOP FIX ─── */
+        /* ─── LIGHTBOX SCRUBBER, MUTE, PLAY/PAUSE, SHEET HEADER, DESKTOP FIX ─── */
         .lb-scrubber-wrap {
             position: relative;
             width: 100%;
@@ -612,14 +612,17 @@
             object-fit: contain;
             transition: transform .25s ease;
         }
-        .lb-video-wrap.lb-landscape video {
-            transform: rotate(90deg);
-            max-width: 100vh;
-            max-height: 100vw;
-        }
-        .lb-mute-btn, .lb-expand-btn {
+        .lb-controls-bar {
             position: absolute;
-            top: 12px;
+            bottom: 10px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 8;
+        }
+        .lb-mute-btn, .lb-playpause-btn {
             width: 34px;
             height: 34px;
             border-radius: 50%;
@@ -629,12 +632,10 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 8;
             cursor: pointer;
+            flex-shrink: 0;
         }
-        .lb-mute-btn { left: 12px; }
-        .lb-expand-btn { right: 12px; }
-        .lb-mute-btn svg, .lb-expand-btn svg {
+        .lb-mute-btn svg, .lb-playpause-btn svg {
             width: 17px;
             height: 17px;
             stroke: #fff;
@@ -660,6 +661,17 @@
         .lb-sheet-meta-row .lb-sheet-views svg { width:13px; height:13px; }
         .lb-sheet-meta-row .lb-sheet-date { font-size:.78rem; color:var(--muted); }
         .lb-sheet-meta-row .comment-sort-btn { margin-left:auto; }
+
+        /* ─── VERIFIED BADGE SIZE FIX ─── */
+        .comment-username svg, .reply-username svg,
+        .lightbox-author-name svg, .lb-sheet-author-name svg,
+        [data-author-badge-wrapper] svg, #modalSellerName svg,
+        .reposter-name-row svg {
+            width: 13px !important;
+            height: 13px !important;
+            vertical-align: middle;
+        }
+
         .gallery-lightbox-footer .post-actions-row {
             margin-top: 0;
         }
@@ -4534,7 +4546,10 @@
             let _scrollSafetyTimer = null;
 
             // ─── GALLERY STATE ───
-            let _galleryState = { items: [], index: 0, postId: null };
+            let _galleryState = { items: [], index: 0, postId: null, resumeState: null };
+
+            // ─── LIGHTBOX SCROLL LOCK FLAG (prevents scroll jump on repeated open) ───
+            let _lightboxScrollLocked = false;
 
             // ─── LIGHTBOX COMMENTS SHEET STATE ───
             let _lightboxCommentsPostId = null;
@@ -5077,23 +5092,23 @@
             }
 
             // ─── GALLERY LIGHTBOX ───────────────────────────────────────────
-            function openGalleryLightbox(mediaItems, startIndex, postId) {
-                _galleryState = { items: mediaItems || [], index: startIndex || 0, postId: postId || null };
+            function openGalleryLightbox(mediaItems, startIndex, postId, resumeState) {
+                _galleryState = { items: mediaItems || [], index: startIndex || 0, postId: postId || null, resumeState: resumeState || null };
                 renderGalleryTrack();
                 document.getElementById('lightbox').classList.add('show');
-                lockBodyScroll();
+                if (!_lightboxScrollLocked) {
+                    lockBodyScroll();
+                    _lightboxScrollLocked = true;
+                }
                 pauseAllVideos();
                 setupLightboxNextPostSwipe(postId);
             }
 
-            // ─── LIGHTBOX VIDEO CONTROLS (scrubber, mute, expand) ───────────
+            // ─── LIGHTBOX VIDEO CONTROLS (scrubber, mute, play/pause) ───────
             function lbMuteIconSVG(muted) {
                 return muted
                     ? '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
                     : '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
-            }
-            function lbExpandIconSVG() {
-                return '<svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
             }
 
             function getActiveLightboxVideo() {
@@ -5114,15 +5129,33 @@
                 if (thumb) thumb.style.left = pct + '%';
             }
 
+            function updateLbPlayPauseIcon(vid) {
+                const wrap = vid.closest('.lb-video-wrap');
+                const btn = wrap && wrap.querySelector('[data-lb-playpause]');
+                if (!btn) return;
+                btn.innerHTML = vid.paused
+                    ? '<svg viewBox="0 0 24 24" fill="#fff"><polygon points="5 3 19 12 5 21 5 3"/></svg>'
+                    : '<svg viewBox="0 0 24 24" fill="#fff"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+            }
+
+            function toggleActiveLightboxPlayback() {
+                const vid = getActiveLightboxVideo();
+                if (!vid) return;
+                if (vid.paused) vid.play().catch(() => {}); else vid.pause();
+                updateLbPlayPauseIcon(vid);
+            }
+
             function setupLightboxVideoControls(vid, i) {
                 if (vid._lbInit) return;
                 vid._lbInit = true;
                 const wrap = vid.closest('.lb-video-wrap');
                 const muteBtn = wrap.querySelector('[data-lb-mute]');
-                const expandBtn = wrap.querySelector('[data-lb-expand]');
+                const playPauseBtn = wrap.querySelector('[data-lb-playpause]');
 
                 vid.addEventListener('timeupdate', () => { if (i === _galleryState.index) updateLbScrubberUI(vid); });
                 vid.addEventListener('loadedmetadata', () => { if (i === _galleryState.index) updateLbScrubberUI(vid); });
+                vid.addEventListener('play', () => updateLbPlayPauseIcon(vid));
+                vid.addEventListener('pause', () => updateLbPlayPauseIcon(vid));
 
                 muteBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -5130,10 +5163,14 @@
                     muteBtn.innerHTML = lbMuteIconSVG(vid.muted);
                 });
 
-                expandBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    wrap.classList.toggle('lb-landscape');
-                });
+                if (playPauseBtn) {
+                    playPauseBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (vid.paused) vid.play().catch(() => {}); else vid.pause();
+                    });
+                }
+
+                updateLbPlayPauseIcon(vid);
             }
 
             function seekLbVideo(e) {
@@ -5170,19 +5207,31 @@
                 openGalleryLightbox(getMediaItems(next), 0, next.id);
             }
 
+            // ─── FREE VIDEO BUFFERS BEFORE REBUILDING TRACK (prevents crashes) ───
+            function releaseGalleryVideos(track) {
+                if (!track) return;
+                track.querySelectorAll('video').forEach(v => {
+                    try { v.pause(); } catch (e) {}
+                    try { v.removeAttribute('src'); v.load(); } catch (e) {}
+                });
+            }
+
             function renderGalleryTrack() {
                 const track = document.getElementById('galleryLightboxTrack');
                 const dots = document.getElementById('galleryLightboxDots');
                 const counter = document.getElementById('galleryLightboxCounter');
                 const { items, index, postId } = _galleryState;
+                releaseGalleryVideos(track);
                 track.innerHTML = items.map((it, i) => {
                     const isVideo = it.type === 'video' && !isYouTubeUrl(it.url || '');
                     if (!isVideo) return `<div class="gallery-lightbox-slide"><img src="${it.url}" class="gallery-lightbox-media" alt=""></div>`;
                     return `<div class="gallery-lightbox-slide">
                         <div class="lb-video-wrap" data-lb-index="${i}">
                             <video src="${it.url}" playsinline muted class="gallery-lightbox-media" data-lb-video></video>
-                            <button type="button" class="lb-mute-btn" data-lb-mute aria-label="Toggle sound">${lbMuteIconSVG(true)}</button>
-                            <button type="button" class="lb-expand-btn" data-lb-expand aria-label="Rotate to landscape">${lbExpandIconSVG()}</button>
+                            <div class="lb-controls-bar">
+                                <button type="button" class="lb-mute-btn" data-lb-mute aria-label="Toggle sound">${lbMuteIconSVG(true)}</button>
+                                <button type="button" class="lb-playpause-btn" data-lb-playpause aria-label="Play or pause"></button>
+                            </div>
                         </div>
                     </div>`;
                 }).join('');
@@ -5196,7 +5245,23 @@
 
                 track.querySelectorAll('[data-lb-video]').forEach((vid, i) => {
                     setupLightboxVideoControls(vid, i);
-                    if (i === index) vid.play().catch(() => {}); else vid.pause();
+                    if (i === index) {
+                        const resume = _galleryState.resumeState;
+                        const applyResume = () => {
+                            if (resume) {
+                                try { vid.currentTime = resume.time; vid.muted = resume.muted; } catch (e) {}
+                            }
+                            vid.play().catch(() => {});
+                            updateLbPlayPauseIcon(vid);
+                        };
+                        if (resume && vid.readyState < 1) {
+                            vid.addEventListener('loadedmetadata', applyResume, { once: true });
+                        } else {
+                            applyResume();
+                        }
+                    } else {
+                        vid.pause();
+                    }
                 });
 
                 document.getElementById('lightbox').classList.remove('ui-hidden');
@@ -5269,14 +5334,17 @@
                     items.length > 1 ? `${_galleryState.index + 1} / ${items.length}` : '';
                 document.querySelectorAll('#galleryLightboxDots .gallery-dot').forEach((d, i2) =>
                     d.classList.toggle('active', i2 === _galleryState.index));
+                const activeVid = getActiveLightboxVideo();
+                if (activeVid) updateLbScrubberUI(activeVid);
             }
 
             function closeLightbox() {
                 const track = document.getElementById('galleryLightboxTrack');
-                track.querySelectorAll('video').forEach(v => v.pause());
+                releaseGalleryVideos(track);
                 document.getElementById('lightbox').classList.remove('show');
                 document.getElementById('lightbox').classList.remove('ui-hidden');
                 unlockBodyScroll();
+                _lightboxScrollLocked = false;
                 track.innerHTML = '';
                 const footer = document.getElementById('galleryLightboxFooter');
                 if (footer) footer.style.display = 'none';
@@ -5378,7 +5446,8 @@
                 if (!mediaArea) return;
                 mediaArea.addEventListener('click', (e) => {
                     if (e.target.closest('.plyr__controls') || e.target.closest('.plyr__control--overlaid')) return;
-                    if (e.target.closest('.lb-mute-btn') || e.target.closest('.lb-expand-btn')) return;
+                    if (e.target.closest('.lb-mute-btn') || e.target.closest('.lb-playpause-btn')) return;
+                    if (e.target.closest('.lb-controls-bar')) return;
                     document.getElementById('lightbox').classList.toggle('ui-hidden');
                 });
             })();
@@ -7689,7 +7758,13 @@
                         e.stopPropagation();
                         const el = t.closest('[data-gallery-post]');
                         const post = allPosts.find(x => x.id === el.dataset.galleryPost);
-                        if (post) openGalleryLightbox(getMediaItems(post), Number(el.dataset.galleryIndex || 0), post.id);
+                        if (post) {
+                            const feedVid = document.querySelector(`[data-gallery-post="${post.id}"][data-gallery-index="${el.dataset.galleryIndex || 0}"] video`);
+                            const resumeState = (feedVid && !isNaN(feedVid.currentTime))
+                                ? { time: feedVid.currentTime, muted: feedVid.muted }
+                                : null;
+                            openGalleryLightbox(getMediaItems(post), Number(el.dataset.galleryIndex || 0), post.id, resumeState);
+                        }
                         return;
                     }
                     if (t.closest('[data-extlink]')) { openInAppWebView(decodeURIComponent(t.closest(
@@ -8289,6 +8364,23 @@
                 });
 
                 document.addEventListener('keydown', e => {
+                    if (document.getElementById('lightbox').classList.contains('show')) {
+                        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            _galleryState.items.length > 1 ? galleryGoTo(_galleryState.index + 1) : goToNextLightboxPost();
+                            return;
+                        }
+                        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            if (_galleryState.items.length > 1) galleryGoTo(_galleryState.index - 1);
+                            return;
+                        }
+                        if (e.key === ' ') {
+                            e.preventDefault();
+                            toggleActiveLightboxPlayback();
+                            return;
+                        }
+                    }
                     if (e.key === 'Escape') {
                         closeLightbox();
                         closeInAppWebView();
