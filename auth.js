@@ -1,6 +1,7 @@
 /* ============================================================
    FreeUpper — auth.js (production)
    with Safari autofix, unique usernames, and bulletproof errors
+   + strict comment-media MIME allowlist (GIFs excluded)
    ============================================================ */
 (function () {
   'use strict';
@@ -287,7 +288,6 @@
   function extractErrorMessage(err) {
     if (!err) return 'Unknown error.';
 
-    // Supabase often nests errors
     const candidate =
       err?.message ||
       err?.error_description ||
@@ -300,7 +300,6 @@
       return candidate;
     }
 
-    // If it's an object, stringify it (but avoid cyclic)
     if (typeof err === 'object') {
       try {
         const str = JSON.stringify(err, Object.getOwnPropertyNames(err));
@@ -401,7 +400,7 @@
       return;
     }
 
-    // ─── MODAL STYLES (includes "Maybe later" style) ──────
+    // ─── MODAL STYLES ──────────────────────────────────────
     const modalCSS = `
     #fu-auth-overlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.7);
       backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;
@@ -440,7 +439,6 @@
       background:transparent;color:var(--text,#fff);font-weight:700;font-size:13.5px;cursor:pointer;
       display:flex;align-items:center;justify-content:center;gap:8px}
     .fu-btn-google svg{flex-shrink:0}
-    /* ─── Updated switch and "Maybe later" styles ─── */
     #fu-auth-switch{text-align:center;font-size:13px;color:var(--muted,rgba(255,255,255,.55));margin-top:16px}
     #fu-auth-switch button{background:none;border:none;color:#a78bfa;font-weight:700;cursor:pointer;font-size:13px}
     #fu-auth-maybe-later{display:block;width:100%;text-align:center;background:none;border:none;
@@ -456,7 +454,7 @@
       document.head.appendChild(style);
     }
 
-    // ─── MODAL MARKUP (includes "Maybe later" button) ──────
+    // ─── MODAL MARKUP ──────────────────────────────────────
     const overlay = document.createElement('div');
     overlay.id = 'fu-auth-overlay';
     overlay.innerHTML = `
@@ -572,7 +570,6 @@
 
     try {
       if (mode === 'signup') {
-        // Generate a unique username with random suffix
         const baseUsername = (name || email.split('@')[0])
           .toLowerCase()
           .replace(/\s+/g, '')
@@ -604,10 +601,9 @@
         fn();
       }
     } catch (e) {
-      // Use the improved error extractor
       const msg = extractErrorMessage(e);
       errEl.textContent = msg;
-      console.error('Auth error:', e); // always log the raw error to console
+      console.error('Auth error:', e);
     } finally {
       btn.disabled = false;
       btn.textContent = mode === 'signup' ? 'Create Account' : 'Sign In';
@@ -635,9 +631,6 @@
   }
 
   // ─── CLOUDINARY UPLOAD HELPER (shared) ────────────────────
-  // Private. Not exposed on window.AuthUser.
-  // Returns the parsed Cloudinary JSON response (contains secure_url).
-  // `fallbackError` preserves caller-specific error strings.
   async function uploadToCloudinary(file, onProgress, fallbackError) {
     const url = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload';
     const formData = new FormData();
@@ -673,8 +666,15 @@
   }
 
   // ─── COMMENT MEDIA UPLOAD (public wrapper) ────────────────
-  // Keeps Cloudinary config private; index.html only sends a File.
-  // Returns the secure_url string, or null if the user is not signed in.
+  // Strict MIME allowlist: JPG / PNG / WebP only.
+  // GIFs are intentionally excluded — they belong to the separate
+  // GIF system, not Cloudinary.
+  const ALLOWED_COMMENT_IMAGE_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/webp'
+  ];
+
   async function uploadCommentMedia(file, onProgress) {
     const user = await getAuthenticatedUser();
     if (!user || !user.isLoggedIn) {
@@ -683,8 +683,8 @@
       }
       return null;
     }
-    if (!file || !/^image\//.test(file.type || '')) {
-      throw new Error('Unsupported media type.');
+    if (!file || !ALLOWED_COMMENT_IMAGE_TYPES.includes(file.type)) {
+      throw new Error('Please choose a JPG, PNG, or WebP image.');
     }
     if (file.size > 10 * 1024 * 1024) {
       throw new Error('Media must be under 10MB.');
@@ -735,7 +735,9 @@
         .eq('id', user.id)
         .select()
         .single();
-      if (updateError) throw new Error('Failed to update avatar: ' + updateError.message);
+      if (updateError) {
+        throw new Error('Failed to update avatar: ' + updateError.message);
+      }
       const updated = Object.assign({}, user, { avatar: updatedProfile.avatar_url });
       writeLocalUser(updated);
       return updatedProfile.avatar_url;
@@ -769,7 +771,9 @@
       .eq('id', user.id)
       .select()
       .single();
-    if (updateError) throw new Error('Failed to update cover photo: ' + updateError.message);
+    if (updateError) {
+      throw new Error('Failed to update cover photo: ' + updateError.message);
+    }
     const updated = Object.assign({}, user, { coverUrl: updatedProfile.cover_url });
     writeLocalUser(updated);
     return updatedProfile.cover_url;
@@ -822,7 +826,7 @@
     onChange
   };
 
-  window.getCurrentUser = getCurrentUser; // backward compatibility
+  window.getCurrentUser = getCurrentUser;
 
   initAuth();
 
