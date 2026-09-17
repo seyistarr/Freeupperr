@@ -556,6 +556,110 @@
             border-top: none;
             transition: opacity .22s ease, transform .22s ease;
         }
+
+        /* ─── LIGHTBOX SCRUBBER, MUTE, EXPAND, SHEET HEADER, DESKTOP FIX ─── */
+        .lb-scrubber-wrap {
+            position: relative;
+            width: 100%;
+            height: 16px;
+            margin-bottom: 6px;
+            display: none;
+        }
+        .lb-scrubber-wrap.active { display: block; }
+        .lb-scrubber-track {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 3px;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,.25);
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        .lb-scrubber-fill {
+            height: 100%;
+            width: 0%;
+            background: #A78BFA;
+            border-radius: 2px;
+            pointer-events: none;
+        }
+        .lb-scrubber-thumb {
+            position: absolute;
+            top: 50%;
+            left: 0%;
+            width: 12px;
+            height: 12px;
+            background: #fff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        .lb-video-wrap {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .lb-video-wrap video {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            transition: transform .25s ease;
+        }
+        .lb-video-wrap.lb-landscape video {
+            transform: rotate(90deg);
+            max-width: 100vh;
+            max-height: 100vw;
+        }
+        .lb-mute-btn, .lb-expand-btn {
+            position: absolute;
+            top: 12px;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: rgba(0,0,0,.5);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 8;
+            cursor: pointer;
+        }
+        .lb-mute-btn { left: 12px; }
+        .lb-expand-btn { right: 12px; }
+        .lb-mute-btn svg, .lb-expand-btn svg {
+            width: 17px;
+            height: 17px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        @media (min-width: 768px) {
+            .lightbox-media-area { display: flex; align-items: center; justify-content: center; }
+        }
+        .lb-sheet-header { padding: 4px 0 12px; border-bottom: 1px solid var(--brd); margin-bottom: 8px; }
+        .lb-sheet-author-row { display:flex; align-items:center; gap:10px; }
+        .lb-sheet-author-row img { width:40px; height:40px; border-radius:50%; object-fit:cover; cursor:pointer; flex-shrink:0; background:var(--bg4); }
+        .lb-sheet-author-info { flex:1; min-width:0; }
+        .lb-sheet-author-name { font-weight:800; font-size:.92rem; color:var(--text); display:flex; align-items:center; gap:4px; }
+        .lb-sheet-author-username { font-size:.78rem; color:var(--muted); }
+        .lb-sheet-caption { font-size:.88rem; line-height:1.45; color:var(--text); margin-top:8px; white-space:pre-wrap; word-break:break-word; }
+        .lb-sheet-caption.clamp4 { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+        .lb-sheet-seemore { background:none; border:none; color:#7C3AED; font-weight:700; font-size:.82rem; padding:4px 0 0; cursor:pointer; display:none; }
+        .lb-sheet-meta-row { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+        .lb-sheet-meta-row .lb-sheet-views { display:flex; align-items:center; gap:4px; font-size:.78rem; color:var(--muted); font-weight:600; }
+        .lb-sheet-meta-row .lb-sheet-views svg { width:13px; height:13px; }
+        .lb-sheet-meta-row .lb-sheet-date { font-size:.78rem; color:var(--muted); }
+        .lb-sheet-meta-row .comment-sort-btn { margin-left:auto; }
         .gallery-lightbox-footer .post-actions-row {
             margin-top: 0;
         }
@@ -728,6 +832,7 @@
             border-top: 1px solid var(--brd);
             background: var(--bg2);
             flex-shrink: 0;
+            flex-wrap: wrap;
         }
         .lightbox-comments-inputbar textarea {
             flex: 1;
@@ -4065,8 +4170,21 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </div>
-            <div class="lightbox-comments-body" id="lightbox-comments-list"></div>
+            <div class="lightbox-comments-body">
+                <div id="lightbox-comments-post-header"></div>
+                <div id="lightbox-comments-list"></div>
+            </div>
             <div class="lightbox-comments-inputbar">
+                <div id="lightbox-comment-media-preview" class="comment-media-preview" style="display:none;">
+                    <img id="lightbox-comment-media-preview-img" src="" alt="">
+                    <button type="button" id="lightbox-comment-media-remove-btn" aria-label="Remove media">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <input type="file" id="lightbox-comment-media-input" accept="image/jpeg,image/png,image/webp" hidden>
+                <button type="button" id="lightbox-comment-media-btn" class="comment-media-btn" aria-label="Add media" title="Add media">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                </button>
                 <textarea id="lightbox-comment-textarea" placeholder="Write a reply..." rows="1"></textarea>
                 <button type="button" id="lightbox-comment-submit-btn" class="comment-send-btn" aria-label="Send" disabled>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4z"/></svg>
@@ -4402,6 +4520,7 @@
             // ─── COMMENT MEDIA (selection/preview + upload) ───
             let globalCommentMedia = null;
             let exploreCommentMedia = null;
+            let lightboxCommentMedia = null;
             const COMMENT_MEDIA_MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
             const tabScrollPositions = { home: 0, explore: 0, market: 0 };
@@ -4964,6 +5083,91 @@
                 document.getElementById('lightbox').classList.add('show');
                 lockBodyScroll();
                 pauseAllVideos();
+                setupLightboxNextPostSwipe(postId);
+            }
+
+            // ─── LIGHTBOX VIDEO CONTROLS (scrubber, mute, expand) ───────────
+            function lbMuteIconSVG(muted) {
+                return muted
+                    ? '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+                    : '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+            }
+            function lbExpandIconSVG() {
+                return '<svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+            }
+
+            function getActiveLightboxVideo() {
+                const track = document.getElementById('galleryLightboxTrack');
+                if (!track) return null;
+                return track.querySelector(`[data-lb-index="${_galleryState.index}"] [data-lb-video]`);
+            }
+
+            function updateLbScrubberUI(vid) {
+                const wrap = document.getElementById('lbScrubberWrap');
+                const fill = document.getElementById('lbScrubberFill');
+                const thumb = document.getElementById('lbScrubberThumb');
+                if (!wrap) return;
+                if (!vid || !vid.duration) { wrap.classList.remove('active'); return; }
+                wrap.classList.add('active');
+                const pct = Math.min(100, (vid.currentTime / vid.duration) * 100);
+                if (fill) fill.style.width = pct + '%';
+                if (thumb) thumb.style.left = pct + '%';
+            }
+
+            function setupLightboxVideoControls(vid, i) {
+                if (vid._lbInit) return;
+                vid._lbInit = true;
+                const wrap = vid.closest('.lb-video-wrap');
+                const muteBtn = wrap.querySelector('[data-lb-mute]');
+                const expandBtn = wrap.querySelector('[data-lb-expand]');
+
+                vid.addEventListener('timeupdate', () => { if (i === _galleryState.index) updateLbScrubberUI(vid); });
+                vid.addEventListener('loadedmetadata', () => { if (i === _galleryState.index) updateLbScrubberUI(vid); });
+
+                muteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    vid.muted = !vid.muted;
+                    muteBtn.innerHTML = lbMuteIconSVG(vid.muted);
+                });
+
+                expandBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    wrap.classList.toggle('lb-landscape');
+                });
+            }
+
+            function seekLbVideo(e) {
+                const vid = getActiveLightboxVideo();
+                const track = document.getElementById('lbScrubberTrack');
+                if (!vid || !vid.duration || !track) return;
+                const rect = track.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                vid.currentTime = pct * vid.duration;
+                updateLbScrubberUI(vid);
+            }
+
+            function buildLbScrubberHTML() {
+                return `<div class="lb-scrubber-wrap" id="lbScrubberWrap">
+                        <div class="lb-scrubber-track" id="lbScrubberTrack">
+                            <div class="lb-scrubber-fill" id="lbScrubberFill"></div>
+                            <div class="lb-scrubber-thumb" id="lbScrubberThumb"></div>
+                        </div>
+                    </div>`;
+            }
+
+            let _lbFeedList = [];
+            let _lbFeedIndex = -1;
+
+            function setupLightboxNextPostSwipe(postId) {
+                _lbFeedList = allPosts.filter(p => getMediaItems(p).some(m => m.type === 'video'));
+                _lbFeedIndex = _lbFeedList.findIndex(p => p.id === postId);
+            }
+
+            function goToNextLightboxPost() {
+                if (_lbFeedIndex < 0 || _lbFeedIndex >= _lbFeedList.length - 1) { showToast('No more videos'); return; }
+                const next = _lbFeedList[_lbFeedIndex + 1];
+                openGalleryLightbox(getMediaItems(next), 0, next.id);
             }
 
             function renderGalleryTrack() {
@@ -4971,11 +5175,16 @@
                 const dots = document.getElementById('galleryLightboxDots');
                 const counter = document.getElementById('galleryLightboxCounter');
                 const { items, index, postId } = _galleryState;
-                track.innerHTML = items.map((it) => {
+                track.innerHTML = items.map((it, i) => {
                     const isVideo = it.type === 'video' && !isYouTubeUrl(it.url || '');
-                    return `<div class="gallery-lightbox-slide">${isVideo
-                        ? `<video src="${it.url}" playsinline autoplay muted class="gallery-lightbox-media"></video>`
-                        : `<img src="${it.url}" class="gallery-lightbox-media" alt="">`}</div>`;
+                    if (!isVideo) return `<div class="gallery-lightbox-slide"><img src="${it.url}" class="gallery-lightbox-media" alt=""></div>`;
+                    return `<div class="gallery-lightbox-slide">
+                        <div class="lb-video-wrap" data-lb-index="${i}">
+                            <video src="${it.url}" playsinline muted class="gallery-lightbox-media" data-lb-video></video>
+                            <button type="button" class="lb-mute-btn" data-lb-mute aria-label="Toggle sound">${lbMuteIconSVG(true)}</button>
+                            <button type="button" class="lb-expand-btn" data-lb-expand aria-label="Rotate to landscape">${lbExpandIconSVG()}</button>
+                        </div>
+                    </div>`;
                 }).join('');
                 track.style.transition = 'none';
                 track.style.transform = `translateX(-${index * 100}%)`;
@@ -4985,9 +5194,9 @@
                     ? items.map((_, i) => `<span class="gallery-dot ${i === index ? 'active' : ''}"></span>`).join('')
                     : '';
 
-                track.querySelectorAll('video').forEach(vid => {
-                    setupPlyrPlayer(vid);
-                    if (vid.plyr) { vid.plyr.play().catch(() => {}); } else { vid.play().catch(() => {}); }
+                track.querySelectorAll('[data-lb-video]').forEach((vid, i) => {
+                    setupLightboxVideoControls(vid, i);
+                    if (i === index) vid.play().catch(() => {}); else vid.pause();
                 });
 
                 document.getElementById('lightbox').classList.remove('ui-hidden');
@@ -5014,6 +5223,7 @@
                                 }
                                 return;
                             }
+                            if (t.closest('.follow-btn')) return;
                             if (t.closest('.lightbox-author-row')) {
                                 const uid = t.closest('.lightbox-author-row').dataset.lightboxAuthor;
                                 if (uid) { closeLightbox(); window.Router.openProfile(uid); }
@@ -5034,8 +5244,17 @@
                             }
                         });
                     }
-                    footer.innerHTML = buildLightboxCaptionHTML(post) + buildActionsRow(post);
+                    footer.innerHTML = buildLightboxCaptionHTML(post) + buildLbScrubberHTML() + buildActionsRow(post);
                     footer.style.display = 'block';
+                    setTimeout(() => {
+                        const strack = document.getElementById('lbScrubberTrack');
+                        if (strack && !strack._lbBound) {
+                            strack._lbBound = true;
+                            strack.addEventListener('click', seekLbVideo);
+                            strack.addEventListener('touchstart', seekLbVideo, { passive: true });
+                        }
+                        updateLbScrubberUI(getActiveLightboxVideo());
+                    }, 0);
                 } else if (footer) {
                     footer.style.display = 'none';
                 }
@@ -5083,10 +5302,7 @@
                 const modal = document.getElementById('lightbox');
                 const track = document.getElementById('galleryLightboxTrack');
                 if (!modal || !track) return;
-                let startY = 0,
-                    startX = 0,
-                    dragging = false,
-                    dragged = false;
+                let startY = 0, startX = 0, dragging = false, dragged = false;
 
                 track.addEventListener('touchstart', e => {
                     if (e.touches.length !== 1) return;
@@ -5104,9 +5320,9 @@
                     if (Math.abs(dy) <= Math.abs(dx)) return;
                     dragged = true;
                     modal.classList.add('dragging');
-                    const clamped = Math.max(0, dy);
+                    const clamped = Math.max(-120, Math.min(400, dy));
                     modal.style.transform = `translateY(${clamped}px)`;
-                    modal.style.opacity = String(Math.max(0.3, 1 - clamped / 400));
+                    modal.style.opacity = String(Math.max(0.5, 1 - Math.abs(clamped) / 500));
                 }, { passive: true });
 
                 track.addEventListener('touchend', e => {
@@ -5114,18 +5330,16 @@
                     dragging = false;
                     modal.classList.remove('dragging');
                     const dy = (e.changedTouches[0].clientY - startY);
+                    modal.style.transition = 'transform .2s ease, opacity .2s ease';
                     if (dragged && dy > 120) {
-                        modal.style.transition = 'transform .2s ease, opacity .2s ease';
                         modal.style.transform = 'translateY(100%)';
                         modal.style.opacity = '0';
-                        setTimeout(() => {
-                            modal.style.transition = '';
-                            modal.style.transform = '';
-                            modal.style.opacity = '';
-                            closeLightbox();
-                        }, 200);
+                        setTimeout(() => { modal.style.transition = ''; modal.style.transform = ''; modal.style.opacity = ''; closeLightbox(); }, 200);
+                    } else if (dragged && dy < -80 && _lbFeedList.length > 0) {
+                        modal.style.transform = 'translateY(-40px)';
+                        modal.style.opacity = '0.4';
+                        setTimeout(() => { modal.style.transition = ''; modal.style.transform = ''; modal.style.opacity = ''; goToNextLightboxPost(); }, 150);
                     } else {
-                        modal.style.transition = 'transform .2s ease, opacity .2s ease';
                         modal.style.transform = '';
                         modal.style.opacity = '';
                         setTimeout(() => { modal.style.transition = ''; }, 200);
@@ -5143,12 +5357,15 @@
                 const rawText = [post.title, post.content].filter(Boolean).join('\n').trim();
                 const captionHtml = rawText ? linkifyContent(rawText, post.mentions) : '';
                 return `<div class="lightbox-caption-block">
-                        <div class="lightbox-author-row" data-lightbox-author="${author.id}">
-                            <img src="${author.avatar || ''}" alt="">
-                            <div class="lightbox-author-info">
-                                <div class="lightbox-author-name">${escapeHtml(da)} ${badgeHtml}</div>
-                                <div class="lightbox-author-time">${usernameStr?usernameStr+' · ':''}${formatRelativeTime(post.timestamp || post.date)}</div>
+                        <div class="lightbox-author-row" style="justify-content:space-between;" data-lightbox-author="${author.id}">
+                            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                                <img src="${author.avatar || ''}" alt="">
+                                <div class="lightbox-author-info">
+                                    <div class="lightbox-author-name">${escapeHtml(da)} ${badgeHtml}</div>
+                                    <div class="lightbox-author-time">${usernameStr?usernameStr+' · ':''}${formatRelativeTime(post.timestamp || post.date)}</div>
+                                </div>
                             </div>
+                            <div style="flex-shrink:0;">${buildFollowButton(post.user_id, da)}</div>
                         </div>
                         ${captionHtml ? `<div class="lightbox-caption-text" id="lightboxCaptionText">${captionHtml}</div>
                         <button type="button" class="lightbox-caption-seemore">See more</button>` : ''}
@@ -5161,6 +5378,7 @@
                 if (!mediaArea) return;
                 mediaArea.addEventListener('click', (e) => {
                     if (e.target.closest('.plyr__controls') || e.target.closest('.plyr__control--overlaid')) return;
+                    if (e.target.closest('.lb-mute-btn') || e.target.closest('.lb-expand-btn')) return;
                     document.getElementById('lightbox').classList.toggle('ui-hidden');
                 });
             })();
@@ -5235,6 +5453,36 @@
                 };
             }
 
+            function buildLbSheetHeaderHTML(post) {
+                if (!post) return '';
+                const author = window.getAuthorFromProfile(post.profile);
+                const da = truncateName(author.name || '', 26);
+                const uname = author.username || (post.profile && post.profile.username) || '';
+                const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(author.verified_status) : '';
+                const rawText = [post.title, post.content].filter(Boolean).join('\n').trim();
+                const captionHtml = rawText ? linkifyContent(rawText, post.mentions) : '';
+                const sortLbl = getCommentSort(post.id) === 'recent' ? 'Recent' : 'Top';
+                return `<div class="lb-sheet-header">
+                        <div class="lb-sheet-author-row" data-lightbox-sheet-author="${author.id}">
+                            <img src="${author.avatar || ''}" alt="">
+                            <div class="lb-sheet-author-info">
+                                <div class="lb-sheet-author-name">${escapeHtml(da)} ${badgeHtml}</div>
+                                ${uname?`<div class="lb-sheet-author-username">@${escapeHtml(uname)}</div>`:''}
+                            </div>
+                            <div>${buildFollowButton(post.user_id, da)}</div>
+                        </div>
+                        ${captionHtml ? `<div class="lb-sheet-caption clamp4" id="lbSheetCaption">${captionHtml}</div>
+                        <button type="button" class="lb-sheet-seemore" id="lbSheetSeeMore">See more</button>` : ''}
+                        <div class="lb-sheet-meta-row">
+                            <span class="lb-sheet-views">${svgEye()}${formatCount(post.views||0)} views</span>
+                            <span class="lb-sheet-date">${formatRelativeTime(post.timestamp || post.date)}</span>
+                            <button class="comment-sort-btn" id="lightboxCommentSortBtn">
+                                <span id="lightboxCommentSortLabel">${sortLbl}</span>${svgChevronDown()}
+                            </button>
+                        </div>
+                    </div>`;
+            }
+
             function openLightboxCommentsSheet(postId) {
                 const overlay = document.getElementById('lightboxCommentsOverlay');
                 if (!overlay) return;
@@ -5243,6 +5491,41 @@
                 _lightboxCommentsPostId = postId;
                 _lightboxReplyTarget = null;
                 overlay.classList.add('open');
+
+                const header = document.getElementById('lightbox-comments-post-header');
+                if (header) {
+                    header.innerHTML = buildLbSheetHeaderHTML(post);
+                    const sortBtn = header.querySelector('#lightboxCommentSortBtn');
+                    if (sortBtn) sortBtn.onclick = () => openCommentSortModal(postId, 'lightbox-comments-list', 'lightboxCommentSortLabel');
+                    const authorRow = header.querySelector('.lb-sheet-author-row');
+                    if (authorRow) authorRow.addEventListener('click', (e) => {
+                        if (e.target.closest('.follow-btn')) return;
+                        closeLightboxCommentsSheet();
+                        closeLightbox();
+                        window.Router.openProfile(post.user_id);
+                    });
+                    requestAnimationFrame(() => {
+                        const cap = document.getElementById('lbSheetCaption');
+                        const more = document.getElementById('lbSheetSeeMore');
+                        if (cap && more) {
+                            if (cap.scrollHeight > cap.clientHeight + 2) {
+                                more.style.display = 'block';
+                                more.onclick = () => {
+                                    if (cap.classList.contains('clamp4')) {
+                                        cap.classList.remove('clamp4');
+                                        more.textContent = 'See less';
+                                    } else {
+                                        cap.classList.add('clamp4');
+                                        more.textContent = 'See more';
+                                    }
+                                };
+                            } else {
+                                more.style.display = 'none';
+                            }
+                        }
+                    });
+                }
+
                 const list = document.getElementById('lightbox-comments-list');
                 if (list) list.innerHTML = commentSkeletons(3);
                 setupLightboxCommentsDelegation(postId);
@@ -5251,6 +5534,7 @@
                 const sendBtn = document.getElementById('lightbox-comment-submit-btn');
                 if (ta) { ta.value = ''; ta.style.height = '40px'; }
                 if (sendBtn) sendBtn.disabled = true;
+                clearCommentMedia('lightbox');
             }
 
             function closeLightboxCommentsSheet() {
@@ -5264,15 +5548,23 @@
                 const ta = document.getElementById('lightbox-comment-textarea');
                 if (!ta || !_lightboxCommentsPostId) return;
                 const message = ta.value.trim();
-                if (!message) return showToast('Reply cannot be empty.');
+                if (!message && !lightboxCommentMedia) return showToast('Reply cannot be empty.');
                 const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = _lightboxReplyTarget;
                 const postId = _lightboxCommentsPostId;
+                const mediaFile = lightboxCommentMedia?.file || null;
                 try {
-                    await addComment(postId, pi, message, mentions, '');
+                    let imageUrl = '';
+                    if (mediaFile) {
+                        showToast('Uploading media...');
+                        imageUrl = await window.AuthUser.uploadCommentMedia(mediaFile, () => {}) || '';
+                        if (!imageUrl) throw new Error('Media upload failed.');
+                    }
+                    await addComment(postId, pi, message, mentions, imageUrl);
                     ta.value = '';
                     ta.style.height = '40px';
                     _lightboxReplyTarget = null;
+                    clearCommentMedia('lightbox');
                     const sendBtn = document.getElementById('lightbox-comment-submit-btn');
                     if (sendBtn) sendBtn.disabled = true;
                     if (!pi) setCommentsVisible(postId, getVisibleComments(postId) + 1);
@@ -5289,16 +5581,22 @@
                 const overlay = document.getElementById('lightboxCommentsOverlay');
                 const ta = document.getElementById('lightbox-comment-textarea');
                 const sendBtn = document.getElementById('lightbox-comment-submit-btn');
+                const mediaBtn = document.getElementById('lightbox-comment-media-btn');
+                const mediaInput = document.getElementById('lightbox-comment-media-input');
+                const mediaRemoveBtn = document.getElementById('lightbox-comment-media-remove-btn');
                 if (closeBtn) closeBtn.addEventListener('click', closeLightboxCommentsSheet);
                 if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closeLightboxCommentsSheet(); });
                 if (ta) {
                     ta.addEventListener('input', function() {
                         this.style.height = 'auto';
                         this.style.height = Math.min(this.scrollHeight, 100) + 'px';
-                        if (sendBtn) sendBtn.disabled = !this.value.trim();
+                        if (sendBtn) sendBtn.disabled = !this.value.trim() && !lightboxCommentMedia;
                     });
                 }
                 if (sendBtn) sendBtn.addEventListener('click', submitLightboxComment);
+                if (mediaBtn && mediaInput) mediaBtn.addEventListener('click', () => mediaInput.click());
+                if (mediaInput) mediaInput.addEventListener('change', (e) => handleCommentMediaSelect(e.target.files && e.target.files[0], 'lightbox'));
+                if (mediaRemoveBtn) mediaRemoveBtn.addEventListener('click', () => clearCommentMedia('lightbox'));
             })();
 
             // ─── VIDEO AUTO-PLAY ─────────────────────────────────────────────
@@ -6178,17 +6476,19 @@
             // ─── COMMENT SORT ────────────────────────────────────────────────
             function getCommentSort(postId) { return currentCommentSort[postId] || 'top'; }
 
-            function openCommentSortModal(postId) {
+            function openCommentSortModal(postId, listId, labelId) {
+                listId = listId || 'comments-list';
+                labelId = labelId || 'commentSortLabel';
                 const modal = document.getElementById('commentSortModal');
                 const active = getCommentSort(postId);
                 modal.querySelectorAll('.report-reason-option').forEach(opt => {
                     opt.classList.toggle('selected', opt.dataset.sort === active);
                     opt.onclick = () => {
                         currentCommentSort[postId] = opt.dataset.sort;
-                        const lbl = document.getElementById('commentSortLabel');
+                        const lbl = document.getElementById(labelId);
                         if (lbl) lbl.textContent = opt.dataset.sort === 'top' ? 'Top' : 'Recent';
                         closeCommentSortModal();
-                        refreshCommentsList(postId, 'comments-list');
+                        refreshCommentsList(postId, listId);
                     };
                 });
                 modal.classList.add('open');
@@ -6722,15 +7022,10 @@
             function renderCommentMediaPreview(kind) {
                 const wrap = document.getElementById(kind + '-comment-media-preview');
                 const img = document.getElementById(kind + '-comment-media-preview-img');
-                const media = kind === 'global' ? globalCommentMedia : exploreCommentMedia;
+                const media = kind === 'global' ? globalCommentMedia : (kind === 'explore' ? exploreCommentMedia : lightboxCommentMedia);
                 if (!wrap || !img) return;
-                if (media) {
-                    img.src = media.url;
-                    wrap.style.display = 'inline-flex';
-                } else {
-                    img.src = '';
-                    wrap.style.display = 'none';
-                }
+                if (media) { img.src = media.url; wrap.style.display = 'inline-flex'; }
+                else { img.src = ''; wrap.style.display = 'none'; }
             }
 
             function clearCommentMedia(kind) {
@@ -6742,7 +7037,7 @@
                     const btn = document.getElementById('global-comment-submit-btn');
                     const ta = document.getElementById('global-comment-textarea');
                     if (btn) btn.disabled = !(ta && ta.value.trim());
-                } else {
+                } else if (kind === 'explore') {
                     if (exploreCommentMedia && exploreCommentMedia.url) URL.revokeObjectURL(exploreCommentMedia.url);
                     exploreCommentMedia = null;
                     const input = document.getElementById('explore-comment-media-input');
@@ -6750,36 +7045,44 @@
                     const btn = document.getElementById('explore-comment-submit-btn');
                     const ta = document.getElementById('explore-comment-textarea');
                     if (btn) btn.disabled = !(ta && ta.value.trim());
+                } else {
+                    if (lightboxCommentMedia && lightboxCommentMedia.url) URL.revokeObjectURL(lightboxCommentMedia.url);
+                    lightboxCommentMedia = null;
+                    const input = document.getElementById('lightbox-comment-media-input');
+                    if (input) input.value = '';
+                    const btn = document.getElementById('lightbox-comment-submit-btn');
+                    const ta = document.getElementById('lightbox-comment-textarea');
+                    if (btn) btn.disabled = !(ta && ta.value.trim());
                 }
                 renderCommentMediaPreview(kind);
             }
 
             function handleCommentMediaSelect(file, kind) {
                 if (!file) return;
+                const inputIds = { global: 'global-comment-media-input', explore: 'explore-comment-media-input', lightbox: 'lightbox-comment-media-input' };
                 if (file.type === 'image/gif') {
                     showToast('GIFs are handled separately.', 'o');
-                    const input = document.getElementById(kind === 'global' ? 'global-comment-media-input' : 'explore-comment-media-input');
+                    const input = document.getElementById(inputIds[kind]);
                     if (input) input.value = '';
                     return;
                 }
-                if (!isSupportedCommentMediaType(file)) {
-                    showToast('Unsupported file type. Choose a JPG, PNG or WebP image.', 'o');
-                    return;
-                }
-                if (file.size > COMMENT_MEDIA_MAX_BYTES) {
-                    showToast('Media must be under 10MB.', 'o');
-                    return;
-                }
+                if (!isSupportedCommentMediaType(file)) { showToast('Unsupported file type. Choose a JPG, PNG or WebP image.', 'o'); return; }
+                if (file.size > COMMENT_MEDIA_MAX_BYTES) { showToast('Media must be under 10MB.', 'o'); return; }
                 const url = URL.createObjectURL(file);
                 if (kind === 'global') {
                     if (globalCommentMedia && globalCommentMedia.url) URL.revokeObjectURL(globalCommentMedia.url);
                     globalCommentMedia = { file, url };
                     const btn = document.getElementById('global-comment-submit-btn');
                     if (btn) btn.disabled = false;
-                } else {
+                } else if (kind === 'explore') {
                     if (exploreCommentMedia && exploreCommentMedia.url) URL.revokeObjectURL(exploreCommentMedia.url);
                     exploreCommentMedia = { file, url };
                     const btn = document.getElementById('explore-comment-submit-btn');
+                    if (btn) btn.disabled = false;
+                } else {
+                    if (lightboxCommentMedia && lightboxCommentMedia.url) URL.revokeObjectURL(lightboxCommentMedia.url);
+                    lightboxCommentMedia = { file, url };
+                    const btn = document.getElementById('lightbox-comment-submit-btn');
                     if (btn) btn.disabled = false;
                 }
                 renderCommentMediaPreview(kind);
