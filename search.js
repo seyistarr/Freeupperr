@@ -2,21 +2,14 @@
 // search.js — FreeUpper standalone search + discovery + lightbox
 //
 // SELF-CONTAINED: does not depend on index.html's inline module.
-// Uses only what global.js / auth.js / posts.js / listings.js /
-// hashtags.js / router.js / mentions.js expose on window.
 //
-// Depends on:
-//   window.sb               (Supabase client)
-//   window.AuthUser         (auth.js)
-//   window.PostsAPI         (posts.js)
-//   window.ListingsAPI      (listings.js)
-//   window.Hashtags         (hashtags.js)
-//   window.Router           (router.js)
-//   window.Mentions         (mentions.js, optional)
-//   window.getAuthorFromProfile / getVerifiedBadgeHTML (global.js)
+// Depends on: window.sb, window.AuthUser, window.PostsAPI,
+//             window.ListingsAPI, window.Hashtags, window.Router,
+//             window.Mentions (optional),
+//             window.getAuthorFromProfile / getVerifiedBadgeHTML.
 //
 // SOFT-DELETE: all `.from('posts')` queries filter `.is('deleted_at', null)`.
-// RACE: `_searchReqToken` guards against stale async responses overwriting tabs.
+// RACE: `_searchReqToken` guards against stale async responses.
 // ============================================================
 (function () {
   'use strict';
@@ -55,13 +48,10 @@
   let loadingMore = false;
   let observer = null;
 
-  // Post cache — search has no persistent allPosts array, so lightbox /
-  // share / comments look up posts here by ID.
   const _postStore = new Map();
   function _rememberPost(p) { if (p && p.id) _postStore.set(p.id, p); return p; }
   function _getPost(id) { return _postStore.get(id) || null; }
 
-  // Lightbox state
   let _galleryState = { items: [], index: 0, postId: null, resumeState: null };
   let _lightboxScrollLocked = false;
   let _lightboxCommentsPostId = null;
@@ -69,29 +59,24 @@
   let _lbFeedList = [];
   let _lbFeedIndex = -1;
 
-  // Comments state
   let currentCommentSort = {};
   let locallyLikedComments = new Map();
   let expandedThreads = new Map();
   let _commentsFetchToken = {};
   let lightboxCommentMedia = null;
 
-  // Pending
   let pendingLikes = new Set();
   let pendingBookmarks = new Set();
 
-  // Share / repost
   let sharePostId = null;
   let repostQuoteTargetId = null;
 
-  // Peek
   let _peekPost = null;
 
-  // YT
   let ytState = {};
   let ytInfo = {};
 
-  // ─── ICONS (search UI) ────────────────────────────────────
+  // ─── ICONS ────────────────────────────────────────────────
   const ICON = {
     search: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
     close: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
@@ -106,7 +91,6 @@
     heart: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
     heartOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
     play: '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
-    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4z"/></svg>',
     pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
     clock: '<svg class="clk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
@@ -268,8 +252,8 @@
     });
   }
 
-  // ─── SVG HELPERS (index.html-compatible) ─────────────────
-  function svgComment() { return ICON.search ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>' : ''; }
+  // ─── SVG HELPERS ─────────────────────────────────────────
+  function svgComment() { return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>'; }
   function svgCommentOff() { return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><line x1="3" y1="21" x2="21" y2="3" stroke="var(--danger,#DC2626)"/></svg>'; }
   function svgShare() { return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4z"/></svg>'; }
   function svgHeart(reacted) {
@@ -279,7 +263,6 @@
   }
   function svgChevronDown() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>'; }
   function svgChevronUp() { return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>'; }
-  function svgClock() { return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'; }
   function svgEye() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19V10"/><path d="M12 19V5"/><path d="M20 19V14"/></svg>'; }
   function bookmarkIcon(filled) { const c = filled ? 'var(--gold)' : 'none'; return `<svg width="19" height="19" viewBox="0 0 24 24" fill="${c}" stroke="var(--gold)" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`; }
   function bookmarkIconWithCount(id, filled, count) {
@@ -301,10 +284,12 @@
   }
 
   // ─── RELATIONSHIP SYSTEM ──────────────────────────────────
-  async function loadFollowSets() {
-    if (followSetsLoaded) return;
+  // ★ FIX: do NOT mark followSetsLoaded=true when user is guest — retry
+  // when auth resolves.
+  async function loadFollowSets(force = false) {
+    if (followSetsLoaded && !force) return;
     const user = getCurrentUser();
-    if (!user || !user.isLoggedIn) { followSetsLoaded = true; return; }
+    if (!user || !user.isLoggedIn) return; // stay unloaded; retry on auth change
     try {
       const [f1, f2] = await Promise.all([
         window.sb.from('follows').select('following_id').eq('follower_id', user.id),
@@ -312,8 +297,8 @@
       ]);
       followingSet = new Set((f1.data || []).map(r => r.following_id));
       followerSet = new Set((f2.data || []).map(r => r.follower_id));
+      followSetsLoaded = true;
     } catch (e) { console.warn('loadFollowSets:', e); }
-    followSetsLoaded = true;
   }
   async function loadBookmarks() {
     const user = getCurrentUser();
@@ -355,23 +340,29 @@
       return !currently;
     } catch (err) { showToast(err.message, 'r'); return currently; }
   }
+
+  // ★ FIX: keep the button visible; flip label to "Following"/"Friends".
   async function toggleFollowHandler(e, userId) {
     e.stopPropagation();
+    const clicked = e.currentTarget;
+    if (clicked) clicked.disabled = true;
     await toggleFollowUser(userId);
     const newState = relationshipState(userId);
     document.querySelectorAll(`.follow-btn[data-user-id="${userId}"]`).forEach(b => {
-      if (newState === 'friends' || newState === 'following') b.outerHTML = `<span class="follow-btn hidden-follow"></span>`;
-      else { b.textContent = relLabel(newState); b.className = `follow-btn rel-${newState}`; b.dataset.relState = newState; }
+      if (b === clicked) b.disabled = false;
+      b.textContent = relLabel(newState);
+      b.className = `follow-btn rel-${newState}`;
+      b.dataset.relState = newState;
     });
     showToast(newState === 'friends' ? 'You are now friends' : (newState === 'following' ? 'Following' : 'Unfollowed'));
   }
   window.toggleFollowHandler = toggleFollowHandler;
 
+  // ★ FIX: no early-return "hide if following" — always render button.
   function buildFollowButton(authorId, authorName) {
     const me = getCurrentUser();
     if (!authorId || authorId === me.id) return `<span class="follow-btn hidden-follow"></span>`;
     const state = relationshipState(authorId);
-    if (state === 'friends' || state === 'following') return `<span class="follow-btn hidden-follow"></span>`;
     return `<button class="follow-btn rel-${state}" data-user-id="${authorId}" data-rel-state="${state}" onclick="toggleFollowHandler(event,'${authorId}')">${relLabel(state)}</button>`;
   }
 
@@ -514,7 +505,7 @@
     return error ? 0 : (count || 0);
   }
 
-  // ─── MEDIA / POST HELPERS ────────────────────────────────
+  // ─── MEDIA HELPERS ───────────────────────────────────────
   function getMediaItems(post) {
     if (!post) return [];
     if (Array.isArray(post.media) && post.media.length) return post.media;
@@ -619,9 +610,10 @@
       ${mediaHtml}
     </article>`;
   }
+  // ★ FIX: added data-user-id to the follow button.
   function userRowHtml(u) {
     const state = relationshipState(u.id);
-    const btn = state === 'self' ? '' : `<button class="follow-btn rel-${state}" onclick="toggleFollowHandler(event,'${u.id}')">${relLabel(state)}</button>`;
+    const btn = state === 'self' ? '' : `<button class="follow-btn rel-${state}" data-user-id="${u.id}" onclick="toggleFollowHandler(event,'${u.id}')">${relLabel(state)}</button>`;
     const showBadge = u.verified_status && u.verified_status !== 'none' && u.verified_status !== 'pending';
     return `<div class="user-row" onclick="window.Router.openProfile('${u.id}')">
       <div class="av"><img src="${u.avatar_url||''}" onerror="this.style.display='none'">${showBadge?`<span class="vb">${ICON.check}</span>`:''}</div>
@@ -672,7 +664,7 @@
   }
 
   // ════════════════════════════════════════════════════════
-  // LIGHTBOX (ported from index.html — adapted to _postStore)
+  // LIGHTBOX
   // ════════════════════════════════════════════════════════
   function lbMuteIconSVG(muted) {
     return muted
@@ -750,7 +742,6 @@
     });
   }
   function setupLightboxNextPostSwipe(postId) {
-    // In search we don't have a feed array — disable "swipe up for next".
     _lbFeedList = [];
     _lbFeedIndex = -1;
   }
@@ -943,7 +934,6 @@
   }
   window.closeLightbox = closeLightbox;
 
-  // ─── GALLERY SWIPE / DISMISS ─────────────────────────────
   (function setupGallerySwipe() {
     const track = document.getElementById('galleryLightboxTrack');
     if (!track) return;
@@ -1086,9 +1076,7 @@
   window._searchYtInit = initYtListener;
   window._searchYtSeek = seekYoutube;
 
-  // ════════════════════════════════════════════════════════
-  // FOOTER ACTIONS (reaction / bookmark / repost / share)
-  // ════════════════════════════════════════════════════════
+  // ─── FOOTER ACTIONS ──────────────────────────────────────
   function isBookmarked(id) { return bookmarksSet.has(id); }
 
   function buildReactionButton(postId) {
@@ -1141,19 +1129,17 @@
       });
     } catch (err) {
       if (!isDuplicateKeyError(err)) showToast(err.message, 'r');
-    } finally {
-      pendingLikes.delete(postId);
-    }
+    } finally { pendingLikes.delete(postId); }
   }
 
   async function toggleBookmarkUI(postId, badgeEl) {
     if (pendingBookmarks.has(postId)) return;
-    spawnRipple(badgeEl, null);
+    spawnRreipple(badgeEl, null);
     haptic(8);
-    const me = getCurrentUser();
-    if (!me.isLoggedIn) {
-      if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
-      else showToast('Please sign in to bookmark', 'o');
+    constpost me = getCurrentUser();
+    if (!me.isQuoteLoggedIn) {
+      if (window.AuthUser && windowOver.AuthUser.openModal) window.AuthUser.openModal('laysignup');
+      else showToast('Please sign in to'). bookmark', 'o');
       return;
     }
     pendingBookmarks.add(postId);
@@ -1176,7 +1162,6 @@
     finally { pendingBookmarks.delete(postId); }
   }
 
-  // ─── SHARE MODAL ─────────────────────────────────────────
   function openShareModal(postId) {
     sharePostId = postId;
     const modal = document.getElementById('share-modal');
@@ -1220,7 +1205,6 @@
     }
   }
 
-  // ─── REPOST ──────────────────────────────────────────────
   function openRepostQuoteSheet(postId) {
     repostQuoteTargetId = postId;
     const post = _getPost(postId);
@@ -1245,7 +1229,7 @@
       else thumbEl.style.display = 'none';
     }
     lockBodyScroll();
-    document.getElementById('repostQuoteOverlay').classList.add('open');
+    document.getElementById('classList.add('open');
   }
   function closeRepostQuoteModal() {
     document.getElementById('repostQuoteOverlay').classList.remove('open');
@@ -1268,9 +1252,7 @@
     }, { once: true });
   }
 
-  // ════════════════════════════════════════════════════════
-  // COMMENTS SHEET
-  // ════════════════════════════════════════════════════════
+  // ─── COMMENTS SHEET ──────────────────────────────────────
   function commentSkeletons(count = 3) {
     let h = '';
     for (let i = 0; i < count; i++) {
@@ -1283,16 +1265,6 @@
     const dc = comments.filter(c => c.parentId === pid);
     for (const c of dc) { r.push(c); r.push(...getAllDescendants(c.id, comments)); }
     return r;
-  }
-  function findTopAncestorId(commentId, comments) {
-    let current = comments.find(c => c.id === commentId);
-    if (!current) return commentId;
-    while (current.parentId) {
-      const parent = comments.find(c => c.id === current.parentId);
-      if (!parent) break;
-      current = parent;
-    }
-    return current.id;
   }
   function getCommentCount(post) {
     if (!post) return 0;
@@ -1338,10 +1310,6 @@
     const username = truncateName(author.name, 16);
     const avatar = author.avatar;
     const bhtml = badgeHTML(author.verified_status);
-    const me = getCurrentUser();
-    const post = _getPost(postId);
-    const isMine = me && me.id === c.userId;
-    const isPostOwner = post && me && post.user_id === me.id;
     const isPinned = !!c.pinned;
     const pinnedBadgeHtml = isPinned ? '<span class="comment-pinned-badge"><svg viewBox="0 0 24 24" width="11" height="11"><path d="M12 17v5"/><path d="M9 3h6l1 6-2 2v3H8v-3L6 9Z"/></svg> Pinned</span>' : '';
     const editedTagHtml = c.edited ? '<span class="comment-edited-tag">(edited)</span>' : '';
@@ -1353,10 +1321,10 @@
       const sh = ds.slice(0, ec);
       const rm = ds.length - ec;
       rh = `<div class="replies-thread">${sh.map(r=>renderReplyItem(r,allComments,postId)).join('')}</div>`;
-      if (rm > 0) rh += `<button type="button" class="view-replies-btn expand-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(rm)} more repl${rm!==1?'ies':'y'} <span class="reply-sort-toggle" onclick="event.stopPropagation();Search._openCommentSort('${postId}')">▾</span></button>`;
+      if (rm > 0) rh += `<button type="button" class="view-replies-btn expand-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(rm)} more repl${rm!==1?'ies':'y'}</button>`;
       else rh += `<button type="button" class="hide-replies-btn collapse-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronUp()} Hide replies</button>`;
     } else if (hr && ec === 0) {
-      rh = `<button type="button" class="view-replies-btn expand-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(ds.length)} repl${ds.length!==1?'ies':'y'} <span class="reply-sort-toggle" onclick="event.stopPropagation();Search._openCommentSort('${postId}')">▾</span></button>`;
+      rh = `<button type="button" class="view-replies-btn expand-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(ds.length)} repl${ds.length!==1?'ies':'y'}</button>`;
     }
     const il = c.message && c.message.length > 220;
     const avatarHtml = avatar ? `<img src="${avatar}" alt="">` : `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8.5" r="3.3"/><path d="M4.8 19c.6-4 3.6-6.3 7.2-6.3s6.6 2.3 7.2 6.3c-2 1.8-4.6 2.8-7.2 2.8s-5.2-1-7.2-2.8z"/></svg>`;
@@ -1365,16 +1333,13 @@
     const commentMediaHtml = c.imageUrl ? `<img class="comment-media" src="${escapeHtml(c.imageUrl)}" alt="" loading="lazy">` : '';
     const _ov = locallyLikedComments.get(c.id);
     const likeCount = _ov ? _ov.count : (c.likeCount || 0);
-    const isLiked = _ov ? _ov.liked : !!c.likedByMe;
+    const is="${Liked = _ov ? _ov.liked : !!c.lcikedByMe;
 
-    return `<div class="comment-item" data-comment-id="${c.id}">
-        <div class="${avatarClass}" data-user-id="${c.userId}">${avatarHtml}</div>
+    return `<div class=".usercomment-item" data-comment-idId="${c.id}">
+        <div class="${}avatarClass}" data-user-id">="${c.userId}">${avatarHtml}</div>
         <div class="comment-body">
           <div class="comment-username-row">
-            <div class="comment-username" data-user-id="${c.userId}">${pinnedBadgeHtml}${escapeHtml(username)} ${bhtml}</div>
-            <div class="comment-menu-actions">
-              ${(isPostOwner && isLiked) ? `<span class="owner-like-badge"><svg viewBox="0 0 24 24" fill="#DC2626" stroke="#DC2626"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>` : ''}
-            </div>
+            <div class="comment-username" data-user-id${pinnedBadgeHtml}${escapeHtml(username)} ${bhtml}</div>
           </div>
           <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${renderedMsg}${editedTagHtml}</div>
           ${commentMediaHtml}
@@ -1490,7 +1455,6 @@
       }
       if (t.closest('.expand-replies-btn')) {
         const btn = t.closest('.expand-replies-btn');
-        if (e.target.closest('.reply-sort-toggle')) { openCommentSortModal(postId); return; }
         const ci = btn.dataset.commentId;
         if (ci) { expandedThreads.set(ci, (expandedThreads.get(ci) || 0) + REPLY_BATCH); refreshCommentsList(postId, 'lightbox-comments-list'); }
         return;
@@ -1654,7 +1618,7 @@
       clearCommentMedia('lightbox');
       const sendBtn = document.getElementById('lightbox-comment-submit-btn');
       if (sendBtn) sendBtn.disabled = true;
-      if (!pi) setCommentsVisible(postId, getVisibleComments(postId) + 1);
+      if (!pi) setCommentsVisibleBtn(postId, getVisibleComments(postId) + 1);
       await refreshCommentsList(postId, 'lightbox-comments-list');
       updateCommentCount(postId);
       showToast(pi ? 'Reply posted' : 'Comment posted');
@@ -1676,7 +1640,7 @@
       this.style.height = Math.min(this.scrollHeight, 100) + 'px';
       if (sendBtn) sendBtn.disabled = !this.value.trim() && !lightboxCommentMedia;
     });
-    if (sendBtn) sendBtn.addEventListener('click', submitLightboxComment);
+    if (sendBtn) send.addEventListener('click', submitLightboxComment);
     if (mediaBtn && mediaInput) mediaBtn.addEventListener('click', () => mediaInput.click());
     if (mediaInput) mediaInput.addEventListener('change', (e) => handleCommentMediaSelect(e.target.files && e.target.files[0], 'lightbox'));
     if (mediaRemoveBtn) mediaRemoveBtn.addEventListener('click', () => clearCommentMedia('lightbox'));
@@ -1745,9 +1709,7 @@
     }
   }
 
-  // ════════════════════════════════════════════════════════
-  // POST OPEN / PEEK / VIDEO DIRECT
-  // ════════════════════════════════════════════════════════
+  // ─── POST OPEN / PEEK / VIDEO DIRECT ────────────────────
   async function openImagePeek(postId) {
     let p = _getPost(postId);
     if (!p || !p.profiles) p = await fetchPostById(postId);
@@ -1796,16 +1758,21 @@
     if (window.Router && window.Router.openProfile) window.Router.openProfile(id);
   }
   window._searchOpenProfile = openProfileSafe;
-  window._searchOpenPost = _openPost;
 
-  // ════════════════════════════════════════════════════════
-  // SEARCH UI (discovery / tabs / hashtag mode / infinite)
-  // ════════════════════════════════════════════════════════
+  // ─── SEARCH UI ────────────────────────────────────────────
   function getRecentSearches() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { return []; } }
+  // ★ FIX: collapse prefix duplicates so typing "Monis" replaces "Mon", "Moni", etc.
   function addRecentSearch(q) {
-    if (!q) return;
-    let list = getRecentSearches().filter(x => x.toLowerCase() !== q.toLowerCase());
-    list.unshift(q);
+    if (!q || q.trim().length < 2) return;
+    const val = q.trim();
+    const lower = val.toLowerCase();
+    let list = getRecentSearches().filter(x => {
+      const xl = (x || '').toLowerCase();
+      if (xl === lower) return false;
+      if (xl.startsWith(lower) || lower.startsWith(xl)) return false;
+      return true;
+    });
+    list.unshift(val);
     localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 10)));
   }
   function removeRecentSearch(q) {
@@ -1924,9 +1891,10 @@
     let html = recentHtml;
     html += `<div class="discovery-block"><div class="section-title">${ICON.fire}Trending Hashtags</div><div class="trend-tag-grid">${hashtags.map(h => `<div class="trend-tag-card" onclick="Search.openHashtag('${escapeHtml(h.tag)}')"><div class="box">${ICON.hashtag}</div><div class="name">#${escapeHtml(h.tag)}</div><div class="cnt">${formatCount(h.count)} posts</div></div>`).join('')}</div></div>`;
     if (users.length) {
+      // ★ FIX: added data-user-id
       html += `<div class="discovery-block"><div class="section-title">${ICON.user}Suggested Users</div><div class="sugg-scroll">${users.map(u => {
         const state = relationshipState(u.id);
-        const btn = state === 'self' ? '' : `<button class="follow-btn rel-${state}" onclick="toggleFollowHandler(event,'${u.id}')">${relLabel(state)}</button>`;
+        const btn = state === 'self' ? '' : `<button class="follow-btn rel-${state}" data-user-id="${u.id}" onclick="toggleFollowHandler(event,'${u.id}')">${relLabel(state)}</button>`;
         const showBadge = u.verified_status && u.verified_status !== 'none' && u.verified_status !== 'pending';
         return `<div class="sugg-card" onclick="window.Router.openProfile('${u.id}')"><div class="sugg-avatar"><img src="${u.avatar_url||''}" onerror="this.style.display='none'">${showBadge?`<span class="vb">${ICON.check}</span>`:''}</div><div class="name">${escapeHtml(u.display_name||u.username||'')}</div><div class="handle">@${escapeHtml(u.username||'')}</div><div onclick="event.stopPropagation()">${btn}</div></div>`;
       }).join('')}</div></div>`;
@@ -2136,24 +2104,18 @@
     renderDiscovery();
   }
 
-  // ════════════════════════════════════════════════════════
-  // MODAL EVENT WIRING
-  // ════════════════════════════════════════════════════════
+  // ─── MODAL EVENT WIRING ──────────────────────────────────
   function wireModals() {
-    // Lightbox close
     const lbClose = document.getElementById('galleryLightboxClose');
     if (lbClose) lbClose.addEventListener('click', closeLightbox);
     const lb = document.getElementById('lightbox');
     if (lb) lb.addEventListener('click', function (e) { if (e.target === this) closeLightbox(); });
 
-    // Comments sheet
     setupLightboxCommentsBar();
 
-    // Comment sort modal — close on backdrop
     const sortModal = document.getElementById('commentSortModal');
     if (sortModal) sortModal.addEventListener('click', e => { if (e.target.id === 'commentSortModal') closeCommentSortModal(); });
 
-    // Share modal
     const shareCloseBtn = document.getElementById('share-close-btn');
     if (shareCloseBtn) shareCloseBtn.addEventListener('click', closeShareModal);
     const shareModal = document.getElementById('share-modal');
@@ -2162,7 +2124,6 @@
       btn.addEventListener('click', () => { const a = btn.dataset.share; if (a) handleShareAction(a); });
     });
 
-    // Repost quote sheet
     const rqc = document.getElementById('repostQuoteCloseBtn');
     if (rqc) rqc.addEventListener('click', closeRepostQuoteModal);
     const rqOverlay = document.getElementById('repostQuoteOverlay');
@@ -2186,7 +2147,6 @@
       });
     });
 
-    // Keyboard
     document.addEventListener('keydown', e => {
       if (document.getElementById('lightbox').classList.contains('show')) {
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -2209,9 +2169,6 @@
         if (document.getElementById('searchPeekModal').classList.contains('open')) closeImagePeek();
       }
     });
-
-    // Peek backdrop already inline-wired via onclick, but wire Esc-friendly close
-    // (documented: peek backdrop has onclick=Search._closePeek in HTML)
   }
 
   async function refreshFooterForPost(postId) {
@@ -2221,13 +2178,10 @@
     if (footer && _galleryState.postId === postId) {
       footer.innerHTML = buildLightboxCaptionHTML(p) + buildLbScrubberHTML() + buildActionsRow(p);
     }
-    // Also refresh inline cards showing repost count
     document.querySelectorAll(`[data-repost-btn="${postId}"] .repost-count-num`).forEach(el => el.textContent = formatCount(p.repostCount || p.repost_count || 0));
   }
 
-  // ════════════════════════════════════════════════════════
-  // PUBLIC API
-  // ════════════════════════════════════════════════════════
+  // ─── PUBLIC API ──────────────────────────────────────────
   window.Search = {
     switchTab, onQueryInput, onFocus, clear, runSearch,
     openHashtag, exitHashtagMode,
@@ -2240,16 +2194,27 @@
     _peekGoToProfile: peekGoToProfile,
     _openVideoDirect: openVideoDirect,
     _openPost: _openPost,
-    _openCommentSort: openCommentSortModal
+    _openCommentSort: openCommentSortModal,
+    reloadFollowSets: () => loadFollowSets(true) // ★ FIX: expose manual refresh
   };
 
-  // ════════════════════════════════════════════════════════
-  // INIT
-  // ════════════════════════════════════════════════════════
+  // ─── INIT ────────────────────────────────────────────────
   function init() {
     document.getElementById('searchIcon').innerHTML = ICON.search;
     document.getElementById('clearBtn').innerHTML = ICON.close;
     wireModals();
+
+    // ★ FIX: retry follow-set load when auth resolves
+    if (window.AuthUser && window.AuthUser.onChange) {
+      window.AuthUser.onChange(() => {
+        loadFollowSets(true).then(() => {
+          // Re-render anything currently showing follow buttons so they reflect the new state
+          if (currentQuery) renderSearchResults(currentQuery, true);
+          else if (!hashtagMode) renderDiscovery();
+        });
+      });
+    }
+
     const params = new URLSearchParams(window.location.search);
     const tagParam = params.get('tag') || params.get('hashtag');
     const queryParam = params.get('q');
