@@ -1,23 +1,19 @@
 // ============================================================
 // search.js — FreeUpper discovery + live search + infinite scroll
 //
+// LIGHTBOX INTEGRATION:
+//   No hand-rolled lightbox. Two flows:
+//     - Image cards  → openImagePeek()  → tap image → window.Lightbox.open()
+//     - Video cards  → openVideoDirect() → window.Lightbox.open() immediately
+//   The shared lightbox lives in lightbox.js (loaded before this file).
+//
 // SOFT-DELETE FILTER:
 //   All `.from('posts')` queries use `.is('deleted_at', null)`.
-//   Swap for `.neq('status','deleted')` or `.eq('is_deleted', false)`
-//   if your schema differs. Marked with "// SOFT-DELETE FILTER".
+//   Marked with "// SOFT-DELETE FILTER".
 //
-// RACE CONDITION FIX:
-//   `_searchReqToken` guards renderSearchResults against stale
-//   responses overwriting the wrong tab. Bumped by switchTab,
-//   renderDiscovery, enterHashtagMode, exitHashtagMode, clear,
-//   and empty-query onQueryInput.
-//
-// LIGHTBOX:
-//   Ported from index.html's gallery lightbox (markup + CSS in
-//   search.html). Same class names (.lightbox-modal,
-//   .gallery-lightbox-*) so the two look identical. The Pinterest
-//   bottom sheet (.fu-lb-*) is appended below the media area — it
-//   is search-specific and doesn't exist in index.html's variant.
+// RACE CONDITION GUARD:
+//   `_searchReqToken` bumped by switchTab, renderDiscovery, enterHashtagMode,
+//   exitHashtagMode, clear, and empty-query onQueryInput.
 // ============================================================
 (function () {
   'use strict';
@@ -36,6 +32,9 @@
   let followerSet = new Set();
   let followSetsLoaded = false;
   let _searchReqToken = 0;
+
+  // Peek state (single in-flight peek at a time)
+  let _peekPost = null;
 
   const paging = {
     top:      { offset: 0, hasMore: true, cache: null, scrollY: 0 },
@@ -97,12 +96,29 @@
     return ytMatch ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg` : mediaUrl;
   }
   function profileIdOf(profile) { return (profile && profile.id) ? profile.id : ''; }
+  function isVideoUrl(u) { return /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || '') || /youtube\.com|youtu\.be/.test(u || ''); }
   function openProfileSafe(e, id) {
     if (!id) return;
     e.stopPropagation();
     if (window.Router && window.Router.openProfile) window.Router.openProfile(id);
   }
   window._searchOpenProfile = openProfileSafe;
+
+  // Convert a post row into the media-items array that window.Lightbox.open
+  // expects. Adjust the per-item shape if lightbox.js needs different keys.
+  function getMediaItemsForPost(p) {
+    if (!p) return [];
+    if (Array.isArray(p.media) && p.media.length) {
+      return p.media.map(m => ({
+        url: m.url || m.media_url || m.src,
+        type: m.type || m.media_type || (isVideoUrl(m.url || m.media_url || m.src) ? 'video' : 'image'),
+      })).filter(x => x.url);
+    }
+    const url = p.media_url || p.mediaUrl;
+    if (!url) return [];
+    const type = p.media_type || p.mediaType || (isVideoUrl(url) ? 'video' : 'image');
+    return [{ url, type }];
+  }
 
   // ─── RECENT SEARCHES ──────────────────────────────────────
   function getRecentSearches() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { return []; } }
@@ -173,7 +189,7 @@
   }
   window._searchToggleFollow = function (e, userId) { e.stopPropagation(); toggleFollowUser(userId, e.currentTarget); };
 
-  // ─── DATA HELPERS ──────────────────────────────────────────────
+  // ─── DATA HELPERS ─────────────────────────────────────────
   async function fetchTrendingHashtags(limit = 10) {
     if (window.Hashtags && typeof window.Hashtags.fetchTrendingHashtags === 'function') {
       return window.Hashtags.fetchTrendingHashtags(limit);
@@ -221,6 +237,17 @@
   async function fetchTrendingMarket(limit = 6) {
     const { data } = await window.ListingsAPI.getListings({ status: 'active', order_by: 'views_count', limit });
     return data || [];
+  }
+
+  // Single-post fetch used by both peek + direct-video openers
+  async function fetchPostById(postId) {
+    try {
+      // SOFT-DELETE FILTER
+      const { data } = await window.sb.from('posts')
+        .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
+        .eq('id', postId).is('deleted_at', null).single();
+      return data || null;
+    } catch (e) { return null; }
   }
 
   async function searchAll(q, offset = 0) {
@@ -325,7 +352,7 @@
     return error ? 0 : (count || 0);
   }
 
-  // ─── CARD RENDERERS ──────────────────────────────────────
+  // ─── CARD RENDERERS ───────────────────────────────────────
   function renderSquareGrid(posts, withPage) {
     if (!posts || posts.length === 0) return '';
     return `<div class="sq-grid">${posts.map(p => squareForPost(p, withPage)).join('')}</div>`;
@@ -344,7 +371,11 @@
     }
     if (withPage && media.length > 1) inner += `<span class="page-badge">1/${media.length}</span>`;
     inner += `<span class="heart-badge">${fmtNum(p.views)} views</span>`;
-    return `<div class="sq-item" onclick="Search._openImageLightbox('${p.id}')">${inner}</div>`;
+    // Photo tiles → peek. Video tiles inside the sq-grid (rare) → direct video.
+    const opener = mediaType === 'video'
+      ? `Search._openVideoDirect('${p.id}')`
+      : `Search._openImagePeek('${p.id}')`;
+    return `<div class="sq-item" onclick="${opener}">${inner}</div>`;
   }
 
   function vidCardHtml(p) {
@@ -353,7 +384,7 @@
     const mediaUrl = p.media_url || p.mediaUrl;
     const thumb = getThumb(mediaUrl);
     const pid = profileIdOf(profile);
-    return `<div class="vid-card" onclick="Search._openVideoFullscreen('${p.id}')">
+    return `<div class="vid-card" onclick="Search._openVideoDirect('${p.id}')">
       <div class="thumb">
         <img src="${thumb||''}" loading="lazy">
         ${p.duration ? `<span class="dur">${p.duration}</span>` : ''}
@@ -373,8 +404,9 @@
     const mediaUrl = p.media_url || p.mediaUrl;
     const thumb = mediaType === 'video' ? getThumb(mediaUrl) : mediaUrl;
     const pid = profileIdOf(profile);
-    const isVideo = mediaType === 'video';
-    const opener = isVideo ? `Search._openVideoFullscreen('${p.id}')` : `Search._openImageLightbox('${p.id}')`;
+    const opener = mediaType === 'video'
+      ? `Search._openVideoDirect('${p.id}')`
+      : `Search._openImagePeek('${p.id}')`;
     return `<div class="pcard">
       <div class="head" onclick="_searchOpenProfile(event,'${pid}')">
         <img src="${author.avatar||''}" onerror="this.style.display='none'">
@@ -613,7 +645,7 @@
       html += `<div class="discovery-block"><div class="section-title">${ICON.video}Trending Videos</div>
         <div class="sugg-scroll">${videos.map(v => {
           const thumb = getThumb(v.media_url);
-          return `<div style="flex-shrink:0;width:120px;cursor:pointer;" onclick="Search._openVideoFullscreen('${v.id}')">
+          return `<div style="flex-shrink:0;width:120px;cursor:pointer;" onclick="Search._openVideoDirect('${v.id}')">
             <div style="position:relative;width:120px;height:160px;border-radius:16px;overflow:hidden;background:#000;">
               <img src="${thumb||''}" style="width:100%;height:100%;object-fit:cover;">
               <span style="position:absolute;bottom:9px;left:9px;color:#fff;font-weight:700;font-size:11.5px;text-shadow:0 1px 4px rgba(0,0,0,.7);">${fmtNum(v.views)} views</span>
@@ -649,12 +681,11 @@
       container.innerHTML = `<div class="center-loading"><span class="spin-icon"></span>Loading</div>`;
     }
     await loadFollowSets();
+    if (myToken !== _searchReqToken) return;
 
     let dataCount = 0;
     let html = '';
     let headHtml = '';
-
-    if (myToken !== _searchReqToken) return;
 
     if (tabForThisCall === 'users') {
       const users = await searchUsers(q, tabState.offset);
@@ -882,99 +913,64 @@
     renderDiscovery();
   }
 
-  // ─── LIGHTBOX (ported from index.html's gallery lightbox) ─
-  async function fetchPostForLightbox(postId) {
-    try {
-      const { data } = await window.sb.from('posts')
-        .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-        .eq('id', postId).is('deleted_at', null).single();
-      return data;
-    } catch (e) { return null; }
+  // ─── PINTEREST PEEK (two-stage image flow) ────────────────
+  async function openImagePeek(postId) {
+    const p = await fetchPostById(postId);
+    if (!p) return;
+    _peekPost = p;
+
+    const profile = p.profiles || {};
+    const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : { name: profile.display_name || 'Anonymous', avatar: profile.avatar_url || '' };
+    const pid = profileIdOf(profile);
+
+    document.getElementById('searchPeekImg').src = p.media_url || p.mediaUrl || '';
+    document.getElementById('searchPeekAuthor').innerHTML =
+      `<img src="${author.avatar||''}" onerror="this.style.display='none'">
+       <div><div class="nm">${escapeHtml(author.name)}</div><div class="un">@${escapeHtml(profile.username||'')}</div></div>`;
+    document.getElementById('searchPeekAuthor').dataset.pid = pid;
+    const caption = [p.title, p.content].filter(Boolean).join(' — ');
+    document.getElementById('searchPeekCaption').textContent = caption || '';
+
+    const modal = document.getElementById('searchPeekModal');
+    modal.classList.add('open');
+    document.body.classList.add('fu-modal-open');
   }
 
-  function goToProfileFromLightbox(userId) {
-    if (!userId) return;
-    closeLightbox();
-    if (window.Router && window.Router.openProfile) window.Router.openProfile(userId);
-  }
-  window._searchLbGoToProfile = goToProfileFromLightbox;
-
-  function closeLightbox() {
-    const modal = document.getElementById('searchLightbox');
-    if (!modal) return;
-    modal.classList.remove('show', 'fu-video-mode');
-    modal.querySelectorAll('video').forEach(v => { try { v.pause(); } catch (e) {} });
-    const track = document.getElementById('searchLbTrack');
-    const sheet = document.getElementById('searchLbSheet');
-    if (track) track.innerHTML = '';
-    if (sheet) sheet.innerHTML = '';
+  function closeImagePeek() {
+    _peekPost = null;
+    document.getElementById('searchPeekModal').classList.remove('open');
     document.body.classList.remove('fu-modal-open');
   }
-  document.addEventListener('DOMContentLoaded', () => {
-    const closeBtn = document.getElementById('searchLbClose');
-    if (closeBtn) closeBtn.addEventListener('click', closeLightbox);
-    const modal = document.getElementById('searchLightbox');
-    if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeLightbox(); });
-  });
 
-  async function openImageLightbox(postId) {
-    const p = await fetchPostForLightbox(postId);
-    if (!p) return;
-    const profile = p.profiles || {};
-    const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : { name: profile.display_name || 'Anonymous', avatar: profile.avatar_url || '' };
-    const pid = profileIdOf(profile);
-
-    const modal = document.getElementById('searchLightbox');
-    if (!modal) return;
-    modal.classList.remove('fu-video-mode');
-    document.getElementById('searchLbTrack').innerHTML =
-      `<div class="gallery-lightbox-slide"><img class="gallery-lightbox-media" src="${p.media_url || p.mediaUrl || ''}" alt=""></div>`;
-    document.getElementById('searchLbCounter').textContent = '';
-    document.getElementById('searchLbDots').innerHTML = '';
-
-    const caption = [p.title, p.content].filter(Boolean).join(' — ');
-    document.getElementById('searchLbSheet').innerHTML = `
-      <div class="fu-lb-author" onclick="_searchLbGoToProfile('${pid}')">
-        <img src="${author.avatar||''}" onerror="this.style.display='none'">
-        <div><div class="nm">${escapeHtml(author.name)}</div><div class="un">@${escapeHtml(profile.username||'')}</div></div>
-      </div>
-      ${caption ? `<div class="fu-lb-caption">${escapeHtml(caption)}</div>` : ''}
-      <div class="fu-lb-actions">
-        <button onclick="_searchLbGoToProfile('${pid}')">View profile</button>
-        <button onclick="Search._closeLightbox()">Close</button>
-      </div>
-      <div class="fu-lb-similar-title">More like this</div>
-      <div class="fu-lb-similar-grid" id="fuLbSimilarGrid"><div class="center-loading"><span class="spin-icon"></span></div></div>
-    `;
-    modal.classList.add('show');
-    document.body.classList.add('fu-modal-open');
-
-    const similar = await searchPhotos((p.title || '').split(' ')[0] || '', 0);
-    const grid = document.getElementById('fuLbSimilarGrid');
-    if (grid) grid.innerHTML = renderSquareGrid(similar.filter(s => s.id !== p.id).slice(0, 10), false) || '';
+  // Tap the peek image → hand off to the shared lightbox
+  function peekExpand() {
+    if (!_peekPost) return;
+    const p = _peekPost;
+    closeImagePeek();
+    if (!window.Lightbox || typeof window.Lightbox.open !== 'function') {
+      console.error('[search] window.Lightbox.open is not available — is lightbox.js loaded?');
+      return;
+    }
+    window.Lightbox.open(getMediaItemsForPost(p), 0, p.id);
   }
 
-  async function openVideoFullscreen(postId) {
-    const p = await fetchPostForLightbox(postId);
-    if (!p) return;
-    const profile = p.profiles || {};
-    const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : { name: profile.display_name || 'Anonymous', avatar: profile.avatar_url || '' };
-    const pid = profileIdOf(profile);
+  function peekGoToProfile() {
+    const el = document.getElementById('searchPeekAuthor');
+    const pid = el ? el.dataset.pid : '';
+    if (!pid) return;
+    closeImagePeek();
+    if (window.Router && window.Router.openProfile) window.Router.openProfile(pid);
+  }
 
-    const modal = document.getElementById('searchLightbox');
-    if (!modal) return;
-    modal.classList.add('fu-video-mode');
-    document.getElementById('searchLbTrack').innerHTML =
-      `<div class="gallery-lightbox-slide"><video class="gallery-lightbox-media" src="${p.media_url || p.mediaUrl || ''}" controls autoplay playsinline></video></div>`;
-    document.getElementById('searchLbCounter').textContent = '';
-    document.getElementById('searchLbDots').innerHTML = '';
-    document.getElementById('searchLbSheet').innerHTML = `
-      <div class="fu-vid-fs-footer">
-        <div class="nm" onclick="_searchLbGoToProfile('${pid}')"><img src="${author.avatar||''}" onerror="this.style.display='none'">${escapeHtml(author.name)}</div>
-        <div class="cap">${escapeHtml(p.title||'')}</div>
-      </div>`;
-    modal.classList.add('show');
-    document.body.classList.add('fu-modal-open');
+  // ─── VIDEO DIRECT (skip peek) ─────────────────────────────
+  async function openVideoDirect(postId) {
+    const p = await fetchPostById(postId);
+    if (!p) return;
+    if (!window.Lightbox || typeof window.Lightbox.open !== 'function') {
+      console.error('[search] window.Lightbox.open is not available — is lightbox.js loaded?');
+      return;
+    }
+    window.Lightbox.open(getMediaItemsForPost(p), 0, p.id);
   }
 
   // ─── PUBLIC API ───────────────────────────────────────────
@@ -984,15 +980,24 @@
     _setHashtagView: setHashtagView,
     removeRecent: removeRecentSearch,
     clearAllRecent, cancelFocus,
-    _openImageLightbox: openImageLightbox,
-    _openVideoFullscreen: openVideoFullscreen,
-    _closeLightbox: closeLightbox,
+    _openImagePeek: openImagePeek,
+    _closePeek: closeImagePeek,
+    _peekExpand: peekExpand,
+    _peekGoToProfile: peekGoToProfile,
+    _openVideoDirect: openVideoDirect,
   };
 
   // ─── INIT ─────────────────────────────────────────────────
   function init() {
     document.getElementById('searchIcon').innerHTML = ICON.search;
     document.getElementById('clearBtn').innerHTML = ICON.close;
+
+    // Esc closes peek
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('searchPeekModal').classList.contains('open')) {
+        closeImagePeek();
+      }
+    });
 
     const params = new URLSearchParams(window.location.search);
     const tagParam = params.get('tag') || params.get('hashtag');
