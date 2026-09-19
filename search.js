@@ -1,6 +1,12 @@
 // ============================================================
 // search.js — FreeUpper discovery + live search + infinite scroll
 // Rebuilt to match exact target UI/UX. SVG-only icons, 3D fire icon.
+//
+// NOTE ON DELETED POSTS:
+//   All `.from('posts')` queries now filter with `.is('deleted_at', null)`.
+//   If your schema soft-deletes via a `status` column instead, swap every
+//   `.is('deleted_at', null)` for `.neq('status', 'deleted')` (or `.eq('is_deleted', false)`).
+//   Search for "SOFT-DELETE FILTER" comments below to find them all.
 // ============================================================
 (function () {
   'use strict';
@@ -40,12 +46,10 @@
     photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
     market: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>',
     hashtag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="9" y1="3" x2="6" y2="21"/><line x1="18" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="2.5" y1="15" x2="20.5" y2="15"/></svg>',
-    sounds: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
     trendUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>',
     chevDown: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
     chevRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>',
-    dots: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="19" r="1.3"/></svg>',
     heart: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
     heartOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
     play: '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
@@ -53,7 +57,7 @@
     pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
     clock: '<svg class="clk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-    slider: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="1.8" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="9" cy="17" r="1.8" fill="currentColor" stroke="none"/></svg>',
+    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
     // 3D fire — layered gradient flame for depth
     fire: `<svg viewBox="0 0 24 24" width="20" height="20">
       <defs>
@@ -83,6 +87,13 @@
     const ytMatch = (mediaUrl || '').match(/(?:embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     return ytMatch ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg` : mediaUrl;
   }
+  function profileIdOf(profile) { return (profile && profile.id) ? profile.id : ''; }
+  function openProfileSafe(e, id) {
+    if (!id) return;
+    e.stopPropagation();
+    if (window.Router && window.Router.openProfile) window.Router.openProfile(id);
+  }
+  window._searchOpenProfile = openProfileSafe;
 
   // ─── RECENT SEARCHES ──────────────────────────────────────
   function getRecentSearches() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { return []; } }
@@ -141,7 +152,12 @@
         followingSet.add(userId);
       }
       const state = relationshipState(userId);
-      if (btn) { btn.textContent = relLabel(state); btn.className = btn.className.replace(/rel-\w[\w-]*/, 'rel-' + state); }
+      if (btn) {
+        btn.textContent = relLabel(state);
+        // Correctly strip only the state class, never the base .rel-btn
+        btn.classList.remove('rel-self', 'rel-friends', 'rel-following', 'rel-follow-back', 'rel-follow');
+        btn.classList.add('rel-' + state);
+      }
       if (window.showToast) window.showToast(state === 'friends' ? 'You are now friends' : (currently ? 'Unfollowed' : 'Following'));
     } catch (err) {
       if (window.showToast) window.showToast(err.message, 'r');
@@ -151,13 +167,11 @@
 
   // ─── DATA HELPERS ──────────────────────────────────────────────
   async function fetchTrendingHashtags(limit = 10) {
-    // Backed by post_hashtags (relational source of truth) via
-    // hashtags.js's shared implementation, falling back to the old
-    // posts.tags scan only if hashtags.js hasn't loaded for some reason.
     if (window.Hashtags && typeof window.Hashtags.fetchTrendingHashtags === 'function') {
       return window.Hashtags.fetchTrendingHashtags(limit);
     }
-    const { data, error } = await window.sb.from('posts').select('tags').not('tags', 'is', null).limit(500);
+    // SOFT-DELETE FILTER
+    const { data, error } = await window.sb.from('posts').select('tags').is('deleted_at', null).not('tags', 'is', null).limit(500);
     if (error || !data) return [];
     const counts = {};
     data.forEach(p => (p.tags || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; }));
@@ -168,15 +182,32 @@
     return error ? [] : (data || []);
   }
   async function fetchTrendingPosts(limit = 3) {
-    const { data, error } = await window.sb.from('posts').select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)').order('views', { ascending: false }).limit(limit);
+    // SOFT-DELETE FILTER
+    const { data, error } = await window.sb.from('posts')
+      .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
+      .is('deleted_at', null)
+      .order('views', { ascending: false })
+      .limit(limit);
     return error ? [] : (data || []);
   }
   async function fetchTrendingVideos(limit = 10) {
-    const { data, error } = await window.sb.from('posts').select('id,title,media_url,media_type,views').eq('media_type', 'video').order('views', { ascending: false }).limit(limit);
+    // SOFT-DELETE FILTER
+    const { data, error } = await window.sb.from('posts')
+      .select('id,title,media_url,media_type,views')
+      .is('deleted_at', null)
+      .eq('media_type', 'video')
+      .order('views', { ascending: false })
+      .limit(limit);
     return error ? [] : (data || []);
   }
   async function fetchTrendingPhotos(limit = 9) {
-    const { data, error } = await window.sb.from('posts').select('id,title,media_url,media_type,views').eq('media_type', 'image').order('views', { ascending: false }).limit(limit);
+    // SOFT-DELETE FILTER
+    const { data, error } = await window.sb.from('posts')
+      .select('id,title,media_url,media_type,views')
+      .is('deleted_at', null)
+      .eq('media_type', 'image')
+      .order('views', { ascending: false })
+      .limit(limit);
     return error ? [] : (data || []);
   }
   async function fetchTrendingMarket(limit = 6) {
@@ -187,8 +218,12 @@
   async function searchAll(q, offset = 0) {
     const like = `%${q}%`;
     const [postsRes, usersRes, marketRes] = await Promise.all([
+      // SOFT-DELETE FILTER
       window.sb.from('posts').select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-        .or(`title.ilike.${like},content.ilike.${like}`).order('created_at', { ascending: false }).range(offset, offset + PAGE_SIZE - 1),
+        .is('deleted_at', null)
+        .or(`title.ilike.${like},content.ilike.${like}`)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1),
       window.sb.from('profiles').select('id,username,display_name,avatar_url,verified_status,bio')
         .or(`username.ilike.${like},display_name.ilike.${like}`).range(offset, offset + PAGE_SIZE - 1),
       window.ListingsAPI.getListings({ search: q, limit: PAGE_SIZE, offset }).catch(() => ({ data: [] })),
@@ -207,14 +242,24 @@
   }
   async function searchVideos(q, offset = 0) {
     const like = `%${q}%`;
+    // SOFT-DELETE FILTER
     const { data, error } = await window.sb.from('posts').select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-      .eq('media_type', 'video').or(`title.ilike.${like},content.ilike.${like}`).order('created_at', { ascending: false }).range(offset, offset + PAGE_SIZE - 1);
+      .is('deleted_at', null)
+      .eq('media_type', 'video')
+      .or(`title.ilike.${like},content.ilike.${like}`)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
     return error ? [] : (data || []);
   }
   async function searchPhotos(q, offset = 0) {
     const like = `%${q}%`;
+    // SOFT-DELETE FILTER
     const { data, error } = await window.sb.from('posts').select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-      .eq('media_type', 'image').or(`title.ilike.${like},content.ilike.${like}`).order('created_at', { ascending: false }).range(offset, offset + PAGE_SIZE - 1);
+      .is('deleted_at', null)
+      .eq('media_type', 'image')
+      .or(`title.ilike.${like},content.ilike.${like}`)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
     return error ? [] : (data || []);
   }
   async function searchListings(q, offset = 0) {
@@ -222,35 +267,40 @@
     return data || [];
   }
   async function searchHashtagsOnly(q, offset = 0) {
-    // Relational search via hashtags.js. Offset/pagination is applied
-    // client-side here since searchHashtags already caps results;
-    // for a small hashtag table this is fine — revisit if it grows large.
     if (window.Hashtags && typeof window.Hashtags.searchHashtags === 'function') {
       const results = await window.Hashtags.searchHashtags(q, 50);
       return results.slice(offset, offset + PAGE_SIZE).map(r => r.tag);
     }
-    const { data, error } = await window.sb.from('posts').select('tags').contains('tags', [q]).range(offset, offset + PAGE_SIZE - 1);
+    // SOFT-DELETE FILTER
+    const { data, error } = await window.sb.from('posts').select('tags')
+      .is('deleted_at', null)
+      .contains('tags', [q])
+      .range(offset, offset + PAGE_SIZE - 1);
     if (error || !data) return [];
     const allTags = data.flatMap(p => p.tags || []).filter(t => t.toLowerCase().includes(q.toLowerCase()));
     return [...new Set(allTags)];
   }
 
   async function searchHashtagPosts(tag, sort, offset = 0) {
-    // Relational path: get post_ids from post_hashtags, then load full
-    // post rows filtered to that set, sorted the same way as before.
     if (window.Hashtags && typeof window.Hashtags.fetchHashtagPostIds === 'function') {
       const postIds = await window.Hashtags.fetchHashtagPostIds(tag);
       if (!postIds.length) return [];
+      // SOFT-DELETE FILTER
       const { data, error } = await window.sb
         .from('posts')
         .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
+        .is('deleted_at', null)
         .in('id', postIds)
         .order(sort === 'latest' ? 'created_at' : 'views', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
       return error ? [] : (data || []);
     }
+    // SOFT-DELETE FILTER
     const { data, error } = await window.sb.from('posts').select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-      .contains('tags', [tag]).order(sort === 'latest' ? 'created_at' : 'views', { ascending: false }).range(offset, offset + PAGE_SIZE - 1);
+      .is('deleted_at', null)
+      .contains('tags', [tag])
+      .order(sort === 'latest' ? 'created_at' : 'views', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
     return error ? [] : (data || []);
   }
 
@@ -259,7 +309,11 @@
       const postIds = await window.Hashtags.fetchHashtagPostIds(tag);
       return postIds.length;
     }
-    const { count, error } = await window.sb.from('posts').select('id', { count: 'exact', head: true }).contains('tags', [tag]);
+    // SOFT-DELETE FILTER
+    const { count, error } = await window.sb.from('posts')
+      .select('id', { count: 'exact', head: true })
+      .is('deleted_at', null)
+      .contains('tags', [tag]);
     return error ? 0 : (count || 0);
   }
 
@@ -281,7 +335,8 @@
       inner = `<div class="sq-text-preview" style="background:linear-gradient(135deg,hsl(${hue},60%,35%),hsl(${(hue+40)%360},60%,25%))">${escapeHtml((p.title||p.content||'').slice(0,80))}</div>`;
     }
     if (withPage && media.length > 1) inner += `<span class="page-badge">1/${media.length}</span>`;
-    inner += `<span class="heart-badge">${ICON.heart}${fmtNum(p.like_count || p.likes)}</span>`;
+    // Views badge instead of likes
+    inner += `<span class="heart-badge">${ICON.eye}${fmtNum(p.views)}</span>`;
     return `<div class="sq-item" onclick="window.Router.openPostById('${p.id}','${mediaType||''}')">${inner}</div>`;
   }
 
@@ -291,15 +346,15 @@
     const mediaType = p.media_type || p.mediaType;
     const mediaUrl = p.media_url || p.mediaUrl;
     const thumb = getThumb(mediaUrl);
+    const pid = profileIdOf(profile);
     return `<div class="vid-card" onclick="window.Router.openPostById('${p.id}','${mediaType||''}')">
       <div class="thumb">
         <img src="${thumb||''}" loading="lazy">
         ${p.duration ? `<span class="dur">${p.duration}</span>` : ''}
-        <span class="dots-o">${ICON.dots}</span>
         <span class="play-c">${ICON.play}</span>
       </div>
       <div class="title">${escapeHtml(p.title||'')}</div>
-      <div class="author"><img src="${author.avatar||''}" onerror="this.style.display='none'"><span>${escapeHtml(author.name)}</span>${badgeHTML(author.verified_status)}</div>
+      <div class="author" onclick="_searchOpenProfile(event,'${pid}')"><img src="${author.avatar||''}" onerror="this.style.display='none'"><span>${escapeHtml(author.name)}</span>${badgeHTML(author.verified_status)}</div>
       <div class="views">${fmtNum(p.views)} views</div>
     </div>`;
   }
@@ -310,11 +365,11 @@
     const mediaType = p.media_type || p.mediaType;
     const mediaUrl = p.media_url || p.mediaUrl;
     const thumb = mediaType === 'video' ? getThumb(mediaUrl) : mediaUrl;
+    const pid = profileIdOf(profile);
     return `<div class="pcard" onclick="window.Router.openPostById('${p.id}','${mediaType||''}')">
-      <div class="head">
+      <div class="head" onclick="_searchOpenProfile(event,'${pid}')">
         <img src="${author.avatar||''}" onerror="this.style.display='none'">
         <span class="nm">${escapeHtml(author.name)}</span>${badgeHTML(author.verified_status)}
-        <span class="dots" onclick="event.stopPropagation()">${ICON.dots}</span>
       </div>
       <div class="media">
         <img src="${thumb||''}" loading="lazy">
@@ -334,6 +389,7 @@
     const media = Array.isArray(p.media) ? p.media : [];
     const isVideo = mediaType === 'video' && mediaUrl;
     const thumb = getThumb(mediaUrl);
+    const pid = profileIdOf(profile);
     let mediaHtml = '';
     if (mediaUrl) {
       mediaHtml = `<div class="media" onclick="event.stopPropagation()">
@@ -344,12 +400,11 @@
     }
     return `<article class="tpost" onclick="window.Router.openPostById('${p.id}','${mediaType||''}')">
       <div class="head">
-        <img src="${author.avatar||''}" onerror="this.style.display='none'">
-        <div class="meta">
+        <img src="${author.avatar||''}" onerror="this.style.display='none'" onclick="_searchOpenProfile(event,'${pid}')">
+        <div class="meta" onclick="_searchOpenProfile(event,'${pid}')">
           <div class="nm">${escapeHtml(author.name)}${badgeHTML(author.verified_status)}</div>
           <div class="time">${timeAgo(p.created_at || p.timestamp)}</div>
         </div>
-        <span class="dots" onclick="event.stopPropagation()">${ICON.dots}</span>
       </div>
       ${p.title ? `<div class="cap">${escapeHtml(p.title)}</div>` : ''}
       ${mediaHtml}
@@ -369,7 +424,6 @@
       </div>
       <div class="actions">
         ${btn}
-        <button class="dots-btn" onclick="event.stopPropagation()">${ICON.dots}</button>
       </div>
     </div>`;
   }
@@ -409,18 +463,18 @@
     document.getElementById('searchTabs').classList.toggle('visible', show);
   }
   function renderTabsBar() {
+    // Sounds tab removed. Text-only tab bar (no pill icon).
     const defs = [
-      { id: 'top', label: 'Top', icon: ICON.search },
-      { id: 'users', label: 'Users', icon: ICON.user },
-      { id: 'videos', label: 'Videos', icon: ICON.video },
-      { id: 'photos', label: 'Photos', icon: ICON.photo },
-      { id: 'market', label: 'Market', icon: ICON.market },
-      { id: 'hashtags', label: 'Hashtags', icon: ICON.hashtag },
-      { id: 'sounds', label: 'Sounds', icon: ICON.sounds },
+      { id: 'top', label: 'Top' },
+      { id: 'users', label: 'Users' },
+      { id: 'videos', label: 'Videos' },
+      { id: 'photos', label: 'Photos' },
+      { id: 'market', label: 'Market' },
+      { id: 'hashtags', label: 'Hashtags' },
     ];
     document.getElementById('searchTabs').innerHTML = defs.map(t =>
       `<button class="tab${t.id===currentTab?' active':''}" data-tab="${t.id}" onclick="Search.switchTab('${t.id}')">
-        <span class="tab-pill">${t.icon}</span><span>${t.label}</span>
+        <span>${t.label}</span>
       </button>`
     ).join('');
   }
@@ -450,6 +504,7 @@
   function showLoadMoreIdle() {
     document.getElementById('loadingMore')?.remove();
     document.getElementById('endResults')?.remove();
+    if (document.getElementById('loadMoreIdle')) return;
     let el = document.createElement('div');
     el.id = 'loadMoreIdle';
     el.className = 'load-more-row';
@@ -604,25 +659,18 @@
       const posts = await searchVideos(q, tabState.offset);
       dataCount = posts.length;
       html = posts.length ? `<div class="vid-grid">${posts.map(vidCardHtml).join('')}</div>` : emptyState('No videos found', `No videos match "${q}"`);
-      if (replace) headHtml = `<div class="results-head"><div><h2 style="margin-bottom:2px;">Videos</h2><div class="sub">Top videos matching "${escapeHtml(q)}"</div></div><div class="sort-dd">Sort: Top ${ICON.chevDown}</div></div>`;
+      if (replace) headHtml = `<div class="results-head"><div><h2 style="margin-bottom:2px;">Videos</h2><div class="sub">Top videos matching "${escapeHtml(q)}"</div></div></div>`;
     } else if (currentTab === 'photos') {
       const posts = await searchPhotos(q, tabState.offset);
       dataCount = posts.length;
       html = renderSquareGrid(posts, false) || emptyState('No photos found', `No photos match "${q}"`);
-      if (replace) headHtml = `<div class="results-head"><h2>Photos<span class="cnt">(${fmtNum(dataCount)} found)</span></h2><div class="sort-dd">Top ${ICON.chevDown}</div></div>`;
+      if (replace) headHtml = `<div class="results-head"><h2>Photos<span class="cnt">(${fmtNum(dataCount)} found)</span></h2></div>`;
     } else if (currentTab === 'market') {
       const listings = await searchListings(q, tabState.offset);
       dataCount = listings.length;
       const cards = listings.map(marketCardHtml).join('');
       html = cards ? `<div class="market-grid">${cards}</div>` : emptyState('No listings found', `No listings match "${q}"`);
-      if (replace) headHtml = `<div class="results-head"><h2>Market<span class="cnt">(${fmtNum(dataCount)} found)</span></h2></div>
-        <div class="filter-row">
-          <button class="filter-chip active">${ICON.slider}All</button>
-          <button class="filter-chip">Category ${ICON.chevDown}</button>
-          <button class="filter-chip">Location ${ICON.chevDown}</button>
-          <button class="filter-chip">Price ${ICON.chevDown}</button>
-          <button class="filter-chip">Condition ${ICON.chevDown}</button>
-        </div>`;
+      if (replace) headHtml = `<div class="results-head"><h2>Market<span class="cnt">(${fmtNum(dataCount)} found)</span></h2></div>`;
     } else if (currentTab === 'hashtags') {
       const hashtags = await searchHashtagsOnly(q, tabState.offset);
       dataCount = hashtags.length;
@@ -672,7 +720,6 @@
     const hh = document.getElementById('hashtagHeader');
     hh.style.display = 'block';
     hh.className = 'tag-header';
-    const state = 'follow'; // hashtag follow state placeholder
     hh.innerHTML = `
       <div class="top-row">
         <button class="back" onclick="Search.exitHashtagMode()">${ICON.back}</button>
@@ -735,13 +782,9 @@
       if (el) el.textContent = `${fmtNum(count)} posts`;
     }
 
-    let headHtml = '';
+    // The Photos subview no longer renders any dropdown row.
     let html;
     if (hashtagView === 'photos') {
-      if (replace) headHtml = `<div class="dd-row">
-        <div class="dd-btn">${ICON.photo}Top Photos ${ICON.chevDown}</div>
-        <div class="dd-btn neutral">All time ${ICON.chevDown}</div>
-      </div>`;
       html = renderSquareGrid(posts.filter(p => (p.media_type||p.mediaType) !== 'video'), true);
     } else if (hashtagView === 'videos') {
       html = posts.length ? `<div class="vid-grid">${posts.filter(p=>(p.media_type||p.mediaType)==='video').map(vidCardHtml).join('')}</div>` : '';
@@ -750,7 +793,7 @@
     }
     if (!html) html = emptyState('No posts yet', `Be the first to post with #${currentHashtag}`);
 
-    if (replace) container.innerHTML = headHtml + html;
+    if (replace) container.innerHTML = html;
     else container.insertAdjacentHTML('beforeend', html);
 
     tabState.offset += posts.length;
@@ -768,8 +811,6 @@
     if (main) paging[currentTab].scrollY = main.scrollTop;
     currentTab = tab;
     renderTabsBar();
-
-    if (tab === 'sounds') { showTabs(true); disconnectObserver(); renderSounds(); return; }
 
     const cached = paging[tab].cache;
     if (cached && cached.query === currentQuery) {
@@ -794,17 +835,6 @@
       (hashtags.length
         ? hashtags.map(h => `<div class="tag-row" onclick="Search.openHashtag('${escapeHtml(h.tag)}')"><div class="box">${ICON.hashtag}</div><div class="info"><div class="name">#${escapeHtml(h.tag)}</div><div class="cnt">${fmtNum(h.count)} posts</div></div><div class="chev">${ICON.chevRight}</div></div>`).join('')
         : emptyState('No hashtags yet'));
-  }
-
-  function renderSounds() {
-    showNormalHeader(true);
-    document.getElementById('resultsContainer').innerHTML = `
-      <div class="empty-state">
-        <div class="ic">${ICON.sounds}</div>
-        <h3>Sounds</h3>
-        <div style="font-weight:700;color:#6b7280;">Coming Soon</div>
-        <p>Soon you'll discover trending sounds, popular audio and original sounds used in FreeUpper videos.</p>
-      </div>`;
   }
 
   // ─── SEARCH INPUT HANDLING ────────────────────────────────
