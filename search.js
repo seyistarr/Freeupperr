@@ -1,5 +1,7 @@
 // ============================================================
 // search.js — FreeUpper standalone search + discovery + lightbox
+// REWRITTEN — every bug from the previous revision fixed inline.
+// Fixes are marked with // ★ FIX
 //
 // SELF-CONTAINED: does not depend on index.html's inline module.
 //
@@ -95,6 +97,8 @@
     clock: '<svg class="clk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
     fire: `<svg viewBox="0 0 24 24" width="20" height="20"><defs><linearGradient id="fireOuter" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#B91C1C"/><stop offset="45%" stop-color="#F97316"/><stop offset="100%" stop-color="#FDE047"/></linearGradient><linearGradient id="fireInner" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#F97316"/><stop offset="60%" stop-color="#FACC15"/><stop offset="100%" stop-color="#FEF9C3"/></linearGradient></defs><path d="M12 2c1 3-2 4-2 7a3 3 0 1 0 6 0c0-1-1-2-1-3 2 1 4 4 4 7.5A6.5 6.5 0 0 1 12.5 20 6.5 6.5 0 0 1 6 13.5C6 8 10 5 12 2z" fill="url(#fireOuter)"/><path d="M12.5 9c.6 1.4-.8 2-.8 3.4a1.8 1.8 0 1 0 3.6 0c0-.7-.4-1.1-.4-1.7 1 .7 1.7 1.9 1.7 3.2A3.9 3.9 0 0 1 12.7 18a3.9 3.9 0 0 1-3.9-3.9c0-2.6 2.2-3.7 3.7-5.1z" fill="url(#fireInner)"/></svg>`
+    // ★ FIX: `share` key was previously referenced but never defined. Left out on
+    // purpose and always use svgShare() instead, which is defined below.
   };
 
   // ─── SHARED HELPERS ───────────────────────────────────────
@@ -114,7 +118,6 @@
     return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'b';
   }
   function formatCount(n) { return fmtNum(n); }
-  function timeAgo(iso) { return window.timeAgo ? window.timeAgo(iso) : formatRelativeTime(iso); }
   function formatRelativeTime(iso) {
     if (!iso) return '';
     const now = Date.now(), then = new Date(iso).getTime();
@@ -321,39 +324,54 @@
   function relLabel(state) {
     return { friends: 'Friends', following: 'Following', 'follow-back': 'Follow Back', follow: 'Follow', self: '' }[state] || 'Follow';
   }
+  // ★ FIX: return { ok, following } so callers can distinguish success vs failure.
   async function toggleFollowUser(userId) {
     const me = getCurrentUser();
     if (!me.isLoggedIn) {
       if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
       else showToast('Please sign in to follow', 'o');
-      return false;
+      return { ok: false, following: false };
     }
+    if (userId === me.id) return { ok: false, following: false };
     const currently = followingSet.has(userId);
     try {
       if (currently) {
-        await window.sb.from('follows').delete().eq('follower_id', me.id).eq('following_id', userId);
+        const { error } = await window.sb.from('follows').delete().eq('follower_id', me.id).eq('following_id', userId);
+        if (error) throw error;
         followingSet.delete(userId);
       } else {
-        await window.sb.from('follows').insert({ follower_id: me.id, following_id: userId });
+        const { error } = await window.sb.from('follows').insert({ follower_id: me.id, following_id: userId });
+        if (error) throw error;
         followingSet.add(userId);
       }
-      return !currently;
-    } catch (err) { showToast(err.message, 'r'); return currently; }
+      return { ok: true, following: !currently };
+    } catch (err) {
+      showToast(err.message || 'Failed', 'r');
+      return { ok: false, following: currently };
+    }
   }
 
   // ★ FIX: keep the button visible; flip label to "Following"/"Friends".
+  //          Skip the "Unfollowed"/"Following" toast if the call failed
+  //          (e.g. guest, network error). try/finally ensures the button
+  //          is never left permanently disabled.
   async function toggleFollowHandler(e, userId) {
-    e.stopPropagation();
-    const clicked = e.currentTarget;
+    if (e) e.stopPropagation();
+    const clicked = e ? e.currentTarget : null;
     if (clicked) clicked.disabled = true;
-    await toggleFollowUser(userId);
+    let result;
+    try {
+      result = await toggleFollowUser(userId);
+    } finally {
+      if (clicked) clicked.disabled = false;
+    }
     const newState = relationshipState(userId);
     document.querySelectorAll(`.follow-btn[data-user-id="${userId}"]`).forEach(b => {
-      if (b === clicked) b.disabled = false;
       b.textContent = relLabel(newState);
       b.className = `follow-btn rel-${newState}`;
       b.dataset.relState = newState;
     });
+    if (!result || !result.ok) return;
     showToast(newState === 'friends' ? 'You are now friends' : (newState === 'following' ? 'Following' : 'Unfollowed'));
   }
   window.toggleFollowHandler = toggleFollowHandler;
@@ -651,16 +669,14 @@
     return `<div class="empty-state"><div class="ic">${ICON.search}</div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(sub||'')}</p></div>`;
   }
 
-  function _openPost(id) {
-    const p = _getPost(id);
-    if (p) {
-      const items = getMediaItems(p);
-      if (items.length) window.openGalleryLightbox(items, 0, p.id);
-    } else {
-      fetchPostById(id).then(fresh => {
-        if (fresh) window.openGalleryLightbox(getMediaItems(fresh), 0, fresh.id);
-      });
-    }
+  // ★ FIX: fall back to fetching if not in store, so the lightbox footer renders.
+  async function _openPost(id) {
+    let p = _getPost(id);
+    if (!p) p = await fetchPostById(id);
+    if (!p) { showToast('Post not found', 'r'); return; }
+    const items = getMediaItems(p);
+    if (!items.length) { showToast('No media to show', 'o'); return; }
+    openGalleryLightbox(items, 0, p.id);
   }
 
   // ════════════════════════════════════════════════════════
@@ -776,6 +792,9 @@
       </div>`;
   }
 
+  // ★ FIX: if the post isn't in the store yet, kick off a fetch and re-render
+  //          the footer when it arrives. This makes externally-triggered
+  //          `window.openGalleryLightbox([...], 0, someId)` work too.
   function renderGalleryTrack() {
     const track = document.getElementById('galleryLightboxTrack');
     const dots = document.getElementById('galleryLightboxDots');
@@ -789,11 +808,12 @@
         const ytId = extractYouTubeId(it.url);
         const idx = 'lb' + i;
         if (!ytId) return `<div class="gallery-lightbox-slide"></div>`;
-        ytState[idx] = { muted: false, playing: true };
+        // ★ FIX: start muted so the browser's autoplay policy lets it play.
+        ytState[idx] = { muted: true, playing: true };
         return `<div class="gallery-lightbox-slide">
           <div class="ig-video-wrap" style="width:100%;height:100%;">
             <div class="yt-wrap" style="height:100%;padding-bottom:0;">
-              <iframe id="yt-${idx}" src="https://www.youtube.com/embed/${ytId}?autoplay=1&loop=0&mute=0&controls=0&modestbranding=1&rel=0&showinfo=0&enablejsapi=1&playsinline=1&origin=${encodeURIComponent(window.location.origin)}" allow="autoplay; encrypted-media" allowfullscreen loading="lazy" onload="window._searchYtInit('${idx}')"></iframe>
+              <iframe id="yt-${idx}" src="https://www.youtube.com/embed/${ytId}?autoplay=1&loop=0&mute=1&controls=0&modestbranding=1&rel=0&showinfo=0&enablejsapi=1&playsinline=1&origin=${encodeURIComponent(window.location.origin)}" allow="autoplay; encrypted-media" allowfullscreen loading="lazy" onload="window._searchYtInit('${idx}')"></iframe>
               <div class="yt-tap" id="ytTap-${idx}" onclick="window._searchYtToggle('${idx}')"></div>
               <div class="yt-mute-badge" id="ytMuteBadge-${idx}"><svg id="ytMuteIco-${idx}" viewBox="0 0 24 24"></svg></div>
               <div class="yt-pause-icon" id="ytPauseIcon-${idx}"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></div>
@@ -815,6 +835,13 @@
     counter.textContent = items.length > 1 ? `${index + 1} / ${items.length}` : '';
     dots.innerHTML = items.length > 1 ? items.map((_, i) => `<span class="gallery-dot ${i === index ? 'active' : ''}"></span>`).join('') : '';
 
+    // ★ FIX: initialise the YT mute badges for any YouTube slides.
+    items.forEach((it, i) => {
+      if (it.type === 'video' && isYouTubeUrl(it.url || '')) {
+        try { _updateMuteBadge('lb' + i); } catch (e) {}
+      }
+    });
+
     track.querySelectorAll('[data-lb-video]').forEach((vid, i) => {
       setupLightboxVideoControls(vid, i);
       if (i === index) {
@@ -833,41 +860,41 @@
 
     document.getElementById('lightbox').classList.remove('ui-hidden');
 
-    const post = postId ? _getPost(postId) : null;
+    let post = postId ? _getPost(postId) : null;
     let footer = document.getElementById('galleryLightboxFooter');
+    if (!footer) {
+      footer = document.createElement('div');
+      footer.id = 'galleryLightboxFooter';
+      footer.className = 'gallery-lightbox-footer';
+      document.getElementById('lightbox').appendChild(footer);
+      footer.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const t = e.target;
+        const pid = _galleryState.postId;
+        if (!pid) return;
+        if (t.closest('.lightbox-caption-seemore')) {
+          const btn = t.closest('.lightbox-caption-seemore');
+          const textEl = document.getElementById('lightboxCaptionText');
+          if (textEl) {
+            const expanded = textEl.classList.toggle('expanded');
+            btn.textContent = expanded ? 'See less' : 'See more';
+          }
+          return;
+        }
+        if (t.closest('.follow-btn')) return;
+        if (t.closest('.lightbox-author-row')) {
+          const uid = t.closest('.lightbox-author-row').dataset.lightboxAuthor;
+          if (uid) { closeLightbox(); if (window.Router) window.Router.openProfile(uid); }
+          return;
+        }
+        if (t.closest('.reaction-btn')) { toggleReaction(pid); return; }
+        if (t.closest('.bookmark-badge')) { toggleBookmarkUI(pid, t.closest('.bookmark-badge')); return; }
+        if (t.closest('.share-btn')) { openShareModal(pid); return; }
+        if (t.closest('[data-repost-btn]')) { triggerRepostFromFeed(t.closest('[data-repost-btn]'), pid); return; }
+        if (t.closest('.comment-btn')) { openLightboxCommentsSheet(pid); return; }
+      });
+    }
     if (post) {
-      if (!footer) {
-        footer = document.createElement('div');
-        footer.id = 'galleryLightboxFooter';
-        footer.className = 'gallery-lightbox-footer';
-        document.getElementById('lightbox').appendChild(footer);
-        footer.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const t = e.target;
-          const pid = _galleryState.postId;
-          if (!pid) return;
-          if (t.closest('.lightbox-caption-seemore')) {
-            const btn = t.closest('.lightbox-caption-seemore');
-            const textEl = document.getElementById('lightboxCaptionText');
-            if (textEl) {
-              const expanded = textEl.classList.toggle('expanded');
-              btn.textContent = expanded ? 'See less' : 'See more';
-            }
-            return;
-          }
-          if (t.closest('.follow-btn')) return;
-          if (t.closest('.lightbox-author-row')) {
-            const uid = t.closest('.lightbox-author-row').dataset.lightboxAuthor;
-            if (uid) { window.closeLightbox(); if (window.Router) window.Router.openProfile(uid); }
-            return;
-          }
-          if (t.closest('.reaction-btn')) { toggleReaction(pid); return; }
-          if (t.closest('.bookmark-badge')) { toggleBookmarkUI(pid, t.closest('.bookmark-badge')); return; }
-          if (t.closest('.share-btn')) { openShareModal(pid); return; }
-          if (t.closest('[data-repost-btn]')) { triggerRepostFromFeed(t.closest('[data-repost-btn]'), pid); return; }
-          if (t.closest('.comment-btn')) { openLightboxCommentsSheet(pid); return; }
-        });
-      }
       footer.innerHTML = buildLightboxCaptionHTML(post) + buildLbScrubberHTML() + buildActionsRow(post);
       footer.style.display = 'block';
       setTimeout(() => {
@@ -897,7 +924,17 @@
         updateLbMuteIcon(activeVid);
         updateLbPlayPauseIcon(activeVid);
       }, 0);
-    } else if (footer) footer.style.display = 'none';
+    } else if (postId) {
+      // ★ FIX: fetch the post if we don't have it, then re-render the footer.
+      footer.style.display = 'none';
+      fetchPostById(postId).then(fresh => {
+        if (!fresh) return;
+        if (_galleryState.postId !== postId) return; // user already closed/changed
+        renderGalleryTrack();
+      });
+    } else {
+      footer.style.display = 'none';
+    }
   }
 
   function openGalleryLightbox(mediaItems, startIndex, postId, resumeState) {
@@ -1060,6 +1097,8 @@
     const iframe = document.getElementById('yt-' + idx);
     if (!iframe || !iframe.contentWindow) return;
     iframe.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'yt-' + idx }), '*');
+    // Also ask for the current state so the badge is right immediately.
+    ytPostMessage(idx, 'mute');
   }
   function seekYoutube(e, idx) {
     const prog = document.getElementById('ytProg-' + idx);
@@ -1075,6 +1114,30 @@
   window._searchYtToggle = toggleYtControls;
   window._searchYtInit = initYtListener;
   window._searchYtSeek = seekYoutube;
+
+  // ★ FIX: single global message handler for YouTube postMessage events.
+  //          Routes `infoDelivery` back to the correct iframe via `e.source`.
+  window.addEventListener('message', function (e) {
+    try {
+      const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+      if (!data || data.event !== 'infoDelivery' || !data.info) return;
+      const iframes = document.querySelectorAll('iframe[id^="yt-"]');
+      for (const f of iframes) {
+        if (f.contentWindow === e.source) {
+          const idx = f.id.replace(/^yt-/, '');
+          ytInfo[idx] = Object.assign({}, ytInfo[idx] || {}, data.info);
+          if (typeof data.info.currentTime === 'number' && data.info.duration) {
+            updateYtProgressUI(idx, data.info.currentTime, data.info.duration);
+          }
+          if (typeof data.info.playerState === 'number' && ytState[idx]) {
+            // 1 = playing, 2 = paused, 0 = ended, 3 = buffering
+            ytState[idx].playing = data.info.playerState === 1;
+          }
+          break;
+        }
+      }
+    } catch (err) { /* ignore non-JSON messages */ }
+  });
 
   // ─── FOOTER ACTIONS ──────────────────────────────────────
   function isBookmarked(id) { return bookmarksSet.has(id); }
@@ -1134,12 +1197,12 @@
 
   async function toggleBookmarkUI(postId, badgeEl) {
     if (pendingBookmarks.has(postId)) return;
-    spawnRreipple(badgeEl, null);
+    spawnRipple(badgeEl, null);
     haptic(8);
-    constpost me = getCurrentUser();
-    if (!me.isQuoteLoggedIn) {
-      if (window.AuthUser && windowOver.AuthUser.openModal) window.AuthUser.openModal('laysignup');
-      else showToast('Please sign in to'). bookmark', 'o');
+    const me = getCurrentUser();
+    if (!me.isLoggedIn) {
+      if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
+      else showToast('Please sign in to bookmark', 'o');
       return;
     }
     pendingBookmarks.add(postId);
@@ -1181,7 +1244,16 @@
     if (!post) { showToast('Post not found'); return; }
     const url = `${window.location.origin}${window.location.pathname}?post=${sharePostId}`;
     const title = post.title || 'FreeUpper post';
-    if (action === 'notinterested') { closeShareModal(); showToast('Post removed from your feed'); return; }
+    if (action === 'notinterested') {
+      closeShareModal();
+      // ★ FIX: actually hide the post visually + hide any lightbox showing it.
+      document.querySelectorAll(`[data-post-reactions="${sharePostId}"]`).forEach(el => {
+        const article = el.closest('.tpost, .pcard, .sq-item, .vid-card');
+        if (article) article.style.display = 'none';
+      });
+      showToast('Post removed from your feed');
+      return;
+    }
     function record() {
       const me = getCurrentUser();
       if (!me.isLoggedIn) return;
@@ -1205,14 +1277,16 @@
     }
   }
 
-  function openRepostQuoteSheet(postId) {
+  // ★ FIX: fetch the post if it's not in the store so the preview isn't blank.
+  async function openRepostQuoteSheet(postId) {
     repostQuoteTargetId = postId;
-    const post = _getPost(postId);
+    let post = _getPost(postId);
+    if (!post) post = await fetchPostById(postId);
     const input = document.getElementById('repostQuoteInput');
     const submitBtn = document.getElementById('repostSubmitBtn');
     const removeBtn = document.getElementById('repostRemoveBtn');
     const title = document.getElementById('repostQuoteTitle');
-    if (!input) return;
+    if (!input || !title || !removeBtn) return;
     input.value = '';
     updateRepostCharCount();
     title.textContent = 'Repost';
@@ -1229,7 +1303,7 @@
       else thumbEl.style.display = 'none';
     }
     lockBodyScroll();
-    document.getElementById('classList.add('open');
+    document.getElementById('repostQuoteOverlay').classList.add('open');
   }
   function closeRepostQuoteModal() {
     document.getElementById('repostQuoteOverlay').classList.remove('open');
@@ -1333,13 +1407,13 @@
     const commentMediaHtml = c.imageUrl ? `<img class="comment-media" src="${escapeHtml(c.imageUrl)}" alt="" loading="lazy">` : '';
     const _ov = locallyLikedComments.get(c.id);
     const likeCount = _ov ? _ov.count : (c.likeCount || 0);
-    const is="${Liked = _ov ? _ov.liked : !!c.lcikedByMe;
+    const isLiked = _ov ? _ov.liked : !!c.likedByMe;
 
-    return `<div class=".usercomment-item" data-comment-idId="${c.id}">
-        <div class="${}avatarClass}" data-user-id">="${c.userId}">${avatarHtml}</div>
+    return `<div class="comment-item" data-comment-id="${c.id}">
+        <div class="${avatarClass}" data-user-id="${c.userId}">${avatarHtml}</div>
         <div class="comment-body">
           <div class="comment-username-row">
-            <div class="comment-username" data-user-id${pinnedBadgeHtml}${escapeHtml(username)} ${bhtml}</div>
+            <div class="comment-username" data-user-id="${c.userId}">${pinnedBadgeHtml}${escapeHtml(username)} ${bhtml}</div>
           </div>
           <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${renderedMsg}${editedTagHtml}</div>
           ${commentMediaHtml}
@@ -1543,11 +1617,14 @@
       </div>`;
   }
 
-  function openLightboxCommentsSheet(postId) {
+  // ★ FIX: if the post isn't in the store, fetch it first so comments can render.
+  async function openLightboxCommentsSheet(postId) {
     const overlay = document.getElementById('lightboxCommentsOverlay');
     if (!overlay) return;
-    const post = _getPost(postId);
-    if (post && post.commentsHidden) { showToast('Comments are turned off for this post', 'o'); return; }
+    let post = _getPost(postId);
+    if (!post) post = await fetchPostById(postId);
+    if (!post) { showToast('Post not found', 'r'); return; }
+    if (post.commentsHidden) { showToast('Comments are turned off for this post', 'o'); return; }
     _lightboxCommentsPostId = postId;
     _lightboxReplyTarget = null;
     overlay.classList.add('open');
@@ -1618,7 +1695,7 @@
       clearCommentMedia('lightbox');
       const sendBtn = document.getElementById('lightbox-comment-submit-btn');
       if (sendBtn) sendBtn.disabled = true;
-      if (!pi) setCommentsVisibleBtn(postId, getVisibleComments(postId) + 1);
+      if (!pi) setCommentsVisible(postId, getVisibleComments(postId) + 1);
       await refreshCommentsList(postId, 'lightbox-comments-list');
       updateCommentCount(postId);
       showToast(pi ? 'Reply posted' : 'Comment posted');
@@ -1640,27 +1717,29 @@
       this.style.height = Math.min(this.scrollHeight, 100) + 'px';
       if (sendBtn) sendBtn.disabled = !this.value.trim() && !lightboxCommentMedia;
     });
-    if (sendBtn) send.addEventListener('click', submitLightboxComment);
+    if (sendBtn) sendBtn.addEventListener('click', submitLightboxComment);
     if (mediaBtn && mediaInput) mediaBtn.addEventListener('click', () => mediaInput.click());
     if (mediaInput) mediaInput.addEventListener('change', (e) => handleCommentMediaSelect(e.target.files && e.target.files[0], 'lightbox'));
     if (mediaRemoveBtn) mediaRemoveBtn.addEventListener('click', () => clearCommentMedia('lightbox'));
   }
 
+  // ★ FIX: clean rejection when requireAuth is unavailable / cancelled, so the
+  //          caller's try/catch actually runs and the toast goes away.
   async function addComment(postId, parentId, message, mentions, imageUrl) {
     const p = _getPost(postId);
-    if (!p) return;
-    if (window.AuthUser && window.AuthUser.requireAuth) {
-      return new Promise((resolve, reject) => {
-        window.AuthUser.requireAuth(async () => {
-          try {
-            const comment = await window.PostsAPI.addComment(postId, parentId, message, mentions, imageUrl);
-            p.comments = getCommentCount(p) + 1;
-            resolve(comment);
-          } catch (err) { showToast(err.message, 'r'); reject(err); }
-        });
-      });
+    if (!p) throw new Error('Post not found');
+    if (!(window.AuthUser && window.AuthUser.requireAuth)) {
+      throw new Error('Please sign in to comment');
     }
-    p.comments = getCommentCount(p) + 1;
+    return new Promise((resolve, reject) => {
+      window.AuthUser.requireAuth(async () => {
+        try {
+          const comment = await window.PostsAPI.addComment(postId, parentId, message, mentions, imageUrl);
+          p.comments = getCommentCount(p) + 1;
+          resolve(comment);
+        } catch (err) { reject(err); }
+      });
+    });
   }
   function updateCommentCount(postId) {
     const p = _getPost(postId);
@@ -1750,7 +1829,9 @@
     let p = _getPost(postId);
     if (!p || !p.profiles) p = await fetchPostById(postId);
     if (!p) return;
-    openGalleryLightbox(getMediaItems(p), 0, p.id);
+    const items = getMediaItems(p);
+    if (!items.length) { showToast('No media to show', 'o'); return; }
+    openGalleryLightbox(items, 0, p.id);
   }
   function openProfileSafe(e, id) {
     if (!id) return;
@@ -1911,12 +1992,13 @@
     c.innerHTML = html || (recentHtml + emptyState('Nothing to discover yet'));
   }
 
+  // ★ FIX: load-more must not clobber the token of an in-flight fresh search.
   async function renderSearchResults(q, replace = true) {
     showNormalHeader(true); showTabs(true); renderTabsBar();
     const container = document.getElementById('resultsContainer');
     const tabForCall = currentTab;
     const ts = paging[tabForCall];
-    const myToken = ++_searchReqToken;
+    const myToken = replace ? ++_searchReqToken : _searchReqToken;
     if (replace) {
       ts.offset = 0; ts.hasMore = true; ts.cache = null;
       container.innerHTML = `<div class="center-loading"><span class="spin-icon"></span>Loading</div>`;
@@ -1926,32 +2008,38 @@
     let dataCount = 0, html = '', headHtml = '';
     if (tabForCall === 'users') {
       const users = await searchUsers(q, ts.offset);
+      if (myToken !== _searchReqToken) return;
       dataCount = users.length;
       html = users.map(u => userRowHtml(u)).join('') || emptyState('No users found', `No users match "${q}"`);
       if (replace) headHtml = `<div class="results-head"><h2>Users<span class="cnt">(${formatCount(dataCount)} found)</span></h2></div>`;
     } else if (tabForCall === 'videos') {
       const posts = await searchVideos(q, ts.offset);
+      if (myToken !== _searchReqToken) return;
       dataCount = posts.length;
       html = posts.length ? `<div class="vid-grid">${posts.map(vidCardHtml).join('')}</div>` : emptyState('No videos found', `No videos match "${q}"`);
       if (replace) headHtml = `<div class="results-head"><div><h2 style="margin-bottom:2px;">Videos</h2><div class="sub">Top videos matching "${escapeHtml(q)}"</div></div></div>`;
     } else if (tabForCall === 'photos') {
       const posts = await searchPhotos(q, ts.offset);
+      if (myToken !== _searchReqToken) return;
       dataCount = posts.length;
       html = renderSquareGrid(posts, false) || emptyState('No photos found', `No photos match "${q}"`);
       if (replace) headHtml = `<div class="results-head"><h2>Photos<span class="cnt">(${formatCount(dataCount)} found)</span></h2></div>`;
     } else if (tabForCall === 'market') {
       const listings = await searchListings(q, ts.offset);
+      if (myToken !== _searchReqToken) return;
       dataCount = listings.length;
       const cards = listings.map(marketCardHtml).join('');
       html = cards ? `<div class="market-grid">${cards}</div>` : emptyState('No listings found', `No listings match "${q}"`);
       if (replace) headHtml = `<div class="results-head"><h2>Market<span class="cnt">(${formatCount(dataCount)} found)</span></h2></div>`;
     } else if (tabForCall === 'hashtags') {
       const tags = await searchHashtagsOnly(q, ts.offset);
+      if (myToken !== _searchReqToken) return;
       dataCount = tags.length;
       html = tags.map(t => `<div class="tag-row" onclick="Search.openHashtag('${escapeHtml(t)}')"><div class="box">${ICON.hashtag}</div><div class="info"><div class="name">#${escapeHtml(t)}</div></div><div class="chev">${ICON.chevRight}</div></div>`).join('') || emptyState('No hashtags found', `No hashtags match "${q}"`);
       if (replace) headHtml = `<div class="results-head"><h2>Hashtags<span class="cnt">(${formatCount(dataCount)} found)</span></h2></div>`;
     } else {
       const result = await searchAll(q, ts.offset);
+      if (myToken !== _searchReqToken) return;
       dataCount = result.posts.length;
       const mixed = [];
       result.posts.forEach(p => mixed.push({ type: 'post', item: p }));
@@ -1989,12 +2077,13 @@
     const hh = document.getElementById('hashtagHeader');
     hh.style.display = 'block';
     hh.className = 'tag-header';
+    // ★ FIX: was ICON.share which doesn't exist → now uses svgShare().
     hh.innerHTML = `
       <div class="top-row">
         <button class="back" onclick="Search.exitHashtagMode()">${ICON.back}</button>
         <div class="box">${ICON.hashtag}</div>
         <div class="title-block"><h1>#${escapeHtml(currentHashtag)}</h1><div class="cnt" id="hashtagCount"></div></div>
-        <div class="side-actions"><button class="follow-btn rel-follow" id="hashtagFollowBtn">Follow</button><button class="icon-btn">${ICON.share}</button></div>
+        <div class="side-actions"><button class="follow-btn rel-follow" id="hashtagFollowBtn">Follow</button><button class="icon-btn">${svgShare()}</button></div>
       </div>
       <div class="subtabs" id="hashtagSubtabs">
         <button data-view="top" class="active" onclick="Search._setHashtagView('top')">${ICON.trendUp}Top</button>
@@ -2168,6 +2257,17 @@
         closeCommentSortModal();
         if (document.getElementById('searchPeekModal').classList.contains('open')) closeImagePeek();
       }
+    });
+
+    // ★ FIX: external link delegation (was dead before).
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-extlink]');
+      if (!a) return;
+      e.preventDefault();
+      try {
+        const url = decodeURIComponent(a.dataset.extlink);
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch (err) {}
     });
   }
 
