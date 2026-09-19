@@ -22,6 +22,7 @@ button{cursor:pointer;}
   --ok-bg:#DCFCE7; --ok-tx:#16A34A;
   --warn-bg:#FEF3C7; --warn-tx:#D97706;
   --blue-bg:#DBEAFE; --blue-tx:#2563EB;
+  --text:#0d0d0d;
 }
 html,body{height:100%;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#0d0d0d;}
 [data-theme="dark"] body{background:#000;color:#fff;}
@@ -237,29 +238,45 @@ body.fu-modal-open{overflow:hidden;}
 #searchSentinel{height:1px;}
 .center-loading{display:flex;align-items:center;justify-content:center;gap:9px;padding:60px 0;color:#6b7280;font-size:14px;font-weight:600;}
 
-/* ── Image lightbox (Pinterest-style) ── */
-.fu-img-lb{position:fixed;inset:0;z-index:200;background:#000;display:none;flex-direction:column;overflow-y:auto;}
-.fu-img-lb.open{display:flex;}
-.fu-img-lb-close{position:fixed;top:14px;right:14px;z-index:5;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;font-size:22px;}
-.fu-img-lb-media{width:100%;background:#000;}
-.fu-img-lb-media img{width:100%;height:auto;display:block;}
-.fu-img-lb-sheet{background:#fff;border-radius:20px 20px 0 0;margin-top:-16px;position:relative;padding:18px;}
-[data-theme="dark"] .fu-img-lb-sheet{background:#111;}
-.fu-img-lb-author{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
-.fu-img-lb-author img{width:38px;height:38px;border-radius:50%;object-fit:cover;background:#eee;}
-.fu-img-lb-caption{font-size:14px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:14px;}
-.fu-img-lb-actions{display:flex;gap:10px;margin-bottom:20px;}
-.fu-img-lb-actions button{flex:1;padding:11px;border-radius:100px;border:1.5px solid var(--pbrd);background:var(--pdim);color:var(--p);font-weight:700;font-size:13px;}
+/* ── Lightbox (ported from index.html) ── */
+.lightbox-modal{position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .25s;touch-action:none;}
+.lightbox-modal.show{opacity:1;pointer-events:auto;}
+.gallery-lightbox-header{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:max(12px,env(safe-area-inset-top)) 16px 12px;z-index:5;}
+.gallery-lightbox-header .lightbox-close{position:static;font-size:26px;background:none;border:none;color:#fff;cursor:pointer;line-height:1;}
+.gallery-lightbox-counter{color:#fff;font-size:.85rem;font-weight:700;}
+.lightbox-media-area{position:relative;flex-shrink:0;min-height:0;overflow:hidden;max-height:60vh;background:#000;}
+.gallery-lightbox-track{display:flex;width:100%;height:100%;background:#000;transition:transform .3s ease;}
+.gallery-lightbox-slide{flex:0 0 100%;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#000;}
+.gallery-lightbox-media{max-width:100%;max-height:60vh;width:auto;height:auto;object-fit:contain;display:block;}
+.gallery-lightbox-dots{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:5;}
+.gallery-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.4);}
+.gallery-dot.active{background:#fff;width:16px;border-radius:3px;}
 
-/* ── Video fullscreen (search-bar overlay) ── */
-.fu-vid-fs{position:fixed;inset:0;z-index:200;background:#000;display:none;flex-direction:column;}
-.fu-vid-fs.open{display:flex;}
-.fu-vid-fs-searchbar{position:absolute;top:0;left:0;right:0;z-index:5;padding:max(12px,env(safe-area-inset-top)) 14px 12px;display:flex;align-items:center;gap:10px;background:linear-gradient(180deg,rgba(0,0,0,.6),transparent);}
-.fu-vid-fs-back{background:none;border:none;color:#fff;font-size:22px;flex-shrink:0;}
-.fu-vid-fs-search-pill{flex:1;padding:10px 16px;border-radius:100px;background:rgba(255,255,255,.15);color:#fff;font-size:14px;}
-.fu-vid-fs-media{flex:1;position:relative;background:#000;display:flex;align-items:center;justify-content:center;}
-.fu-vid-fs-media video{width:100%;height:100%;object-fit:contain;}
-.fu-vid-fs-footer{position:absolute;bottom:0;left:0;right:0;padding:16px 14px max(16px,env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(0,0,0,.7),transparent);color:#fff;}
+/* Search-specific bottom sheet (Pinterest style, appended below index.html's media area) */
+.fu-lb-sheet{background:#fff;border-radius:20px 20px 0 0;margin-top:-16px;position:relative;z-index:2;padding:18px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+[data-theme="dark"] .fu-lb-sheet{background:#111;}
+.fu-lb-author{display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;}
+.fu-lb-author img{width:38px;height:38px;border-radius:50%;object-fit:cover;background:#eee;flex-shrink:0;}
+.fu-lb-author .nm{font-weight:800;font-size:14px;color:var(--text);}
+[data-theme="dark"] .fu-lb-author .nm{color:#fff;}
+.fu-lb-author .un{font-size:12px;color:#9CA3AF;}
+.fu-lb-caption{font-size:14px;line-height:1.5;color:var(--text);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:14px;}
+[data-theme="dark"] .fu-lb-caption{color:#fff;}
+.fu-lb-actions{display:flex;gap:10px;margin-bottom:20px;}
+.fu-lb-actions button{flex:1;padding:11px;border-radius:100px;border:1.5px solid var(--pbrd);background:var(--pdim);color:var(--p);font-weight:700;font-size:13px;}
+.fu-lb-similar-title{font-size:15px;font-weight:800;margin-bottom:10px;color:var(--text);}
+[data-theme="dark"] .fu-lb-similar-title{color:#fff;}
+.fu-lb-similar-grid{column-count:2;column-gap:8px;max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:2px;}
+.fu-lb-similar-grid .sq-item{break-inside:avoid;margin-bottom:8px;}
+
+/* Fullscreen video variant: no bottom sheet, footer overlays like index.html */
+.lightbox-modal.fu-video-mode .lightbox-media-area{max-height:none;flex:1;}
+.lightbox-modal.fu-video-mode .fu-lb-sheet{display:none;}
+.lightbox-modal.fu-video-mode .gallery-lightbox-media{max-height:100vh;}
+.fu-vid-fs-footer{position:absolute;bottom:0;left:0;right:0;z-index:6;padding:16px 14px max(16px,env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(0,0,0,.75),transparent);color:#fff;}
+.fu-vid-fs-footer .nm{display:flex;align-items:center;gap:8px;font-weight:800;margin-bottom:4px;cursor:pointer;}
+.fu-vid-fs-footer .nm img{width:30px;height:30px;border-radius:50%;object-fit:cover;}
+.fu-vid-fs-footer .cap{font-size:13px;opacity:.92;}
 </style>
 </head>
 <body>
@@ -294,29 +311,18 @@ body.fu-modal-open{overflow:hidden;}
   <bottom-nav></bottom-nav>
 </div>
 
-<!-- ===== IMAGE LIGHTBOX (Pinterest-style) ===== -->
-<div class="fu-img-lb" id="fuImgLightbox">
-  <button class="fu-img-lb-close" onclick="Search._closeImageLightbox()">&times;</button>
-  <div class="fu-img-lb-media"><img id="fuImgLbImg" src="" alt=""></div>
-  <div class="fu-img-lb-sheet">
-    <div class="fu-img-lb-author" id="fuImgLbAuthor"></div>
-    <div class="fu-img-lb-caption" id="fuImgLbCaption"></div>
-    <div class="fu-img-lb-actions" id="fuImgLbActions"></div>
-    <div class="fu-img-lb-similar">
-      <div class="section-title">More like this</div>
-      <div class="sq-grid" id="fuImgLbSimilar"></div>
-    </div>
+<!-- ===== SHARED-STYLE LIGHTBOX (ported from index.html) ===== -->
+<div class="lightbox-modal" id="searchLightbox">
+  <div class="gallery-lightbox-header">
+    <button class="lightbox-close" id="searchLbClose">&times;</button>
+    <span class="gallery-lightbox-counter" id="searchLbCounter"></span>
+    <span style="width:34px;"></span>
   </div>
-</div>
-
-<!-- ===== VIDEO FULLSCREEN (search-bar overlay) ===== -->
-<div class="fu-vid-fs" id="fuVidFullscreen">
-  <div class="fu-vid-fs-searchbar">
-    <button class="fu-vid-fs-back" onclick="Search._closeVideoFullscreen()">&larr;</button>
-    <div class="fu-vid-fs-search-pill" onclick="Search._closeVideoFullscreen()">Search FreeUpper...</div>
+  <div class="lightbox-media-area" id="searchLbMediaArea">
+    <div class="gallery-lightbox-track" id="searchLbTrack"></div>
+    <div class="gallery-lightbox-dots" id="searchLbDots"></div>
   </div>
-  <div class="fu-vid-fs-media" id="fuVidFsMedia"></div>
-  <div class="fu-vid-fs-footer" id="fuVidFsFooter"></div>
+  <div class="fu-lb-sheet" id="searchLbSheet"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
