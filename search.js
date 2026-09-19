@@ -1,12 +1,15 @@
 // ============================================================
 // search.js — FreeUpper discovery + live search + infinite scroll
-// Rebuilt to match exact target UI/UX. SVG-only icons, 3D fire icon.
 //
-// NOTE ON DELETED POSTS:
-//   All `.from('posts')` queries now filter with `.is('deleted_at', null)`.
-//   If your schema soft-deletes via a `status` column instead, swap every
-//   `.is('deleted_at', null)` for `.neq('status', 'deleted')` (or `.eq('is_deleted', false)`).
-//   Search for "SOFT-DELETE FILTER" comments below to find them all.
+// SOFT-DELETE FILTER:
+//   All `.from('posts')` queries use `.is('deleted_at', null)`.
+//   Swap for `.neq('status','deleted')` or `.eq('is_deleted', false)`
+//   if your schema differs. Marked with "// SOFT-DELETE FILTER".
+//
+// RACE CONDITION FIX:
+//   `_searchReqToken` guards renderSearchResults against stale
+//   responses overwriting the wrong tab. Also bumped by switchTab,
+//   renderDiscovery, enterHashtagMode, exitHashtagMode and clear.
 // ============================================================
 (function () {
   'use strict';
@@ -19,11 +22,12 @@
   let searchDebounce = null;
   let hashtagMode = false;
   let currentHashtag = '';
-  let hashtagSort = 'top';   // 'top' | 'latest' (used only by Top subtab)
-  let hashtagView = 'top';   // 'top' | 'photos' | 'videos'
+  let hashtagSort = 'top';
+  let hashtagView = 'top';
   let followingSet = new Set();
   let followerSet = new Set();
   let followSetsLoaded = false;
+  let _searchReqToken = 0;
 
   const paging = {
     top:      { offset: 0, hasMore: true, cache: null, scrollY: 0 },
@@ -48,7 +52,6 @@
     hashtag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="9" y1="3" x2="6" y2="21"/><line x1="18" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="2.5" y1="15" x2="20.5" y2="15"/></svg>',
     trendUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>',
-    chevDown: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
     chevRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>',
     heart: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
     heartOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
@@ -57,8 +60,6 @@
     pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
     clock: '<svg class="clk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-    // 3D fire — layered gradient flame for depth
     fire: `<svg viewBox="0 0 24 24" width="20" height="20">
       <defs>
         <linearGradient id="fireOuter" x1="0" y1="1" x2="0" y2="0">
@@ -154,7 +155,6 @@
       const state = relationshipState(userId);
       if (btn) {
         btn.textContent = relLabel(state);
-        // Correctly strip only the state class, never the base .rel-btn
         btn.classList.remove('rel-self', 'rel-friends', 'rel-following', 'rel-follow-back', 'rel-follow');
         btn.classList.add('rel-' + state);
       }
@@ -335,27 +335,27 @@
       inner = `<div class="sq-text-preview" style="background:linear-gradient(135deg,hsl(${hue},60%,35%),hsl(${(hue+40)%360},60%,25%))">${escapeHtml((p.title||p.content||'').slice(0,80))}</div>`;
     }
     if (withPage && media.length > 1) inner += `<span class="page-badge">1/${media.length}</span>`;
-    // Views badge instead of likes
-    inner += `<span class="heart-badge">${ICON.eye}${fmtNum(p.views)}</span>`;
-    return `<div class="sq-item" onclick="window.Router.openPostById('${p.id}','${mediaType||''}')">${inner}</div>`;
+    // Text-only views badge (no icon)
+    inner += `<span class="heart-badge">${fmtNum(p.views)} views</span>`;
+    return `<div class="sq-item" onclick="Search._openImageLightbox('${p.id}')">${inner}</div>`;
   }
 
   function vidCardHtml(p) {
     const profile = p.profiles || p.profile || {};
     const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : { name: profile.display_name || 'Anonymous', avatar: profile.avatar_url || '', verified_status: profile.verified_status || 'none' };
-    const mediaType = p.media_type || p.mediaType;
     const mediaUrl = p.media_url || p.mediaUrl;
     const thumb = getThumb(mediaUrl);
     const pid = profileIdOf(profile);
-    return `<div class="vid-card" onclick="window.Router.openPostById('${p.id}','${mediaType||''}')">
+    return `<div class="vid-card" onclick="Search._openVideoFullscreen('${p.id}')">
       <div class="thumb">
         <img src="${thumb||''}" loading="lazy">
         ${p.duration ? `<span class="dur">${p.duration}</span>` : ''}
-        <span class="play-c">${ICON.play}</span>
       </div>
       <div class="title">${escapeHtml(p.title||'')}</div>
-      <div class="author" onclick="_searchOpenProfile(event,'${pid}')"><img src="${author.avatar||''}" onerror="this.style.display='none'"><span>${escapeHtml(author.name)}</span>${badgeHTML(author.verified_status)}</div>
-      <div class="views">${fmtNum(p.views)} views</div>
+      <div class="author-row">
+        <div class="author" onclick="_searchOpenProfile(event,'${pid}')"><img src="${author.avatar||''}" onerror="this.style.display='none'"><span class="au-name">${escapeHtml(author.name)}</span>${badgeHTML(author.verified_status)}</div>
+        <span class="views">${fmtNum(p.views)} views</span>
+      </div>
     </div>`;
   }
 
@@ -366,12 +366,14 @@
     const mediaUrl = p.media_url || p.mediaUrl;
     const thumb = mediaType === 'video' ? getThumb(mediaUrl) : mediaUrl;
     const pid = profileIdOf(profile);
-    return `<div class="pcard" onclick="window.Router.openPostById('${p.id}','${mediaType||''}')">
+    const isVideo = mediaType === 'video';
+    const opener = isVideo ? `Search._openVideoFullscreen('${p.id}')` : `Search._openImageLightbox('${p.id}')`;
+    return `<div class="pcard">
       <div class="head" onclick="_searchOpenProfile(event,'${pid}')">
         <img src="${author.avatar||''}" onerror="this.style.display='none'">
         <span class="nm">${escapeHtml(author.name)}</span>${badgeHTML(author.verified_status)}
       </div>
-      <div class="media">
+      <div class="media" onclick="${opener}">
         <img src="${thumb||''}" loading="lazy">
         <div class="stats">
           <span>${ICON.heart}${fmtNum(p.like_count || p.likes)}</span>
@@ -422,9 +424,7 @@
         <div class="handle">@${escapeHtml(u.username||'')}</div>
         ${u.bio ? `<div class="bio">${escapeHtml(u.bio)}</div>` : ''}
       </div>
-      <div class="actions">
-        ${btn}
-      </div>
+      <div class="actions">${btn}</div>
     </div>`;
   }
 
@@ -456,14 +456,9 @@
   }
 
   // ─── HEADER VISIBILITY ────────────────────────────────────
-  function showNormalHeader(show) {
-    document.getElementById('normalHeader').style.display = show ? 'block' : 'none';
-  }
-  function showTabs(show) {
-    document.getElementById('searchTabs').classList.toggle('visible', show);
-  }
+  function showNormalHeader(show) { document.getElementById('normalHeader').style.display = show ? 'block' : 'none'; }
+  function showTabs(show) { document.getElementById('searchTabs').classList.toggle('visible', show); }
   function renderTabsBar() {
-    // Sounds tab removed. Text-only tab bar (no pill icon).
     const defs = [
       { id: 'top', label: 'Top' },
       { id: 'users', label: 'Users' },
@@ -495,8 +490,7 @@
         el.id = 'loadingMore';
         el.className = 'load-more-row muted';
         el.innerHTML = `<span class="spin-icon"></span><span>Loading more</span>`;
-        const container = document.getElementById('resultsContainer');
-        if (container) container.appendChild(el);
+        document.getElementById('resultsContainer')?.appendChild(el);
       }
       el.style.display = 'flex';
     } else if (el) el.style.display = 'none';
@@ -505,7 +499,7 @@
     document.getElementById('loadingMore')?.remove();
     document.getElementById('endResults')?.remove();
     if (document.getElementById('loadMoreIdle')) return;
-    let el = document.createElement('div');
+    const el = document.createElement('div');
     el.id = 'loadMoreIdle';
     el.className = 'load-more-row';
     el.innerHTML = `<span class="dashed"></span><span>Load more</span>`;
@@ -553,8 +547,9 @@
     paging[key].cache = { query: currentQuery || currentHashtag, html: html };
   }
 
-  // ─── DISCOVERY (default state) ─────────────────────────
+  // ─── DISCOVERY ────────────────────────────────────────────
   async function renderDiscovery() {
+    ++_searchReqToken; // invalidate any in-flight search render
     showNormalHeader(true);
     if (!currentQuery && !hashtagMode) showTabs(false);
     disconnectObserver();
@@ -611,7 +606,7 @@
       html += `<div class="discovery-block"><div class="section-title">${ICON.video}Trending Videos</div>
         <div class="sugg-scroll">${videos.map(v => {
           const thumb = getThumb(v.media_url);
-          return `<div style="flex-shrink:0;width:120px;cursor:pointer;" onclick="window.Router.openPostById('${v.id}','video')">
+          return `<div style="flex-shrink:0;width:120px;cursor:pointer;" onclick="Search._openVideoFullscreen('${v.id}')">
             <div style="position:relative;width:120px;height:160px;border-radius:16px;overflow:hidden;background:#000;">
               <img src="${thumb||''}" style="width:100%;height:100%;object-fit:cover;">
               <span style="position:absolute;bottom:9px;left:9px;color:#fff;font-weight:700;font-size:11.5px;text-shadow:0 1px 4px rgba(0,0,0,.7);">${fmtNum(v.views)} views</span>
@@ -632,13 +627,15 @@
     c.innerHTML = html || (recentHtml + emptyState('Nothing to discover yet'));
   }
 
-  // ─── LIVE SEARCH ─────────────────────────────────
+  // ─── LIVE SEARCH (race-condition guarded) ─────────────────
   async function renderSearchResults(q, replace = true) {
     showNormalHeader(true);
     showTabs(true);
     renderTabsBar();
     const container = document.getElementById('resultsContainer');
-    const tabState = paging[currentTab];
+    const tabForThisCall = currentTab;
+    const tabState = paging[tabForThisCall];
+    const myToken = ++_searchReqToken;
 
     if (replace) {
       tabState.offset = 0; tabState.hasMore = true; tabState.cache = null;
@@ -650,28 +647,30 @@
     let html = '';
     let headHtml = '';
 
-    if (currentTab === 'users') {
+    if (myToken !== _searchReqToken) return; // superseded by a newer call
+
+    if (tabForThisCall === 'users') {
       const users = await searchUsers(q, tabState.offset);
       dataCount = users.length;
       html = users.map(u => userRowHtml(u, true)).join('') || emptyState('No users found', `No users match "${q}"`);
       if (replace) headHtml = `<div class="results-head"><h2>Users<span class="cnt">(${fmtNum(dataCount>=PAGE_SIZE?dataCount+'+':dataCount)} found)</span></h2></div>`;
-    } else if (currentTab === 'videos') {
+    } else if (tabForThisCall === 'videos') {
       const posts = await searchVideos(q, tabState.offset);
       dataCount = posts.length;
       html = posts.length ? `<div class="vid-grid">${posts.map(vidCardHtml).join('')}</div>` : emptyState('No videos found', `No videos match "${q}"`);
       if (replace) headHtml = `<div class="results-head"><div><h2 style="margin-bottom:2px;">Videos</h2><div class="sub">Top videos matching "${escapeHtml(q)}"</div></div></div>`;
-    } else if (currentTab === 'photos') {
+    } else if (tabForThisCall === 'photos') {
       const posts = await searchPhotos(q, tabState.offset);
       dataCount = posts.length;
       html = renderSquareGrid(posts, false) || emptyState('No photos found', `No photos match "${q}"`);
       if (replace) headHtml = `<div class="results-head"><h2>Photos<span class="cnt">(${fmtNum(dataCount)} found)</span></h2></div>`;
-    } else if (currentTab === 'market') {
+    } else if (tabForThisCall === 'market') {
       const listings = await searchListings(q, tabState.offset);
       dataCount = listings.length;
       const cards = listings.map(marketCardHtml).join('');
       html = cards ? `<div class="market-grid">${cards}</div>` : emptyState('No listings found', `No listings match "${q}"`);
       if (replace) headHtml = `<div class="results-head"><h2>Market<span class="cnt">(${fmtNum(dataCount)} found)</span></h2></div>`;
-    } else if (currentTab === 'hashtags') {
+    } else if (tabForThisCall === 'hashtags') {
       const hashtags = await searchHashtagsOnly(q, tabState.offset);
       dataCount = hashtags.length;
       html = hashtags.map(t => `<div class="tag-row" onclick="Search.openHashtag('${escapeHtml(t)}')">
@@ -696,6 +695,8 @@
       if (!html) html = emptyState('No results found', `We couldn't find anything for "${q}"`);
     }
 
+    if (myToken !== _searchReqToken) return; // stale response — discard
+
     if (replace) container.innerHTML = headHtml + html;
     else container.insertAdjacentHTML('beforeend', html);
 
@@ -708,7 +709,7 @@
     startInfiniteScroll();
   }
 
-  // ─── HASHTAG MODE ───────────────────────────────────────────
+  // ─── HASHTAG MODE ─────────────────────────────────────────
   function openHashtag(tag) {
     if (!tag) return;
     const clean = tag.replace(/^#/, '');
@@ -741,6 +742,7 @@
   }
 
   async function enterHashtagMode(tag) {
+    ++_searchReqToken;
     hashtagMode = true;
     currentHashtag = tag;
     hashtagView = 'top';
@@ -782,7 +784,6 @@
       if (el) el.textContent = `${fmtNum(count)} posts`;
     }
 
-    // The Photos subview no longer renders any dropdown row.
     let html;
     if (hashtagView === 'photos') {
       html = renderSquareGrid(posts.filter(p => (p.media_type||p.mediaType) !== 'video'), true);
@@ -805,8 +806,9 @@
     startInfiniteScroll();
   }
 
-  // ─── TAB SWITCHING ──────────────────────────────────────────
+  // ─── TAB SWITCHING ────────────────────────────────────────
   function switchTab(tab) {
+    ++_searchReqToken; // invalidate any pending search render
     const main = document.getElementById('mainScroll');
     if (main) paging[currentTab].scrollY = main.scrollTop;
     currentTab = tab;
@@ -843,7 +845,7 @@
     currentQuery = val.trim();
     document.getElementById('clearBtn').classList.toggle('show', !!currentQuery);
     clearTimeout(searchDebounce);
-    if (!currentQuery) { disconnectObserver(); renderDiscovery(); return; }
+    if (!currentQuery) { ++_searchReqToken; disconnectObserver(); renderDiscovery(); return; }
     if (!hadQuery) { showTabs(true); renderTabsBar(); }
     searchDebounce = setTimeout(() => { addRecentSearch(currentQuery); renderSearchResults(currentQuery, true); }, 350);
   }
@@ -853,6 +855,7 @@
   }
   function onFocus() { if (!currentQuery) renderDiscovery(); }
   function clear() {
+    ++_searchReqToken;
     document.getElementById('searchInput').value = '';
     document.getElementById('clearBtn').classList.remove('show');
     currentQuery = '';
@@ -862,6 +865,7 @@
   function cancelFocus() { clear(); }
 
   function exitHashtagMode() {
+    ++_searchReqToken;
     hashtagMode = false;
     currentHashtag = '';
     document.getElementById('hashtagHeader').style.display = 'none';
@@ -871,18 +875,72 @@
     renderDiscovery();
   }
 
-  function setHashtagSort(sort) { /* reserved */ }
+  // ─── IMAGE LIGHTBOX ───────────────────────────────────────
+  async function openImageLightbox(postId) {
+    let p;
+    try {
+      const { data } = await window.sb.from('posts')
+        .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
+        .eq('id', postId).single();
+      p = data;
+    } catch (e) { return; }
+    if (!p) return;
+    const profile = p.profiles || {};
+    const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : { name: profile.display_name || 'Anonymous', avatar: profile.avatar_url || '' };
+    document.getElementById('fuImgLbImg').src = p.media_url || p.mediaUrl || '';
+    document.getElementById('fuImgLbAuthor').innerHTML = `<img src="${author.avatar||''}" onerror="this.style.display='none'"><div><div style="font-weight:800;">${escapeHtml(author.name)}</div><div style="color:#9CA3AF;font-size:12px;">@${escapeHtml(profile.username||'')}</div></div>`;
+    const caption = [p.title, p.content].filter(Boolean).join(' — ');
+    document.getElementById('fuImgLbCaption').textContent = caption;
+    document.getElementById('fuImgLbActions').innerHTML = `<button onclick="_searchOpenProfile(event,'${profileIdOf(profile)}')">View profile</button><button onclick="Search._closeImageLightbox()">Close</button>`;
+    document.getElementById('fuImgLbSimilar').innerHTML = `<div class="center-loading"><span class="spin-icon"></span></div>`;
+    document.getElementById('fuImgLightbox').classList.add('open');
+    document.body.classList.add('fu-modal-open');
 
-  // ─── PUBLIC API ──────────────────────────────────────────────
+    const similar = await searchPhotos((p.title||'').split(' ')[0] || '', 0);
+    document.getElementById('fuImgLbSimilar').innerHTML = renderSquareGrid(similar.filter(s => s.id !== p.id).slice(0, 10), false) || '';
+  }
+  function closeImageLightbox() {
+    document.getElementById('fuImgLightbox').classList.remove('open');
+    document.body.classList.remove('fu-modal-open');
+  }
+
+  // ─── VIDEO FULLSCREEN ─────────────────────────────────────
+  async function openVideoFullscreen(postId) {
+    let p;
+    try {
+      const { data } = await window.sb.from('posts')
+        .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
+        .eq('id', postId).single();
+      p = data;
+    } catch (e) { return; }
+    if (!p) return;
+    const profile = p.profiles || {};
+    const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : { name: profile.display_name || 'Anonymous', avatar: profile.avatar_url || '' };
+    document.getElementById('fuVidFsMedia').innerHTML = `<video src="${p.media_url||''}" controls autoplay playsinline></video>`;
+    document.getElementById('fuVidFsFooter').innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><img src="${author.avatar||''}" onerror="this.style.display='none'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;"><b>${escapeHtml(author.name)}</b></div><div style="font-size:13px;opacity:.9;">${escapeHtml(p.title||'')}</div>`;
+    document.getElementById('fuVidFullscreen').classList.add('open');
+    document.body.classList.add('fu-modal-open');
+  }
+  function closeVideoFullscreen() {
+    document.getElementById('fuVidFsMedia').innerHTML = '';
+    document.getElementById('fuVidFullscreen').classList.remove('open');
+    document.body.classList.remove('fu-modal-open');
+  }
+
+  // ─── PUBLIC API ───────────────────────────────────────────
   window.Search = {
     switchTab, onQueryInput, onFocus, clear, runSearch,
-    openHashtag, exitHashtagMode, setHashtagSort,
+    openHashtag, exitHashtagMode,
     _setHashtagView: setHashtagView,
     removeRecent: removeRecentSearch,
-    clearAllRecent, cancelFocus
+    clearAllRecent, cancelFocus,
+    _openImageLightbox: openImageLightbox,
+    _closeImageLightbox: closeImageLightbox,
+    _openVideoFullscreen: openVideoFullscreen,
+    _closeVideoFullscreen: closeVideoFullscreen,
   };
 
-  // ─── INIT ───────────────────────────────────────────────────
+  // ─── INIT ─────────────────────────────────────────────────
   function init() {
     document.getElementById('searchIcon').innerHTML = ICON.search;
     document.getElementById('clearBtn').innerHTML = ICON.close;
