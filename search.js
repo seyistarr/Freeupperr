@@ -8,8 +8,16 @@
 //
 // RACE CONDITION FIX:
 //   `_searchReqToken` guards renderSearchResults against stale
-//   responses overwriting the wrong tab. Also bumped by switchTab,
-//   renderDiscovery, enterHashtagMode, exitHashtagMode and clear.
+//   responses overwriting the wrong tab. Bumped by switchTab,
+//   renderDiscovery, enterHashtagMode, exitHashtagMode, clear,
+//   and empty-query onQueryInput.
+//
+// LIGHTBOX:
+//   Ported from index.html's gallery lightbox (markup + CSS in
+//   search.html). Same class names (.lightbox-modal,
+//   .gallery-lightbox-*) so the two look identical. The Pinterest
+//   bottom sheet (.fu-lb-*) is appended below the media area — it
+//   is search-specific and doesn't exist in index.html's variant.
 // ============================================================
 (function () {
   'use strict';
@@ -335,7 +343,6 @@
       inner = `<div class="sq-text-preview" style="background:linear-gradient(135deg,hsl(${hue},60%,35%),hsl(${(hue+40)%360},60%,25%))">${escapeHtml((p.title||p.content||'').slice(0,80))}</div>`;
     }
     if (withPage && media.length > 1) inner += `<span class="page-badge">1/${media.length}</span>`;
-    // Text-only views badge (no icon)
     inner += `<span class="heart-badge">${fmtNum(p.views)} views</span>`;
     return `<div class="sq-item" onclick="Search._openImageLightbox('${p.id}')">${inner}</div>`;
   }
@@ -549,7 +556,7 @@
 
   // ─── DISCOVERY ────────────────────────────────────────────
   async function renderDiscovery() {
-    ++_searchReqToken; // invalidate any in-flight search render
+    ++_searchReqToken;
     showNormalHeader(true);
     if (!currentQuery && !hashtagMode) showTabs(false);
     disconnectObserver();
@@ -647,7 +654,7 @@
     let html = '';
     let headHtml = '';
 
-    if (myToken !== _searchReqToken) return; // superseded by a newer call
+    if (myToken !== _searchReqToken) return;
 
     if (tabForThisCall === 'users') {
       const users = await searchUsers(q, tabState.offset);
@@ -695,7 +702,7 @@
       if (!html) html = emptyState('No results found', `We couldn't find anything for "${q}"`);
     }
 
-    if (myToken !== _searchReqToken) return; // stale response — discard
+    if (myToken !== _searchReqToken) return;
 
     if (replace) container.innerHTML = headHtml + html;
     else container.insertAdjacentHTML('beforeend', html);
@@ -808,7 +815,7 @@
 
   // ─── TAB SWITCHING ────────────────────────────────────────
   function switchTab(tab) {
-    ++_searchReqToken; // invalidate any pending search render
+    ++_searchReqToken;
     const main = document.getElementById('mainScroll');
     if (main) paging[currentTab].scrollY = main.scrollTop;
     currentTab = tab;
@@ -875,56 +882,99 @@
     renderDiscovery();
   }
 
-  // ─── IMAGE LIGHTBOX ───────────────────────────────────────
+  // ─── LIGHTBOX (ported from index.html's gallery lightbox) ─
+  async function fetchPostForLightbox(postId) {
+    try {
+      const { data } = await window.sb.from('posts')
+        .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
+        .eq('id', postId).is('deleted_at', null).single();
+      return data;
+    } catch (e) { return null; }
+  }
+
+  function goToProfileFromLightbox(userId) {
+    if (!userId) return;
+    closeLightbox();
+    if (window.Router && window.Router.openProfile) window.Router.openProfile(userId);
+  }
+  window._searchLbGoToProfile = goToProfileFromLightbox;
+
+  function closeLightbox() {
+    const modal = document.getElementById('searchLightbox');
+    if (!modal) return;
+    modal.classList.remove('show', 'fu-video-mode');
+    modal.querySelectorAll('video').forEach(v => { try { v.pause(); } catch (e) {} });
+    const track = document.getElementById('searchLbTrack');
+    const sheet = document.getElementById('searchLbSheet');
+    if (track) track.innerHTML = '';
+    if (sheet) sheet.innerHTML = '';
+    document.body.classList.remove('fu-modal-open');
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const closeBtn = document.getElementById('searchLbClose');
+    if (closeBtn) closeBtn.addEventListener('click', closeLightbox);
+    const modal = document.getElementById('searchLightbox');
+    if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeLightbox(); });
+  });
+
   async function openImageLightbox(postId) {
-    let p;
-    try {
-      const { data } = await window.sb.from('posts')
-        .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-        .eq('id', postId).single();
-      p = data;
-    } catch (e) { return; }
+    const p = await fetchPostForLightbox(postId);
     if (!p) return;
     const profile = p.profiles || {};
     const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : { name: profile.display_name || 'Anonymous', avatar: profile.avatar_url || '' };
-    document.getElementById('fuImgLbImg').src = p.media_url || p.mediaUrl || '';
-    document.getElementById('fuImgLbAuthor').innerHTML = `<img src="${author.avatar||''}" onerror="this.style.display='none'"><div><div style="font-weight:800;">${escapeHtml(author.name)}</div><div style="color:#9CA3AF;font-size:12px;">@${escapeHtml(profile.username||'')}</div></div>`;
+    const pid = profileIdOf(profile);
+
+    const modal = document.getElementById('searchLightbox');
+    if (!modal) return;
+    modal.classList.remove('fu-video-mode');
+    document.getElementById('searchLbTrack').innerHTML =
+      `<div class="gallery-lightbox-slide"><img class="gallery-lightbox-media" src="${p.media_url || p.mediaUrl || ''}" alt=""></div>`;
+    document.getElementById('searchLbCounter').textContent = '';
+    document.getElementById('searchLbDots').innerHTML = '';
+
     const caption = [p.title, p.content].filter(Boolean).join(' — ');
-    document.getElementById('fuImgLbCaption').textContent = caption;
-    document.getElementById('fuImgLbActions').innerHTML = `<button onclick="_searchOpenProfile(event,'${profileIdOf(profile)}')">View profile</button><button onclick="Search._closeImageLightbox()">Close</button>`;
-    document.getElementById('fuImgLbSimilar').innerHTML = `<div class="center-loading"><span class="spin-icon"></span></div>`;
-    document.getElementById('fuImgLightbox').classList.add('open');
+    document.getElementById('searchLbSheet').innerHTML = `
+      <div class="fu-lb-author" onclick="_searchLbGoToProfile('${pid}')">
+        <img src="${author.avatar||''}" onerror="this.style.display='none'">
+        <div><div class="nm">${escapeHtml(author.name)}</div><div class="un">@${escapeHtml(profile.username||'')}</div></div>
+      </div>
+      ${caption ? `<div class="fu-lb-caption">${escapeHtml(caption)}</div>` : ''}
+      <div class="fu-lb-actions">
+        <button onclick="_searchLbGoToProfile('${pid}')">View profile</button>
+        <button onclick="Search._closeLightbox()">Close</button>
+      </div>
+      <div class="fu-lb-similar-title">More like this</div>
+      <div class="fu-lb-similar-grid" id="fuLbSimilarGrid"><div class="center-loading"><span class="spin-icon"></span></div></div>
+    `;
+    modal.classList.add('show');
     document.body.classList.add('fu-modal-open');
 
-    const similar = await searchPhotos((p.title||'').split(' ')[0] || '', 0);
-    document.getElementById('fuImgLbSimilar').innerHTML = renderSquareGrid(similar.filter(s => s.id !== p.id).slice(0, 10), false) || '';
-  }
-  function closeImageLightbox() {
-    document.getElementById('fuImgLightbox').classList.remove('open');
-    document.body.classList.remove('fu-modal-open');
+    const similar = await searchPhotos((p.title || '').split(' ')[0] || '', 0);
+    const grid = document.getElementById('fuLbSimilarGrid');
+    if (grid) grid.innerHTML = renderSquareGrid(similar.filter(s => s.id !== p.id).slice(0, 10), false) || '';
   }
 
-  // ─── VIDEO FULLSCREEN ─────────────────────────────────────
   async function openVideoFullscreen(postId) {
-    let p;
-    try {
-      const { data } = await window.sb.from('posts')
-        .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-        .eq('id', postId).single();
-      p = data;
-    } catch (e) { return; }
+    const p = await fetchPostForLightbox(postId);
     if (!p) return;
     const profile = p.profiles || {};
     const author = window.getAuthorFromProfile ? window.getAuthorFromProfile(profile) : { name: profile.display_name || 'Anonymous', avatar: profile.avatar_url || '' };
-    document.getElementById('fuVidFsMedia').innerHTML = `<video src="${p.media_url||''}" controls autoplay playsinline></video>`;
-    document.getElementById('fuVidFsFooter').innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><img src="${author.avatar||''}" onerror="this.style.display='none'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;"><b>${escapeHtml(author.name)}</b></div><div style="font-size:13px;opacity:.9;">${escapeHtml(p.title||'')}</div>`;
-    document.getElementById('fuVidFullscreen').classList.add('open');
+    const pid = profileIdOf(profile);
+
+    const modal = document.getElementById('searchLightbox');
+    if (!modal) return;
+    modal.classList.add('fu-video-mode');
+    document.getElementById('searchLbTrack').innerHTML =
+      `<div class="gallery-lightbox-slide"><video class="gallery-lightbox-media" src="${p.media_url || p.mediaUrl || ''}" controls autoplay playsinline></video></div>`;
+    document.getElementById('searchLbCounter').textContent = '';
+    document.getElementById('searchLbDots').innerHTML = '';
+    document.getElementById('searchLbSheet').innerHTML = `
+      <div class="fu-vid-fs-footer">
+        <div class="nm" onclick="_searchLbGoToProfile('${pid}')"><img src="${author.avatar||''}" onerror="this.style.display='none'">${escapeHtml(author.name)}</div>
+        <div class="cap">${escapeHtml(p.title||'')}</div>
+      </div>`;
+    modal.classList.add('show');
     document.body.classList.add('fu-modal-open');
-  }
-  function closeVideoFullscreen() {
-    document.getElementById('fuVidFsMedia').innerHTML = '';
-    document.getElementById('fuVidFullscreen').classList.remove('open');
-    document.body.classList.remove('fu-modal-open');
   }
 
   // ─── PUBLIC API ───────────────────────────────────────────
@@ -935,9 +985,8 @@
     removeRecent: removeRecentSearch,
     clearAllRecent, cancelFocus,
     _openImageLightbox: openImageLightbox,
-    _closeImageLightbox: closeImageLightbox,
     _openVideoFullscreen: openVideoFullscreen,
-    _closeVideoFullscreen: closeVideoFullscreen,
+    _closeLightbox: closeLightbox,
   };
 
   // ─── INIT ─────────────────────────────────────────────────
