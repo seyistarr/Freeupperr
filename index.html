@@ -679,6 +679,73 @@
         .lightbox-modal.dragging .gallery-lightbox-track {
             transition: none !important;
         }
+        .lightbox-modal {
+            overflow: hidden;
+            overscroll-behavior: none;
+            background: #000;
+        }
+        .lb-peek {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            will-change: transform;
+            pointer-events: none;
+        }
+        .lb-peek video,
+        .lb-peek img {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+        }
+
+        /* ─── COMMENT IMAGE VIEWER ─── */
+        .cimg-viewer {
+            position: fixed;
+            inset: 0;
+            z-index: 400;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s ease;
+            touch-action: none;
+        }
+        .cimg-viewer.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .cimg-viewer img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            will-change: transform;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        .cimg-close {
+            position: absolute;
+            top: max(12px, env(safe-area-inset-top));
+            left: 16px;
+            z-index: 2;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .14);
+            color: #fff;
+            font-size: 26px;
+            line-height: 1;
+            cursor: pointer;
+        }
 
         /* ─── LIGHTBOX TAP-TO-HIDE UI ─── */
         .lightbox-modal .gallery-lightbox-header,
@@ -2007,8 +2074,16 @@
             transition: transform .3s cubic-bezier(.4, 0, .2, 1), bottom .15s ease;
             box-shadow: 0 -2px 12px rgba(0, 0, 0, .06);
         }
+        #global-comment-bar {
+            visibility: hidden;
+            pointer-events: none;
+            transition: transform .3s cubic-bezier(.4, 0, .2, 1), bottom .15s ease, visibility 0s linear .3s;
+        }
         #global-comment-bar.visible {
             transform: translateY(0);
+            visibility: visible;
+            pointer-events: auto;
+            transition: transform .3s cubic-bezier(.4, 0, .2, 1), bottom .15s ease, visibility 0s;
         }
         #reply-context-banner {
             display: none;
@@ -2269,8 +2344,7 @@
             height: 16px;
         }
         .comment-pill .comment-send-btn:disabled {
-            opacity: .35;
-            cursor: not-allowed;
+            display: none;
         }
         .lightbox-comments-header h3 span {
             color: var(--muted);
@@ -4285,6 +4359,12 @@
         </div>
     </div>
 
+    <!-- ===== COMMENT IMAGE VIEWER ===== -->
+    <div id="commentImageViewer" class="cimg-viewer">
+        <button type="button" class="cimg-close" aria-label="Close">&times;</button>
+        <img id="cimgImg" src="" alt="">
+    </div>
+
     <!-- ===== SHARE MODAL ===== -->
     <div id="share-modal">
         <div class="share-sheet">
@@ -4645,6 +4725,7 @@
 
             // ─── COMMENTS FETCH TOKEN ───
             let _commentsFetchToken = {};
+            let _commentsCache = {};
 
             // ───────────────────────────────────────────────────────────────
             // HELPERS
@@ -5497,6 +5578,76 @@
                 closeLightboxCommentsSheet();
             }
 
+            // ─── COMMENT IMAGE VIEWER ───
+            function openCommentImageViewer(url) {
+                const v = document.getElementById('commentImageViewer');
+                const img = document.getElementById('cimgImg');
+                if (!v || !img || !url) return;
+                img.style.transition = 'none';
+                img.style.transform = '';
+                v.style.background = '#000';
+                img.src = url;
+                v.classList.add('show');
+            }
+
+            function closeCommentImageViewer() {
+                const v = document.getElementById('commentImageViewer');
+                const img = document.getElementById('cimgImg');
+                if (!v || !img || !v.classList.contains('show')) return;
+                v.classList.remove('show');
+                setTimeout(() => {
+                    if (v.classList.contains('show')) return;
+                    img.src = '';
+                    img.style.transform = '';
+                    v.style.background = '#000';
+                }, 220);
+            }
+
+            (function setupCommentImageViewer() {
+                const v = document.getElementById('commentImageViewer');
+                const img = document.getElementById('cimgImg');
+                if (!v || !img) return;
+                let sx = 0, sy = 0, dx = 0, dy = 0, dragging = false, moved = false;
+                const dist = () => Math.hypot(dx, dy);
+
+                v.addEventListener('touchstart', e => {
+                    if (e.touches.length !== 1) { dragging = false; return; }
+                    sx = e.touches[0].clientX;
+                    sy = e.touches[0].clientY;
+                    dx = 0; dy = 0; moved = false; dragging = true;
+                    img.style.transition = 'none';
+                }, { passive: true });
+
+                v.addEventListener('touchmove', e => {
+                    if (!dragging || e.touches.length !== 1) return;
+                    dx = e.touches[0].clientX - sx;
+                    dy = e.touches[0].clientY - sy;
+                    if (dist() > 10) moved = true;
+                    const s = Math.max(0.7, 1 - dist() / 1200);
+                    img.style.transform = `translate(${dx}px, ${dy}px) scale(${s})`;
+                    v.style.background = `rgba(0,0,0,${Math.max(0.15, 1 - dist() / 400)})`;
+                }, { passive: true });
+
+                const end = () => {
+                    if (!dragging) return;
+                    dragging = false;
+                    if (dist() > 90) { closeCommentImageViewer(); return; }
+                    img.style.transition = 'transform .2s ease';
+                    img.style.transform = '';
+                    v.style.background = '#000';
+                };
+                v.addEventListener('touchend', end, { passive: true });
+                v.addEventListener('touchcancel', end, { passive: true });
+
+                v.addEventListener('click', () => {
+                    if (moved) { moved = false; return; }
+                    closeCommentImageViewer();
+                });
+            })();
+
+            window.openCommentImageViewer = openCommentImageViewer;
+            window.closeCommentImageViewer = closeCommentImageViewer;
+
             (function setupGallerySwipe() {
                 const track = document.getElementById('galleryLightboxTrack');
                 if (!track) return;
@@ -5516,52 +5667,153 @@
                 }, { passive: true });
             })();
 
-            (function setupGalleryVerticalDismiss() {
+            (function setupLightboxReelsSwipe() {
                 const modal = document.getElementById('lightbox');
-                const track = document.getElementById('galleryLightboxTrack');
-                if (!modal || !track) return;
-                let startY = 0, startX = 0, dragging = false, dragged = false;
+                if (!modal) return;
+                let startX = 0, startY = 0, startT = 0;
+                let dragging = false, axis = null, mode = null, peek = null, busy = false;
+                const H = () => window.innerHeight;
 
-                track.addEventListener('touchstart', e => {
-                    if (e.touches.length !== 1) return;
-                    startY = e.touches[0].clientY;
+                function movers() {
+                    return [
+                        document.getElementById('lightboxMediaArea'),
+                        document.getElementById('galleryLightboxFooter')
+                    ].filter(Boolean);
+                }
+
+                function move(dy, animate) {
+                    const tr = animate ? 'transform .25s cubic-bezier(.4,0,.2,1)' : 'none';
+                    movers().forEach(el => {
+                        el.style.transition = tr;
+                        el.style.transform = `translateY(${dy}px)`;
+                    });
+                    if (peek) {
+                        peek.style.transition = tr;
+                        peek.style.transform = `translateY(${(mode === 'next' ? H() : -H()) + dy}px)`;
+                    }
+                }
+
+                function reset() {
+                    movers().forEach(el => { el.style.transition = ''; el.style.transform = ''; });
+                }
+
+                function cleanupPeek() {
+                    if (peek) { peek.remove(); peek = null; }
+                }
+
+                function buildPeek(post, offset) {
+                    const first = getMediaItems(post)[0];
+                    const el = document.createElement('div');
+                    el.className = 'lb-peek';
+                    el.style.transform = `translateY(${offset}px)`;
+                    if (first && first.url) {
+                        if (first.type === 'video' && !isYouTubeUrl(first.url)) {
+                            el.innerHTML = `<video src="${first.url}#t=0.1" muted playsinline preload="auto"></video>`;
+                        } else if (first.type !== 'video') {
+                            el.innerHTML = `<img src="${first.url}" alt="">`;
+                        }
+                    }
+                    modal.insertBefore(el, modal.firstChild);
+                    return el;
+                }
+
+                function begin(dy) {
+                    const hasNext = _lbFeedIndex >= 0 && _lbFeedIndex < _lbFeedList.length - 1;
+                    const hasPrev = _lbFeedIndex > 0;
+                    if (dy < 0) mode = hasNext ? 'next' : 'bounce';
+                    else mode = hasPrev ? 'prev' : 'dismiss';
+                    if (mode === 'next') peek = buildPeek(_lbFeedList[_lbFeedIndex + 1], H());
+                    if (mode === 'prev') peek = buildPeek(_lbFeedList[_lbFeedIndex - 1], -H());
+                }
+
+                function apply(dy) {
+                    let m = 0;
+                    if (mode === 'next') m = Math.min(0, dy);
+                    else if (mode === 'prev' || mode === 'dismiss') m = Math.max(0, dy);
+                    else m = Math.max(-90, Math.min(0, dy * 0.3));
+                    move(m, false);
+                }
+
+                function commitSwap(post, finalDy) {
+                    busy = true;
+                    move(finalDy, true);
+                    setTimeout(() => {
+                        const p = peek;
+                        peek = null;
+                        reset();
+                        openGalleryLightbox(getMediaItems(post), 0, post.id);
+                        busy = false;
+                        if (!p) return;
+                        const done = () => { if (p.isConnected) p.remove(); };
+                        const vid = getActiveLightboxVideo();
+                        if (vid) {
+                            vid.addEventListener('playing', () => setTimeout(done, 80), { once: true });
+                            setTimeout(done, 1500);
+                        } else {
+                            setTimeout(done, 100);
+                        }
+                    }, 260);
+                }
+
+                function finish(dy, dt) {
+                    const dist = Math.abs(dy);
+                    const fast = dist > 40 && dist / Math.max(dt, 1) > 0.5;
+                    const commit = dist > H() * 0.18 || fast;
+
+                    if (mode === 'next' && dy < 0 && commit) {
+                        commitSwap(_lbFeedList[_lbFeedIndex + 1], -H());
+                        return;
+                    }
+                    if (mode === 'prev' && dy > 0 && commit) {
+                        commitSwap(_lbFeedList[_lbFeedIndex - 1], H());
+                        return;
+                    }
+                    if (mode === 'dismiss' && dy > 0 && (dist > 120 || fast)) {
+                        busy = true;
+                        move(H(), true);
+                        setTimeout(() => { closeLightbox(); reset(); busy = false; }, 230);
+                        return;
+                    }
+                    if (mode === 'bounce' && dy < -40 && _lbFeedIndex >= 0) showToast('No more videos');
+                    busy = true;
+                    move(0, true);
+                    setTimeout(() => { cleanupPeek(); reset(); busy = false; }, 260);
+                }
+
+                modal.addEventListener('touchstart', e => {
+                    if (busy || e.touches.length !== 1) return;
+                    if (e.target.closest('.gallery-lightbox-footer, .gallery-lightbox-header')) return;
                     startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                    startT = Date.now();
                     dragging = true;
-                    dragged = false;
+                    axis = null;
+                    mode = null;
                 }, { passive: true });
 
-                track.addEventListener('touchmove', e => {
+                modal.addEventListener('touchmove', e => {
                     if (!dragging || e.touches.length !== 1) return;
                     const dy = e.touches[0].clientY - startY;
                     const dx = e.touches[0].clientX - startX;
-                    if (Math.abs(dy) < 10 && Math.abs(dx) < 10) return;
-                    if (Math.abs(dy) <= Math.abs(dx)) return;
-                    dragged = true;
-                    modal.classList.add('dragging');
-                    const clamped = Math.max(-120, Math.min(400, dy));
-                    modal.style.transform = `translateY(${clamped}px)`;
-                    modal.style.opacity = String(Math.max(0.5, 1 - Math.abs(clamped) / 500));
+                    if (axis === null) {
+                        if (Math.abs(dy) < 10 && Math.abs(dx) < 10) return;
+                        axis = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x';
+                        if (axis === 'y') begin(dy);
+                    }
+                    if (axis !== 'y') return;
+                    apply(dy);
                 }, { passive: true });
 
-                track.addEventListener('touchend', e => {
+                modal.addEventListener('touchend', e => {
                     if (!dragging) return;
                     dragging = false;
-                    modal.classList.remove('dragging');
-                    const dy = (e.changedTouches[0].clientY - startY);
-                    modal.style.transition = 'transform .2s ease, opacity .2s ease';
-                    if (dragged && dy > 120) {
-                        modal.style.transform = 'translateY(100%)';
-                        modal.style.opacity = '0';
-                        setTimeout(() => { modal.style.transition = ''; modal.style.transform = ''; modal.style.opacity = ''; closeLightbox(); }, 200);
-                    } else if (dragged && dy < -80 && _lbFeedList.length > 0) {
-                        modal.style.transform = 'translateY(-40px)';
-                        modal.style.opacity = '0.4';
-                        setTimeout(() => { modal.style.transition = ''; modal.style.transform = ''; modal.style.opacity = ''; goToNextLightboxPost(); }, 150);
-                    } else {
-                        modal.style.transform = '';
-                        modal.style.opacity = '';
-                        setTimeout(() => { modal.style.transition = ''; }, 200);
-                    }
+                    if (axis !== 'y') return;
+                    finish(e.changedTouches[0].clientY - startY, Date.now() - startT);
+                }, { passive: true });
+
+                modal.addEventListener('touchcancel', () => {
+                    if (dragging && axis === 'y') finish(0, 1);
+                    dragging = false;
                 }, { passive: true });
             })();
 
@@ -6819,21 +7071,23 @@
                 const pinnedBadgeHtml = isPinned ? '<span class="comment-pinned-badge"><svg viewBox="0 0 24 24" width="11" height="11"><path d="M12 17v5"/><path d="M9 3h6l1 6-2 2v3H8v-3L6 9Z"/></svg> Pinned</span>' : '';
                 const editedTagHtml = c.edited ? '<span class="comment-edited-tag">(edited)</span>' : '';
 
-                const ds = getAllDescendants(c.id, allComments),
-                    hr = ds.length > 0,
-                    ec = expandedThreads.has(c.id) ? expandedThreads.get(c.id) : (ds.length > 0 ? 1 : 0);
+                const ds = getAllDescendants(c.id, allComments);
+                const ownerId = post ? post.user_id : null;
+                const ownerReplies = ownerId ? ds.filter(r => r.userId === ownerId) : [];
+                const otherReplies = ownerId ? ds.filter(r => r.userId !== ownerId) : ds;
+                const ordered = [...ownerReplies, ...otherReplies];
+                const userExpanded = expandedThreads.has(c.id);
+                const extra = userExpanded ? expandedThreads.get(c.id) : 0;
+                const shown = ordered.slice(0, ownerReplies.length + extra);
+                const hiddenCount = ordered.length - shown.length;
                 let rh = '';
-                if (hr && ec > 0) {
-                    const sh = ds.slice(0, ec),
-                        rm = ds.length - ec;
-                    rh = `<div class="replies-thread">${sh.map(r=>renderReplyItem(r,allComments,postId)).join('')}</div>`;
-                    if (rm > 0) rh +=
-                        `<button type="button" class="view-replies-btn expand-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(rm)} more repl${rm!==1?'ies':'y'} <span class="reply-sort-toggle" onclick="event.stopPropagation();openCommentSortModal('${postId}')">▾</span></button>`;
-                    else rh +=
-                        `<button type="button" class="hide-replies-btn collapse-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronUp()} Hide replies</button>`;
-                } else if (hr && ec === 0) {
-                    rh =
-                        `<button type="button" class="view-replies-btn expand-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(ds.length)} repl${ds.length!==1?'ies':'y'} <span class="reply-sort-toggle" onclick="event.stopPropagation();openCommentSortModal('${postId}')">▾</span></button>`;
+                if (shown.length) {
+                    rh = `<div class="replies-thread">${shown.map(r => renderReplyItem(r, allComments, postId)).join('')}</div>`;
+                }
+                if (hiddenCount > 0) {
+                    rh += `<button type="button" class="view-replies-btn expand-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronDown()} View ${formatCount(hiddenCount)} ${shown.length ? 'more ' : ''}repl${hiddenCount !== 1 ? 'ies' : 'y'} <span class="reply-sort-toggle" onclick="event.stopPropagation();openCommentSortModal('${postId}')">▾</span></button>`;
+                } else if (userExpanded && ordered.length > ownerReplies.length) {
+                    rh += `<button type="button" class="hide-replies-btn collapse-replies-btn" data-comment-id="${c.id}" data-post-id="${postId}">${svgChevronUp()} Hide replies</button>`;
                 }
                 const il = c.message.length > 220;
                 const avatarHtml = avatar ?
@@ -6843,7 +7097,7 @@
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
                 const renderedMsg = linkifyContent(c.message, c.mentions);
                 const commentMediaHtml = c.imageUrl
-                    ? `<img class="comment-media" src="${escapeHtml(c.imageUrl)}" alt="Comment media" loading="lazy" onclick="event.stopPropagation(); window.openGalleryLightbox([{url:'${escapeHtml(c.imageUrl)}',type:'image'}], 0, null)">`
+                    ? `<img class="comment-media" src="${escapeHtml(c.imageUrl)}" alt="Comment media" loading="lazy" onclick="event.stopPropagation(); window.openCommentImageViewer(this.currentSrc || this.src)">`
                     : '';
 
                 const _ov = locallyLikedComments.get(c.id);
@@ -6901,7 +7155,7 @@
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
                 const renderedMsg = linkifyContent(r.message, r.mentions);
                 const replyMediaHtml = r.imageUrl
-                    ? `<img class="reply-media" src="${escapeHtml(r.imageUrl)}" alt="Reply media" loading="lazy" onclick="event.stopPropagation(); window.openGalleryLightbox([{url:'${escapeHtml(r.imageUrl)}',type:'image'}], 0, null)">`
+                    ? `<img class="reply-media" src="${escapeHtml(r.imageUrl)}" alt="Reply media" loading="lazy" onclick="event.stopPropagation(); window.openCommentImageViewer(this.currentSrc || this.src)">`
                     : '';
 
                 const _ov = locallyLikedComments.get(r.id);
@@ -7477,6 +7731,7 @@
                     const comments = await window.PostsAPI.loadComments(postId);
                     if (_commentsFetchToken[postId] !== myToken) return;
                     p.comments = comments;
+                    _commentsCache[postId] = comments;
                     const sortMode = getCommentSort(postId);
                     const sorted = [...comments].sort((a, b) => {
                         if (!!b.pinned !== !!a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
@@ -7521,6 +7776,10 @@
                                 );
                                 p.comments = getCommentCount(p) + 1;
                                 const user = getCurrentUser();
+                                if (parentId) {
+                                    const _top = findTopAncestorId(parentId, _commentsCache[postId] || []) || parentId;
+                                    expandedThreads.set(_top, 1000000);
+                                }
                                 if (comment.id && mentions.length > 0 && window.Mentions) {
                                     window.Mentions.notifyMentionedUsers(
                                         'comment',
@@ -8077,7 +8336,7 @@
                     pi = document.getElementById('pull-icon');
 
                 document.addEventListener('touchstart', e => {
-                    const blocked = uiPage === 'single-post-explore' ||
+                    const blocked = document.body.style.position === 'fixed' || uiPage === 'single-post-explore' ||
                         (e.target.closest && (
                             e.target.closest('#explore-fullscreen') ||
                             e.target.closest('#lightbox') ||
@@ -8172,7 +8431,9 @@
                 const vv = window.visualViewport;
 
                 function adjust() {
-                    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+                    const _a = document.activeElement;
+                    const _typing = !!(_a && (_a.tagName === 'TEXTAREA' || _a.tagName === 'INPUT'));
+                    const kb = _typing ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
                     const gcb = document.getElementById('global-comment-bar'),
                         ecb = document.getElementById('explore-comment-bar');
                     if (gcb) gcb.style.bottom = kb + 'px';
@@ -8538,7 +8799,13 @@
                 });
 
                 document.addEventListener('keydown', e => {
-                    if (document.getElementById('lightbox').classList.contains('show')) {
+                    const _t = e.target;
+                    const _typing = _t && (_t.tagName === 'TEXTAREA' || _t.tagName === 'INPUT' || _t.isContentEditable);
+                    if (document.getElementById('commentImageViewer').classList.contains('show')) {
+                        if (e.key === 'Escape') closeCommentImageViewer();
+                        return;
+                    }
+                    if (!_typing && document.getElementById('lightbox').classList.contains('show')) {
                         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
                             e.preventDefault();
                             _galleryState.items.length > 1 ? galleryGoTo(_galleryState.index + 1) : goToNextLightboxPost();
