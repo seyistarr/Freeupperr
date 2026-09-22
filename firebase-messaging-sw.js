@@ -10,6 +10,8 @@ importScripts(
 // ============================================================
 // FIREBASE INITIALIZATION
 // ============================================================
+// NOTE: projectId must match FIREBASE_PROJECT_ID in the
+// Supabase Edge Function ("freeupper-notifications").
 
 firebase.initializeApp({
   apiKey: "AIzaSyCmJE2jQH2l_zjjrcDt2DiA8",
