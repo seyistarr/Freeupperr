@@ -47,6 +47,9 @@
         window.FreeUpperFCM = { messaging, getToken, onMessage };
     </script>
 
+    <!-- FreeUpper custom notification permission gate (must load before FCM getToken) -->
+    <script src="notification-permission.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer>
     </script>
     <script src="global.js" defer></script>
@@ -94,7 +97,7 @@
         body.modal-lock {
             overflow: hidden;
         }
-        body.modal-lock>*:not(.fu-lb):not(.fu-screen):not(.poll-modal):not(.fu-confirm-modal):not(.fu-action-sheet-backdrop):not(.mfs):not(#fuDocViewer):not(#fuArchivedModal):not(#tw) {
+        body.modal-lock>*:not(.fu-lb):not(.fu-screen):not(.poll-modal):not(.fu-confirm-modal):not(.fu-action-sheet-backdrop):not(.mfs):not(#fuDocViewer):not(#fuArchivedModal):not(#tw):not(#fuNotificationPermissionModal) {
             pointer-events: none;
         }
         body.modal-lock .fu-lb,
@@ -103,7 +106,8 @@
         body.modal-lock .fu-confirm-modal,
         body.modal-lock .fu-action-sheet-backdrop,
         body.modal-lock .mfs,
-        body.modal-lock #tw {
+        body.modal-lock #tw,
+        body.modal-lock #fuNotificationPermissionModal {
             pointer-events: auto;
         }
 
@@ -3825,6 +3829,168 @@
             height: auto;
             margin-bottom: 8px;
             opacity: .92;
+        }
+
+        /* ============================================================
+           FREEUPPER NOTIFICATION PERMISSION MODAL
+           ============================================================ */
+
+        #fuNotificationPermissionModal {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .fu-notification-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .72);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .fu-notification-card {
+            position: relative;
+            z-index: 1;
+            width: min(100%, 420px);
+            padding: 30px 24px 24px;
+            border-radius: 24px;
+            background: var(--bg2);
+            border: 1px solid var(--brd);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, .55);
+            text-align: center;
+            animation: fuNotificationIn .28s ease both;
+        }
+
+        @keyframes fuNotificationIn {
+            from {
+                opacity: 0;
+                transform: translateY(18px) scale(.97);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .fu-notification-icon {
+            width: 68px;
+            height: 68px;
+            margin: 0 auto 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--pdim);
+            border: 1px solid var(--pbrd, rgba(139, 92, 246, .28));
+            color: var(--p);
+        }
+
+        .fu-notification-icon svg {
+            width: 30px;
+            height: 30px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .fu-notification-card h2 {
+            font-size: 21px;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 10px;
+        }
+
+        .fu-notification-card > p {
+            font-size: 13.5px;
+            line-height: 1.6;
+            color: var(--muted);
+            margin-bottom: 20px;
+        }
+
+        .fu-notification-features {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+            margin-bottom: 22px;
+            text-align: left;
+        }
+
+        .fu-notification-features div {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: var(--inp);
+            color: var(--text);
+            font-size: 13px;
+        }
+
+        .fu-notification-features div span:first-child {
+            width: 27px;
+            height: 27px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--pdim);
+            color: var(--pl, #c4b5fd);
+            font-weight: 800;
+        }
+
+        .fu-notification-allow {
+            width: 100%;
+            padding: 13px 18px;
+            border-radius: 14px;
+            border: none;
+            background: var(--p);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform .15s, opacity .15s;
+        }
+
+        .fu-notification-allow:hover {
+            opacity: .9;
+            transform: translateY(-1px);
+        }
+
+        .fu-notification-allow:disabled {
+            opacity: .6;
+            cursor: default;
+            transform: none;
+        }
+
+        .fu-notification-later {
+            width: 100%;
+            padding: 11px 18px;
+            margin-top: 5px;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .fu-notification-later:hover {
+            color: var(--text);
+        }
+
+        .fu-notification-note {
+            margin-top: 8px;
+            font-size: 10.5px;
+            line-height: 1.45;
+            color: var(--muted2);
         }
     </style>
 </head>
@@ -9132,18 +9298,26 @@
                         maybeShowIosA2hsBanner();
                         return; // Skip FCM entirely — it will fail on iOS Safari tabs anyway
                     }
-                    if (!("Notification" in window) || !window.FreeUpperFCM) return;
-                    const permission = await Notification.requestPermission();
-                    if (permission !== "granted") return;
 
-                   const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-await navigator.serviceWorker.ready;
-console.log('Service worker active:', registration.active);
+                    if (!("Notification" in window) || !window.FreeUpperFCM) {
+                        return;
+                    }
 
-const token = await window.FreeUpperFCM.getToken(window.FreeUpperFCM.messaging, {
-    vapidKey: "BHmk5m_sPqAlX_JlLtLfHS0oPQgQFLtuANDGZhtBNEeamb760XLZxfYGdatnjrWUmDU7zfwTIRaUM8IRsa7rYUw",
-    serviceWorkerRegistration: registration
-});
+                    // ─── FreeUpper custom permission gate runs BEFORE browser prompt / getToken ───
+                    const permission = await window.FreeUpperNotificationPermission.start();
+
+                    if (permission !== "granted") {
+                        return;
+                    }
+
+                    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+                    await navigator.serviceWorker.ready;
+                    console.log('Service worker active:', registration.active);
+
+                    const token = await window.FreeUpperFCM.getToken(window.FreeUpperFCM.messaging, {
+                        vapidKey: "BHmk5m_sPqAlX_JlLtLfHS0oPQgQFLtuANDGZhtBNEeamb760XLZxfYGdatnjrWUmDU7zfwTIRaUM8IRsa7rYUw",
+                        serviceWorkerRegistration: registration
+                    });
                     if (!token) return;
 
                     await sb.from('push_tokens').upsert(
