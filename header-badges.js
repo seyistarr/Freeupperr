@@ -10,6 +10,8 @@
  * - Database remains the source of truth.
  * - Realtime events trigger a fresh count instead of blindly
  *   incrementing/decrementing local numbers.
+ * - Chat unread count is calculated server-side through:
+ *     public.get_unread_message_count()
  */
 
 (() => {
@@ -21,10 +23,11 @@
 
     let notificationChannel = null;
     let messageChannel = null;
-    let conversationMemberChannel = null;
+    let messageReadChannel = null;
 
     let refreshTimer = null;
     let isRefreshing = false;
+    let refreshAgain = false;
 
 
     /* =========================================================
@@ -94,73 +97,6 @@
 
 
     /* =========================================================
-       CONVERSATION IDS
-    ========================================================= */
-
-    async function getUserConversationIds() {
-        if (!currentUserId || !window.sb) {
-            return [];
-        }
-
-        const ids = new Set();
-
-
-        /*
-         * DIRECT CONVERSATIONS
-         *
-         * Your existing schema uses user1_id/user2_id
-         */
-        const { data: directConversations, error: directError } =
-            await window.sb
-                .from('conversations')
-                .select('id')
-                .or(
-                    `user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`
-                );
-
-        if (directError) {
-            console.error(
-                '[Header Badges] Direct conversations error:',
-                directError
-            );
-        } else {
-            for (const conversation of directConversations || []) {
-                if (conversation.id) {
-                    ids.add(conversation.id);
-                }
-            }
-        }
-
-
-        /*
-         * GROUP CONVERSATIONS
-         *
-         * Group membership comes from conversation_members.
-         */
-        const { data: memberships, error: membershipError } =
-            await window.sb
-                .from('conversation_members')
-                .select('conversation_id')
-                .eq('user_id', currentUserId);
-
-        if (membershipError) {
-            console.error(
-                '[Header Badges] Conversation membership error:',
-                membershipError
-            );
-        } else {
-            for (const membership of memberships || []) {
-                if (membership.conversation_id) {
-                    ids.add(membership.conversation_id);
-                }
-            }
-        }
-
-        return [...ids];
-    }
-
-
-    /* =========================================================
        CHAT UNREAD COUNT
     ========================================================= */
 
@@ -169,84 +105,24 @@
             return 0;
         }
 
-        const conversationIds = await getUserConversationIds();
-
-        if (!conversationIds.length) {
-            return 0;
-        }
-
-
         /*
-         * Fetch messages belonging to the user's conversations.
-         *
-         * We deliberately do not try to maintain a local counter.
-         * message_reads is the source of truth for whether this
-         * particular user has read a message.
+         * The unread calculation is performed server-side.
+         * This keeps message IDs/read rows out of the browser and
+         * reduces the badge refresh to one scalar RPC result.
          */
+        const { data, error } = await window.sb
+            .rpc('get_unread_message_count');
 
-        const { data: messages, error: messageError } =
-            await window.sb
-                .from('messages')
-                .select('id, sender_id')
-                .in('conversation_id', conversationIds)
-                .neq('sender_id', currentUserId);
-
-        if (messageError) {
+        if (error) {
             console.error(
-                '[Header Badges] Messages query error:',
-                messageError
+                '[Header Badges] Unread chat count RPC error:',
+                error
             );
 
             return 0;
         }
 
-        if (!messages?.length) {
-            return 0;
-        }
-
-        const messageIds = messages
-            .map(message => message.id)
-            .filter(Boolean);
-
-        if (!messageIds.length) {
-            return 0;
-        }
-
-
-        /*
-         * Find the messages this user has already read.
-         */
-        const { data: readRows, error: readError } =
-            await window.sb
-                .from('message_reads')
-                .select('message_id')
-                .eq('user_id', currentUserId)
-                .in('message_id', messageIds);
-
-        if (readError) {
-            console.error(
-                '[Header Badges] Message reads query error:',
-                readError
-            );
-
-            return 0;
-        }
-
-        const readIds = new Set(
-            (readRows || [])
-                .map(row => row.message_id)
-                .filter(Boolean)
-        );
-
-        let unreadCount = 0;
-
-        for (const message of messages) {
-            if (!readIds.has(message.id)) {
-                unreadCount++;
-            }
-        }
-
-        return unreadCount;
+        return Number(data) || 0;
     }
 
 
@@ -260,9 +136,12 @@
         }
 
         /*
-         * Prevent overlapping refreshes.
+         * If a refresh is already running, mark that another
+         * refresh is needed when it finishes. This prevents
+         * Realtime events from being dropped during a slow query.
          */
         if (isRefreshing) {
+            refreshAgain = true;
             return;
         }
 
@@ -294,6 +173,11 @@
             );
         } finally {
             isRefreshing = false;
+
+            if (refreshAgain) {
+                refreshAgain = false;
+                scheduleRefresh();
+            }
         }
     }
 
@@ -430,19 +314,16 @@
             return;
         }
 
-        if (conversationMemberChannel) {
-            window.sb.removeChannel(
-                conversationMemberChannel
-            );
-
-            conversationMemberChannel = null;
+        if (messageReadChannel) {
+            window.sb.removeChannel(messageReadChannel);
+            messageReadChannel = null;
         }
 
         /*
          * When this user reads a message, message_reads changes.
          * Refresh the badge so the header number falls immediately.
          */
-        conversationMemberChannel = window.sb
+        messageReadChannel = window.sb
             .channel(
                 `header-message-reads-${currentUserId}`
             )
@@ -490,12 +371,9 @@
             messageChannel = null;
         }
 
-        if (conversationMemberChannel) {
-            window.sb.removeChannel(
-                conversationMemberChannel
-            );
-
-            conversationMemberChannel = null;
+        if (messageReadChannel) {
+            window.sb.removeChannel(messageReadChannel);
+            messageReadChannel = null;
         }
     }
 
@@ -652,13 +530,16 @@
 
     window.FreeUpperHeaderBadges = {
         refresh: refreshBadges,
+
         refreshChat: async () => {
             const count = await getUnreadChatCount();
+
             setBadge(
                 getChatBadge(),
                 count
             );
         },
+
         refreshNotifications: async () => {
             const count =
                 await getUnreadNotificationCount();
@@ -671,4 +552,3 @@
     };
 
 })();
-
