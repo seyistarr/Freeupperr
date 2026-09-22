@@ -1,4 +1,3 @@
-js
 /*
  * FreeUpper — Header Unread Badges
  *
