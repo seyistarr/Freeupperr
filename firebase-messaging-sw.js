@@ -14,7 +14,7 @@ importScripts(
 // Supabase Edge Function ("freeupper-notifications").
 
 firebase.initializeApp({
-  apiKey: "AIzaSyCmJE2jQH2l_zjjrcDt2DiA8",
+  apiKey: "AIzaSyCmAu-nvJunX-vXQH2l_zjjrcDt2DiA8",
   authDomain: "freeupper-notifications.firebaseapp.com",
   projectId: "freeupper-notifications",
   storageBucket: "freeupper-notifications.firebasestorage.app",
