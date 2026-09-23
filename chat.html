@@ -1841,7 +1841,6 @@
             font-weight: 800;
         }
 
-
         /* ─── DOCUMENT ─── */
         .message-bubble .msg-doc {
             display: flex;
@@ -9403,11 +9402,31 @@
                     }
                 } else {
                     const params = new URLSearchParams(window.location.search);
+                    const conversationId = params.get('conversation');
                     const uid = params.get('uid');
-                    if (uid) {
+
+                    if (conversationId) {
+                        // ─── Deep link from FCM push notification: chat.html?conversation=<id> ───
+                        const existing = conversations.find(c => c.id === conversationId);
+
+                        if (existing) {
+                            await selectConversation(existing.id);
+                        } else {
+                            // Not in current list (archived / hidden / stale) — refetch and retry
+                            await loadConversations();
+                            const loaded = conversations.find(c => c.id === conversationId);
+                            if (loaded) {
+                                await selectConversation(loaded.id);
+                            } else {
+                                showToast('Conversation not found', 'o');
+                            }
+                        }
+
+                        history.replaceState({}, '', window.location.pathname);
+                    } else if (uid) {
                         const existing = conversations.find(c => c.otherUserId === uid);
                         if (existing) {
-                            selectConversation(existing.id);
+                            await selectConversation(existing.id);
                         } else {
                             const { data, error } = await sb.from('profiles').select('id').eq('id', uid).single();
                             if (!error && data) await startConversationWith(uid);
