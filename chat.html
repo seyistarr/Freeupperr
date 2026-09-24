@@ -5647,16 +5647,94 @@
                 }
             }
 
+            // ─── App badge: mirrors the real DB unread count ───
+            async function syncFreeUpperUnreadBadge() {
+                if (!currentUserId || !sb) return;
+
+                try {
+                    const { data, error } = await sb.rpc(
+                        'get_my_unread_message_count'
+                    );
+
+                    if (error) {
+                        console.warn('Unread badge sync failed:', error);
+                        return;
+                    }
+
+                    const unreadCount = Math.max(
+                        0,
+                        Math.floor(Number(data) || 0)
+                    );
+
+                    // iOS Home Screen PWA, supported Chromium PWAs,
+                    // and other browsers that implement the Badging API.
+                    if (unreadCount > 0 && 'setAppBadge' in navigator) {
+                        await navigator.setAppBadge(unreadCount);
+                    } else if (unreadCount === 0 && 'clearAppBadge' in navigator) {
+                        await navigator.clearAppBadge();
+                    }
+                } catch (error) {
+                    console.warn('Unread badge sync failed:', error);
+                }
+            }
+
             async function markVisibleMessagesRead(convId) {
                 if (!currentUserId) return;
-                const unread = messages.filter(m => m.sender_id !== currentUserId &&
-                    !(m.message_reads || []).some(r => r.user_id === currentUserId));
-                if (!unread.length) return;
+
+                const unread = messages.filter(
+                    m =>
+                        m.sender_id !== currentUserId &&
+                        !(m.message_reads || []).some(
+                            r => r.user_id === currentUserId
+                        )
+                );
+
+                // Even if there was nothing new to mark as read,
+                // make sure the app badge reflects the database.
+                if (!unread.length) {
+                    await syncFreeUpperUnreadBadge();
+                    return;
+                }
+
                 try {
-                    const rows = unread.map(m => ({ message_id: m.id, user_id: currentUserId, read_at: new Date()
-                            .toISOString() }));
-                    await sb.from('message_reads').upsert(rows, { onConflict: 'message_id,user_id' });
-                } catch (e) { /* non-fatal */ }
+                    const now = new Date().toISOString();
+
+                    const rows = unread.map(m => ({
+                        message_id: m.id,
+                        user_id: currentUserId,
+                        read_at: now
+                    }));
+
+                    const { error } = await sb
+                        .from('message_reads')
+                        .upsert(
+                            rows,
+                            { onConflict: 'message_id,user_id' }
+                        );
+
+                    if (error) {
+                        console.warn('Mark messages read failed:', error);
+                        return;
+                    }
+
+                    // Keep the local message state synchronized.
+                    const readIds = new Set(unread.map(m => m.id));
+
+                    messages.forEach(m => {
+                        if (readIds.has(m.id)) {
+                            m.message_reads = [
+                                ...(m.message_reads || []),
+                                { user_id: currentUserId, read_at: now }
+                            ];
+                        }
+                    });
+                } catch (error) {
+                    console.warn('Mark messages read failed:', error);
+                    return;
+                }
+
+                // Now calculate the real remaining unread count.
+                await syncFreeUpperUnreadBadge();
             }
 
             // ============================================================
@@ -9348,6 +9426,9 @@
                     return;
                 }
                 currentUserId = user.id;
+
+                syncFreeUpperUnreadBadge();
+
                 messageInputArea.dataset.defaultHtml = messageInputArea.innerHTML;
 
                 const { data: profile } = await sb.from('profiles').select('*').eq('id', currentUserId).single();
@@ -9361,6 +9442,10 @@
                 document.addEventListener('visibilitychange', () => {
                     const online = document.visibilityState === 'visible';
                     sb.from('profiles').update({ is_online: online, last_seen_at: new Date().toISOString() }).eq('id', currentUserId).then(()=>{}).catch(()=>{});
+
+                    if (online) {
+                        syncFreeUpperUnreadBadge();
+                    }
                 });
                 window.addEventListener('pagehide', () => {
                     sb.from('profiles').update({ is_online: false, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
