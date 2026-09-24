@@ -25,6 +25,30 @@ const messaging = firebase.messaging();
 
 
 // ============================================================
+// IOS / IPADOS WEB APP DETECTION
+// ============================================================
+//
+// iOS Home Screen web apps may ignore Notification.icon and
+// use the web app's own icon instead. When that happens, we
+// intentionally use the FreeUpper app icon instead of trying
+// to force the sender avatar into the notification icon.
+//
+// Android and desktop browsers keep the sender avatar.
+
+function isIOSWebApp() {
+  const ua = self.navigator?.userAgent || "";
+
+  return (
+    /iPhone|iPad|iPod/i.test(ua) ||
+    (
+      /Macintosh/i.test(ua) &&
+      Number(self.navigator?.maxTouchPoints || 0) > 1
+    )
+  );
+}
+
+
+// ============================================================
 // BACKGROUND NOTIFICATIONS
 // ============================================================
 
@@ -50,21 +74,35 @@ messaging.onBackgroundMessage((payload) => {
     data.thumbnail_url ||
     null;
 
+  const iosWebApp = isIOSWebApp();
+
 
   const notificationOptions = {
 
     body,
 
-    // IMPORTANT:
-    // Use the sender's profile image as the notification icon.
-    icon: actorAvatar,
+    // iPhone/iPad: intentionally use FreeUpper's app icon.
+    // Android/desktop: keep the sender's profile image.
+    icon: iosWebApp
+      ? "/freeupper.png"
+      : actorAvatar,
 
     // Keep FreeUpper branding as the notification badge.
     badge: "/freeupper.png",
 
+    dir: "auto",
+    lang: "en-US",
+
     data: {
 
       ...data,
+
+      sender_name:
+        data.sender_name ||
+        title,
+
+      sender_avatar_url:
+        actorAvatar,
 
       destination_url:
         data.destination_url || "",
@@ -93,8 +131,9 @@ messaging.onBackgroundMessage((payload) => {
   };
 
 
-  // Optional media preview
-  if (mediaUrl) {
+  // Optional media preview.
+  // Do not attach it on iOS web apps.
+  if (mediaUrl && !iosWebApp) {
     notificationOptions.image = mediaUrl;
   }
 
