@@ -20,20 +20,12 @@ firebase.initializeApp({
   appId: "1:37328138260:web:f362538c37f279fccf7701"
 });
 
-
 const messaging = firebase.messaging();
 
 
 // ============================================================
-// IOS / IPADOS WEB APP DETECTION
+// PLATFORM DETECTION
 // ============================================================
-//
-// iOS Home Screen web apps may ignore Notification.icon and
-// use the web app's own icon instead. When that happens, we
-// intentionally use the FreeUpper app icon instead of trying
-// to force the sender avatar into the notification icon.
-//
-// Android and desktop browsers keep the sender avatar.
 
 function isIOSWebApp() {
   const ua = self.navigator?.userAgent || "";
@@ -49,22 +41,83 @@ function isIOSWebApp() {
 
 
 // ============================================================
+// APP BADGE
+// ============================================================
+
+async function updateFreeUpperBadge(unreadCount) {
+  try {
+    if (
+      !self.navigator ||
+      typeof self.navigator.setAppBadge !== "function"
+    ) {
+      return;
+    }
+
+    const count = Number(unreadCount);
+
+    if (!Number.isFinite(count) || count <= 0) {
+      if (
+        typeof self.navigator.clearAppBadge === "function"
+      ) {
+        await self.navigator.clearAppBadge();
+      }
+
+      return;
+    }
+
+    await self.navigator.setAppBadge(
+      Math.floor(count)
+    );
+
+  } catch (error) {
+    console.warn(
+      "FreeUpper badge update failed:",
+      error
+    );
+  }
+}
+
+
+async function clearFreeUpperBadge() {
+  try {
+    if (
+      self.navigator &&
+      typeof self.navigator.clearAppBadge === "function"
+    ) {
+      await self.navigator.clearAppBadge();
+    }
+
+  } catch (error) {
+    console.warn(
+      "FreeUpper badge clear failed:",
+      error
+    );
+  }
+}
+
+
+// ============================================================
 // BACKGROUND NOTIFICATIONS
 // ============================================================
 
-messaging.onBackgroundMessage((payload) => {
+messaging.onBackgroundMessage(async (payload) => {
 
-  const data = payload.data || {};
+  const data =
+    payload.data || {};
+
+  const senderName =
+    data.sender_name ||
+    data.title ||
+    "FreeUpper";
 
   const title =
     data.title ||
-    "FreeUpper";
+    senderName;
 
   const body =
     data.body ||
     "You have a new notification.";
 
-  // Sender's profile image
   const actorAvatar =
     data.actor_avatar_url ||
     "/freeupper.png";
@@ -74,38 +127,79 @@ messaging.onBackgroundMessage((payload) => {
     data.thumbnail_url ||
     null;
 
-  const iosWebApp = isIOSWebApp();
+  const iosWebApp =
+    isIOSWebApp();
 
+
+  // ----------------------------------------------------------
+  // REAL UNREAD COUNT
+  // ----------------------------------------------------------
+
+  /*
+   * The Edge Function must send:
+   *
+   * unread_count: "5"
+   *
+   * in the FCM data payload.
+   *
+   * We intentionally DO NOT use 1 as a fake fallback.
+   */
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      data,
+      "unread_count"
+    )
+  ) {
+    await updateFreeUpperBadge(
+      data.unread_count
+    );
+  }
+
+
+  // ----------------------------------------------------------
+  // NOTIFICATION OPTIONS
+  // ----------------------------------------------------------
 
   const notificationOptions = {
 
     body,
 
-    // iPhone/iPad: intentionally use FreeUpper's app icon.
-    // Android/desktop: keep the sender's profile image.
+    /*
+     * Android + desktop:
+     * sender profile image.
+     *
+     * iPhone/iPad:
+     * FreeUpper app icon because iOS/WebKit
+     * controls the notification identity icon.
+     */
+
     icon: iosWebApp
       ? "/freeupper.png"
       : actorAvatar,
 
-    // Keep FreeUpper branding as the notification badge.
-    badge: "/freeupper.png",
+    badge:
+      "/freeupper.png",
 
-    dir: "auto",
-    lang: "en-US",
+    dir:
+      "auto",
+
+    lang:
+      "en-US",
 
     data: {
 
       ...data,
 
       sender_name:
-        data.sender_name ||
-        title,
+        senderName,
 
       sender_avatar_url:
         actorAvatar,
 
       destination_url:
-        data.destination_url || "",
+        data.destination_url ||
+        "",
 
       notification_type:
         data.notification_type ||
@@ -131,12 +225,29 @@ messaging.onBackgroundMessage((payload) => {
   };
 
 
-  // Optional media preview.
-  // Do not attach it on iOS web apps.
-  if (mediaUrl && !iosWebApp) {
-    notificationOptions.image = mediaUrl;
+  // ----------------------------------------------------------
+  // MEDIA PREVIEW
+  // ----------------------------------------------------------
+
+  /*
+   * Keep existing media previews on Android/desktop.
+   *
+   * iOS gets the clean FreeUpper-branded notification
+   * presentation.
+   */
+
+  if (
+    mediaUrl &&
+    !iosWebApp
+  ) {
+    notificationOptions.image =
+      mediaUrl;
   }
 
+
+  // ----------------------------------------------------------
+  // SHOW NOTIFICATION
+  // ----------------------------------------------------------
 
   return self.registration.showNotification(
     title,
@@ -164,7 +275,9 @@ self.addEventListener(
     // 1. EXPLICIT DESTINATION
     // --------------------------------------------------------
 
-    if (data.destination_url) {
+    if (
+      data.destination_url
+    ) {
 
       event.waitUntil(
         openFreeUpperUrl(
@@ -180,7 +293,9 @@ self.addEventListener(
     // 2. CHAT
     // --------------------------------------------------------
 
-    if (data.conversation_id) {
+    if (
+      data.conversation_id
+    ) {
 
       const url =
         `/chat.html?conversation=${encodeURIComponent(
@@ -199,7 +314,9 @@ self.addEventListener(
     // 3. POST
     // --------------------------------------------------------
 
-    if (data.post_id) {
+    if (
+      data.post_id
+    ) {
 
       const url =
         `/index.html?post=${encodeURIComponent(
@@ -218,7 +335,9 @@ self.addEventListener(
     // 4. PROFILE
     // --------------------------------------------------------
 
-    if (data.actor_id) {
+    if (
+      data.actor_id
+    ) {
 
       const url =
         `/profile.html?uid=${encodeURIComponent(
@@ -271,10 +390,12 @@ async function openFreeUpperUrl(path) {
 
 
   // ----------------------------------------------------------
-  // Reuse an existing FreeUpper window
+  // REUSE EXISTING FREEUPPER WINDOW
   // ----------------------------------------------------------
 
-  for (const client of windowClients) {
+  for (
+    const client of windowClients
+  ) {
 
     if (
       client.url.startsWith(baseUrl) &&
@@ -285,7 +406,9 @@ async function openFreeUpperUrl(path) {
         targetUrl
       );
 
-      if ("focus" in client) {
+      if (
+        "focus" in client
+      ) {
         return client.focus();
       }
 
@@ -296,10 +419,12 @@ async function openFreeUpperUrl(path) {
 
 
   // ----------------------------------------------------------
-  // Otherwise open FreeUpper
+  // OTHERWISE OPEN FREEUPPER
   // ----------------------------------------------------------
 
-  if (clients.openWindow) {
+  if (
+    clients.openWindow
+  ) {
 
     return clients.openWindow(
       targetUrl
