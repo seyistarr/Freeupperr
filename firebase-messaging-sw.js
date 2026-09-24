@@ -41,55 +41,44 @@ function isIOSWebApp() {
 
 
 // ============================================================
-// APP BADGE
+// FREEUPPER APP BADGE
 // ============================================================
 
 async function updateFreeUpperBadge(unreadCount) {
+  const count = Number(unreadCount);
+
   try {
-    if (
-      !self.navigator ||
-      typeof self.navigator.setAppBadge !== "function"
-    ) {
+    if (typeof self.navigator === "undefined") {
       return;
     }
 
-    const count = Number(unreadCount);
+    if (typeof self.navigator.setAppBadge !== "function") {
+      console.log("FreeUpper badge API not supported");
+      return;
+    }
 
-    if (!Number.isFinite(count) || count <= 0) {
-      if (
-        typeof self.navigator.clearAppBadge === "function"
-      ) {
-        await self.navigator.clearAppBadge();
-      }
+    if (Number.isFinite(count) && count > 0) {
+      await self.navigator.setAppBadge(
+        Math.floor(count)
+      );
+
+      console.log(
+        "FreeUpper badge updated:",
+        Math.floor(count)
+      );
 
       return;
     }
 
-    await self.navigator.setAppBadge(
-      Math.floor(count)
-    );
-
-  } catch (error) {
-    console.warn(
-      "FreeUpper badge update failed:",
-      error
-    );
-  }
-}
-
-
-async function clearFreeUpperBadge() {
-  try {
-    if (
-      self.navigator &&
-      typeof self.navigator.clearAppBadge === "function"
-    ) {
+    if (typeof self.navigator.clearAppBadge === "function") {
       await self.navigator.clearAppBadge();
+
+      console.log("FreeUpper badge cleared");
     }
 
   } catch (error) {
-    console.warn(
-      "FreeUpper badge clear failed:",
+    console.error(
+      "FreeUpper badge update failed:",
       error
     );
   }
@@ -104,6 +93,20 @@ messaging.onBackgroundMessage(async (payload) => {
 
   const data =
     payload.data || {};
+
+
+  // ==========================================================
+  // UPDATE FREEUPPER APP ICON BADGE
+  // ==========================================================
+
+  await updateFreeUpperBadge(
+    data.unread_count
+  );
+
+
+  // ==========================================================
+  // NOTIFICATION CONTENT
+  // ==========================================================
 
   const senderName =
     data.sender_name ||
@@ -131,35 +134,9 @@ messaging.onBackgroundMessage(async (payload) => {
     isIOSWebApp();
 
 
-  // ----------------------------------------------------------
-  // REAL UNREAD COUNT
-  // ----------------------------------------------------------
-
-  /*
-   * The Edge Function must send:
-   *
-   * unread_count: "5"
-   *
-   * in the FCM data payload.
-   *
-   * We intentionally DO NOT use 1 as a fake fallback.
-   */
-
-  if (
-    Object.prototype.hasOwnProperty.call(
-      data,
-      "unread_count"
-    )
-  ) {
-    await updateFreeUpperBadge(
-      data.unread_count
-    );
-  }
-
-
-  // ----------------------------------------------------------
+  // ==========================================================
   // NOTIFICATION OPTIONS
-  // ----------------------------------------------------------
+  // ==========================================================
 
   const notificationOptions = {
 
@@ -225,9 +202,9 @@ messaging.onBackgroundMessage(async (payload) => {
   };
 
 
-  // ----------------------------------------------------------
+  // ==========================================================
   // MEDIA PREVIEW
-  // ----------------------------------------------------------
+  // ==========================================================
 
   /*
    * Keep existing media previews on Android/desktop.
@@ -245,9 +222,9 @@ messaging.onBackgroundMessage(async (payload) => {
   }
 
 
-  // ----------------------------------------------------------
+  // ==========================================================
   // SHOW NOTIFICATION
-  // ----------------------------------------------------------
+  // ==========================================================
 
   return self.registration.showNotification(
     title,
