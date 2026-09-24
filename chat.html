@@ -5661,6 +5661,11 @@
             // The existing callers (markVisibleMessagesRead, initChat,
             // visibilitychange) continue to call syncFreeUpperUnreadBadge(),
             // which now also updates the combined badge.
+            //
+            // Additionally, when FreeUpper is in the foreground and a social
+            // push arrives via FCM onMessage, the new async handler inside
+            // setupFreeUpperNotifications() updates the badge from
+            // payload.data.unread_count.
             // ============================================================
 
             async function computeFreeUpperUnreadCounts() {
@@ -9469,10 +9474,83 @@
                         { onConflict: 'token' }
                     );
 
-                    window.FreeUpperFCM.onMessage(window.FreeUpperFCM.messaging, (payload) => {
-                        const n = payload.notification || {};
-                        showToast(`<b>${escapeHtml(n.title || 'FreeUpper')}:</b>&nbsp;${escapeHtml(n.body || '')}`, 'p');
-                    });
+                    window.FreeUpperFCM.onMessage(
+                        window.FreeUpperFCM.messaging,
+                        async (payload) => {
+
+                            const data =
+                                payload.data || {};
+
+                            const notification =
+                                payload.notification || {};
+
+                            // ========================================================
+                            // UPDATE APP ICON BADGE FROM FCM (foreground)
+                            // ========================================================
+
+                            const unreadCount =
+                                Number(data.unread_count);
+
+                            if (
+                                Number.isFinite(unreadCount) &&
+                                unreadCount >= 0 &&
+                                typeof navigator.setAppBadge === "function"
+                            ) {
+
+                                try {
+
+                                    if (unreadCount > 0) {
+
+                                        await navigator.setAppBadge(
+                                            Math.floor(unreadCount)
+                                        );
+
+                                        console.log(
+                                            "FreeUpper FCM badge:",
+                                            Math.floor(unreadCount)
+                                        );
+
+                                    } else if (
+                                        typeof navigator.clearAppBadge ===
+                                        "function"
+                                    ) {
+
+                                        await navigator.clearAppBadge();
+
+                                    }
+
+                                } catch (error) {
+
+                                    console.error(
+                                        "FreeUpper FCM badge error:",
+                                        error
+                                    );
+
+                                }
+                            }
+
+
+                            // ========================================================
+                            // SHOW FOREGROUND NOTIFICATION TOAST
+                            // ========================================================
+
+                            const title =
+                                data.title ||
+                                notification.title ||
+                                "FreeUpper";
+
+                            const body =
+                                data.body ||
+                                notification.body ||
+                                "You have a new notification.";
+
+                            showToast(
+                                `<b>${escapeHtml(title)}:</b>&nbsp;${escapeHtml(body)}`,
+                                "p"
+                            );
+
+                        }
+                    );
                 } catch (err) {
                     console.error('FreeUpper notification setup failed:', err);
                 }
