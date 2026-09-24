@@ -5647,35 +5647,102 @@
                 }
             }
 
-            // ─── App badge: mirrors the real DB unread count ───
-            async function syncFreeUpperUnreadBadge() {
-                if (!currentUserId || !sb) return;
+            // ============================================================
+            // FREEUPPER COMBINED APP BADGE
+            // ============================================================
+            //
+            // Badge = unread chat messages + unread social notifications.
+            //
+            // Primary RPC: get_unread_message_count(p_user_id)
+            // Fallback RPC: get_my_unread_message_count()
+            //
+            // Notifications table: notifications.receiver_id + read = false
+            //
+            // The existing callers (markVisibleMessagesRead, initChat,
+            // visibilitychange) continue to call syncFreeUpperUnreadBadge(),
+            // which now also updates the combined badge.
+            // ============================================================
 
+            async function computeFreeUpperUnreadCounts() {
+                const result = {
+                    unreadMessages: 0,
+                    unreadNotifications: 0
+                };
+
+                if (!currentUserId || !sb) return result;
+
+                // ---- Unread chat messages ----
                 try {
-                    const { data, error } = await sb.rpc(
-                        'get_my_unread_message_count'
-                    );
+                    const { data: messageCount, error: messageError } =
+                        await sb.rpc('get_unread_message_count', { p_user_id: currentUserId });
 
-                    if (error) {
-                        console.warn('Unread badge sync failed:', error);
+                    if (!messageError) {
+                        result.unreadMessages = Math.max(0, Math.floor(Number(messageCount) || 0));
+                    } else {
+                        // Fallback to the older RPC if the new one isn't deployed
+                        const { data: fallback, error: fallbackError } =
+                            await sb.rpc('get_my_unread_message_count');
+                        if (!fallbackError) {
+                            result.unreadMessages = Math.max(0, Math.floor(Number(fallback) || 0));
+                        } else {
+                            console.warn('Unread message RPC failed:', messageError, fallbackError);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Unread message count failed:', e);
+                }
+
+                // ---- Unread social notifications ----
+                try {
+                    const { count, error: notifError } = await sb
+                        .from('notifications')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('receiver_id', currentUserId)
+                        .eq('read', false);
+
+                    if (!notifError) {
+                        result.unreadNotifications = Math.max(0, Math.floor(Number(count) || 0));
+                    } else {
+                        console.warn('Unread notification count failed:', notifError);
+                    }
+                } catch (e) {
+                    console.warn('Unread notification count failed:', e);
+                }
+
+                return result;
+            }
+
+            async function updateFreeUpperAppBadge() {
+                try {
+                    if (typeof navigator.setAppBadge !== 'function' &&
+                        typeof navigator.clearAppBadge !== 'function') {
                         return;
                     }
 
-                    const unreadCount = Math.max(
+                    const { unreadMessages, unreadNotifications } =
+                        await computeFreeUpperUnreadCounts();
+
+                    const totalUnread = Math.max(
                         0,
-                        Math.floor(Number(data) || 0)
+                        Math.floor(unreadMessages + unreadNotifications)
                     );
 
-                    // iOS Home Screen PWA, supported Chromium PWAs,
-                    // and other browsers that implement the Badging API.
-                    if (unreadCount > 0 && 'setAppBadge' in navigator) {
-                        await navigator.setAppBadge(unreadCount);
-                    } else if (unreadCount === 0 && 'clearAppBadge' in navigator) {
+                    if (totalUnread > 0 && typeof navigator.setAppBadge === 'function') {
+                        await navigator.setAppBadge(totalUnread);
+                        console.log('FreeUpper combined badge:', totalUnread);
+                    } else if (totalUnread === 0 && typeof navigator.clearAppBadge === 'function') {
                         await navigator.clearAppBadge();
+                        console.log('FreeUpper badge cleared');
                     }
                 } catch (error) {
-                    console.warn('Unread badge sync failed:', error);
+                    console.warn('FreeUpper app badge error:', error);
                 }
+            }
+
+            // Kept for existing call sites (markVisibleMessagesRead, initChat,
+            // visibilitychange). Now updates the combined badge.
+            async function syncFreeUpperUnreadBadge() {
+                await updateFreeUpperAppBadge();
             }
 
             async function markVisibleMessagesRead(convId) {
@@ -5733,7 +5800,7 @@
                     return;
                 }
 
-                // Now calculate the real remaining unread count.
+                // Now calculate the real remaining combined unread count.
                 await syncFreeUpperUnreadBadge();
             }
 
@@ -9427,6 +9494,7 @@
                 }
                 currentUserId = user.id;
 
+                // ── Combined badge: chat unread + notification unread ──
                 syncFreeUpperUnreadBadge();
 
                 messageInputArea.dataset.defaultHtml = messageInputArea.innerHTML;
@@ -9444,6 +9512,7 @@
                     sb.from('profiles').update({ is_online: online, last_seen_at: new Date().toISOString() }).eq('id', currentUserId).then(()=>{}).catch(()=>{});
 
                     if (online) {
+                        // Refresh combined badge when returning to the tab
                         syncFreeUpperUnreadBadge();
                     }
                 });
