@@ -317,7 +317,6 @@
             flex-direction: column;
             align-items: center;
             padding: 4px 0 20px;
-            /* animation removed — profile identity must render instantly */
         }
 
         .avatar-wrap {
@@ -2458,7 +2457,7 @@
                 <div class="dob-col" style="flex:1.4"><div class="dob-col-lbl">Year</div><div class="dob-scroll" id="dobYearScroll"></div></div>
             </div>
             <div id="dobResult" style="padding:14px 20px;border-radius:16px;background:var(--inp);border:1px solid var(--brd);width:100%;text-align:center;font-size:14px;color:var(--muted)">Select your date of birth above</div>
-            <div id="dobWarn" style="display:none;padding:14px 18px;border-radius:14px;background:rgba(248,113,113,.1);border:1.5px solid rgba(248,113,113,.3);width:100%;display:none;gap:10px;align-items:flex-start">
+            <div id="dobWarn" style="display:none;padding:14px 18px;border-radius:14px;background:rgba(248,113,113,.1);border:1.5px solid rgba(248,113,113,.3);width:100%;gap:10px;align-items:flex-start">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 <div><div style="font-size:13px;font-weight:800;color:#f87171">Age Restriction</div><div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5">You must be at least 13 years old.</div></div>
             </div>
@@ -2602,6 +2601,74 @@
             }
             function formatPrice(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
             function truncateName(name, max) { max = max || 24; name = name || ''; return name.length > max ? name.slice(0, max) + '…' : name; }
+
+            // ─── PUBLIC PROFILE IDENTITY HELPERS ──────────────────────
+            // The canonical public route is /u/{freeupper_id}.
+            // Legacy /profile.html?uid={uuid} is still recognised so
+            // previously shared links keep working — but no new link
+            // is ever built using the UUID form unless the profile
+            // object is missing its freeupper_id (defensive fallback).
+
+            // Parse the current URL and return the public identity
+            // information it carries.
+            function parseProfileRoute() {
+                var pathParts = window.location.pathname.split('/').filter(Boolean);
+                var freeupperId = null;
+                if (pathParts.length >= 2 && pathParts[0] === 'u') {
+                    try { freeupperId = decodeURIComponent(pathParts[1]); }
+                    catch (e) { freeupperId = pathParts[1]; }
+                }
+                var params = new URLSearchParams(window.location.search);
+                var legacyUid = params.get('uid');
+                return { freeupperId: freeupperId, legacyUid: legacyUid };
+            }
+
+            // Resolve a freeupper_id into the full profile row via the
+            // database resolver. Returns null on failure.
+            async function resolveProfileByFreeupperId(freeupperId) {
+                if (!freeupperId || !window.sb) return null;
+                try {
+                    var result = await window.sb.rpc('get_profile_by_freeupper_id', {
+                        p_freeupper_id: freeupperId
+                    });
+                    if (result.error) {
+                        console.warn('get_profile_by_freeupper_id error:', result.error);
+                        return null;
+                    }
+                    var data = result.data;
+                    if (Array.isArray(data)) data = data[0];
+                    return data || null;
+                } catch (e) {
+                    console.warn('resolveProfileByFreeupperId exception:', e);
+                    return null;
+                }
+            }
+
+            // Build a public-facing href for a profile object.
+            // Prefers freeupper_id, falls back to legacy ?uid=.
+            function buildProfileHref(user) {
+                if (user && user.freeupper_id) {
+                    return '/u/' + encodeURIComponent(user.freeupper_id);
+                }
+                if (user && user.id) {
+                    return 'profile.html?uid=' + encodeURIComponent(user.id);
+                }
+                return '#';
+            }
+
+            // Build a fully-qualified public URL for sharing / QR.
+            function buildPublicProfileUrl(user) {
+                if (user && user.freeupper_id) {
+                    return 'https://freeupper.vercel.app/u/' + encodeURIComponent(user.freeupper_id);
+                }
+                if (user && user.id) {
+                    return 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(user.id);
+                }
+                if (targetUserId) {
+                    return 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(targetUserId);
+                }
+                return 'https://freeupper.vercel.app/';
+            }
 
             // ─── NAVIGATION ────────────────────────────────────────────
             window.openPostFromGrid = function(postId) {
@@ -2811,11 +2878,6 @@
                 return null;
             }
 
-            function getTargetUserFromUrl() {
-                var params = new URLSearchParams(window.location.search);
-                return params.get('uid') || null;
-            }
-
             // ─── SKELETON ─────────────────────────────────────────────
             function showProfileSkeleton() {
                 var avatarWrap = document.getElementById('avatarWrap');
@@ -2877,10 +2939,12 @@
                 }
             }
 
+            // Follower/following list queries now include freeupper_id
+            // so their rows can navigate to the public /u/... route.
             async function fetchFollowers(userId) {
                 var result = await window.sb
                     .from('follows')
-                    .select('follower_id, profiles:follower_id (id, username, display_name, avatar_url, verified)')
+                    .select('follower_id, profiles:follower_id (id, freeupper_id, username, display_username, display_name, avatar_url, verified)')
                     .eq('following_id', userId);
                 if (result.error) return [];
                 return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
@@ -2889,7 +2953,7 @@
             async function fetchFollowing(userId) {
                 var result = await window.sb
                     .from('follows')
-                    .select('following_id, profiles:following_id (id, username, display_name, avatar_url, verified)')
+                    .select('following_id, profiles:following_id (id, freeupper_id, username, display_username, display_name, avatar_url, verified)')
                     .eq('follower_id', userId);
                 if (result.error) return [];
                 return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
@@ -2941,6 +3005,9 @@
             // The client must NOT touch public.follows or
             // public.notifications directly — the database function is the
             // single source of truth. Do not add a second insert/trigger.
+            //
+            // p_target_id remains the internal UUID. FreeUpper IDs are
+            // public identity only; they never reach this RPC.
             // ─────────────────────────────────────────────────────────
             async function toggleFollow(targetId) {
                 const user = getCurrentUser();
@@ -2954,15 +3021,6 @@
                     return false;
                 }
                 try {
-                    // ========================================================
-                    // USE THE EXISTING DATABASE RPC
-                    //
-                    // This handles BOTH:
-                    // 1. follows insert/delete
-                    // 2. follow notification creation
-                    //
-                    // The database remains the source of truth.
-                    // ========================================================
                     const { data, error } = await window.sb.rpc(
                         'toggle_follow_with_notification',
                         {
@@ -2976,7 +3034,6 @@
                         );
                         throw error;
                     }
-                    // The existing RPC returns the new following state.
                     const isNowFollowing = Boolean(data);
                     console.log(
                         'Follow state changed:',
@@ -3029,24 +3086,6 @@
             }
 
             // ─── VIDEO THUMBNAIL ENFORCER (legacy fallback) ──────────
-            // Videos in a grid can show a black rectangle until metadata
-            // and a decoded first frame are available. This walks the
-            // rendered grid and forces each <video> to seek to 0.1s once
-            // its metadata is ready, so the tile shows a frame instead
-            // of a black box.
-            //
-            // This is now a LEGACY path only. New posts carry a stored
-            // poster JPG (posts.thumbnail_url) and render as <img> with
-            // no video decoding at all. This function only does work
-            // when a tile fell through to <video> — i.e. a pre-thumbnail
-            // post whose posts.thumbnail_url is null.
-            //
-            // Kept deliberately until every historical video has been
-            // backfilled with a thumbnail. When that day comes, this
-            // function, its call in renderTab(), and the export at the
-            // bottom of the file can all be deleted in one pass — the
-            // <video> fallback branches in buildGridPostCard and
-            // buildGridLoveCard would become `mediaHtml = noMediaFallback;`.
             function forceVideoThumbnails(rootEl) {
                 if (!rootEl) return;
                 var vids = rootEl.querySelectorAll('video');
@@ -3073,29 +3112,12 @@
                 }
             }
 
-            // ─── VIDEO TAG (legacy <video> fallback) ──────────────────
-            // Only reached when a post has no stored poster thumbnail.
-            // New posts carry a poster JPG and render as <img>; this
-            // function exists solely for pre-thumbnail media.
             function buildVideoTag(url) {
-                // Append #t=0.1 to force first-frame decode as thumbnail
                 var src = url || '';
                 if (src && src.indexOf('#') === -1) src += '#t=0.1';
                 return '<video src="' + src + '" preload="metadata" muted playsinline webkit-playsinline style="width:100%;height:100%;object-fit:cover;display:block;background:#000;pointer-events:none;"></video>';
             }
 
-            // ─── BUILD GRID POST CARD ────────────────────────────────
-            // Video rendering strategy:
-            //   1. post.thumbnailUrl present (and not equal to the video
-            //      URL) → <img> poster. This is the fast path.
-            //   2. Otherwise → legacy <video> element. Only reached for
-            //      pre-thumbnail media or (defensively) for a row where
-            //      posts.thumbnail_url was accidentally set to the MP4.
-            //
-            // The hasPoster guard below is what makes (2) safe: an
-            // <img src="…mp4"> is a broken image, not a fallback, so we
-            // refuse to point an <img> at the video URL even if the
-            // stored thumbnail happens to equal it.
             function buildGridPostCard(post, opts) {
                 opts = opts || {};
                 var mediaHtml = '';
@@ -3104,11 +3126,6 @@
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
                     var thumbnailUrl = post.thumbnailUrl || '';
-                    // A thumbnail is only usable as an <img> if it differs
-                    // from the video URL. mapPost() already returns '' for
-                    // videos without a stored poster, but this guards against
-                    // any legacy rows where the MP4 URL ended up in
-                    // thumbnail_url. An <img src="…mp4"> is a broken image.
                     var hasPoster = thumbnailUrl && thumbnailUrl !== post.mediaUrl;
                     if (hasPoster) {
                         mediaHtml =
@@ -3120,7 +3137,6 @@
                             ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
                             noMediaFallback;
                     } else {
-                        // Legacy video without a stored thumbnail.
                         mediaHtml = buildVideoTag(post.mediaUrl);
                     }
                 } else {
@@ -3152,8 +3168,6 @@
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
                     var thumbnailUrl = post.thumbnailUrl || '';
-                    // Same guard as buildGridPostCard: an MP4 must never
-                    // become an <img src>.
                     var hasPoster = thumbnailUrl && thumbnailUrl !== post.mediaUrl;
                     if (hasPoster) {
                         mediaHtml =
@@ -3165,7 +3179,6 @@
                             ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
                             noMediaFallback;
                     } else {
-                        // Legacy video without a stored thumbnail.
                         mediaHtml = buildVideoTag(post.mediaUrl);
                     }
                 } else {
@@ -3240,49 +3253,75 @@
             };
 
             // ─── RENDER PROFILE — PHASE 1: IDENTITY (immediate) ────────
-            // Fetches only the profile row + block status, then renders the
-            // avatar/cover/name/bio/tags/badge instantly. Secondary data
-            // (counts, posts, market, relationship) is fired afterwards.
+            //
+            // Route resolution:
+            //   1. /u/{freeupper_id}          → resolve via RPC to UUID
+            //   2. profile.html?uid={uuid}    → legacy, use UUID directly
+            //   3. (no param) + logged-in     → own profile (UUID = user.id)
+            //
+            // In all cases, targetUserId ends up as the internal UUID.
+            // targetUser.freeupper_id is what the share/QR path uses.
             async function renderProfile() {
                 if (!_profileLoadedOnce) showProfileSkeleton();
                 var user = getCurrentUser();
                 currentUser = user;
 
-                var targetId = getTargetUserFromUrl();
-                if (!targetId) {
+                var route = parseProfileRoute();
+                var profile = null;
+
+                if (route.freeupperId) {
+                    // Canonical public route.
+                    profile = await resolveProfileByFreeupperId(route.freeupperId);
+                    if (!profile || !profile.id) {
+                        hideProfileSkeleton();
+                        showToast('Profile not found', 'r');
+                        return;
+                    }
+                    targetUserId = profile.id;
+                } else if (route.legacyUid) {
+                    // Legacy compatibility — remains until shared
+                    // links have aged out.
+                    targetUserId = route.legacyUid;
+                } else {
+                    // No identifier in the URL — self view.
                     if (user && user.isLoggedIn) {
-                        targetId = user.id;
+                        targetUserId = user.id;
                     } else {
                         window.location.href = 'index.html';
                         return;
                     }
                 }
 
-                targetUserId = targetId;
-                isOwner = targetId === user?.id;
+                isOwner = targetUserId === (user && user.id);
                 _secondaryDataLoaded = false;
 
                 try {
-                    var profile, iBlockedThem = false, theyBlockedMe = false;
+                    var iBlockedThem = false, theyBlockedMe = false;
                     var canCheckBlocks = !isOwner && user && user.isLoggedIn;
 
                     if (canCheckBlocks) {
                         var results = await Promise.all([
-                            fetchProfile(targetId),
+                            profile ? Promise.resolve(profile) : fetchProfile(targetUserId),
                             (async function() {
                                 if (!window.SettingsAPI) return false;
                                 try {
                                     var blockedList = await window.SettingsAPI.listBlockedUsers();
-                                    return blockedList.some(function(b) { return b.id === targetId; });
+                                    return blockedList.some(function(b) { return b.id === targetUserId; });
                                 } catch (e) { return false; }
                             })(),
-                            didUserBlockMe(targetId, user.id)
+                            didUserBlockMe(targetUserId, user.id)
                         ]);
                         profile = results[0];
                         iBlockedThem = results[1];
                         theyBlockedMe = results[2];
-                    } else {
-                        profile = await fetchProfile(targetId);
+                    } else if (!profile) {
+                        profile = await fetchProfile(targetUserId);
+                    }
+
+                    if (!profile) {
+                        hideProfileSkeleton();
+                        showToast('Profile not found', 'r');
+                        return;
                     }
 
                     targetUser = profile;
@@ -3324,13 +3363,11 @@
                     }
                 }
 
-                // Name — the moment data is available, hand it to the browser.
                 document.getElementById('displayName').textContent = profile.display_name || 'Guest';
                 document.getElementById('headerUsername').textContent = profile.display_username || profile.username || '@user';
                 document.getElementById('qrName').textContent = profile.display_name || 'Guest';
                 document.getElementById('qrHandle').textContent = '@' + (profile.display_username || profile.username || 'user');
 
-                // Bio — same instant render.
                 var bioEl = document.getElementById('heroBio');
                 bioEl.innerHTML = linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
 
@@ -3363,8 +3400,6 @@
                     };
                 }
 
-                // Action row: show skeleton while relationship loads (background),
-                // then renderActionRow() swaps in the real buttons.
                 if (!isOwner) {
                     var row = document.getElementById('actionRow');
                     row.innerHTML = '<div class="skl-block skl-btn"></div><div class="skl-block skl-btn"></div>';
@@ -3373,7 +3408,6 @@
                     document.getElementById('actionRow').innerHTML = '';
                 }
 
-                // Stat counts stay at "—" until secondary data arrives.
                 document.getElementById('statPosts').textContent = '—';
                 document.getElementById('statFollowers').textContent = '—';
                 document.getElementById('statFollowing').textContent = '—';
@@ -3610,12 +3644,6 @@
                         break;
                 }
 
-                // Video grids prefer stored poster thumbnails (rendered as
-                // <img> by buildGridPostCard / buildGridLoveCard). For any
-                // legacy video tile that still fell through to a <video>
-                // element — i.e. posts.thumbnail_url is null on a
-                // pre-thumbnail post — this forces the first frame so it
-                // isn't a black box. No-op when every tile is an <img>.
                 if (tab === 'posts' || tab === 'love' || tab === 'share' || tab === 'star') {
                     requestAnimationFrame(function() { forceVideoThumbnails(container); });
                 }
@@ -3875,7 +3903,7 @@
             function generateQRCode() {
                 var container = document.getElementById('qrcode');
                 container.innerHTML = '';
-                var url = 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(targetUserId);
+                var url = buildPublicProfileUrl(targetUser);
                 try {
                     new QRCode(container, { text: url, width: 160, height: 160, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
                 } catch (e) {
@@ -3884,7 +3912,7 @@
             }
 
             window.copyProfileLink = function() {
-                var url = 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(targetUserId);
+                var url = buildPublicProfileUrl(targetUser);
                 if (navigator.clipboard) {
                     navigator.clipboard.writeText(url).then(function() { showToast('Profile link copied', 'g'); }).catch(function() {
                         var textArea = document.createElement('textarea');
@@ -3907,7 +3935,7 @@
             };
 
             window.shareProfileLink = function() {
-                var url = 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(targetUserId);
+                var url = buildPublicProfileUrl(targetUser);
                 var name = targetUser?.display_name || 'User';
                 if (navigator.share) {
                     navigator.share({ title: name + ' on Freeupper', text: 'Connect with ' + name + ' on Freeupper!', url: url }).catch(function() {});
@@ -3923,7 +3951,7 @@
             }
 
             window.shareProfileOther = function(type) {
-                var url = 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(targetUserId);
+                var url = buildPublicProfileUrl(targetUser);
                 var name = targetUser?.display_name || 'User';
                 var text = 'Connect with ' + name + ' on Freeupper!';
                 closeFS('shareOtherModal');
@@ -4058,6 +4086,9 @@
                 scanRAF = requestAnimationFrame(tick);
             }
 
+            // QR scanner accepts both the new /u/{freeupper_id} URL and
+            // the legacy /profile.html?uid={uuid} URL so older QR codes
+            // remain usable during the transition.
             function onQRDetected(data) {
                 stopCamera();
                 document.querySelectorAll('.scan-corner').forEach(function(c) {
@@ -4065,16 +4096,31 @@
                     c.style.borderColor = '#4ade80';
                     setTimeout(function() { c.style.borderColor = ''; c.style.transition = ''; }, 700);
                 });
-                var match = data.match(/^https?:\/\/(www\.)?freeupper\.vercel\.app\/profile\.html\?uid=([a-zA-Z0-9-]+)$/);
-                if (match) {
-                    var uid = match[2];
+
+                var newMatch = data.match(/^https?:\/\/(www\.)?freeupper\.vercel\.app\/u\/([A-Za-z0-9_\-]+)\/?$/i);
+                if (newMatch) {
+                    var freeupperId = newMatch[2];
                     showScanStatus('Profile found', 'rgba(74,222,128,.9)');
-                    setTimeout(function() { stopCameraAndShowQR();
-                        window.location.href = 'profile.html?uid=' + uid; }, 900);
-                } else {
-                    showScanStatus('Not a valid Freeupper QR code', 'rgba(248,113,113,.85)');
-                    setTimeout(function() { if (!camStream) startCamera(); }, 1800);
+                    setTimeout(function() {
+                        stopCameraAndShowQR();
+                        window.location.href = '/u/' + encodeURIComponent(freeupperId);
+                    }, 900);
+                    return;
                 }
+
+                var legacyMatch = data.match(/^https?:\/\/(www\.)?freeupper\.vercel\.app\/profile\.html\?uid=([a-zA-Z0-9\-]+)$/i);
+                if (legacyMatch) {
+                    var uid = legacyMatch[2];
+                    showScanStatus('Profile found', 'rgba(74,222,128,.9)');
+                    setTimeout(function() {
+                        stopCameraAndShowQR();
+                        window.location.href = 'profile.html?uid=' + encodeURIComponent(uid);
+                    }, 900);
+                    return;
+                }
+
+                showScanStatus('Not a valid Freeupper QR code', 'rgba(248,113,113,.85)');
+                setTimeout(function() { if (!camStream) startCamera(); }, 1800);
             }
 
             function showScanStatus(msg, color) {
@@ -4552,7 +4598,15 @@
                     var sugResult = await window.sb.rpc('get_suggestions', { p_limit: 10, p_offset: 0 });
                     if (!sugResult.error) {
                         suggestions = (sugResult.data || []).map(function(u) {
-                            return { id: u.id, username: u.username, display_name: u.display_name, avatar_url: u.avatar_url, verified: u.verified, verified_status: u.verified_status };
+                            return {
+                                id: u.id,
+                                freeupper_id: u.freeupper_id,
+                                username: u.username,
+                                display_name: u.display_name,
+                                avatar_url: u.avatar_url,
+                                verified: u.verified,
+                                verified_status: u.verified_status
+                            };
                         });
                     }
                     _sugOffset = suggestions.length;
@@ -4581,8 +4635,15 @@
                     else if (idx === 3) dataSource = followModalData.suggestions;
                 }
                 _fwList = dataSource.map(function(u) {
+                    // Public navigation target: /u/{freeupper_id}
+                    // Defensive fallback to legacy ?uid= if a profile
+                    // object arrives without freeupper_id.
+                    var href = u.freeupper_id
+                        ? '/u/' + encodeURIComponent(u.freeupper_id)
+                        : 'profile.html?uid=' + encodeURIComponent(u.id);
                     return {
                         id: u.id,
+                        href: href,
                         displayName: u.display_name || u.username,
                         handle: '@' + (u.display_username || u.username || ''),
                         avatar: u.avatar_url || '',
@@ -4693,11 +4754,12 @@
                     var top = i * rowH;
                     var d = 'data-uid="' + (u.id || '') + '" data-fidx="' + i + '"';
                     var tp = 'onclick="_fwTap(this)"';
+                    var rowHref = u.href || '#';
                     if (isSugg) {
                         var srcLbl = u.source || 'People you may know';
                         html += '<div class="u-row u-row-suggestion" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;padding:0 clamp(14px,5vw,24px)">' +
-                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
-                            '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
+                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="window.location.href=\'' + rowHref + '\'">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-info" onclick="window.location.href=\'' + rowHref + '\'" style="cursor:pointer">' +
                             '<div class="u-name truncate-1">' + truncateName(u.displayName, 24) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + truncateName(u.handle || '', 18) + '</div>' +
                             '<div class="u-sugg-src">' + srcLbl + '</div>' +
@@ -4709,8 +4771,8 @@
                     } else {
                         var actionHtml = _fwRowAction(u, i);
                         html += '<div class="u-row" data-row-idx="' + i + '" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 clamp(14px,5vw,24px)">' +
-                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
-                            '<div class="u-info" onclick="window.location.href=\'profile.html?uid=' + u.id + '\'" style="cursor:pointer">' +
+                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="window.location.href=\'' + rowHref + '\'">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-info" onclick="window.location.href=\'' + rowHref + '\'" style="cursor:pointer">' +
                             '<div class="u-name truncate-1">' + truncateName(u.displayName, 24) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + truncateName(u.handle || '', 18) + '</div>' +
                             '</div>' +
@@ -4798,9 +4860,28 @@
                                 var more = await window.sb.rpc('get_suggestions', { p_limit: 1, p_offset: _sugOffset });
                                 if (!more.error && more.data && more.data.length) {
                                     var nu = more.data[0];
-                                    var mapped = { id: nu.id, username: nu.username, display_name: nu.display_name, avatar_url: nu.avatar_url, verified: nu.verified, verified_status: nu.verified_status };
+                                    var mapped = {
+                                        id: nu.id,
+                                        freeupper_id: nu.freeupper_id,
+                                        username: nu.username,
+                                        display_name: nu.display_name,
+                                        avatar_url: nu.avatar_url,
+                                        verified: nu.verified,
+                                        verified_status: nu.verified_status
+                                    };
                                     followModalData.suggestions.push(mapped);
-                                    _fwList.push({ id: mapped.id, displayName: mapped.display_name || mapped.username, handle: '@' + (mapped.username || ''), avatar: mapped.avatar_url || '', verified: mapped.verified || false, isFollowing: false, isMutual: false });
+                                    _fwList.push({
+                                        id: mapped.id,
+                                        href: mapped.freeupper_id
+                                            ? '/u/' + encodeURIComponent(mapped.freeupper_id)
+                                            : 'profile.html?uid=' + encodeURIComponent(mapped.id),
+                                        displayName: mapped.display_name || mapped.username,
+                                        handle: '@' + (mapped.username || ''),
+                                        avatar: mapped.avatar_url || '',
+                                        verified: mapped.verified || false,
+                                        isFollowing: false,
+                                        isMutual: false
+                                    });
                                 }
                             } catch (e) {}
                             _fwApplyFilter();
@@ -4822,9 +4903,28 @@
                     var more = await window.sb.rpc('get_suggestions', { p_limit: 10, p_offset: _sugOffset });
                     if (!more.error && more.data && more.data.length) {
                         more.data.forEach(function(nu) {
-                            var mapped = { id: nu.id, username: nu.username, display_name: nu.display_name, avatar_url: nu.avatar_url, verified: nu.verified, verified_status: nu.verified_status };
+                            var mapped = {
+                                id: nu.id,
+                                freeupper_id: nu.freeupper_id,
+                                username: nu.username,
+                                display_name: nu.display_name,
+                                avatar_url: nu.avatar_url,
+                                verified: nu.verified,
+                                verified_status: nu.verified_status
+                            };
                             followModalData.suggestions.push(mapped);
-                            _fwList.push({ id: mapped.id, displayName: mapped.display_name || mapped.username, handle: '@' + (mapped.username || ''), avatar: mapped.avatar_url || '', verified: mapped.verified || false, isFollowing: false, isMutual: false });
+                            _fwList.push({
+                                id: mapped.id,
+                                href: mapped.freeupper_id
+                                    ? '/u/' + encodeURIComponent(mapped.freeupper_id)
+                                    : 'profile.html?uid=' + encodeURIComponent(mapped.id),
+                                displayName: mapped.display_name || mapped.username,
+                                handle: '@' + (mapped.username || ''),
+                                avatar: mapped.avatar_url || '',
+                                verified: mapped.verified || false,
+                                isFollowing: false,
+                                isMutual: false
+                            });
                         });
                         _fwApplyFilter();
                         _fwRenderVisible();
@@ -5211,11 +5311,16 @@
             window.applyUsernameSuggestion = applyUsernameSuggestion;
             window.canonicalizeUsername = canonicalizeUsername;
             window.restoreProfileReturnState = restoreProfileReturnState;
-            // Legacy-path utility: seeks any grid <video> to its first
-            // frame. Exported for parity with prior versions and for the
-            // renderTab() call above. Remove this export alongside the
-            // function itself once every historical video has a poster.
             window.forceVideoThumbnails = forceVideoThumbnails;
+
+            // ─── FREEUPPER-ID PUBLIC IDENTITY HELPERS ────────────────
+            // Exposed so other in-page handlers (and future shared
+            // components that embed this script) can resolve public
+            // identifiers and build canonical profile URLs.
+            window.parseProfileRoute = parseProfileRoute;
+            window.resolveProfileByFreeupperId = resolveProfileByFreeupperId;
+            window.buildProfileHref = buildProfileHref;
+            window.buildPublicProfileUrl = buildPublicProfileUrl;
         })();
     </script>
 </body>
