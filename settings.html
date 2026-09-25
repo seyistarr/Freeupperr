@@ -2120,7 +2120,7 @@
 
                 <!-- Header -->
                 <div class="settings-header">
-                    <button class="back-btn" onclick="window.location.href='profile.html'">
+                    <button class="back-btn" onclick="goToOwnProfile()">
                         <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
                     </button>
                     <span class="title">Settings</span>
@@ -2305,7 +2305,7 @@
         </div>
     </div>
 
-    <!-- ─── VERIFICATION (original simple version) ─── -->
+    <!-- ─── VERIFICATION ─── -->
     <div class="mfs" id="verificationModal">
         <div class="fs-hdr">
             <button class="fs-back" onclick="closeFS('verificationModal')" aria-label="Back"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -2677,6 +2677,46 @@
                 }
             }
 
+            // ─── FREEUPPER PUBLIC IDENTITY HELPERS ──────────────
+            // The canonical public profile route is /u/{freeupper_id}.
+            // Every profile-linking action in settings must use this
+            // helper so that UUIDs are never leaked into URLs.
+            //
+            // Internal operations (block/unblock, follows, sessions,
+            // verification, password, delete account) all continue to
+            // use the internal UUID. This helper is only for building
+            // navigational URLs.
+            function buildProfileHref(user) {
+                if (user && user.freeupper_id) {
+                    return '/u/' + encodeURIComponent(user.freeupper_id);
+                }
+                // Defensive fallback: if a profile object arrived
+                // without its public identifier, use the legacy route
+                // rather than break navigation. No new code should
+                // construct ?uid= URLs directly.
+                if (user && user.id) {
+                    return 'profile.html?uid=' + encodeURIComponent(user.id);
+                }
+                return 'profile.html';
+            }
+
+            // Navigate to the signed-in user's own profile via the
+            // canonical public route. Falls back to the plain profile
+            // page when the freeupper_id isn't yet available in the
+            // cached user object (legacy session, mid-migration).
+            window.goToOwnProfile = function() {
+                var user = getCurrentUser();
+                if (user && user.freeupper_id) {
+                    window.location.href = '/u/' + encodeURIComponent(user.freeupper_id);
+                } else {
+                    window.location.href = 'profile.html';
+                }
+            };
+
+            // Expose the helper so other scripts in this file (and any
+            // future in-page code) can build profile links safely.
+            window.buildProfileHref = buildProfileHref;
+
             // ─── MODAL HELPERS ──────────────────────────────────
             window.openFS = function(id) {
                 document.getElementById(id).classList.add('open');
@@ -2755,8 +2795,8 @@
                     var hiddenTabs = data.hidden_tabs || [];
                     var sub = document.getElementById('hiddenTabsSub');
                     if (sub) {
-                        sub.textContent = hiddenTabs.length ? (hiddenTabs.length + ' tab' + (hiddenTabs.length > 1 ? 's' :
-                            '') + ' hidden') : 'All tabs visible';
+                        sub.textContent = hiddenTabs.length ? (hiddenTabs.length + ' tab' + (hiddenTabs.length > 1 ?
+                            's' : '') + ' hidden') : 'All tabs visible';
                     }
 
                 } catch (e) {
@@ -2954,7 +2994,7 @@
                 }
             };
 
-            // ─── VERIFICATION (ORIGINAL SIMPLE VERSION) ──────
+            // ─── VERIFICATION ──────
             var vfyCat = '';
             var vfyState = 'none';
 
@@ -3134,10 +3174,14 @@
                 }).join('');
             }
 
+            // Public profile navigation for blocked users now goes
+            // through buildProfileHref(), which prefers freeupper_id
+            // and only falls back to the legacy ?uid= form when the
+            // blocked-user row lacks a public identifier.
             window.goToBlockedProfile = function(idx) {
                 var u = blockedUsers[idx];
-                if (!u || !u.id) return;
-                window.location.href = 'profile.html?uid=' + u.id;
+                if (!u) return;
+                window.location.href = buildProfileHref(u);
             };
 
             window.filterBlockedUsers = function(q) {
@@ -3154,6 +3198,7 @@
                 if (!user) return;
                 if (!confirm('Unblock ' + (user.name || 'this user') + '?')) return;
                 try {
+                    // Internal operation — still uses the UUID.
                     await window.SettingsAPI.unblockUser(user.id);
                     blockedUsers.splice(idx, 1);
                     renderBlockedUsers(blockedUsers);
@@ -3554,7 +3599,7 @@
                 }
             }
 
-            // ─── FORGOT PASSWORD (inside Change Password modal) ──
+            // ─── FORGOT PASSWORD ──
             window.requestPasswordReset = async function() {
                 var user = getCurrentUser();
                 if (!user || !user.email) {
@@ -3976,7 +4021,7 @@
             // ★★★ Load privacy toggles on page load ★★★
             initPrivacyToggles();
 
-            console.log('🔥 Settings fully loaded with original verification flow.');
+            console.log('🔥 Settings fully loaded with FreeUpper-ID profile routing.');
         })();
     </script>
 
