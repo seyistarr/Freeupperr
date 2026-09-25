@@ -2844,25 +2844,26 @@
             function getTargetUserFromUrl() {
                 var params = new URLSearchParams(window.location.search);
 
-                // New public identity route:
-                // Vercel rewrites /u/FUXXXXXXXXXXXX →
-                //   /profile.html?freeupper_id=FUXXXXXXXXXXXX
+                // Primary public identity route:
+                // /u/FUA107621FDE21
+                // Vercel should rewrite this to:
+                // /profile.html?freeupper_id=FUA107621FDE21
                 var freeupperId = params.get('freeupper_id');
 
                 if (freeupperId) {
                     return {
                         type: 'freeupper_id',
-                        value: freeupperId
+                        value: freeupperId.trim().toUpperCase()
                     };
                 }
 
-                // Temporary backwards compatibility for old shared links.
+                // Legacy UUID links.
                 var uid = params.get('uid');
 
                 if (uid) {
                     return {
                         type: 'uuid',
-                        value: uid
+                        value: uid.trim()
                     };
                 }
 
@@ -2910,14 +2911,29 @@
             // Uses the database resolver so we do not expose the entire
             // profiles table via the public /u/ route.
             async function fetchProfileByFreeUpperId(freeupperId) {
+                if (!window.sb) {
+                    throw new Error('Supabase client is not ready');
+                }
+
+                var cleanId = String(freeupperId || '').trim().toUpperCase();
+
+                if (!cleanId) {
+                    throw new Error('Missing FreeUpper ID');
+                }
+
+                console.log('[Profile] Resolving FreeUpper ID:', cleanId);
+
                 var result = await window.sb.rpc(
                     'get_profile_by_freeupper_id',
                     {
-                        p_freeupper_id: freeupperId
+                        p_freeupper_id: cleanId
                     }
                 );
 
+                console.log('[Profile] FreeUpper RPC result:', result);
+
                 if (result.error) {
+                    console.error('[Profile] FreeUpper RPC error:', result.error);
                     throw result.error;
                 }
 
@@ -2926,7 +2942,11 @@
                     : result.data;
 
                 if (!profile) {
-                    throw new Error('Profile not found');
+                    throw new Error('Profile not found for ' + cleanId);
+                }
+
+                if (!profile.id) {
+                    throw new Error('Profile resolver returned no profile ID');
                 }
 
                 return profile;
@@ -3260,88 +3280,230 @@
                 renderTab('market');
             };
 
-            // ─── RENDER PROFILE ────────────────────────────────────────
-            //
-            // Route dispatch:
-            //   1. freeupper_id query param (from /u/:freeupper_id rewrite)
-            //      → resolve via RPC to a full profile row
-            //   2. legacy uid query param
-            //      → direct UUID lookup
-            //   3. no param + logged-in
-            //      → own profile
-            //
-            // After resolving, targetUserId is the internal UUID and
-            // targetUser.freeupper_id is the public identity.
-            async function renderProfile() {
-                if (!_profileLoadedOnce) showProfileSkeleton();
-                var user = getCurrentUser();
-                currentUser = user;
+            // ─── SUPABASE READY ────────────────────────────────────────
+            async function waitForSupabase(timeoutMs) {
+                var timeout = timeoutMs || 10000;
+                var started = Date.now();
 
-                var targetInfo = getTargetUserFromUrl();
-                var profile = null;
+                while (!window.sb) {
+                    if (Date.now() - started >= timeout) {
+                        throw new Error('Supabase client did not initialize');
+                    }
+
+                    await new Promise(function(resolve) {
+                        setTimeout(resolve, 100);
+                    });
+                }
+
+                return window.sb;
+            }
+
+            // ─── RENDER PROFILE ────────────────────────────────────────
+            async function renderProfile() {
+
+                // Prevent multiple simultaneous profile loads.
+                if (window.__freeupperProfileLoading) {
+                    return;
+                }
+
+                window.__freeupperProfileLoading = true;
+
+                if (!_profileLoadedOnce) {
+                    showProfileSkeleton();
+                }
 
                 try {
+
+                    // ----------------------------------------------------
+                    // Make absolutely sure Supabase exists before RPC.
+                    // ----------------------------------------------------
+                    await waitForSupabase(10000);
+
+                    var user = getCurrentUser();
+                    currentUser = user;
+
+                    var targetInfo = getTargetUserFromUrl();
+                    var profile = null;
+
+                    console.log('[Profile] URL:', window.location.href);
+                    console.log('[Profile] Target:', targetInfo);
+
+                    // ----------------------------------------------------
+                    // No public/legacy identifier = own profile.
+                    // ----------------------------------------------------
                     if (!targetInfo) {
-                        // No public identifier in the URL — self view.
-                        if (user && user.isLoggedIn) {
-                            targetInfo = { type: 'uuid', value: user.id };
+
+                        if (user && user.isLoggedIn && user.id) {
+                            targetInfo = {
+                                type: 'uuid',
+                                value: user.id
+                            };
                         } else {
-                            window.location.href = 'index.html';
-                            return;
+                            throw new Error(
+                                'No public profile identifier was supplied'
+                            );
                         }
                     }
 
+                    // ----------------------------------------------------
+                    // Resolve profile.
+                    // ----------------------------------------------------
                     if (targetInfo.type === 'freeupper_id') {
-                        profile = await fetchProfileByFreeUpperId(targetInfo.value);
-                    } else {
-                        profile = await fetchProfileByUuid(targetInfo.value);
+
+                        profile = await fetchProfileByFreeUpperId(
+                            targetInfo.value
+                        );
+
+                    } else if (targetInfo.type === 'uuid') {
+
+                        profile = await fetchProfileByUuid(
+                            targetInfo.value
+                        );
+
                     }
 
-                    if (!profile) {
-                        hideProfileSkeleton();
-                        showToast('Profile not found', 'r');
-                        return;
+                    if (!profile || !profile.id) {
+                        throw new Error('Profile could not be resolved');
                     }
 
+                    console.log('[Profile] Resolved profile:', profile);
+
+                    // ----------------------------------------------------
+                    // Store resolved internal UUID.
+                    // ----------------------------------------------------
                     targetUser = profile;
-
-                    // Internal UUID remains the relationship ID.
                     targetUserId = profile.id;
 
-                    isOwner = targetUserId === (user && user.id);
+                    isOwner = !!(
+                        user &&
+                        user.isLoggedIn &&
+                        user.id === targetUserId
+                    );
+
                     _secondaryDataLoaded = false;
 
-                    // ── Block checks ──
-                    var iBlockedThem = false, theyBlockedMe = false;
-                    var canCheckBlocks = !isOwner && user && user.isLoggedIn;
+                    // ----------------------------------------------------
+                    // Block checks only for logged-in visitors.
+                    // ----------------------------------------------------
+                    var iBlockedThem = false;
+                    var theyBlockedMe = false;
+
+                    var canCheckBlocks =
+                        !isOwner &&
+                        user &&
+                        user.isLoggedIn &&
+                        user.id;
 
                     if (canCheckBlocks) {
+
                         var results = await Promise.all([
+
                             (async function() {
-                                if (!window.SettingsAPI) return false;
+
+                                if (!window.SettingsAPI) {
+                                    return false;
+                                }
+
                                 try {
-                                    var blockedList = await window.SettingsAPI.listBlockedUsers();
-                                    return blockedList.some(function(b) { return b.id === targetUserId; });
-                                } catch (e) { return false; }
+
+                                    var blockedList =
+                                        await window.SettingsAPI.listBlockedUsers();
+
+                                    return Array.isArray(blockedList) &&
+                                        blockedList.some(function(b) {
+                                            return b.id === targetUserId;
+                                        });
+
+                                } catch (e) {
+
+                                    console.warn(
+                                        '[Profile] Block-list check failed:',
+                                        e
+                                    );
+
+                                    return false;
+                                }
+
                             })(),
-                            didUserBlockMe(targetUserId, user.id)
+
+                            didUserBlockMe(
+                                targetUserId,
+                                user.id
+                            )
+
                         ]);
+
                         iBlockedThem = results[0];
                         theyBlockedMe = results[1];
                     }
 
-                    if (iBlockedThem) { renderFrozenBlockedProfile(profile, 'blocked-by-me'); return; }
-                    if (theyBlockedMe) { renderFrozenBlockedProfile(profile, 'blocked-by-them'); return; }
+                    // ----------------------------------------------------
+                    // Blocked profile.
+                    // ----------------------------------------------------
+                    if (iBlockedThem) {
 
-                    // ── Phase 1: identity ──
+                        _profileLoadedOnce = true;
+                        hideProfileSkeleton();
+
+                        renderFrozenBlockedProfile(
+                            profile,
+                            'blocked-by-me'
+                        );
+
+                        return;
+                    }
+
+                    if (theyBlockedMe) {
+
+                        _profileLoadedOnce = true;
+                        hideProfileSkeleton();
+
+                        renderFrozenBlockedProfile(
+                            profile,
+                            'blocked-by-them'
+                        );
+
+                        return;
+                    }
+
+                    // ----------------------------------------------------
+                    // Render identity immediately.
+                    // ----------------------------------------------------
                     renderProfileIdentity(profile);
 
-                    // ── Phase 2: secondary data ──
-                    loadAndRenderSecondaryData();
-                } catch (err) {
-                    console.error('Error rendering profile:', err);
+                    // ----------------------------------------------------
+                    // IMPORTANT:
+                    // Identity successfully rendered.
+                    // Do this BEFORE secondary requests.
+                    // ----------------------------------------------------
+                    _profileLoadedOnce = true;
                     hideProfileSkeleton();
-                    showToast('Failed to load profile', 'r');
+
+                    // ----------------------------------------------------
+                    // Secondary data can now load independently.
+                    // ----------------------------------------------------
+                    loadAndRenderSecondaryData();
+
+                } catch (err) {
+
+                    console.error(
+                        '[Profile] Failed to render profile:',
+                        err
+                    );
+
+                    _profileLoadedOnce = true;
+                    hideProfileSkeleton();
+
+                    showToast(
+                        err && err.message
+                            ? err.message
+                            : 'Failed to load profile',
+                        'r'
+                    );
+
+                } finally {
+
+                    window.__freeupperProfileLoading = false;
                 }
             }
 
@@ -5303,22 +5465,105 @@
 
             // ─── INIT ───────────────────────────────────────────────────
             async function init() {
-                if (!window.AuthUser) {
-                    await new Promise(function(resolve) { setTimeout(resolve, 300); });
-                }
-                await renderProfile();
-                restoreProfileReturnState();
-                if (typeof window.setupProfileSync === 'function') {
-                    window.setupProfileSync(function() { renderProfile(); });
-                }
-                document.addEventListener('userRefreshed', function() { renderProfile(); });
-                document.getElementById('avatarModal').addEventListener('open', initAvatarGrid);
-                window.addEventListener('popstate', function() { renderProfile(); });
-                setupProfileRealtime();
 
-                document.addEventListener('profileUpdated', function(e) {
-                    followModalData = null;
-                });
+                try {
+
+                    // Give the global authentication/client scripts
+                    // time to initialize.
+                    if (!window.AuthUser) {
+                        await new Promise(function(resolve) {
+                            setTimeout(resolve, 300);
+                        });
+                    }
+
+                    await renderProfile();
+
+                    restoreProfileReturnState();
+
+                    // ----------------------------------------------------
+                    // Profile sync
+                    // ----------------------------------------------------
+                    if (
+                        typeof window.setupProfileSync === 'function'
+                    ) {
+                        window.setupProfileSync(function() {
+
+                            // Only refresh after the current load is finished.
+                            if (!window.__freeupperProfileLoading) {
+                                renderProfile();
+                            }
+
+                        });
+                    }
+
+                    // ----------------------------------------------------
+                    // User refresh
+                    // ----------------------------------------------------
+                    document.addEventListener(
+                        'userRefreshed',
+                        function() {
+
+                            if (!window.__freeupperProfileLoading) {
+                                renderProfile();
+                            }
+
+                        }
+                    );
+
+                    // ----------------------------------------------------
+                    // Avatar modal
+                    // ----------------------------------------------------
+                    var avatarModal =
+                        document.getElementById('avatarModal');
+
+                    if (avatarModal) {
+                        avatarModal.addEventListener(
+                            'open',
+                            initAvatarGrid
+                        );
+                    }
+
+                    // ----------------------------------------------------
+                    // Browser navigation
+                    // ----------------------------------------------------
+                    window.addEventListener(
+                        'popstate',
+                        function() {
+
+                            if (!window.__freeupperProfileLoading) {
+                                renderProfile();
+                            }
+
+                        }
+                    );
+
+                    setupProfileRealtime();
+
+                    // ----------------------------------------------------
+                    // Profile updated event
+                    // ----------------------------------------------------
+                    document.addEventListener(
+                        'profileUpdated',
+                        function() {
+                            followModalData = null;
+                        }
+                    );
+
+                } catch (err) {
+
+                    console.error(
+                        '[Profile] Initialization failed:',
+                        err
+                    );
+
+                    _profileLoadedOnce = true;
+                    hideProfileSkeleton();
+
+                    showToast(
+                        'Unable to initialize profile',
+                        'r'
+                    );
+                }
             }
 
             if (document.readyState === 'loading') {
@@ -5395,6 +5640,7 @@
             window.fetchProfileByUuid = fetchProfileByUuid;
             window.getPublicProfileUrl = getPublicProfileUrl;
             window.buildProfileHref = buildProfileHref;
+            window.waitForSupabase = waitForSupabase;
         })();
     </script>
 </body>
