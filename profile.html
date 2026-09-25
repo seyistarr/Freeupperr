@@ -2604,45 +2604,9 @@
 
             // ─── PUBLIC PROFILE IDENTITY HELPERS ──────────────────────
             // The canonical public route is /u/{freeupper_id}.
-            // Legacy /profile.html?uid={uuid} is still recognised so
-            // previously shared links keep working — but no new link
-            // is ever built using the UUID form unless the profile
-            // object is missing its freeupper_id (defensive fallback).
-
-            // Parse the current URL and return the public identity
-            // information it carries.
-            function parseProfileRoute() {
-                var pathParts = window.location.pathname.split('/').filter(Boolean);
-                var freeupperId = null;
-                if (pathParts.length >= 2 && pathParts[0] === 'u') {
-                    try { freeupperId = decodeURIComponent(pathParts[1]); }
-                    catch (e) { freeupperId = pathParts[1]; }
-                }
-                var params = new URLSearchParams(window.location.search);
-                var legacyUid = params.get('uid');
-                return { freeupperId: freeupperId, legacyUid: legacyUid };
-            }
-
-            // Resolve a freeupper_id into the full profile row via the
-            // database resolver. Returns null on failure.
-            async function resolveProfileByFreeupperId(freeupperId) {
-                if (!freeupperId || !window.sb) return null;
-                try {
-                    var result = await window.sb.rpc('get_profile_by_freeupper_id', {
-                        p_freeupper_id: freeupperId
-                    });
-                    if (result.error) {
-                        console.warn('get_profile_by_freeupper_id error:', result.error);
-                        return null;
-                    }
-                    var data = result.data;
-                    if (Array.isArray(data)) data = data[0];
-                    return data || null;
-                } catch (e) {
-                    console.warn('resolveProfileByFreeupperId exception:', e);
-                    return null;
-                }
-            }
+            // Vercel rewrites that to /profile.html?freeupper_id=...
+            // We read the freeupper_id query parameter, and only fall
+            // back to the legacy uid parameter for old shared links.
 
             // Build a public-facing href for a profile object.
             // Prefers freeupper_id, falls back to legacy ?uid=.
@@ -2656,18 +2620,12 @@
                 return '#';
             }
 
-            // Build a fully-qualified public URL for sharing / QR.
-            function buildPublicProfileUrl(user) {
-                if (user && user.freeupper_id) {
-                    return 'https://freeupper.vercel.app/u/' + encodeURIComponent(user.freeupper_id);
+            // Fully-qualified public URL for share / QR.
+            function getPublicProfileUrl() {
+                if (targetUser && targetUser.freeupper_id) {
+                    return 'https://freeupper.vercel.app/u/' + encodeURIComponent(targetUser.freeupper_id);
                 }
-                if (user && user.id) {
-                    return 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(user.id);
-                }
-                if (targetUserId) {
-                    return 'https://freeupper.vercel.app/profile.html?uid=' + encodeURIComponent(targetUserId);
-                }
-                return 'https://freeupper.vercel.app/';
+                return null;
             }
 
             // ─── NAVIGATION ────────────────────────────────────────────
@@ -2878,6 +2836,39 @@
                 return null;
             }
 
+            // ─── URL READER ────────────────────────────────────────────
+            // Priority:
+            //   1. freeupper_id query param (set by Vercel rewrite from /u/:id)
+            //   2. legacy uid query param (?uid=<uuid>)
+            //   3. null (self view)
+            function getTargetUserFromUrl() {
+                var params = new URLSearchParams(window.location.search);
+
+                // New public identity route:
+                // Vercel rewrites /u/FUXXXXXXXXXXXX →
+                //   /profile.html?freeupper_id=FUXXXXXXXXXXXX
+                var freeupperId = params.get('freeupper_id');
+
+                if (freeupperId) {
+                    return {
+                        type: 'freeupper_id',
+                        value: freeupperId
+                    };
+                }
+
+                // Temporary backwards compatibility for old shared links.
+                var uid = params.get('uid');
+
+                if (uid) {
+                    return {
+                        type: 'uuid',
+                        value: uid
+                    };
+                }
+
+                return null;
+            }
+
             // ─── SKELETON ─────────────────────────────────────────────
             function showProfileSkeleton() {
                 var avatarWrap = document.getElementById('avatarWrap');
@@ -2914,13 +2905,45 @@
             }
 
             // ─── FETCH HELPERS ────────────────────────────────────────
-            async function fetchProfile(userId) {
+
+            // New primary resolver — public identifier → full profile row.
+            // Uses the database resolver so we do not expose the entire
+            // profiles table via the public /u/ route.
+            async function fetchProfileByFreeUpperId(freeupperId) {
+                var result = await window.sb.rpc(
+                    'get_profile_by_freeupper_id',
+                    {
+                        p_freeupper_id: freeupperId
+                    }
+                );
+
+                if (result.error) {
+                    throw result.error;
+                }
+
+                var profile = Array.isArray(result.data)
+                    ? result.data[0]
+                    : result.data;
+
+                if (!profile) {
+                    throw new Error('Profile not found');
+                }
+
+                return profile;
+            }
+
+            // Legacy UUID lookup — kept so old shared links keep working.
+            async function fetchProfileByUuid(userId) {
                 var result = await window.sb
                     .from('profiles')
                     .select('*')
                     .eq('id', userId)
                     .maybeSingle();
-                if (result.error) throw result.error;
+
+                if (result.error) {
+                    throw result.error;
+                }
+
                 return result.data;
             }
 
@@ -2939,8 +2962,8 @@
                 }
             }
 
-            // Follower/following list queries now include freeupper_id
-            // so their rows can navigate to the public /u/... route.
+            // Follower/following list queries include freeupper_id so
+            // their rows can navigate to the public /u/... route.
             async function fetchFollowers(userId) {
                 var result = await window.sb
                     .from('follows')
@@ -2990,24 +3013,9 @@
             }
 
             // ─────────────────────────────────────────────────────────
-            // FOLLOW / UNFOLLOW
-            //
-            // Delegates to the Postgres function
-            //   toggle_follow_with_notification(p_target_id uuid)
-            //
-            // That function owns BOTH halves of the operation:
-            //   1. INSERT/DELETE on public.follows
-            //   2. INSERT on public.notifications when the branch is a
-            //      follow (not an unfollow), which in turn fires
-            //      trg_notify_social_notification → send-push-notification
-            //      → FCM → Home Screen + in-app notification panel.
-            //
-            // The client must NOT touch public.follows or
-            // public.notifications directly — the database function is the
-            // single source of truth. Do not add a second insert/trigger.
-            //
-            // p_target_id remains the internal UUID. FreeUpper IDs are
-            // public identity only; they never reach this RPC.
+            // FOLLOW / UNFOLLOW — unchanged.
+            // The DB function owns both the follows row and the
+            // notification. p_target_id remains the internal UUID.
             // ─────────────────────────────────────────────────────────
             async function toggleFollow(targetId) {
                 const user = getCurrentUser();
@@ -3252,70 +3260,41 @@
                 renderTab('market');
             };
 
-            // ─── RENDER PROFILE — PHASE 1: IDENTITY (immediate) ────────
+            // ─── RENDER PROFILE ────────────────────────────────────────
             //
-            // Route resolution:
-            //   1. /u/{freeupper_id}          → resolve via RPC to UUID
-            //   2. profile.html?uid={uuid}    → legacy, use UUID directly
-            //   3. (no param) + logged-in     → own profile (UUID = user.id)
+            // Route dispatch:
+            //   1. freeupper_id query param (from /u/:freeupper_id rewrite)
+            //      → resolve via RPC to a full profile row
+            //   2. legacy uid query param
+            //      → direct UUID lookup
+            //   3. no param + logged-in
+            //      → own profile
             //
-            // In all cases, targetUserId ends up as the internal UUID.
-            // targetUser.freeupper_id is what the share/QR path uses.
+            // After resolving, targetUserId is the internal UUID and
+            // targetUser.freeupper_id is the public identity.
             async function renderProfile() {
                 if (!_profileLoadedOnce) showProfileSkeleton();
                 var user = getCurrentUser();
                 currentUser = user;
 
-                var route = parseProfileRoute();
+                var targetInfo = getTargetUserFromUrl();
                 var profile = null;
 
-                if (route.freeupperId) {
-                    // Canonical public route.
-                    profile = await resolveProfileByFreeupperId(route.freeupperId);
-                    if (!profile || !profile.id) {
-                        hideProfileSkeleton();
-                        showToast('Profile not found', 'r');
-                        return;
-                    }
-                    targetUserId = profile.id;
-                } else if (route.legacyUid) {
-                    // Legacy compatibility — remains until shared
-                    // links have aged out.
-                    targetUserId = route.legacyUid;
-                } else {
-                    // No identifier in the URL — self view.
-                    if (user && user.isLoggedIn) {
-                        targetUserId = user.id;
-                    } else {
-                        window.location.href = 'index.html';
-                        return;
-                    }
-                }
-
-                isOwner = targetUserId === (user && user.id);
-                _secondaryDataLoaded = false;
-
                 try {
-                    var iBlockedThem = false, theyBlockedMe = false;
-                    var canCheckBlocks = !isOwner && user && user.isLoggedIn;
+                    if (!targetInfo) {
+                        // No public identifier in the URL — self view.
+                        if (user && user.isLoggedIn) {
+                            targetInfo = { type: 'uuid', value: user.id };
+                        } else {
+                            window.location.href = 'index.html';
+                            return;
+                        }
+                    }
 
-                    if (canCheckBlocks) {
-                        var results = await Promise.all([
-                            profile ? Promise.resolve(profile) : fetchProfile(targetUserId),
-                            (async function() {
-                                if (!window.SettingsAPI) return false;
-                                try {
-                                    var blockedList = await window.SettingsAPI.listBlockedUsers();
-                                    return blockedList.some(function(b) { return b.id === targetUserId; });
-                                } catch (e) { return false; }
-                            })(),
-                            didUserBlockMe(targetUserId, user.id)
-                        ]);
-                        profile = results[0];
-                        iBlockedThem = results[1];
-                        theyBlockedMe = results[2];
-                    } else if (!profile) {
-                        profile = await fetchProfile(targetUserId);
+                    if (targetInfo.type === 'freeupper_id') {
+                        profile = await fetchProfileByFreeUpperId(targetInfo.value);
+                    } else {
+                        profile = await fetchProfileByUuid(targetInfo.value);
                     }
 
                     if (!profile) {
@@ -3326,13 +3305,38 @@
 
                     targetUser = profile;
 
+                    // Internal UUID remains the relationship ID.
+                    targetUserId = profile.id;
+
+                    isOwner = targetUserId === (user && user.id);
+                    _secondaryDataLoaded = false;
+
+                    // ── Block checks ──
+                    var iBlockedThem = false, theyBlockedMe = false;
+                    var canCheckBlocks = !isOwner && user && user.isLoggedIn;
+
+                    if (canCheckBlocks) {
+                        var results = await Promise.all([
+                            (async function() {
+                                if (!window.SettingsAPI) return false;
+                                try {
+                                    var blockedList = await window.SettingsAPI.listBlockedUsers();
+                                    return blockedList.some(function(b) { return b.id === targetUserId; });
+                                } catch (e) { return false; }
+                            })(),
+                            didUserBlockMe(targetUserId, user.id)
+                        ]);
+                        iBlockedThem = results[0];
+                        theyBlockedMe = results[1];
+                    }
+
                     if (iBlockedThem) { renderFrozenBlockedProfile(profile, 'blocked-by-me'); return; }
                     if (theyBlockedMe) { renderFrozenBlockedProfile(profile, 'blocked-by-them'); return; }
 
-                    // ── Phase 1: identity renders NOW ──
+                    // ── Phase 1: identity ──
                     renderProfileIdentity(profile);
 
-                    // ── Phase 2: secondary data loads independently ──
+                    // ── Phase 2: secondary data ──
                     loadAndRenderSecondaryData();
                 } catch (err) {
                     console.error('Error rendering profile:', err);
@@ -3413,7 +3417,7 @@
                 document.getElementById('statFollowing').textContent = '—';
             }
 
-            // ─── SECONDARY DATA LOAD (all in parallel) ────────────────
+            // ─── SECONDARY DATA LOAD ──────────────────────────────────
             async function loadAndRenderSecondaryData() {
                 var user = getCurrentUser();
                 var targetId = targetUserId;
@@ -3551,7 +3555,7 @@
                 }
             }
 
-            // ─── PRIVACY + TABS (after secondary data) ────────────────
+            // ─── PRIVACY + TABS ────────────────────────────────────────
             function applyPrivacyAndTabs(profile, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, viewerFollowsOwner) {
                 var isPrivate = !!profile.is_private;
                 var viewerBlocked = isPrivate && !isOwner && !viewerFollowsOwner;
@@ -3900,29 +3904,61 @@
                 setTimeout(generateQRCode, 300);
             };
 
+            // QR code — uses the canonical public /u/{freeupper_id} URL.
             function generateQRCode() {
                 var container = document.getElementById('qrcode');
                 container.innerHTML = '';
-                var url = buildPublicProfileUrl(targetUser);
+
+                var url = getPublicProfileUrl();
+
+                if (!url) {
+                    container.innerHTML =
+                        '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">' +
+                        'Profile QR code unavailable' +
+                        '</div>';
+                    return;
+                }
+
                 try {
-                    new QRCode(container, { text: url, width: 160, height: 160, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+                    new QRCode(container, {
+                        text: url,
+                        width: 160,
+                        height: 160,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
                 } catch (e) {
-                    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">QR code unavailable</div>';
+                    container.innerHTML =
+                        '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">' +
+                        'QR code unavailable' +
+                        '</div>';
                 }
             }
 
+            // Copy Link — uses the canonical public /u/{freeupper_id} URL.
             window.copyProfileLink = function() {
-                var url = buildPublicProfileUrl(targetUser);
+                var url = getPublicProfileUrl();
+
+                if (!url) {
+                    showToast('Profile link unavailable', 'r');
+                    return;
+                }
+
                 if (navigator.clipboard) {
-                    navigator.clipboard.writeText(url).then(function() { showToast('Profile link copied', 'g'); }).catch(function() {
-                        var textArea = document.createElement('textarea');
-                        textArea.value = url;
-                        document.body.appendChild(textArea);
-                        textArea.select();
-                        document.execCommand('copy');
-                        textArea.remove();
-                        showToast('Profile link copied', 'g');
-                    });
+                    navigator.clipboard.writeText(url)
+                        .then(function() {
+                            showToast('Profile link copied', 'g');
+                        })
+                        .catch(function() {
+                            var textArea = document.createElement('textarea');
+                            textArea.value = url;
+                            document.body.appendChild(textArea);
+                            textArea.select();
+                            document.execCommand('copy');
+                            textArea.remove();
+                            showToast('Profile link copied', 'g');
+                        });
                 } else {
                     var textArea = document.createElement('textarea');
                     textArea.value = url;
@@ -3934,12 +3970,26 @@
                 }
             };
 
+            // Share Link — uses the canonical public /u/{freeupper_id} URL.
             window.shareProfileLink = function() {
-                var url = buildPublicProfileUrl(targetUser);
+                var url = getPublicProfileUrl();
+
+                if (!url) {
+                    showToast('Profile link unavailable', 'r');
+                    return;
+                }
+
                 var name = targetUser?.display_name || 'User';
+
                 if (navigator.share) {
-                    navigator.share({ title: name + ' on Freeupper', text: 'Connect with ' + name + ' on Freeupper!', url: url }).catch(function() {});
-                } else { copyProfileLink(); }
+                    navigator.share({
+                        title: name + ' on Freeupper',
+                        text: 'Connect with ' + name + ' on Freeupper!',
+                        url: url
+                    }).catch(function() {});
+                } else {
+                    copyProfileLink();
+                }
             };
 
             // ─── SHARE OTHER ──────────────────────────────────────────
@@ -3951,7 +4001,13 @@
             }
 
             window.shareProfileOther = function(type) {
-                var url = buildPublicProfileUrl(targetUser);
+                var url = getPublicProfileUrl();
+
+                if (!url) {
+                    showToast('Profile link unavailable', 'r');
+                    return;
+                }
+
                 var name = targetUser?.display_name || 'User';
                 var text = 'Connect with ' + name + ' on Freeupper!';
                 closeFS('shareOtherModal');
@@ -4086,40 +4142,60 @@
                 scanRAF = requestAnimationFrame(tick);
             }
 
-            // QR scanner accepts both the new /u/{freeupper_id} URL and
-            // the legacy /profile.html?uid={uuid} URL so older QR codes
-            // remain usable during the transition.
+            // QR scanner — new /u/{freeupper_id} URLs are preferred,
+            // but legacy /profile.html?uid={uuid} codes still work so
+            // previously printed QR codes remain usable.
             function onQRDetected(data) {
                 stopCamera();
+
                 document.querySelectorAll('.scan-corner').forEach(function(c) {
                     c.style.transition = 'border-color .2s';
                     c.style.borderColor = '#4ade80';
                     setTimeout(function() { c.style.borderColor = ''; c.style.transition = ''; }, 700);
                 });
 
-                var newMatch = data.match(/^https?:\/\/(www\.)?freeupper\.vercel\.app\/u\/([A-Za-z0-9_\-]+)\/?$/i);
-                if (newMatch) {
-                    var freeupperId = newMatch[2];
-                    showScanStatus('Profile found', 'rgba(74,222,128,.9)');
+                // ── New canonical public route ──
+                var match = data.match(
+                    /^https?:\/\/(www\.)?freeupper\.vercel\.app\/u\/(FU[A-Z0-9]+)$/i
+                );
+
+                if (match) {
+                    var freeupperId = match[2];
+                    showScanStatus(
+                        'Profile found',
+                        'rgba(74,222,128,.9)'
+                    );
                     setTimeout(function() {
                         stopCameraAndShowQR();
-                        window.location.href = '/u/' + encodeURIComponent(freeupperId);
+                        window.location.href =
+                            '/u/' + encodeURIComponent(freeupperId);
                     }, 900);
                     return;
                 }
 
-                var legacyMatch = data.match(/^https?:\/\/(www\.)?freeupper\.vercel\.app\/profile\.html\?uid=([a-zA-Z0-9\-]+)$/i);
+                // ── Temporary support for old QR codes ──
+                var legacyMatch = data.match(
+                    /^https?:\/\/(www\.)?freeupper\.vercel\.app\/profile\.html\?uid=([a-zA-Z0-9-]+)$/i
+                );
+
                 if (legacyMatch) {
                     var uid = legacyMatch[2];
-                    showScanStatus('Profile found', 'rgba(74,222,128,.9)');
+                    showScanStatus(
+                        'Profile found',
+                        'rgba(74,222,128,.9)'
+                    );
                     setTimeout(function() {
                         stopCameraAndShowQR();
-                        window.location.href = 'profile.html?uid=' + encodeURIComponent(uid);
+                        window.location.href =
+                            '/profile.html?uid=' + encodeURIComponent(uid);
                     }, 900);
                     return;
                 }
 
-                showScanStatus('Not a valid Freeupper QR code', 'rgba(248,113,113,.85)');
+                showScanStatus(
+                    'Not a valid Freeupper QR code',
+                    'rgba(248,113,113,.85)'
+                );
                 setTimeout(function() { if (!camStream) startCamera(); }, 1800);
             }
 
@@ -5313,14 +5389,12 @@
             window.restoreProfileReturnState = restoreProfileReturnState;
             window.forceVideoThumbnails = forceVideoThumbnails;
 
-            // ─── FREEUPPER-ID PUBLIC IDENTITY HELPERS ────────────────
-            // Exposed so other in-page handlers (and future shared
-            // components that embed this script) can resolve public
-            // identifiers and build canonical profile URLs.
-            window.parseProfileRoute = parseProfileRoute;
-            window.resolveProfileByFreeupperId = resolveProfileByFreeupperId;
+            // Public identity helpers
+            window.getTargetUserFromUrl = getTargetUserFromUrl;
+            window.fetchProfileByFreeUpperId = fetchProfileByFreeUpperId;
+            window.fetchProfileByUuid = fetchProfileByUuid;
+            window.getPublicProfileUrl = getPublicProfileUrl;
             window.buildProfileHref = buildProfileHref;
-            window.buildPublicProfileUrl = buildPublicProfileUrl;
         })();
     </script>
 </body>
