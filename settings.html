@@ -2678,22 +2678,31 @@
             }
 
             // ─── FREEUPPER PUBLIC IDENTITY HELPERS ──────────────
-            // The canonical public profile route is /u/{freeupper_id}.
-            // Every profile-linking action in settings must use this
-            // helper so that UUIDs are never leaked into URLs.
             //
-            // Internal operations (block/unblock, follows, sessions,
-            // verification, password, delete account) all continue to
-            // use the internal UUID. This helper is only for building
-            // navigational URLs.
+            // The canonical public profile route is /u/{freeupper_id}.
+            //
+            // IMPORTANT — this file does NOT contain QR/share/copy-link
+            // code. Those functions live only in profile.html. So there
+            // is no `getPublicProfileUrl()` in this file because there is
+            // nothing in settings.html that builds a profile link for
+            // external sharing.
+            //
+            // What settings.html DOES need is public profile navigation
+            // for:
+            //   * the header back button → the signed-in user's profile
+            //   * the blocked-users list → each blocked user's profile
+            //
+            // Both go through the helpers below. Internal operations
+            // (block, unblock, sessions, verification, password, delete)
+            // continue to use the UUID.
+
+            // Build a public-facing href for a profile object.
+            // Prefers freeupper_id; falls back to legacy ?uid= only when
+            // a profile object arrives without its public identifier.
             function buildProfileHref(user) {
                 if (user && user.freeupper_id) {
                     return '/u/' + encodeURIComponent(user.freeupper_id);
                 }
-                // Defensive fallback: if a profile object arrived
-                // without its public identifier, use the legacy route
-                // rather than break navigation. No new code should
-                // construct ?uid= URLs directly.
                 if (user && user.id) {
                     return 'profile.html?uid=' + encodeURIComponent(user.id);
                 }
@@ -2713,8 +2722,8 @@
                 }
             };
 
-            // Expose the helper so other scripts in this file (and any
-            // future in-page code) can build profile links safely.
+            // Expose the helper so any future settings code can build
+            // profile links safely.
             window.buildProfileHref = buildProfileHref;
 
             // ─── MODAL HELPERS ──────────────────────────────────
@@ -3174,10 +3183,10 @@
                 }).join('');
             }
 
-            // Public profile navigation for blocked users now goes
-            // through buildProfileHref(), which prefers freeupper_id
-            // and only falls back to the legacy ?uid= form when the
-            // blocked-user row lacks a public identifier.
+            // Public profile navigation for blocked users goes through
+            // buildProfileHref(), which prefers freeupper_id and only
+            // falls back to the legacy ?uid= form when a blocked-user
+            // row lacks a public identifier.
             window.goToBlockedProfile = function(idx) {
                 var u = blockedUsers[idx];
                 if (!u) return;
