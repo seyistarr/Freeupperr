@@ -2925,24 +2925,78 @@
                 } catch (e) { return false; }
             }
 
+            // ─────────────────────────────────────────────────────────
+            // FOLLOW / UNFOLLOW
+            //
+            // Delegates to the Postgres function
+            //   toggle_follow_with_notification(p_target_id uuid)
+            //
+            // That function owns BOTH halves of the operation:
+            //   1. INSERT/DELETE on public.follows
+            //   2. INSERT on public.notifications when the branch is a
+            //      follow (not an unfollow), which in turn fires
+            //      trg_notify_social_notification → send-push-notification
+            //      → FCM → Home Screen + in-app notification panel.
+            //
+            // The client must NOT touch public.follows or
+            // public.notifications directly — the database function is the
+            // single source of truth. Do not add a second insert/trigger.
+            // ─────────────────────────────────────────────────────────
             async function toggleFollow(targetId) {
-                var user = getCurrentUser();
+                const user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
                     showToast('Please sign in to follow', 'o');
                     return false;
                 }
-                var currently = await isFollowing(user.id, targetId);
-                var result;
-                if (currently) {
-                    result = await window.sb.from('follows').delete()
-                        .eq('follower_id', user.id)
-                        .eq('following_id', targetId);
-                    if (result.error) throw result.error;
-                } else {
-                    result = await window.sb.from('follows').insert({ follower_id: user.id, following_id: targetId });
-                    if (result.error) throw result.error;
+                if (!targetId) {
+                    console.error('toggleFollow: missing targetId');
+                    showToast('Unable to follow this user', 'o');
+                    return false;
                 }
-                return !currently;
+                try {
+                    // ========================================================
+                    // USE THE EXISTING DATABASE RPC
+                    //
+                    // This handles BOTH:
+                    // 1. follows insert/delete
+                    // 2. follow notification creation
+                    //
+                    // The database remains the source of truth.
+                    // ========================================================
+                    const { data, error } = await window.sb.rpc(
+                        'toggle_follow_with_notification',
+                        {
+                            p_target_id: targetId
+                        }
+                    );
+                    if (error) {
+                        console.error(
+                            'toggle_follow_with_notification error:',
+                            error
+                        );
+                        throw error;
+                    }
+                    // The existing RPC returns the new following state.
+                    const isNowFollowing = Boolean(data);
+                    console.log(
+                        'Follow state changed:',
+                        {
+                            targetId,
+                            following: isNowFollowing
+                        }
+                    );
+                    return isNowFollowing;
+                } catch (error) {
+                    console.error(
+                        'toggleFollow failed:',
+                        error
+                    );
+                    showToast(
+                        'Unable to update follow status. Please try again.',
+                        'o'
+                    );
+                    return false;
+                }
             }
 
             async function getUserLikes(userId) {
