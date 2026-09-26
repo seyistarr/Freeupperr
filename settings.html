@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="global.css" />
     <link rel="stylesheet" href="bottom-nav.css" />
     <link rel="stylesheet" href="side-nav.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
     <style>
         /* ============================================================
@@ -2697,11 +2698,14 @@
             // continue to use the UUID.
 
             // Build a public-facing href for a profile object.
-            // Prefers freeupper_id; falls back to legacy ?uid= only when
-            // a profile object arrives without its public identifier.
+            // Prefers freeupper_id (uppercased + trimmed); falls back to
+            // legacy ?uid= only when a profile object arrives without its
+            // public identifier.
             function buildProfileHref(user) {
                 if (user && user.freeupper_id) {
-                    return '/u/' + encodeURIComponent(user.freeupper_id);
+                    return '/u/' + encodeURIComponent(
+                        String(user.freeupper_id).trim().toUpperCase()
+                    );
                 }
                 if (user && user.id) {
                     return 'profile.html?uid=' + encodeURIComponent(user.id);
@@ -2710,16 +2714,28 @@
             }
 
             // Navigate to the signed-in user's own profile via the
-            // canonical public route. Falls back to the plain profile
-            // page when the freeupper_id isn't yet available in the
-            // cached user object (legacy session, mid-migration).
+            // canonical public route. Falls back to ?uid= for stale
+            // sessions where freeupper_id hasn't been cached yet.
             window.goToOwnProfile = function() {
                 var user = getCurrentUser();
+
                 if (user && user.freeupper_id) {
-                    window.location.href = '/u/' + encodeURIComponent(user.freeupper_id);
-                } else {
-                    window.location.href = 'profile.html';
+                    window.location.href =
+                        '/u/' + encodeURIComponent(
+                            String(user.freeupper_id).trim().toUpperCase()
+                        );
+                    return;
                 }
+
+                // Legacy/session fallback.
+                if (user && user.id) {
+                    window.location.href =
+                        'profile.html?uid=' +
+                        encodeURIComponent(user.id);
+                    return;
+                }
+
+                window.location.href = 'profile.html';
             };
 
             // Expose the helper so any future settings code can build
