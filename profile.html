@@ -2936,46 +2936,52 @@
             // Uses the database resolver so we do not expose the entire
             // profiles table via the public /u/ route.
             async function fetchProfileByFreeUpperId(freeupperId) {
-                if (!window.sb) {
-                    throw new Error('Supabase client is not ready');
-                }
+    if (!window.sb) {
+        throw new Error('Supabase client is not ready');
+    }
 
-                var cleanId = String(freeupperId || '').trim().toUpperCase();
+    var cleanId = String(freeupperId || '').trim().toUpperCase();
 
-                if (!cleanId) {
-                    throw new Error('Missing FreeUpper ID');
-                }
+    if (!cleanId) {
+        throw new Error('Missing FreeUpper ID');
+    }
 
-                console.log('[Profile] Resolving FreeUpper ID:', cleanId);
+    console.log('[Profile] Resolving FreeUpper ID:', cleanId);
 
-                var result = await window.sb.rpc(
-                    'get_profile_by_freeupper_id',
-                    {
-                        p_freeupper_id: cleanId
-                    }
-                );
+    var result = await window.sb.rpc(
+        'get_profile_by_freeupper_id',
+        {
+            p_freeupper_id: cleanId
+        }
+    );
 
-                console.log('[Profile] FreeUpper RPC result:', result);
+    console.log('[Profile] FreeUpper RPC result:', result);
 
-                if (result.error) {
-                    console.error('[Profile] FreeUpper RPC error:', result.error);
-                    throw result.error;
-                }
+    if (result.error) {
+        console.error('[Profile] FreeUpper RPC error:', result.error);
+        throw result.error;
+    }
 
-                var profile = Array.isArray(result.data)
-                    ? result.data[0]
-                    : result.data;
+    var profile = Array.isArray(result.data)
+        ? result.data[0]
+        : result.data;
 
-                if (!profile) {
-                    throw new Error('Profile not found for ' + cleanId);
-                }
+    if (!profile) {
+        throw new Error('Profile not found for ' + cleanId);
+    }
 
-                if (!profile.id) {
-                    throw new Error('Profile resolver returned no profile ID');
-                }
+    // The RPC returns the internal UUID as "profile_id".
+    // The rest of profile.html expects it as "id".
+    if (!profile.id && profile.profile_id) {
+        profile.id = profile.profile_id;
+    }
 
-                return profile;
-            }
+    if (!profile.id) {
+        throw new Error('Profile resolver returned no profile ID');
+    }
+
+    return profile;
+}
 
             // Legacy UUID lookup — kept so old shared links keep working.
             async function fetchProfileByUuid(userId) {
