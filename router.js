@@ -131,25 +131,66 @@
 
   /**
    * Open a user profile.
-   * If already on profile.html, updates URL without reload.
+   *
+   * Accepts either:
+   *   - a public FreeUpper ID (e.g. "FUA107621FDE21") → navigates directly
+   *   - an internal Supabase UUID → resolved to a FreeUpper ID first
+   *
+   * Always performs a real navigation to /u/<FreeUpperID> so the
+   * Vercel rewrite can serve profile.html.
    */
-  function openProfile(userId) {
+  async function openProfile(userId) {
     if (!userId) {
       console.warn('Router.openProfile: No userId provided');
       return;
     }
 
-    if (isOnPage('profile.html')) {
-      const currentParams = new URLSearchParams(window.location.search);
-      if (currentParams.get('uid') === String(userId)) return;
-      history.pushState({}, '', 'profile.html?uid=' + userId);
-      window.dispatchEvent(new CustomEvent('router:navigate', {
-        detail: { type: 'profile', id: userId, page: 'profile.html' }
-      }));
+    // Already a public FreeUpper ID
+    if (String(userId).startsWith('FU')) {
+      window.location.href = '/u/' + encodeURIComponent(String(userId));
       return;
     }
 
-    window.location.href = 'profile.html?uid=' + userId;
+    try {
+      if (!window.sb) {
+        console.error('Router.openProfile: Supabase client is unavailable');
+        return;
+      }
+
+      const { data, error } = await window.sb.rpc(
+        'get_profile_identity_by_id',
+        {
+          p_user_id: userId
+        }
+      );
+
+      if (error) {
+        console.error(
+          'Router.openProfile: Failed to resolve FreeUpper ID',
+          error
+        );
+        return;
+      }
+
+      const profile = Array.isArray(data) ? data[0] : data;
+
+      if (!profile || !profile.freeupper_id) {
+        console.warn(
+          'Router.openProfile: No FreeUpper ID found for user',
+          userId
+        );
+        return;
+      }
+
+      // Public profile URL
+      window.location.href =
+        '/u/' + encodeURIComponent(profile.freeupper_id);
+    } catch (error) {
+      console.error(
+        'Router.openProfile: Unexpected error',
+        error
+      );
+    }
   }
 
   /**
