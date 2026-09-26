@@ -2843,33 +2843,57 @@
             //   2. legacy uid query param (?uid=<uuid>)
             //   3. null (self view)
             function getTargetUserFromUrl() {
-                var params = new URLSearchParams(window.location.search);
+    var params = new URLSearchParams(window.location.search);
 
-                // Primary public identity route:
-                // /u/FUA107621FDE21
-                // Vercel should rewrite this to:
-                // /profile.html?freeupper_id=FUA107621FDE21
-                var freeupperId = params.get('freeupper_id');
+    // --------------------------------------------------------
+    // 1. Query-string public ID
+    //    /profile.html?freeupper_id=FUA107621FDE21
+    // --------------------------------------------------------
+    var freeupperId = params.get('freeupper_id');
 
-                if (freeupperId) {
-                    return {
-                        type: 'freeupper_id',
-                        value: freeupperId.trim().toUpperCase()
-                    };
-                }
+    if (freeupperId) {
+        return {
+            type: 'freeupper_id',
+            value: freeupperId.trim().toUpperCase()
+        };
+    }
 
-                // Legacy UUID links.
-                var uid = params.get('uid');
+    // --------------------------------------------------------
+    // 2. Canonical public URL
+    //    /u/FUA107621FDE21
+    //
+    // Vercel rewrites this internally to profile.html,
+    // but the browser pathname remains /u/FUA107621FDE21.
+    // Therefore we MUST read the ID from pathname too.
+    // --------------------------------------------------------
+    var pathname = window.location.pathname || '';
 
-                if (uid) {
-                    return {
-                        type: 'uuid',
-                        value: uid.trim()
-                    };
-                }
+    var publicMatch = pathname.match(
+        /^\/u\/(FU[A-Z0-9]+)\/?$/i
+    );
 
-                return null;
-            }
+    if (publicMatch) {
+        return {
+            type: 'freeupper_id',
+            value: publicMatch[1].trim().toUpperCase()
+        };
+    }
+
+    // --------------------------------------------------------
+    // 3. Legacy UUID links
+    //    /profile.html?uid=<uuid>
+    // --------------------------------------------------------
+    var uid = params.get('uid');
+
+    if (uid) {
+        return {
+            type: 'uuid',
+            value: uid.trim()
+        };
+    }
+
+    return null;
+}
 
             // ─── SKELETON ─────────────────────────────────────────────
             function showProfileSkeleton() {
