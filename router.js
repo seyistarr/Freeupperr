@@ -322,11 +322,36 @@
   }
 
   /**
-   * Get the current profile UID from the URL.
+   * Get the current profile identifier from the URL.
+   *
+   * Supports three formats:
+   *   1. Legacy UUID:           profile.html?uid=<uuid>
+   *   2. Legacy FreeUpper ID:   profile.html?freeupper_id=FUA...
+   *   3. Public route:          /u/FUAxxxxxxxxxxxx
+   *
+   * Returns the raw identifier — the caller decides how to treat it.
    */
   function getCurrentProfileId() {
     const params = new URLSearchParams(window.location.search);
-    return params.get('uid') || null;
+
+    // Legacy UUID profile URL
+    const uid = params.get('uid');
+    if (uid) return uid;
+
+    // Legacy query-based FreeUpper ID
+    const freeupperId = params.get('freeupper_id');
+    if (freeupperId) return freeupperId;
+
+    // New public route: /u/FUAxxxxxxxxxxxx
+    const pathParts = window.location.pathname
+      .split('/')
+      .filter(Boolean);
+    const uIndex = pathParts.indexOf('u');
+    if (uIndex !== -1 && pathParts[uIndex + 1]) {
+      return decodeURIComponent(pathParts[uIndex + 1]);
+    }
+
+    return null;
   }
 
   /**
@@ -358,7 +383,7 @@
       const params = new URLSearchParams(window.location.search);
       const postId = params.get('post');
       const productId = params.get('product');
-      const profileId = params.get('uid');
+      const profileId = getCurrentProfileId();
       const hashtag = params.get('tag');
       const query = params.get('q');
 
@@ -369,7 +394,12 @@
       } else if (productId) {
         eventDetail = { ...eventDetail, type: 'listing', id: productId, page: 'index.html' };
       } else if (profileId) {
-        eventDetail = { ...eventDetail, type: 'profile', id: profileId, page: 'profile.html' };
+        eventDetail = {
+          ...eventDetail,
+          type: 'profile',
+          id: profileId,
+          page: 'profile.html'
+        };
       } else if (hashtag) {
         eventDetail = { ...eventDetail, type: 'hashtag', tag: hashtag, page: 'search.html' };
       } else if (query) {
