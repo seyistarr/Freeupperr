@@ -245,7 +245,7 @@
 
         let followBtn = '';
         if (g.type === 'follow' && primaryActor.id) {
-            followBtn = `<div class="follow-back-btn" onclick="event.stopPropagation(); window.location.href='profile.html?uid=${primaryActor.id}'">View profile</div>`;
+            followBtn = `<div class="follow-back-btn" onclick="event.stopPropagation(); window.Router.openProfile('${primaryActor.id}')">View profile</div>`;
         }
 
         return `
@@ -328,7 +328,7 @@
         if (ids.length) markRead(ids);
 
         if (type === 'follow' && actorId) {
-            window.location.href = 'profile.html?uid=' + actorId;
+            window.Router.openProfile(actorId);
             return;
         }
         if (postId) {
@@ -336,7 +336,7 @@
             return;
         }
         if (actorId) {
-            window.location.href = 'profile.html?uid=' + actorId;
+            window.Router.openProfile(actorId);
         }
     }
 
