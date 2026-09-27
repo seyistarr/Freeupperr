@@ -2049,6 +2049,129 @@
         .crop-zoom-row { display: flex; align-items: center; gap: 12px; padding: 16px clamp(16px,5vw,24px); flex-shrink: 0; }
         .crop-zoom-row input[type="range"] { flex: 1; accent-color: var(--p); }
 
+        /* ─── PROFILE REELS VIEWER ─── */
+        .reels-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 9500;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity .25s, visibility .25s;
+        }
+        .reels-modal.open { visibility: visible; opacity: 1; }
+        .reels-header {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            z-index: 5;
+            padding: max(env(safe-area-inset-top), 16px) 16px 12px;
+            display: flex;
+            align-items: center;
+            background: linear-gradient(rgba(0,0,0,.55), transparent);
+            pointer-events: none;
+        }
+        .reels-back {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.14);
+            border: none;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        .reels-back:active { transform: scale(.94); }
+        .reels-track {
+            flex: 1;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+        }
+        .reels-track::-webkit-scrollbar { display: none; }
+        .reels-slide {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            height: 100dvh;
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+        .reels-slide img, .reels-slide video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
+        .reels-noimg {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,.55);
+            font-weight: 700;
+            padding: 30px;
+            text-align: center;
+        }
+        .reels-caption {
+            position: absolute;
+            left: 16px; right: 84px;
+            bottom: max(env(safe-area-inset-bottom), 24px);
+            color: #fff;
+            z-index: 3;
+            text-shadow: 0 1px 6px rgba(0,0,0,.6);
+            pointer-events: none;
+        }
+        .reels-caption .rc-name { font-weight: 800; font-size: 14px; margin-bottom: 4px; }
+        .reels-caption .rc-text {
+            font-size: 13px;
+            line-height: 1.4;
+            opacity: .95;
+            white-space: pre-wrap;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .reels-actions {
+            position: absolute;
+            right: 12px;
+            bottom: max(env(safe-area-inset-bottom), 32px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            z-index: 3;
+        }
+        .reels-actions button {
+            background: none;
+            border: none;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 700;
+            text-shadow: 0 1px 4px rgba(0,0,0,.5);
+            padding: 4px;
+        }
+        .reels-actions button:active { transform: scale(.9); }
+        .reels-actions svg {
+            width: 28px; height: 28px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .reels-actions button.liked svg { fill: #ef4444; stroke: #ef4444; }
+        .reels-actions button.bookmarked svg { fill: #FFD700; stroke: #FFD700; }
+
         @media (min-width: 768px) {
             .main { padding-bottom: 24px; }
         }
@@ -2540,6 +2663,16 @@
         </div>
     </div>
 
+    <!-- ===== PROFILE REELS (TikTok-style fullscreen scroller) ===== -->
+    <div class="reels-modal" id="profileReelsModal">
+        <div class="reels-header">
+            <button class="reels-back" onclick="closeProfileReels()" aria-label="Close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+        </div>
+        <div class="reels-track" id="reelsTrack"></div>
+    </div>
+
     <!-- ===== SCRIPTS ===== -->
     <!-- ===== SCRIPTS ===== -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2630,16 +2763,8 @@
             }
 
             // ─── NAVIGATION ────────────────────────────────────────────
-            window.openPostFromGrid = function(postId) {
-                var returnUrl = window.location.href;
-                try {
-                    sessionStorage.setItem('fu_return_url', returnUrl);
-                    sessionStorage.setItem('fu_return_scroll', String(document.getElementById('mainScroll').scrollTop));
-                    sessionStorage.setItem('fu_return_tab', activeTab);
-                } catch (e) {}
-                window.location.href = 'index.html?post=' + postId + '&from=profile&ret=' + encodeURIComponent(returnUrl);
-            };
-
+            // NOTE: Post grid taps are now handled in-page via openProfileReels().
+            // The old openPostFromGrid() navigation helper has been removed.
             window.openMarketFromGrid = function(productId) {
                 var returnUrl = window.location.href;
                 try {
@@ -2714,6 +2839,10 @@
             var _profileLoadedOnce = false;
             var _profileCounts = { followers: 0, following: 0 };
             var _secondaryDataLoaded = false;
+
+            // Cache of the exact lists rendered per tab so the reels viewer
+            // can open at the right index with the right posts.
+            var _tabPostsCache = { posts: [], love: [], share: [], star: [] };
 
             var _fwPageIdx = 0;
             var _fwPageState = [
@@ -3177,8 +3306,7 @@
                 return '<video src="' + src + '" preload="metadata" muted playsinline webkit-playsinline style="width:100%;height:100%;object-fit:cover;display:block;background:#000;pointer-events:none;"></video>';
             }
 
-            function buildGridPostCard(post, opts) {
-                opts = opts || {};
+            function buildGridPostCard(post, tabKey, idx) {
                 var mediaHtml = '';
                 var noMediaFallback = '<div class="no-media" style="display:none">' + escapeHtml(post.title) + '</div>';
                 if (post.mediaType === 'image' && post.mediaUrl) {
@@ -3211,7 +3339,7 @@
                         '<div class="lock-pill"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Only you</div>' :
                         '');
 
-                var tapAction = "openPostFromGrid('" + post.id + "')";
+                var tapAction = "openProfileReels('" + tabKey + "'," + idx + ")";
 
                 return '<div class="grid-card" onclick="' + tapAction + '">' +
                     mediaHtml +
@@ -3220,7 +3348,7 @@
                     '</div>';
             }
 
-            function buildGridLoveCard(post) {
+            function buildGridLoveCard(post, tabKey, idx) {
                 var mediaHtml = '';
                 var noMediaFallback = '<div class="no-media" style="display:none">' + escapeHtml(post.title) + '</div>';
                 if (post.mediaType === 'image' && post.mediaUrl) {
@@ -3244,7 +3372,7 @@
                     mediaHtml = '<div class="no-media">' + escapeHtml(post.title) + '</div>';
                 }
 
-                var tapAction = "openPostFromGrid('" + post.id + "')";
+                var tapAction = "openProfileReels('" + tabKey + "'," + idx + ")";
 
                 return '<div class="grid-card" onclick="' + tapAction + '">' +
                     mediaHtml +
@@ -3269,12 +3397,12 @@
                 }
                 return '<div class="market-card-v2" onclick="openMarketFromGrid(\'' + item.id + '\')">' +
                     '<div class="mc2-media">' +
-                    (imgUrl ? '<img src="' + imgUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.no-media\').style.display=\'flex\'">' : '') +
+                    (imgUrl ? '<img src="' + escapeHtml(imgUrl) + '" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.no-media\').style.display=\'flex\'">' : '') +
                     '<div class="no-media"' + (imgUrl ? ' style="display:none"' : '') + '>No image</div>' +
                     actionBtn +
                     '<div class="mc2-overlay">' +
                     '<div class="mc2-seller">' +
-                    (sellerAvatar ? '<img class="mc2-seller-av" src="' + sellerAvatar + '" onerror="this.style.display=\'none\'">' : '') +
+                    (sellerAvatar ? '<img class="mc2-seller-av" src="' + escapeHtml(sellerAvatar) + '" onerror="this.style.display=\'none\'">' : '') +
                     '<span class="mc2-seller-name">' + escapeHtml(truncateName(sellerName, 16)) + '</span>' + badgeHtml +
                     '</div>' +
                     '<div class="mc2-price">₦' + formatPrice(item.price) + '</div>' +
@@ -3412,6 +3540,7 @@
                     );
 
                     _secondaryDataLoaded = false;
+                    viewerIsBlockedByPrivacy = false;
 
                     // ----------------------------------------------------
                     // Block checks only for logged-in visitors.
@@ -3852,31 +3981,34 @@
                     if (!a.pinned && b.pinned) return 1;
                     return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date);
                 });
+                _tabPostsCache.posts = sorted;
                 if (!sorted.length) {
                     container.innerHTML =
                         '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><h3>No posts yet</h3><p>' + (isOwner ? 'Create your first post.' : 'Nothing posted yet.') + '</p></div>';
                     return;
                 }
                 container.innerHTML = '<div class="grid-3">' +
-                    sorted.map(function(p) { return buildGridPostCard(p); }).join('') +
+                    sorted.map(function(p, i) { return buildGridPostCard(p, 'posts', i); }).join('') +
                     '</div>';
             }
 
             function renderLove(container, userPosts, likedIds) {
                 var likedPosts = userPosts.filter(function(p) { return likedIds.indexOf(p.id) !== -1; });
+                likedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
+                _tabPostsCache.love = likedPosts;
                 if (!likedPosts.length) {
                     container.innerHTML =
                         '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div><h3>No liked posts</h3><p>Posts you love will appear here.</p></div>';
                     return;
                 }
-                likedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML = '<div class="grid-3">' +
-                    likedPosts.map(function(p) { return buildGridLoveCard(p); }).join('') +
+                    likedPosts.map(function(p, i) { return buildGridLoveCard(p, 'love', i); }).join('') +
                     '</div>';
             }
 
             async function renderReposts(container, repostedIds) {
                 if (!repostedIds.length) {
+                    _tabPostsCache.share = [];
                     container.innerHTML =
                         '<div class="empty-state"><div class="icon"><i class="ri-repeat-2-line" style="font-size:32px;color:var(--p)"></i></div><h3>No reposts</h3><p>Posts you repost will appear here.</p></div>';
                     return;
@@ -3891,27 +4023,29 @@
                     }));
                     fetched.forEach(function(p) { if (p) found.push(p); });
                 }
+                found.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
+                _tabPostsCache.share = found;
                 if (!found.length) {
                     container.innerHTML =
                         '<div class="empty-state"><div class="icon"><i class="ri-repeat-2-line" style="font-size:32px;color:var(--p)"></i></div><h3>No reposts</h3><p>Posts you repost will appear here.</p></div>';
                     return;
                 }
-                found.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML = '<div class="grid-3">' +
-                    found.map(function(p) { return buildGridPostCard(p, { forceNavigate: true }); }).join('') +
+                    found.map(function(p, i) { return buildGridPostCard(p, 'share', i); }).join('') +
                     '</div>';
             }
 
             function renderStar(container, userPosts, bookmarkedIds) {
                 var bookmarkedPosts = userPosts.filter(function(p) { return bookmarkedIds.indexOf(p.id) !== -1; });
+                bookmarkedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
+                _tabPostsCache.star = bookmarkedPosts;
                 if (!bookmarkedPosts.length) {
                     container.innerHTML =
                         '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div><h3>No saved posts</h3><p>Save posts you love to find them instantly.</p></div>';
                     return;
                 }
-                bookmarkedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
                 container.innerHTML = '<div class="grid-3">' +
-                    bookmarkedPosts.map(function(p) { return buildGridPostCard(p, { forceNavigate: true }); }).join('') +
+                    bookmarkedPosts.map(function(p, i) { return buildGridPostCard(p, 'star', i); }).join('') +
                     '</div>';
             }
 
@@ -3956,6 +4090,101 @@
                 container.innerHTML = subtabsHtml + '<div class="grid-2">' +
                     marketItems.map(function(item) { return buildMarketCard(item, { canDelete: isOwner }); }).join('') +
                     '</div>';
+            }
+
+            // ─── PROFILE REELS VIEWER ─────────────────────────────────
+            var _reelsPosts = [];
+            var _reelsObserver = null;
+
+            window.openProfileReels = function(tabKey, startIdx) {
+                var list = _tabPostsCache[tabKey] || [];
+                if (!list.length) return;
+                _reelsPosts = list;
+                renderReelsSlides();
+                var modal = document.getElementById('profileReelsModal');
+                modal.classList.add('open');
+                document.body.style.overflow = 'hidden';
+                var track = document.getElementById('reelsTrack');
+                requestAnimationFrame(function() {
+                    var target = track.children[startIdx];
+                    if (target) track.scrollTop = target.offsetTop;
+                    setupReelsObserver();
+                });
+            };
+
+            window.closeProfileReels = function() {
+                var modal = document.getElementById('profileReelsModal');
+                if (!modal) return;
+                modal.classList.remove('open');
+                document.body.style.overflow = '';
+                document.querySelectorAll('#reelsTrack video').forEach(function(v) {
+                    try { v.pause(); } catch (e) {}
+                });
+                if (_reelsObserver) { _reelsObserver.disconnect(); _reelsObserver = null; }
+            };
+
+            function reelsMediaHtml(post) {
+                if (post.mediaType === 'video' && post.mediaUrl) {
+                    return '<video src="' + post.mediaUrl + '" playsinline webkit-playsinline muted loop preload="metadata"></video>';
+                }
+                if (post.mediaType === 'image' && post.mediaUrl) {
+                    return '<img src="' + post.mediaUrl + '" loading="lazy" alt="">';
+                }
+                return '<div class="reels-noimg">' + escapeHtml(post.title || post.content || '') + '</div>';
+            }
+
+            function renderReelsSlides() {
+                var track = document.getElementById('reelsTrack');
+                if (!track) return;
+                track.innerHTML = _reelsPosts.map(function(p, i) {
+                    var name = (targetUser && targetUser.display_name) || 'User';
+                    var liked = likedPostIds.indexOf(p.id) !== -1;
+                    var saved = bookmarkedPostIds.indexOf(p.id) !== -1;
+                    var likeCount = p.likes || p.reactions && p.reactions.like || 0;
+                    return '<div class="reels-slide" data-post-id="' + p.id + '" data-idx="' + i + '">' +
+                        reelsMediaHtml(p) +
+                        '<div class="reels-caption">' +
+                            '<div class="rc-name">' + escapeHtml(name) + '</div>' +
+                            '<div class="rc-text">' + escapeHtml(p.title || p.content || '') + '</div>' +
+                        '</div>' +
+                        '<div class="reels-actions">' +
+                            '<button class="' + (liked ? 'liked' : '') + '" onclick="reelsLike(\'' + p.id + '\', this)" aria-label="Like">' +
+                                '<svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>' +
+                                '<span>' + fmtNum(likeCount) + '</span>' +
+                            '</button>' +
+                            '<button class="' + (saved ? 'bookmarked' : '') + '" onclick="reelsBookmark(\'' + p.id + '\', this)" aria-label="Save">' +
+                                '<svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>' +
+                            '</button>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            }
+
+            window.reelsLike = function(postId, btn) {
+                btn.classList.toggle('liked');
+                window.toggleReaction(postId);
+            };
+            window.reelsBookmark = function(postId, btn) {
+                btn.classList.toggle('bookmarked');
+                window.toggleBookmark(postId);
+            };
+
+            function setupReelsObserver() {
+                var track = document.getElementById('reelsTrack');
+                if (!track) return;
+                if (_reelsObserver) _reelsObserver.disconnect();
+                _reelsObserver = new IntersectionObserver(function(entries) {
+                    entries.forEach(function(entry) {
+                        var vid = entry.target.querySelector('video');
+                        if (!vid) return;
+                        if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
+                            vid.play().catch(function() {});
+                        } else {
+                            try { vid.pause(); } catch (e) {}
+                        }
+                    });
+                }, { threshold: [0, 0.6, 1] });
+                Array.from(track.children).forEach(function(slide) { _reelsObserver.observe(slide); });
             }
 
             // ─── ACTION ROW ────────────────────────────────────────────
@@ -4036,12 +4265,26 @@
             // ─── INTERACTION FUNCTIONS ──────────────────────────────
             window.toggleReaction = async function(postId) {
                 var post = allPosts.find(function(p) { return p.id === postId; });
-                if (!post) return;
                 window.AuthUser.requireAuth(async function() {
                     try {
                         var result = await window.PostsAPI.toggleLike(postId);
-                        post.likedByMe = result.liked;
-                        post.reactions.like = result.count;
+                        if (post) {
+                            post.likedByMe = result.liked;
+                            if (post.reactions) post.reactions.like = result.count;
+                            post.likes = result.count;
+                        }
+                        // Update like counts inside the reels viewer
+                        var modal = document.getElementById('profileReelsModal');
+                        if (modal && modal.classList.contains('open')) {
+                            var slide = modal.querySelector('.reels-slide[data-post-id="' + postId + '"]');
+                            if (slide) {
+                                var cnt = slide.querySelector('.reels-actions button span');
+                                if (cnt) cnt.textContent = fmtNum(result.count);
+                                var btn = slide.querySelector('.reels-actions button');
+                                if (btn) btn.classList.toggle('liked', result.liked);
+                            }
+                        }
+                        // Update icon state on the grid
                         renderTab(activeTab);
                         showToast(result.liked ? 'Liked' : 'Unliked', result.liked ? 'g' : 'o');
                     } catch (err) { showToast(err.message, 'r'); }
@@ -4055,9 +4298,11 @@
                 if (result.error) throw result.error;
                 if (result.data) {
                     await window.sb.from('bookmarks').delete().eq('id', result.data.id);
+                    bookmarkedPostIds = bookmarkedPostIds.filter(function(id) { return id !== postId; });
                     showToast('Removed from bookmarks', 'o');
                 } else {
                     await window.sb.from('bookmarks').insert({ user_id: user.id, post_id: postId });
+                    if (bookmarkedPostIds.indexOf(postId) === -1) bookmarkedPostIds.push(postId);
                     showToast('Bookmarked', 'g');
                 }
                 renderTab(activeTab);
@@ -5022,16 +5267,16 @@
                     var u = data[i];
                     var top = i * rowH;
                     var d = 'data-uid="' + (u.id || '') + '" data-fidx="' + i + '"';
-                    var tp = 'onclick="_fwTap(this)"';
+                    var tp = 'onclick="_fwTap(this, event)"';
                     var rowHref = u.href || '#';
                     if (isSugg) {
                         var srcLbl = u.source || 'People you may know';
                         html += '<div class="u-row u-row-suggestion" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;padding:0 clamp(14px,5vw,24px)">' +
-                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="window.location.href=\'' + rowHref + '\'">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="window.location.href=\'' + rowHref + '\'">' + (u.avatar ? '<img src="' + escapeHtml(u.avatar) + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
                             '<div class="u-info" onclick="window.location.href=\'' + rowHref + '\'" style="cursor:pointer">' +
-                            '<div class="u-name truncate-1">' + truncateName(u.displayName, 24) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
-                            '<div class="u-handle">' + truncateName(u.handle || '', 18) + '</div>' +
-                            '<div class="u-sugg-src">' + srcLbl + '</div>' +
+                            '<div class="u-name truncate-1">' + escapeHtml(truncateName(u.displayName, 24)) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-handle">' + escapeHtml(truncateName(u.handle || '', 18)) + '</div>' +
+                            '<div class="u-sugg-src">' + escapeHtml(srcLbl) + '</div>' +
                             '</div>' +
                             '<div class="u-sugg-actions" style="display:flex;gap:8px;flex-shrink:0">' +
                             '<button class="u-btn" ' + d + ' data-action="toggle-follow" ' + tp + '>Follow</button>' +
@@ -5040,10 +5285,10 @@
                     } else {
                         var actionHtml = _fwRowAction(u, i);
                         html += '<div class="u-row" data-row-idx="' + i + '" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 clamp(14px,5vw,24px)">' +
-                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="window.location.href=\'' + rowHref + '\'">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="window.location.href=\'' + rowHref + '\'">' + (u.avatar ? '<img src="' + escapeHtml(u.avatar) + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
                             '<div class="u-info" onclick="window.location.href=\'' + rowHref + '\'" style="cursor:pointer">' +
-                            '<div class="u-name truncate-1">' + truncateName(u.displayName, 24) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
-                            '<div class="u-handle">' + truncateName(u.handle || '', 18) + '</div>' +
+                            '<div class="u-name truncate-1">' + escapeHtml(truncateName(u.displayName, 24)) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
+                            '<div class="u-handle">' + escapeHtml(truncateName(u.handle || '', 18)) + '</div>' +
                             '</div>' +
                             actionHtml +
                             '</div>';
@@ -5054,7 +5299,7 @@
 
             function _fwRowAction(u, idx) {
                 var d = 'data-uid="' + (u.id || '') + '" data-fidx="' + idx + '"';
-                var tp = 'onclick="_fwTap(this)"';
+                var tp = 'onclick="_fwTap(this, event)"';
                 if (_fwCurTab === 'friends') {
                     return '<button class="u-btn-msg" ' + d + ' data-action="message" ' + tp + '><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Message</button>';
                 }
@@ -5077,8 +5322,8 @@
                 return '';
             }
 
-            window._fwTap = function(btn) {
-                if (event) event.stopPropagation();
+            window._fwTap = function(btn, evt) {
+                if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
                 if (btn.classList.contains('pending')) return;
                 var action = btn.getAttribute('data-action') || 'toggle-follow';
                 var fidx = parseInt(btn.getAttribute('data-fidx'), 10);
@@ -5312,12 +5557,16 @@
             window.openCountryModal = function() { renderCountries(COUNTRIES, false);
                 openFS('countryModal'); };
             window.filterCountries = function(q) {
+                var clearBtn = document.getElementById('countrySearchClear');
+                if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
                 if (!q) { renderCountries(COUNTRIES, false); return; }
                 var q2 = q.toLowerCase();
                 renderCountries(COUNTRIES.filter(function(c) { return c.n.toLowerCase().includes(q2); }), true);
             };
             window.clearCountrySearch = function() {
                 document.getElementById('countrySearch').value = '';
+                var clearBtn = document.getElementById('countrySearchClear');
+                if (clearBtn) clearBtn.style.display = 'none';
                 renderCountries(COUNTRIES, false);
             };
 
@@ -5580,6 +5829,18 @@
                         }
                     );
 
+                    // ----------------------------------------------------
+                    // Escape key closes reels viewer
+                    // ----------------------------------------------------
+                    document.addEventListener('keydown', function(e) {
+                        if (e.key === 'Escape') {
+                            var modal = document.getElementById('profileReelsModal');
+                            if (modal && modal.classList.contains('open')) {
+                                window.closeProfileReels();
+                            }
+                        }
+                    });
+
                 } catch (err) {
 
                     console.error(
@@ -5664,6 +5925,12 @@
             window.canonicalizeUsername = canonicalizeUsername;
             window.restoreProfileReturnState = restoreProfileReturnState;
             window.forceVideoThumbnails = forceVideoThumbnails;
+
+            // Reels viewer
+            window.openProfileReels = openProfileReels;
+            window.closeProfileReels = closeProfileReels;
+            window.reelsLike = reelsLike;
+            window.reelsBookmark = reelsBookmark;
 
             // Public identity helpers
             window.getTargetUserFromUrl = getTargetUserFromUrl;
