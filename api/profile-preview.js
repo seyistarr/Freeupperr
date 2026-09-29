@@ -92,7 +92,9 @@ export default async function handler(req, res) {
     `${SITE_URL}/u/${encodeURIComponent(profile.freeupper_id)}`;
 
   const imageUrl =
-    profile.avatar_url || FALLBACK_IMAGE;
+  `${SITE_URL}/api/profile-og?freeupper_id=${encodeURIComponent(
+    profile.freeupper_id
+  )}&v=2`;
 
   const safeTitle = escapeHtml(title);
   const safeDescription = escapeHtml(bio);
@@ -120,7 +122,7 @@ export default async function handler(req, res) {
     property="og:type"
     content="profile"
   >
-
+  
   <meta
     property="og:site_name"
     content="FreeUpper"
@@ -145,6 +147,20 @@ export default async function handler(req, res) {
     property="og:image"
     content="${safeImage}"
   >
+  <meta
+  property="og:image:width"
+  content="1200"
+>
+
+<meta
+  property="og:image:height"
+  content="630"
+>
+
+<meta
+  property="og:image:type"
+  content="image/png"
+>
 
   <meta
     property="og:image:alt"
