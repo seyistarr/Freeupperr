@@ -4256,6 +4256,175 @@
             color: var(--muted);
         }
 
+        /* ─── DESKTOP SPLIT VIEW (post modal + video lightbox) ─── */
+        @media (min-width: 1024px) {
+
+            /* A. POST MODAL: media left, info + comments right */
+            .explore-fullscreen {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 420px;
+                grid-template-rows: auto minmax(0, 1fr) auto;
+                background: #000;
+            }
+            .explore-fullscreen.sp-nomedia-mode {
+                grid-template-columns: minmax(0, 1fr);
+                background: var(--bg);
+            }
+            .explore-fullscreen-header { grid-column: 1 / -1; grid-row: 1; }
+            #explore-fullscreen-content {
+                grid-column: 1 / -1;
+                grid-row: 2;
+                display: flex;
+                overflow: hidden;
+                padding-bottom: 0;
+            }
+            #explore-comment-bar {
+                grid-column: 2;
+                grid-row: 3;
+                border-left: 1px solid var(--brd);
+            }
+            .explore-fullscreen.sp-nomedia-mode #explore-comment-bar {
+                grid-column: 1;
+                width: 100%;
+                max-width: 720px;
+                margin: 0 auto;
+                border-left: none;
+            }
+
+            .explore-fullscreen .single-post-container.sp-split {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 420px;
+                grid-template-rows: auto minmax(0, 1fr);
+                flex: 1;
+                width: 100%;
+                max-width: none;
+                height: 100%;
+                min-height: 0;
+                margin: 0;
+                padding: 0;
+            }
+            .explore-fullscreen.sp-nomedia-mode .single-post-container.sp-split {
+                grid-template-columns: minmax(0, 1fr);
+                max-width: 720px;
+                margin: 0 auto;
+                background: var(--bg);
+            }
+
+            .explore-fullscreen .sp-author {
+                grid-column: 2;
+                grid-row: 1;
+                margin: 0;
+                padding: 14px 18px;
+                background: var(--bg);
+                border-bottom: 1px solid var(--brd);
+                border-left: 1px solid var(--brd);
+            }
+            .explore-fullscreen .sp-info-rest {
+                grid-column: 2;
+                grid-row: 2;
+                min-height: 0;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
+                padding: 12px 18px 24px;
+                background: var(--bg);
+                border-left: 1px solid var(--brd);
+            }
+            .explore-fullscreen.sp-nomedia-mode .sp-author,
+            .explore-fullscreen.sp-nomedia-mode .sp-info-rest {
+                grid-column: 1;
+                border-left: none;
+            }
+
+            .explore-fullscreen .sp-media-col {
+                grid-column: 1;
+                grid-row: 1 / 3;
+                min-width: 0;
+                min-height: 0;
+                background: #000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+                position: relative;
+            }
+            .sp-media-col .ig-media-container,
+            .sp-media-col .ig-video-wrap {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                border-radius: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .sp-media-col .ig-media-container img {
+                width: 100%;
+                height: 100%;
+                max-height: none;
+                object-fit: contain;
+            }
+            .sp-media-col .ig-video-wrap .plyr,
+            .sp-media-col .ig-video-wrap .plyr__video-wrapper {
+                width: 100%;
+                height: 100%;
+                background: #000;
+            }
+            .sp-media-col .ig-video-wrap video {
+                width: 100%;
+                height: 100%;
+                max-height: none;
+                object-fit: contain;
+            }
+            .sp-media-col .yt-wrap { width: 100%; }
+            .sp-media-col .media-scroll-row {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                gap: 0;
+                scroll-snap-type: x mandatory;
+            }
+            .sp-media-col .media-scroll-row .scroll-media-item {
+                flex: 0 0 100%;
+                width: 100%;
+                max-width: none;
+                height: 100%;
+                aspect-ratio: auto;
+                border-radius: 0;
+                scroll-snap-align: center;
+            }
+            .sp-media-col .media-scroll-row .scroll-media-item img,
+            .sp-media-col .media-scroll-row .scroll-media-item video {
+                object-fit: contain;
+            }
+
+            /* B. VIDEO LIGHTBOX: video left, docked comments panel right */
+            .lightbox-modal.lb-docked { right: 420px; }
+            .lightbox-modal.lb-docked .lightbox-caption-block { display: none; }
+
+            .lightbox-comments-overlay {
+                left: auto;
+                width: 420px;
+                z-index: 105;
+                background: transparent;
+                align-items: stretch;
+                justify-content: stretch;
+            }
+            .lightbox-comments-sheet {
+                max-width: none;
+                width: 100%;
+                height: 100%;
+                border-radius: 0;
+                border: none;
+                border-left: 1px solid var(--brd);
+                background: var(--bg);
+                transform: none;
+                transition: none;
+            }
+            #lightboxCommentsCloseBtn { display: none; }
+        }
+
         /* ─── VIEW TRANSITIONS ─── */
         @view-transition {
             navigation: auto;
@@ -4965,6 +5134,10 @@
 
             function haptic(ms) { if (navigator.vibrate) navigator.vibrate(ms || 8); }
 
+            function isDesktopSplit() {
+                return window.matchMedia('(min-width: 1024px)').matches;
+            }
+
             function spawnRipple(el, evt) {
                 if (!el) return;
                 const rect = el.getBoundingClientRect();
@@ -5331,6 +5504,9 @@
                 pauseAllVideos();
                 setupLightboxNextPostSwipe(postId);
                 if (postId) registerPostView(postId);
+                const docked = !!(postId && isDesktopSplit());
+                document.getElementById('lightbox').classList.toggle('lb-docked', docked);
+                if (docked) openLightboxCommentsSheet(postId, { docked: true });
             }
 
             // ─── LIGHTBOX VIDEO CONTROLS (scrubber with inline mute/play) ───
@@ -5550,6 +5726,10 @@
                             if (t.closest('.share-btn')) { openShareModal(pid); return; }
                             if (t.closest('[data-repost-btn]')) { triggerRepostFromFeed(t.closest('[data-repost-btn]'), pid); return; }
                             if (t.closest('.comment-btn')) {
+                                if (isDesktopSplit()) {
+                                    document.getElementById('lightbox-comment-textarea')?.focus();
+                                    return;
+                                }
                                 openLightboxCommentsSheet(pid);
                                 return;
                             }
@@ -5612,6 +5792,7 @@
                 releaseGalleryVideos(track);
                 document.getElementById('lightbox').classList.remove('show');
                 document.getElementById('lightbox').classList.remove('ui-hidden');
+                document.getElementById('lightbox').classList.remove('lb-docked');
                 unlockBodyScroll();
                 _lightboxScrollLocked = false;
                 track.innerHTML = '';
@@ -5997,11 +6178,12 @@
                     </div>`;
             }
 
-            function openLightboxCommentsSheet(postId) {
+            function openLightboxCommentsSheet(postId, opts) {
+                const docked = !!(opts && opts.docked);
                 const overlay = document.getElementById('lightboxCommentsOverlay');
                 if (!overlay) return;
                 const post = allPosts.find(p => p.id === postId);
-                if (post && post.commentsHidden) { showToast('Comments are turned off for this post', 'o'); return; }
+                if (post && post.commentsHidden && !docked) { showToast('Comments are turned off for this post', 'o'); return; }
                 _lightboxCommentsPostId = postId;
                 _lightboxReplyTarget = null;
                 overlay.classList.add('open');
@@ -6043,13 +6225,19 @@
                     });
                 }
 
+                const commentsOff = !!(post && post.commentsHidden);
                 const list = document.getElementById('lightbox-comments-list');
-                if (list) list.innerHTML = commentSkeletons(3);
+                if (list) list.innerHTML = commentsOff ? buildCommentsOffIllustration() : commentSkeletons(3);
                 setupLightboxCommentsDelegation(postId);
-                refreshCommentsList(postId, 'lightbox-comments-list');
+                if (!commentsOff) refreshCommentsList(postId, 'lightbox-comments-list');
                 const ta = document.getElementById('lightbox-comment-textarea');
                 const sendBtn = document.getElementById('lightbox-comment-submit-btn');
-                if (ta) { ta.value = ''; ta.style.height = '40px'; }
+                if (ta) {
+                    ta.value = '';
+                    ta.style.height = '40px';
+                    ta.disabled = commentsOff;
+                    ta.placeholder = commentsOff ? 'Comments are turned off for this post' : 'Got something to comment?';
+                }
                 if (sendBtn) sendBtn.disabled = true;
                 clearCommentMedia('lightbox');
             }
@@ -6800,7 +6988,10 @@
                     }
 
                     // lightbox comment sheet
-                    if (commentsHidden && _lightboxCommentsPostId === postId) closeLightboxCommentsSheet();
+                    if (_lightboxCommentsPostId === postId) {
+                        if (isDesktopSplit()) openLightboxCommentsSheet(postId, { docked: true });
+                        else if (commentsHidden) closeLightboxCommentsSheet();
+                    }
 
                     showToast(commentsHidden ? 'Comments turned off' : 'Comments turned on', 'g');
                     closeShareModal();
@@ -7901,9 +8092,8 @@
 
                 const hasCaption = (post.title && post.title.trim()) || (post.description && post.description.trim()) || (post.content && post.content.trim());
 
-                return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container" data-post-id="${post.id}" data-author-id="${author.id}">
-                        <article>
-                          <div class="flex items-center gap-2 mb-2" style="width:100%;">
+                return `<div class="max-w-2xl mx-auto px-4 py-4 single-post-container sp-split${hasMedia ? '' : ' sp-nomedia'}" data-post-id="${post.id}" data-author-id="${author.id}">
+                          <div class="sp-author flex items-center gap-2 mb-2" style="width:100%;">
                             <img data-author-avatar src="${aa}" class="w-10 h-10 rounded-full object-cover cursor-pointer" style="flex-shrink:0;">
                             <div style="flex:1;min-width:0;">
                               <div class="flex items-center gap-1.5 flex-wrap" style="width:100%;">
@@ -7914,8 +8104,8 @@
                             </div>
                             <div style="flex-shrink:0;margin-left:8px;">${followBtn}</div>
                           </div>
-                          ${mh}
-                        </article>
+                          ${hasMedia ? `<div class="sp-media-col">${mh}</div>` : ''}
+                          <div class="sp-info-rest">
                         ${hasCaption ? `<div class="mt-2">
                           ${renderPostTitle(post.title, { noClamp: true, hasMedia, mentions: post.mentions })}
                           ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
@@ -7946,6 +8136,7 @@
                           <div id="comments-list">${post.commentsHidden ? '' : commentSkeletons(3)}</div>
                           ${post.commentsHidden ? buildCommentsOffIllustration() : ''}
                         </div>
+                          </div>
                       </div>`;
             }
 
@@ -8009,6 +8200,7 @@
 
                 fc.innerHTML = buildSinglePostHTML(post);
 
+                fs.classList.toggle('sp-nomedia-mode', !(post && getMediaItems(post).length));
                 fs.classList.add('open');
                 document.body.classList.add('explore-open');
                 fs.scrollTop = 0;
@@ -8095,6 +8287,7 @@
                 if (eb) eb.style.display = 'none';
                 setCommentBarVisible(false);
                 fs.classList.remove('open');
+                fs.classList.remove('sp-nomedia-mode');
                 document.body.classList.remove('explore-open');
                 unlockBodyScroll();
                 currentPostId = null;
@@ -8967,6 +9160,7 @@
             window.openRepostersSheet = openRepostersSheet;
             window.spawnRipple = spawnRipple;
             window.haptic = haptic;
+            window.isDesktopSplit = isDesktopSplit;
             window.openInAppWebView = openInAppWebView;
             window.getUiPage = () => uiPage;
             window.getCategoryFilter = () => currentCategoryFilter;
