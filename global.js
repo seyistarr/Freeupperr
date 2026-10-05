@@ -191,11 +191,13 @@
   };
 
   // ─── VERIFIED BADGE HTML ─────────────────────────────────────
+  // Default size is now 'sm' (small). Pass 'std' for the standard badge
+  // or 'lg' for the large profile-page badge.
   window.getVerifiedBadgeHTML = function(verifiedStatus, size) {
     if (!verifiedStatus || verifiedStatus === 'none' || verifiedStatus === 'pending') return '';
-    const sizeClass = size === 'sm' ? 'verified-badge-sm' :
-                      size === 'lg' ? 'verified-badge-lg' :
-                      'verified-badge';
+    const sizeClass = size === 'lg' ? 'verified-badge-lg' :
+                      size === 'std' ? 'verified-badge' :
+                      'verified-badge-sm';
     const label = verifiedStatus === 'official' ? 'Official' :
                   verifiedStatus === 'staff' ? 'Staff' :
                   verifiedStatus === 'business' ? 'Business' : 'Verified';
@@ -239,7 +241,7 @@
       const badgeWrapper = el.querySelector('[data-author-badge-wrapper]');
       if (badgeWrapper) {
         if (isVerified) {
-          badgeWrapper.innerHTML = window.getVerifiedBadgeHTML(verifiedStatus);
+          badgeWrapper.innerHTML = window.getVerifiedBadgeHTML(verifiedStatus, badgeWrapper.dataset.badgeSize || 'sm');
           badgeWrapper.style.display = '';
         } else {
           badgeWrapper.innerHTML = '';
@@ -403,9 +405,9 @@
         ` : ''}
         <div class="meta">
           <span class="status-badge ${statusClass}">${status}</span>
-          <span>📍 ${listing.location || 'Campus'}</span>
+          <span>${listing.location || 'Campus'}</span>
           <span>${time}</span>
-          ${listing.views_count ? `<span>👁️ ${listing.views_count}</span>` : ''}
+          ${listing.views_count ? `<span>${listing.views_count}</span>` : ''}
         </div>
       </div>
     `;
@@ -424,5 +426,5 @@
     initGlobal();
   }
 
-  console.log('✅ global.js loaded (full version with marketplace helpers)');
+  console.log('global.js loaded (full version with marketplace helpers)');
 })();
