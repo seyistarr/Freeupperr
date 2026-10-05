@@ -2476,6 +2476,49 @@
             padding: 16px;
         }
 
+        /* ─── LIGHTBOX SPLIT LAYOUT (tablet + desktop) ─── */
+        :root {
+            --lb-right-w: 360px;
+        }
+        @media (min-width: 1024px) {
+            :root {
+                --lb-right-w: 420px;
+            }
+        }
+        @media (min-width: 768px) {
+            .lightbox-modal.lb-split {
+                right: var(--lb-right-w);
+            }
+            .lightbox-modal.lb-split .lightbox-caption-block {
+                display: none;
+            }
+            .lightbox-modal.lb-split .gallery-lightbox-footer {
+                padding-top: 24px;
+            }
+            .lightbox-comments-overlay {
+                inset: 0 0 0 auto;
+                width: var(--lb-right-w);
+                background: transparent;
+                align-items: stretch;
+                pointer-events: none;
+            }
+            .lightbox-comments-overlay.open {
+                pointer-events: auto;
+            }
+            .lightbox-comments-sheet {
+                height: 100%;
+                max-width: none;
+                border-radius: 0;
+                border: none;
+                border-left: 1px solid var(--brd);
+                transform: none;
+                transition: none;
+            }
+            #lightboxCommentsCloseBtn {
+                display: none;
+            }
+        }
+
         /* ─── SINGLE POST SPLIT LAYOUT (tablet + desktop) ─── */
         .explore-fullscreen {
             --sp-right-w: 360px;
@@ -5401,6 +5444,10 @@
                 pauseAllVideos();
                 setupLightboxNextPostSwipe(postId);
                 if (postId) registerPostView(postId);
+                if (isLbSplit()) {
+                    if (postId) openLightboxCommentsSheet(postId);
+                    else closeLightboxCommentsSheet();
+                }
             }
 
             // ─── LIGHTBOX VIDEO CONTROLS (scrubber with inline mute/play) ───
@@ -5620,7 +5667,12 @@
                             if (t.closest('.share-btn')) { openShareModal(pid); return; }
                             if (t.closest('[data-repost-btn]')) { triggerRepostFromFeed(t.closest('[data-repost-btn]'), pid); return; }
                             if (t.closest('.comment-btn')) {
-                                openLightboxCommentsSheet(pid);
+                                if (isLbSplit()) {
+                                    const _lbFocus = document.getElementById('lightbox-comment-textarea');
+                                    if (_lbFocus && !_lbFocus.disabled) _lbFocus.focus();
+                                } else {
+                                    openLightboxCommentsSheet(pid);
+                                }
                                 return;
                             }
                         });
@@ -5682,6 +5734,7 @@
                 releaseGalleryVideos(track);
                 document.getElementById('lightbox').classList.remove('show');
                 document.getElementById('lightbox').classList.remove('ui-hidden');
+                document.getElementById('lightbox').classList.remove('lb-split');
                 unlockBodyScroll();
                 _lightboxScrollLocked = false;
                 track.innerHTML = '';
@@ -6071,10 +6124,12 @@
                 const overlay = document.getElementById('lightboxCommentsOverlay');
                 if (!overlay) return;
                 const post = allPosts.find(p => p.id === postId);
-                if (post && post.commentsHidden) { showToast('Comments are turned off for this post', 'o'); return; }
+                const commentsOff = !!(post && post.commentsHidden);
+                if (commentsOff && !isLbSplit()) { showToast('Comments are turned off for this post', 'o'); return; }
                 _lightboxCommentsPostId = postId;
                 _lightboxReplyTarget = null;
                 overlay.classList.add('open');
+                if (isLbSplit()) document.getElementById('lightbox').classList.add('lb-split');
 
                 const lbCount = document.getElementById('lightboxCommentsCount');
                 if (lbCount) lbCount.textContent = post ? formatCount(getCommentCount(post)) : '';
@@ -6114,9 +6169,18 @@
                 }
 
                 const list = document.getElementById('lightbox-comments-list');
-                if (list) list.innerHTML = commentSkeletons(3);
-                setupLightboxCommentsDelegation(postId);
-                refreshCommentsList(postId, 'lightbox-comments-list');
+                if (commentsOff) {
+                    if (list) list.innerHTML = buildCommentsOffIllustration();
+                } else {
+                    if (list) list.innerHTML = commentSkeletons(3);
+                    setupLightboxCommentsDelegation(postId);
+                    refreshCommentsList(postId, 'lightbox-comments-list');
+                }
+                const _lbTa = document.getElementById('lightbox-comment-textarea');
+                if (_lbTa) {
+                    _lbTa.disabled = commentsOff;
+                    _lbTa.placeholder = commentsOff ? 'Comments are turned off for this post' : 'Got something to comment?';
+                }
                 const ta = document.getElementById('lightbox-comment-textarea');
                 const sendBtn = document.getElementById('lightbox-comment-submit-btn');
                 if (ta) { ta.value = ''; ta.style.height = '40px'; }
@@ -6124,9 +6188,15 @@
                 clearCommentMedia('lightbox');
             }
 
+            function isLbSplit() {
+                return window.matchMedia('(min-width: 768px)').matches;
+            }
+
             function closeLightboxCommentsSheet() {
                 const overlay = document.getElementById('lightboxCommentsOverlay');
                 if (overlay) overlay.classList.remove('open');
+                const lbEl = document.getElementById('lightbox');
+                if (lbEl) lbEl.classList.remove('lb-split');
                 _lightboxCommentsPostId = null;
                 _lightboxReplyTarget = null;
             }
