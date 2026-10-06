@@ -688,6 +688,37 @@ function getCurrentUser() {
   if (window.AuthUser && typeof window.AuthUser.getCurrentUser === 'function') return window.AuthUser.getCurrentUser();
   return { id: 'guest', isLoggedIn: false, avatar: '' };
 }
+
+// ─── ORIGINAL SOUND: derive an MP3 URL from a Cloudinary video URL ───
+//     Cloudinary can deliver an uploaded video asset as an audio
+//     format (e.g. MP3) by changing the delivered extension.
+//     The transformed asset is generated on demand and cached.
+//     We use this to give a freshly-published video its own real
+//     FreeUpper sound without needing an FFmpeg pipeline yet.
+function buildOriginalAudioUrl(videoUrl) {
+  if (!videoUrl) return null;
+  try {
+    const url = new URL(videoUrl);
+    // Cloudinary video assets can be delivered as audio by changing
+    // the output extension to a supported audio format.
+    if (/\.(mp4|mov|webm|m4v)$/i.test(url.pathname)) {
+      url.pathname = url.pathname.replace(
+        /\.(mp4|mov|webm|m4v)$/i,
+        '.mp3'
+      );
+    } else if (!/\.mp3$/i.test(url.pathname)) {
+      url.pathname += '.mp3';
+    }
+    return url.toString();
+  } catch (error) {
+    console.warn(
+      'Could not build original audio URL:',
+      error
+    );
+    return null;
+  }
+}
+
 function closeStudio() {
   stopCameraStream();
   window.location.href = 'video.html';  // ─── GO TO VIDEO FEED ───
@@ -1418,16 +1449,21 @@ async function publishPost() {
       mentions = window.Mentions.extractMentions(capField);
     }
 
+    // ─── Determine media kind up front ──────────────────────────────
+    // `isVideo` is used later by the original-sound block, so it must
+    // be in function scope, not nested inside the S.media branch.
+    const isVideo = !!(S.media && S.media.type === 'video');
+
     // ─── Sound is OPTIONAL ──────────────────────────────────────────
-    // Only attach a sound when the user explicitly selected one.
-    // If no sound was selected, sound_id will be null and the post
-    // publishes normally. We do NOT auto-create an "Original sound".
+    // finalSoundId is the ID of a sound the user explicitly picked
+    // from the FreeUpper library. If null, this post has no chosen
+    // sound — and (if it's a video) we will create an ORIGINAL sound
+    // from the video's own audio below.
     const finalSoundId = S.attachedSound?.id || null;
 
     let payload;
     if (S.media) {
       setProgress(0, 'Uploading…', 'Sending your media to Freeupper');
-      const isVideo = S.media.type === 'video';
 
       // Handle multiple images: upload each, collect URLs
       let mediaUrls = [];
@@ -1494,19 +1530,72 @@ async function publishPost() {
       };
     }
 
-    // ─── IMPORTANT ──────────────────────────────────────────────────
-    // Do NOT auto-create an "Original sound" here.
-    // Sound is optional. PostsAPI.createPost() already handles
-    // sound_id: null gracefully (sound_id: fields.sound_id || null).
     const post = await PostsAPI.createPost(payload);
+    let createdOriginalSound = null;
 
-    // Record sound usage only when the user actually selected a real sound.
-    // Posts without a sound do not create or increment anything.
-    if (post.id && finalSoundId && window.SoundsAPI?.incrementSoundUsage) {
+    // ────────────────────────────────────────────────────────────────
+    // ORIGINAL SOUND
+    // ────────────────────────────────────────────────────────────────
+    // If this is a video and the user did NOT explicitly select
+    // another FreeUpper sound, turn the video's original audio
+    // into a real FreeUpper sound.
+    //
+    // This does NOT create a fake "Original sound" record.
+    // It creates a real sounds row linked to this exact post
+    // via the idempotent create_original_sound_for_post() RPC.
+    // ────────────────────────────────────────────────────────────────
+    if (
+      post.id &&
+      isVideo &&
+      !finalSoundId &&
+      window.SoundsAPI?.createOriginalSoundForPost
+    ) {
+      try {
+        const audioUrl = buildOriginalAudioUrl(payload.mediaUrl);
+        if (audioUrl) {
+          setProgress(
+            97,
+            'Creating original sound…',
+            'Making your audio available on FreeUpper'
+          );
+          createdOriginalSound =
+            await window.SoundsAPI.createOriginalSoundForPost(
+              post.id,
+              audioUrl
+            );
+          console.log(
+            '🎵 Original sound created:',
+            createdOriginalSound
+          );
+        }
+      } catch (soundErr) {
+        // The video post already exists, so do not fail the entire
+        // publication if sound creation has a temporary problem.
+        console.warn(
+          'Original sound creation failed:',
+          soundErr
+        );
+      }
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // SELECTED FREEUPPER SOUND
+    // ────────────────────────────────────────────────────────────────
+    // If the user explicitly selected an existing sound,
+    // count this publication as one use.
+    // ────────────────────────────────────────────────────────────────
+    if (
+      post.id &&
+      finalSoundId &&
+      window.SoundsAPI?.incrementSoundUsage
+    ) {
       try {
         await window.SoundsAPI.incrementSoundUsage(finalSoundId);
       } catch (soundErr) {
-        console.warn('Sound usage update failed:', soundErr);
+        console.warn(
+          'Sound usage update failed:',
+          soundErr
+        );
       }
     }
 
