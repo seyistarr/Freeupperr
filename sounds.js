@@ -7,27 +7,43 @@
 //
 // Tables used:
 //   sounds        (id, title, art_url, audio_url, duration, bpm,
-//                   created_by, created_at, usage_count)
+//                   created_by, created_at, usage_count,
+//                   artist_name, sound_type, source_post_id,
+//                   is_original, status)
 //   saved_sounds  (id, user_id, sound_id, created_at)
 //   posts         (sound_id, user_id, media_url, media_type, views,
 //                   like_count, is_pinned, created_at)
 //
 // DEPENDENCIES: the following SQL must exist in your Supabase schema:
-//   increment_sound_usage(text)  – atomic usage counter RPC
-//   get_sound_stats(text)        – aggregate stats RPC
+//   increment_sound_usage(text)          – atomic usage counter RPC
+//   get_sound_stats(text)                – aggregate stats RPC
+//   create_original_sound_for_post(...)  – idempotent original-sound RPC
 //
 // IMPORTANT NOTE FOR CONSUMERS (e.g. studio.html):
-//   SoundsAPI.createSound() is meant to be called ONLY when a user
-//   explicitly creates a new "Original sound" — e.g. a "Save as
-//   original sound" flow, or a dedicated upload-sound screen.
 //
-//   Do NOT call createSound() automatically inside a post-publish
-//   flow. Every post already accepts an OPTIONAL sound_id via
-//   PostsAPI.createPost({ sound_id }), where sound_id: null is a
-//   perfectly valid value. Auto-creating an Original sound on every
-//   post was causing the "Failed to attach sound to post" error for
-//   image, video, and text posts. That auto-creation block has been
-//   removed from studio.html. Please keep it that way.
+//   There are now TWO distinct ways a sound gets created. Use the
+//   right one for the right situation.
+//
+//   1. SoundsAPI.createOriginalSoundForPost(postId, audioUrl, ...)
+//      → This is the SANCTIONED path for the "video just got
+//        published" flow. It calls the create_original_sound_for_post
+//        RPC, which is idempotent and links sounds.source_post_id to
+//        the published post. Safe to call automatically after
+//        PostsAPI.createPost() when the post is a video and the user
+//        did not pick another FreeUpper sound.
+//
+//   2. SoundsAPI.createSound(fields)
+//      → ONLY for explicit user-driven flows such as a dedicated
+//        "Upload a sound" screen or an admin/import tool. Do NOT
+//        call this from a post-publish pipeline. It does NOT create
+//        the sounds.source_post_id link — that is exactly what
+//        createOriginalSoundForPost() exists for.
+//
+//   Posts accept `sound_id: null` just fine — a sound is optional.
+//   The old "auto-create via createSound() on every post" pattern
+//   was the root cause of the "Failed to attach sound to post"
+//   error users hit on image, video, and text posts. That pattern
+//   is gone. Please keep it that way.
 // =====================================================================
 
 (function() {
@@ -69,6 +85,14 @@
       createdBy: row.created_by,
       createdAt: row.created_at,
       usageCount: row.usage_count || 0,
+
+      // ── Original-sound metadata (added to the sounds table) ──
+      artistName: row.artist_name || null,
+      soundType: row.sound_type || 'original',
+      sourcePostId: row.source_post_id || null,
+      isOriginal: !!row.is_original,
+      status: row.status || 'active',
+
       creator: prof ? {
         id: prof.id,
         displayName: prof.display_name || 'Anonymous',
@@ -251,20 +275,22 @@
 
   // ─── CREATE SOUND ──────────────────────────────────────────────────
   //
-  //   ⚠️  IMPORTANT: This function should ONLY be called when the user
-  //   explicitly creates a new Original sound (e.g. via a dedicated
-  //   "Upload sound" or "Save as original sound" flow).
+  //   ⚠️  IMPORTANT: This function is ONLY for explicit user-driven
+  //   flows — e.g. a dedicated "Upload sound" screen or an admin
+  //   import tool. It does NOT link the sound to a source post.
   //
-  //   Do NOT call this automatically from a post-publish pipeline.
-  //   Posts accept `sound_id: null` just fine — the sound is optional.
-  //   Auto-creating an Original sound on every post was the root cause
-  //   of the "Failed to attach sound to post" error users hit on
-  //   image, video, and text posts.
+  //   If you are inside a post-publish flow and you want the video's
+  //   audio to become a real FreeUpper sound attached to that exact
+  //   post, call createOriginalSoundForPost() instead. That path is
+  //   idempotent and creates the sounds.source_post_id link.
+  //
+  //   Normal sounds receive their ID from PostgreSQL. Only a
+  //   controlled / admin import may provide an explicit `fields.id`.
   //
   async function createSound(fields) {
     const userId = await _getUserId();
+
     const payload = {
-      id: fields.id || ('sound_' + userId + '_' + Date.now()),
       title: fields.title || 'Original sound',
       art_url: fields.artUrl || null,
       audio_url: fields.audioUrl || null,
@@ -272,6 +298,12 @@
       bpm: fields.bpm || null,
       created_by: userId,
     };
+
+    // Only controlled/admin imports may provide an explicit ID.
+    // Normal sounds receive their ID from PostgreSQL.
+    if (fields.id) {
+      payload.id = fields.id;
+    }
 
     const { data: sound, error } = await sb
       .from('sounds')
@@ -284,6 +316,50 @@
     // Fetch the creator's profile to return a fully mapped object.
     const profile = await _fetchProfile(userId);
     return mapSound(sound, profile);
+  }
+
+  // ─── CREATE ORIGINAL SOUND FROM A PUBLISHED VIDEO ────────────────
+  //
+  //   Sanctioned post-publish path. Calls the idempotent
+  //   create_original_sound_for_post() RPC, which:
+  //     • verifies the caller owns the post
+  //     • verifies the post is a video
+  //     • creates a real sounds row with source_post_id set
+  //     • attaches sounds.id to posts.sound_id
+  //     • reuses the existing sound if the RPC is retried
+  //
+  //   Safe to call automatically after PostsAPI.createPost() when
+  //   the post is a video and the user did not pick another sound.
+  //
+  async function createOriginalSoundForPost(
+    postId,
+    audioUrl,
+    artUrl = null,
+    title = null
+  ) {
+    if (!postId || !audioUrl) {
+      throw new Error('postId and audioUrl are required');
+    }
+
+    const { data, error } = await sb.rpc(
+      'create_original_sound_for_post',
+      {
+        p_post_id: postId,
+        p_audio_url: audioUrl,
+        p_art_url: artUrl,
+        p_title: title,
+      }
+    );
+
+    if (error) throw error;
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+      throw new Error('Original sound was not created');
+    }
+
+    const profile = await _fetchProfile(row.created_by);
+    return mapSound(row, profile);
   }
 
   // ─── UPDATE SOUND ──────────────────────────────────────────────────
@@ -428,6 +504,7 @@
     loadRecommendedSounds,
     loadOriginalSounds,
     createSound,
+    createOriginalSoundForPost,
     updateSound,
     saveSound,
     unsaveSound,
