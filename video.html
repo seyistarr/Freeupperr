@@ -1060,7 +1060,7 @@
             color: var(--text);
         }
 
-        /* ─── FIX #6: "More like this" section ─── */
+        /* ─── "More like this" section ─── */
         .similar-posts-section {
             padding: 12px 0 4px;
             border-bottom: 1px solid var(--brd);
@@ -3006,10 +3006,12 @@
         function openSoundPage(idx) {
             const v = videoPosts[idx];
             if (!v) return;
+            // Only open if a real sound_id exists on the post
+            if (!v.soundId) return;
             if (window.VideoRender) {
-                VideoRender.openSoundPage(v.soundId || VideoRender.resolveSoundId(v.postData || v));
+                VideoRender.openSoundPage(v.soundId);
             } else {
-                window.location.href = 'sound.html?id=' + encodeURIComponent(v.soundId || '');
+                window.location.href = 'sound.html?id=' + encodeURIComponent(v.soundId);
             }
         }
 
@@ -3124,13 +3126,13 @@
                         }
                     }
 
-                    let soundId = post.sound_id || null;
-                    if (!soundId) {
-                        const audioTitle = post.sound_title || post.audio_track || 'original';
-                        const clean = audioTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        soundId = 'sound_' + post.user_id + '_' + (clean || 'original');
-                    }
-                    const soundTitle = post.sound_title || post.audio_track || 'Original Audio · ' + author.name;
+                    // ─── Only use a real sound ID stored on the post ───
+                    // Never create a fake/synthetic sound ID.
+                    const soundId = post.sound_id || null;
+                    const soundTitle =
+                        post.sound_title ||
+                        post.audio_track ||
+                        'Original Audio · ' + author.name;
                     const soundArt = post.sound_art || author.avatar ||
                         'https://api.dicebear.com/7.x/avataaars/svg?seed=' + author.name;
 
@@ -3140,7 +3142,6 @@
                     const textBody = isTextPost ? (post.content || post.title || '') : '';
                     let fullCaption;
                     if (isTextPost) {
-                        // text lives on the card; only hashtags go under the avatar
                         fullCaption = tagsLine;
                     } else {
                         const defaultTitles = ['Video', 'Photo', 'Photo Carousel'];
@@ -3342,7 +3343,13 @@
             return `
             <div class="v-card" data-idx="${i}" data-post-id="${v.id}" data-author-id="${v.authorId}">
                 ${mediaHtml}
-                <div class="v-skeleton" id="skel-${i}"><div class="v-skeleton-pulse"></div></div>
+                <div
+                    class="v-skeleton"
+                    id="skel-${i}"
+                    style="${isTextPost ? 'display:none;' : ''}"
+                >
+                    <div class="v-skeleton-pulse"></div>
+                </div>
                 <div class="v-grad-top"></div>
                 <div class="v-grad-bot"></div>
                 <div class="v-pause-icon" id="pauseIcon-${i}">
@@ -3385,6 +3392,7 @@
                             <svg viewBox="0 0 24 24"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                         </button>
                     </div>
+                    ${ v.soundId ? `
                     <div class="v-disc-wrap" onclick="event.stopPropagation(); openSoundPage(${i})" title="View sound details">
                         <div class="v-disc">
                             <img src="${v.soundImg || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + v.creator}" alt="sound" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${v.creator}'">
@@ -3392,7 +3400,7 @@
                         <div class="v-disc-note">
                             <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
                         </div>
-                    </div>
+                    </div>` : '' }
                 </div>
 
                 <div class="v-info">
@@ -3446,7 +3454,7 @@
                             : ''
                     }
                     ${
-                        !isTextPost
+                        !isTextPost && v.soundId
                             ? `<div
                                 class="v-music-tag"
                                 onclick="event.stopPropagation(); openSoundPage(${i})"
@@ -3605,6 +3613,9 @@
 
             if (v.mediaType !== 'video') {
                 ytState[idx] = null;
+                // Text and image posts do not need the video loading skeleton.
+                const sk = document.getElementById('skel-' + idx);
+                if (sk) sk.style.display = 'none';
                 return;
             }
 
@@ -4271,7 +4282,6 @@
             try {
                 const comments = await window.PostsAPI.loadComments(postId);
                 const sorted = [...comments].sort((a, b) => {
-                    // Pinned first
                     if (!!b.pinned !== !!a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
                     if (commentSortMode === 'newest') return new Date(b.time) - new Date(a.time);
                     return (b.likeCount || 0) - (a.likeCount || 0);
@@ -4535,7 +4545,6 @@
             const locked = !!v.commentsHidden && !isOwner;
             applyCommentBarLockState(locked);
 
-            // Load similar posts
             loadSimilarPosts(v.id);
 
             if (locked) {
@@ -4810,7 +4819,6 @@
             if (thumb) thumb.src = v.poster || v.src || '';
             if (cap) cap.textContent = (v.caption || v.textBody || '').split('\n')[0].slice(0, 60);
             if (handle) handle.textContent = v.handle || '';
-            // Show Delete only on own posts
             const delRow = document.getElementById('deletePostRow');
             if (delRow) delRow.style.display = v.isOwn ? 'flex' : 'none';
             openSheet('shareSheet');
@@ -4920,19 +4928,12 @@
             const ok = confirm('Delete this post? This cannot be undone.');
             if (!ok) return;
 
-            // Visual feedback
             showToast('Deleting…');
 
             try {
                 await window.PostsAPI.deletePost(v.id);
-
-                // Close any open sheets first
                 closeAllSheets();
-
-                // Remove from local state
                 videoPosts = videoPosts.filter(p => p.id !== v.id);
-
-                // Rebuild the feed (fall back to 'foryou' if Following becomes empty)
                 let filtered = buildEligibleFeed(feedMode);
                 if (filtered.length === 0 && feedMode === 'following') {
                     feedMode = 'foryou';
@@ -4941,7 +4942,6 @@
                     filtered = buildEligibleFeed('foryou');
                 }
                 buildFeed(filtered);
-
                 showToast('Post deleted ✓');
             } catch (err) {
                 console.error('Delete post error:', err);
@@ -5004,13 +5004,13 @@
                 '<div><div class="more-row-lbl" id="moreCommentsLbl">' + (v.commentsHidden ? 'Turn On Comments' : 'Turn Off Comments') + '</div></div>' +
                 '</button>' : '';
 
-            const soundRow =
+            const soundRow = v.soundId ?
                 '<button class="more-row" onclick="moreAction(\'View sound: ' + escapeHtml(v.sound) + '\'); openSoundPage(' +
                 idx + ')">' +
                 '<svg class="more-row-ico" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>' +
                 '<div><div class="more-row-lbl">View sound</div><div class="more-row-sub">' + escapeHtml(v.sound) +
                 '</div></div>' +
-                '</button>';
+                '</button>' : '';
 
             const otherRows = '' +
                 '<button class="more-row" onclick="moreAction(\'Not interested in this video\')">' +
@@ -5251,7 +5251,7 @@
                 pullOffset = 0;
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · text-card v-info fix + padding tuned ✓');
+            console.log('Freeupper Video Feed · no fake sound IDs · text/image skeleton fix ✓');
         }
 
         if (document.readyState === 'loading') {
