@@ -260,6 +260,40 @@
   }
 
   /**
+   * Open a sound page.
+   * If already on sound.html with the same sound ID, do nothing.
+   * If on sound.html with a different ID, push state + dispatch event
+   * so the page can swap without a full reload.
+   * Otherwise, navigate to sound.html?id=<soundId>.
+   */
+  function openSound(soundId) {
+    if (!soundId) {
+      console.warn('Router.openSound: No sound ID provided');
+      return;
+    }
+
+    const target = 'sound.html?id=' + encodeURIComponent(soundId);
+
+    if (isOnPage('sound.html')) {
+      const currentParams = new URLSearchParams(window.location.search);
+      if (currentParams.get('id') === String(soundId)) {
+        return;
+      }
+      history.pushState({}, '', target);
+      window.dispatchEvent(new CustomEvent('router:navigate', {
+        detail: {
+          type: 'sound',
+          id: soundId,
+          page: 'sound.html'
+        }
+      }));
+      return;
+    }
+
+    window.location.href = target;
+  }
+
+  /**
    * Navigate to chat with a specific user.
    */
   function openChat(userId) {
@@ -425,6 +459,7 @@
     openHashtag,
     openSearch,
     openChat,
+    openSound,
     openNotifications,
     goBack,
     goHome,
