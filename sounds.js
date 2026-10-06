@@ -15,6 +15,19 @@
 // DEPENDENCIES: the following SQL must exist in your Supabase schema:
 //   increment_sound_usage(text)  – atomic usage counter RPC
 //   get_sound_stats(text)        – aggregate stats RPC
+//
+// IMPORTANT NOTE FOR CONSUMERS (e.g. studio.html):
+//   SoundsAPI.createSound() is meant to be called ONLY when a user
+//   explicitly creates a new "Original sound" — e.g. a "Save as
+//   original sound" flow, or a dedicated upload-sound screen.
+//
+//   Do NOT call createSound() automatically inside a post-publish
+//   flow. Every post already accepts an OPTIONAL sound_id via
+//   PostsAPI.createPost({ sound_id }), where sound_id: null is a
+//   perfectly valid value. Auto-creating an Original sound on every
+//   post was causing the "Failed to attach sound to post" error for
+//   image, video, and text posts. That auto-creation block has been
+//   removed from studio.html. Please keep it that way.
 // =====================================================================
 
 (function() {
@@ -26,7 +39,7 @@
   }
   const sb = window.sb;
 
-  // ─── Internal auth helper ───────────────────────────────────────────
+  // ─── Internal auth helpers ──────────────────────────────────────────
   async function _getUserId() {
     const { data: { user }, error } = await sb.auth.getUser();
     if (error || !user) throw new Error('You must be logged in to perform this action.');
@@ -66,7 +79,7 @@
     };
   }
 
-  // ─── Helper to fetch a profile by ID ──────────────────────────────
+  // ─── Fetch a single profile by ID ───────────────────────────────────
   async function _fetchProfile(userId) {
     if (!userId) return null;
     try {
@@ -79,6 +92,24 @@
       return data;
     } catch (_) {
       return null;
+    }
+  }
+
+  // ─── Fetch many profiles in one round-trip, return a map ────────────
+  //   Used by every list-style loader to avoid the same two-step
+  //   profile-fetch block being duplicated six times.
+  async function _fetchProfiles(userIds) {
+    const ids = [...new Set((userIds || []).filter(Boolean))];
+    if (!ids.length) return {};
+    try {
+      const { data, error } = await sb
+        .from('profiles')
+        .select('id, display_name, username, avatar_url, verified_status')
+        .in('id', ids);
+      if (error || !data) return {};
+      return Object.fromEntries(data.map(p => [p.id, p]));
+    } catch (_) {
+      return {};
     }
   }
 
@@ -120,18 +151,7 @@
       return [];
     }
 
-    // Fetch profiles for all unique user_ids
-    const userIds = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
-    let profiles = {};
-    if (userIds.length) {
-      const { data: profData } = await sb
-        .from('profiles')
-        .select('id, display_name, username, avatar_url')
-        .in('id', userIds);
-      if (profData) {
-        profiles = Object.fromEntries(profData.map(p => [p.id, p]));
-      }
-    }
+    const profiles = await _fetchProfiles(posts.map(p => p.user_id));
 
     return posts.map(row => ({
       id: row.id,
@@ -167,19 +187,7 @@
       return [];
     }
 
-    // Fetch all creators' profiles
-    const creatorIds = [...new Set(sounds.map(s => s.created_by).filter(Boolean))];
-    let profiles = {};
-    if (creatorIds.length) {
-      const { data: profData } = await sb
-        .from('profiles')
-        .select('id, display_name, username, avatar_url, verified_status')
-        .in('id', creatorIds);
-      if (profData) {
-        profiles = Object.fromEntries(profData.map(p => [p.id, p]));
-      }
-    }
-
+    const profiles = await _fetchProfiles(sounds.map(s => s.created_by));
     return sounds.map(s => mapSound(s, profiles[s.created_by] || null));
   }
 
@@ -196,18 +204,7 @@
       return [];
     }
 
-    const creatorIds = [...new Set(sounds.map(s => s.created_by).filter(Boolean))];
-    let profiles = {};
-    if (creatorIds.length) {
-      const { data: profData } = await sb
-        .from('profiles')
-        .select('id, display_name, username, avatar_url, verified_status')
-        .in('id', creatorIds);
-      if (profData) {
-        profiles = Object.fromEntries(profData.map(p => [p.id, p]));
-      }
-    }
-
+    const profiles = await _fetchProfiles(sounds.map(s => s.created_by));
     return sounds.map(s => mapSound(s, profiles[s.created_by] || null));
   }
 
@@ -230,18 +227,7 @@
       return [];
     }
 
-    const creatorIds = [...new Set(sounds.map(s => s.created_by).filter(Boolean))];
-    let profiles = {};
-    if (creatorIds.length) {
-      const { data: profData } = await sb
-        .from('profiles')
-        .select('id, display_name, username, avatar_url, verified_status')
-        .in('id', creatorIds);
-      if (profData) {
-        profiles = Object.fromEntries(profData.map(p => [p.id, p]));
-      }
-    }
-
+    const profiles = await _fetchProfiles(sounds.map(s => s.created_by));
     return sounds.map(s => mapSound(s, profiles[s.created_by] || null));
   }
 
@@ -259,22 +245,22 @@
       return [];
     }
 
-    const creatorIds = [...new Set(sounds.map(s => s.created_by).filter(Boolean))];
-    let profiles = {};
-    if (creatorIds.length) {
-      const { data: profData } = await sb
-        .from('profiles')
-        .select('id, display_name, username, avatar_url, verified_status')
-        .in('id', creatorIds);
-      if (profData) {
-        profiles = Object.fromEntries(profData.map(p => [p.id, p]));
-      }
-    }
-
+    const profiles = await _fetchProfiles(sounds.map(s => s.created_by));
     return sounds.map(s => mapSound(s, profiles[s.created_by] || null));
   }
 
   // ─── CREATE SOUND ──────────────────────────────────────────────────
+  //
+  //   ⚠️  IMPORTANT: This function should ONLY be called when the user
+  //   explicitly creates a new Original sound (e.g. via a dedicated
+  //   "Upload sound" or "Save as original sound" flow).
+  //
+  //   Do NOT call this automatically from a post-publish pipeline.
+  //   Posts accept `sound_id: null` just fine — the sound is optional.
+  //   Auto-creating an Original sound on every post was the root cause
+  //   of the "Failed to attach sound to post" error users hit on
+  //   image, video, and text posts.
+  //
   async function createSound(fields) {
     const userId = await _getUserId();
     const payload = {
@@ -294,7 +280,8 @@
       .single();
 
     if (error) throw error;
-    // Fetch the creator's profile to return a fully mapped object
+
+    // Fetch the creator's profile to return a fully mapped object.
     const profile = await _fetchProfile(userId);
     return mapSound(sound, profile);
   }
@@ -329,6 +316,7 @@
       .from('saved_sounds')
       .insert({ user_id: userId, sound_id: soundId });
 
+    // 23505 = unique_violation → already saved, treat as success
     if (error && error.code !== '23505') throw error;
     return { saved: true };
   }
@@ -385,20 +373,10 @@
 
     if (!sounds?.length) return [];
 
-    // Fetch profiles for creators
-    const creatorIds = [...new Set(sounds.map(s => s.created_by).filter(Boolean))];
-    let profiles = {};
-    if (creatorIds.length) {
-      const { data: profData } = await sb
-        .from('profiles')
-        .select('id, display_name, username, avatar_url, verified_status')
-        .in('id', creatorIds);
-      if (profData) {
-        profiles = Object.fromEntries(profData.map(p => [p.id, p]));
-      }
-    }
+    const profiles = await _fetchProfiles(sounds.map(s => s.created_by));
 
-    // Map sounds and attach the savedAt timestamp
+    // Map sounds and attach the savedAt timestamp, preserving the
+    // user's save order (most recent first).
     return saved.map(item => {
       const sound = sounds.find(s => s.id === item.sound_id);
       if (!sound) return null;
