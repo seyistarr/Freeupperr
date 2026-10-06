@@ -1365,7 +1365,11 @@ async function publishPost() {
       mentions = window.Mentions.extractMentions(capField);
     }
 
-    let finalSoundId = S.attachedSound ? S.attachedSound.id : null;
+    // ─── Sound is OPTIONAL ──────────────────────────────────────────
+    // Only attach a sound when the user explicitly selected one.
+    // If no sound was selected, sound_id will be null and the post
+    // publishes normally. We do NOT auto-create an "Original sound".
+    const finalSoundId = S.attachedSound?.id || null;
 
     let payload;
     if (S.media) {
@@ -1437,25 +1441,10 @@ async function publishPost() {
       };
     }
 
-    // ─── IF NO SOUND ATTACHED, AUTO-CREATE "ORIGINAL SOUND" ──────────
-    // ─── PATCH: now throws on failure so the post won't publish without a sound ──
-    if (!finalSoundId && window.SoundsAPI) {
-      const isVideo = S.media && S.media.type === 'video';
-      const audioUrl = isVideo && S.media.url ? S.media.url : null;
-      try {
-        const originalSound = await SoundsAPI.createSound({
-          title: 'Original sound',
-          artUrl: null,
-          audioUrl: audioUrl,
-        });
-        finalSoundId = originalSound.id;
-        payload.sound_id = finalSoundId;
-      } catch (e) {
-        console.error('Could not auto-create original sound:', e);
-        throw new Error('Failed to attach sound to post. Please try again.');
-      }
-    }
-
+    // ─── IMPORTANT ──────────────────────────────────────────────────
+    // Do NOT auto-create an "Original sound" here.
+    // Sound is optional. PostsAPI.createPost() already handles
+    // sound_id: null gracefully (sound_id: fields.sound_id || null).
     const post = await PostsAPI.createPost(payload);
 
     if (post.id && mentions.length && window.Mentions?.notifyMentionedUsers) {
