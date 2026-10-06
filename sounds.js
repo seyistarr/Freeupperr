@@ -138,6 +138,20 @@
   }
 
   // ─── LOAD SINGLE SOUND (two‑step) ──────────────────────────────────
+  //
+  //   Contract:
+  //     • Returns a mapped sound object when the row exists.
+  //     • Returns null when the query succeeded but no row matched
+  //       (i.e. the sound genuinely does not exist).
+  //     • THROWS the raw Supabase/PostgREST error when the request
+  //       itself failed (network, RLS, auth, malformed query, etc.).
+  //
+  //   Callers MUST distinguish "null = missing" from "throw = failed".
+  //   sound.html's loadSoundPage() already wraps this call in a
+  //   try/catch, so a thrown error surfaces in the console with the
+  //   real PostgREST fields instead of being flattened into the
+  //   generic "sound couldn't be found" empty state.
+  //
   async function loadSound(soundId) {
     if (!soundId) return null;
     const { data: sound, error } = await sb
@@ -146,15 +160,18 @@
       .eq('id', soundId)
       .maybeSingle();
 
-    if (error || !sound) {
-      console.error(
-        '❌ loadSound failed',
-        {
-          soundId,
-          error,
-          sound
-        }
-      );
+    if (error) {
+      console.error('❌ loadSound Supabase error:', {
+        soundId,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      throw error;
+    }
+    if (!sound) {
+      console.error('❌ Sound does not exist:', soundId);
       return null;
     }
 
