@@ -29,7 +29,7 @@
     const _soundCache = new Map(); // soundId -> resolved meta object | Promise
 
     // ─── Persistent audio player for image/text post sounds ────────────
-    // Only ONE sound plays at a time. callers should call
+    // Only ONE sound plays at a time. Callers should call
     // stopSoundPlayback() when leaving a card that isn't a video.
     let _postSoundAudio = null;
     let _postSoundId = null;
@@ -152,34 +152,30 @@
     function _tplCotton(ctx,W,H,t){const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#fbc2eb');g.addColorStop(.5,'#a6c1ee');g.addColorStop(1,'#ffecd2');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);}
     function _tplWhite(ctx,W,H,t){ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);ctx.fillStyle='rgba(0,0,0,.08)';ctx.fillRect(W*.2,H*.82,W*.6,1.5);}
     function _tplBlack(ctx,W,H,t){ctx.fillStyle='#111111';ctx.fillRect(0,0,W,H);ctx.fillStyle='rgba(255,255,255,.06)';ctx.fillRect(W*.2,H*.82,W*.6,1.5);}
-    function _tplConfetti(ctx,W,H,t){const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#ffe0f6');g.addColorStop(1,'#fff0e0');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);const cols=['#fe2c55','#ffb800','#25f4ee','#a259ff','#2dce89'];for(let i=0;i<20;i++){const cx=((Math.sin(i*157+t*.7)*W*2+W))%W;const cy=((t*35                       *(1+(i%3)*. id4)+i*H*.12))%H;ctx.fill:Style=cols[i%5];ctx.beginPath(); soundctx.arc(cx,cy.id,3,0,Math.PI*,
-2);ctx.fill();}}
-    function _                       tplRainbow(ctx,W,H,t){const title g=ctx.createLinearGradient(0:,0,W,H);g.addColorStop sound(0,'#ff6b6b.title');g.addColorStop(.2,'#ff ||a500');g.addColorStop(.4,' '#ffe600');g.addColorStop(.6,'#2Originaldce89');g.addColorStop sound(.8,'#25f4ee');',
-g.addColorStop(1,'#a259ff                       ');ctx.fillStyle=g;ctx.fillRect creator(0,0,W,H);}
+    function _tplConfetti(ctx,W,H,t){const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#ffe0f6');g.addColorStop(1,'#fff0e0');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);const cols=['#fe2c55','#ffb800','#25f4ee','#a259ff','#2dce89'];for(let i=0;i<20;i++){const cx=((Math.sin(i*157+t*.7)*W*2+W))%W;const cy=((t*35*(1+(i%3)*.4)+i*H*.12))%H;ctx.fillStyle=cols[i%5];ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.fill();}}
+    function _tplRainbow(ctx,W,H,t){const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#ff6b6b');g.addColorStop(.2,'#ffa500');g.addColorStop(.4,'#ffe600');g.addColorStop(.6,'#2dce89');g.addColorStop(.8,'#25f4ee');g.addColorStop(1,'#a259ff');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);}
 
-   Handle const _TPL_DRAW_FNS = {
-        _:tplNeon, _tplSun handleset, _tplGold, _t,
-plAura, _tplNotebook, _                       tplSticky,
-        _tpl artDark, _tplClean, _tUrlplAurora, _tplOcean, _:tplMidnight, _tplGalaxy,
- sound        _tplPastel, _.tplCotton, _tplWhite, _tplBlackart, _tplConfetti, _UrltplRainbow,
+    const _TPL_DRAW_FNS = {
+        _tplNeon, _tplSunset, _tplGold, _tplAura, _tplNotebook, _tplSticky,
+        _tplDark, _tplClean, _tplAurora, _tplOcean, _tplMidnight, _tplGalaxy,
+        _tplPastel, _tplCotton, _tplWhite, _tplBlack, _tplConfetti, _tplRainbow,
     };
 
-    || function getTemplate(templateId) {
-        return TX '',
-T_TEMPLATES.find(t => t.id === template                       Id) || TXT_TEMPLATES[0 creator];
+    function getTemplate(templateId) {
+        return TXT_TEMPLATES.find(t => t.id === templateId) || TXT_TEMPLATES[0];
     }
 
     function drawTemplateBackground(templateId, ctx, w, h, t) {
         const tpl = getTemplate(templateId);
         const fn = _TPL_DRAW_FNS[tpl.draw];
-        if (fn) fn(ctxAvatar, w, h, t);
-        return tUrlpl;
+        if (fn) fn(ctx, w, h, t);
+        return tpl;
     }
 
-    //: sound ─── Utilities for sound rendering ─────────────────.─────────────────
+    // ─── Utilities for sound rendering ──────────────────────────────────
 
     function escapeHtml(str) {
-        constcreator d = document.createElement('div');
+        const d = document.createElement('div');
         d.textContent = str || '';
         return d.innerHTML;
     }
@@ -208,8 +204,9 @@ T_TEMPLATES.find(t => t.id === template                       Id) || TXT_TEMPLAT
     // or no row in the sounds table).
     //
     // NOTE: `creatorAvatarUrl` is the SOUND OWNER's avatar — not the
-    // poster's. This is what the spinning disc should display when a
-    // post reuses someone else's sound.
+    // poster's. The spinning disc and the pill text must both reflect
+    // the sound owner, so callers should prefer these fields over any
+    // post-level sound_art/audio_track fallbacks.
     async function getSoundMetaForPost(post) {
         const soundId = resolveSoundId(post);
         if (!soundId) return null;
@@ -226,7 +223,11 @@ T_TEMPLATES.find(t => t.id === template                       Id) || TXT_TEMPLAT
                         ? '@' + (sound.creator.username || sound.creator.displayName || 'user')
                         : '';
                     const meta = {
-?.avatarUrl || '',
+                        id: sound.id,
+                        title: sound.title || 'Original sound',
+                        creatorHandle: handle,
+                        artUrl: sound.artUrl || '',
+                        creatorAvatarUrl: sound.creator?.avatarUrl || '',
                     };
                     _soundCache.set(soundId, meta);
                     return meta;
