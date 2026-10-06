@@ -2524,8 +2524,6 @@
             vertical-align: middle;
         }
 
-        /* ── Comments font overrides (already applied in classes above) ── */
-
         /* ─── COMMENTS OFF ─── */
         .v-action-btn.comments-off svg {
             opacity: .55;
@@ -3099,6 +3097,9 @@
         });
 
         // ─── LOAD VIDEO POSTS ──────────────────────────────────────
+        // NOTE: this function MUST NOT block on sound resolution. Any
+        // sound enrichment happens later via hydrateSoundOwnersForCurrentFeed()
+        // after the feed has already rendered.
 
         async function loadVideoPosts() {
             try {
@@ -3203,37 +3204,61 @@
                         deduped.push(v);
                     }
                 }
-                // ─── Resolve the REAL sound owner (disc + pill). ───────
-                // The disc AND the pill both represent the SOUND, not the
-                // post. If a post reuses another creator's sound, both the
-                // spinning disc avatar AND the pill text must reflect the
-                // sound owner — never the poster.
-                if (window.VideoRender && typeof window.VideoRender.getSoundMetaForPost === 'function') {
-                    await Promise.all(deduped.map(async (v) => {
-                        if (!v.soundId) return;
-                        try {
-                            const soundMeta = await window.VideoRender.getSoundMetaForPost(v.postData || v);
-                            if (!soundMeta) return;
-                            // Sound disc = sound owner's avatar
-                            const ownerAvatar = soundMeta.creatorAvatarUrl || '';
-                            if (ownerAvatar) {
-                                v.soundImg = ownerAvatar;
-                            }
-                            // Sound pill = sound owner's name/handle
-                            v.sound = soundMeta.creatorHandle
-                                ? `${soundMeta.title} · ${soundMeta.creatorHandle}`
-                                : soundMeta.title;
-                        } catch (e) {
-                            console.warn('Could not resolve sound owner:', e);
-                        }
-                    }));
-                }
+                // Return immediately — sound owner resolution is deferred
+                // to hydrateSoundOwnersForCurrentFeed() AFTER cards render.
                 return deduped;
             } catch (err) {
                 console.error('Failed to load video posts:', err);
                 showToast('Error loading videos');
                 return [];
             }
+        }
+
+        // ─── SOUND-OWNER HYDRATION (post-render, non-blocking) ─────
+        // Runs AFTER cards exist in the DOM. For each card with a real
+        // sound_id, resolves the sound meta and updates BOTH the disc
+        // avatar AND the pill text in place. Errors on individual posts
+        // never affect the rest of the feed.
+        async function hydrateSoundOwnersForCurrentFeed() {
+            if (!window.VideoRender || typeof window.VideoRender.getSoundMetaForPost !== 'function') return;
+
+            const cards = Array.from(document.querySelectorAll('.v-card'));
+            if (!cards.length) return;
+
+            await Promise.all(cards.map(async (card) => {
+                const postId = card.dataset.postId;
+                if (!postId) return;
+
+                const v = videoPosts.find(p => String(p.id) === String(postId));
+                if (!v || !v.soundId) return;
+
+                try {
+                    const soundMeta = await window.VideoRender.getSoundMetaForPost(v.postData || v);
+                    if (!soundMeta) return;
+
+                    // ─── Update the post model so any re-render (tab
+                    // switch, refresh) picks up the correct values.
+                    const ownerAvatar = soundMeta.creatorAvatarUrl || '';
+                    if (ownerAvatar) v.soundImg = ownerAvatar;
+                    v.sound = soundMeta.creatorHandle
+                        ? `${soundMeta.title} · ${soundMeta.creatorHandle}`
+                        : soundMeta.title;
+
+                    // ─── Update the disc image in place.
+                    const discImg = card.querySelector('.v-disc img');
+                    if (discImg && ownerAvatar) {
+                        discImg.src = ownerAvatar;
+                    }
+
+                    // ─── Update the pill label in place.
+                    const pillLabel = card.querySelector('.v-music-tag .sound-label');
+                    if (pillLabel) {
+                        pillLabel.textContent = v.sound;
+                    }
+                } catch (e) {
+                    console.warn('Sound owner hydration failed for post', postId, e);
+                }
+            }));
         }
 
         // ─── BUILD COMPACT REPOST LABEL ────────────────────────────
@@ -3567,20 +3592,24 @@
             });
 
             posts.forEach((v, i) => {
-                const card = document.createElement('div');
-                card.className = 'v-card';
-                card.id = 'card-' + i;
-                card.innerHTML = buildCard(v, i);
-                track.appendChild(card);
+                try {
+                    const card = document.createElement('div');
+                    card.className = 'v-card';
+                    card.id = 'card-' + i;
+                    card.innerHTML = buildCard(v, i);
+                    track.appendChild(card);
 
-                const soundLabelEl = card.querySelector('.sound-label');
-                if (soundLabelEl && window.VideoRender) {
-                    VideoRender.hydrateSoundLabel(v.postData || v, soundLabelEl);
-                }
+                    const soundLabelEl = card.querySelector('.sound-label');
+                    if (soundLabelEl && window.VideoRender) {
+                        VideoRender.hydrateSoundLabel(v.postData || v, soundLabelEl).catch(() => {});
+                    }
 
-                const txcCanvas = card.querySelector('.v-text-card-canvas');
-                if (txcCanvas && window.VideoRender) {
-                    startTextCardAnimation(txcCanvas, v.textTemplateId);
+                    const txcCanvas = card.querySelector('.v-text-card-canvas');
+                    if (txcCanvas && window.VideoRender) {
+                        startTextCardAnimation(txcCanvas, v.textTemplateId);
+                    }
+                } catch (err) {
+                    console.error('[video] Failed to build card for post', v && v.id, err);
                 }
             });
 
@@ -3613,6 +3642,11 @@
                     }
                 });
             });
+
+            // ─── Feed is now fully rendered. Fire-and-forget sound
+            // owner hydration so a slow/hanging sound lookup can never
+            // block the feed from appearing.
+            hydrateSoundOwnersForCurrentFeed();
         }
 
         // ─── PAUSE / ACTIVE / SCRUB / TAP ──────────────────────────
@@ -3677,17 +3711,17 @@
                 return;
             }
 
-            const vidid = document.getElementById('vid-' + idx);
-            if (!vid) return._;
-            const sk = document.getElementById('skel-'pro + idx);
-            if (sk) sk.style.display =g 'none';
-            vid.muted = userMutePreTimerference;
+            const vid = document.getElementById('vid-' + idx);
+            if (!vid) return;
+            const sk = document.getElementById('skel-' + idx);
+            if (sk) sk.style.display = 'none';
+            vid.muted = userMutePreference;
             vid.play().catch(() => {
-                vid);
-.muted = true;
+                vid.muted = true;
                 vid.play().catch(() => {});
             });
-            if (vid._progTimer) clearInterval(v            vid._progTimer = setInterval(() => updateProgress(idx), 250);
+            if (vid._progTimer) clearInterval(vid._progTimer);
+            vid._progTimer = setInterval(() => updateProgress(idx), 250);
             showProgress(idx);
         }
 
@@ -5292,7 +5326,7 @@
                 pullOffset = 0;
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · scrubber only on videos · sound owner disc + pill · image/text sound playback ✓');
+            console.log('Freeupper Video Feed · feed renders immediately · sound owner hydrated async ✓');
         }
 
         if (document.readyState === 'loading') {
