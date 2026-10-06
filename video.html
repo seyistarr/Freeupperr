@@ -201,6 +201,41 @@
             fill: #fff;
         }
 
+        /* Studio upload button in header */
+        .vt-upload {
+            position: absolute;
+            left: 16px;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255, 255, 255, .35);
+            background: linear-gradient(135deg, var(--p), var(--pd));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
+            transition: transform .12s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .vt-upload:active {
+            transform: scale(.92);
+        }
+        .vt-upload svg {
+            width: 18px;
+            height: 18px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.4;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        /* old per-card badge no longer used */
+        .v-upload-badge {
+            display: none !important;
+        }
+
         #feedTrack {
             position: absolute;
             inset: 0;
@@ -287,7 +322,7 @@
             opacity: 0;
         }
 
-        /* Upload badge – now opens studio.html */
+        /* Upload badge – now hidden, replaced by header button */
         .v-upload-badge {
             position: absolute;
             top: max(env(safe-area-inset-top), 14px);
@@ -2595,6 +2630,9 @@
     <!-- ════ MAIN ════ -->
     <div class="main" id="mainScroll">
         <div class="video-topbar">
+            <button class="vt-upload" onclick="openStudio()" aria-label="Create in Studio">
+                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
             <div class="vt-tabs">
                 <button class="vt-tab active" data-tab="foryou" onclick="switchFeedTab('foryou')">For You</button>
                 <button class="vt-tab" data-tab="following" onclick="switchFeedTab('following')">Following</button>
@@ -2625,7 +2663,7 @@
     <div class="sheet-backdrop" id="backdrop" onclick="closeAllSheets()"></div>
 
     <!-- ══════════════════════════════════════════════════════
-    COMMENT SHEET — with "More like this" (FIX #6)
+    COMMENT SHEET — with "More like this"
     ══════════════════════════════════════════════════════ -->
     <div class="sheet" id="commentSheet">
         <div class="sheet-handle"></div>
@@ -2644,7 +2682,6 @@
             <button id="reply-cancel-btn" onclick="cancelReply()">✕</button>
         </div>
         <div class="sheet-body" id="commentBody">
-            <!-- FIX #6: "More like this" section -->
             <div class="similar-posts-section" id="similarPostsSection" style="display:none;">
                 <div class="similar-posts-title">More like this</div>
                 <div class="similar-posts-scroll" id="similarPostsScroll"></div>
@@ -3072,11 +3109,24 @@
                     const soundArt = post.sound_art || author.avatar ||
                         'https://api.dicebear.com/7.x/avataaars/svg?seed=' + author.name;
 
-                    const contentParts = [];
-                    if (post.title) contentParts.push(post.title);
-                    if (post.content) contentParts.push(post.content);
-                    if (post.tags && post.tags.length) contentParts.push(post.tags.map(t => '#' + t).join(' '));
-                    const fullCaption = contentParts.join('\n');
+                    // ─── FIX #3a: text posts get their body on the card, only hashtags under the avatar ───
+                    const isTextPost = mediaType === 'text';
+                    const tagsLine = (post.tags && post.tags.length) ? post.tags.map(t => '#' + t).join(' ') : '';
+                    const textBody = isTextPost ? (post.content || post.title || '') : '';
+                    let fullCaption;
+                    if (isTextPost) {
+                        // text lives on the card; only hashtags go under the avatar
+                        fullCaption = tagsLine;
+                    } else {
+                        const defaultTitles = ['Video', 'Photo', 'Photo Carousel'];
+                        const t = (post.title || '').trim();
+                        const c = (post.content || '').trim();
+                        const parts = [];
+                        if (t && !defaultTitles.includes(t) && t !== c && !c.startsWith(t)) parts.push(t);
+                        if (c) parts.push(c);
+                        if (tagsLine) parts.push(tagsLine);
+                        fullCaption = parts.join('\n');
+                    }
 
                     return {
                         id: post.id,
@@ -3089,6 +3139,7 @@
                         avatar: author.avatar,
                         isOwn: isOwn,
                         caption: fullCaption,
+                        textBody: textBody,
                         sound: soundTitle,
                         soundImg: soundArt,
                         soundId: soundId,
@@ -3229,15 +3280,18 @@
                 </div>`;
             }
 
-            const tpl = window.VideoRender ? VideoRender.getTemplate(v.textTemplateId) : { color: '#fff', font: '800',
-                shadow: 'none' };
+            // ─── FIX #3c: text card uses textBody with dynamic font sizing ───
+            const tpl = window.VideoRender ? VideoRender.getTemplate(v.textTemplateId) : { color: '#fff', font: '800', shadow: 'none' };
+            const body = v.textBody || '';
+            const len = body.length;
+            const fs = len <= 40 ? 34 : len <= 90 ? 28 : len <= 150 ? 24 : 20;
             return `
             <div class="v-media-wrap" id="mediaWrap-${i}">
                 <canvas class="v-text-card-canvas" id="txcCanvas-${i}" onclick="handleCardTap(event,${i})"
                         style="position:absolute;inset:0;width:100%;height:100%;display:block;"></canvas>
                 <div class="v-text-card-overlay" onclick="handleCardTap(event,${i})"
-                     style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:60px 32px;">
-                    <p style="font-size:clamp(20px,5vw,28px);font-weight:${tpl.font};color:${tpl.color};text-shadow:${tpl.shadow};line-height:1.5;text-align:center;word-wrap:break-word;">${escapeHtml((v.caption || '').split('\n')[0] || '')}</p>
+                     style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:110px 56px 240px;">
+                    <p style="font-size:${fs}px;font-weight:${tpl.font};color:${tpl.color};text-shadow:${tpl.shadow};line-height:1.35;text-align:center;white-space:pre-wrap;word-break:break-word;max-height:100%;overflow:hidden;">${escapeHtml(body)}</p>
                 </div>
             </div>`;
         }
@@ -3329,10 +3383,10 @@
                             <div class="v-post-time">${timeStr}</div>
                         </div>
                     </div>
-                    <div class="v-desc-container">
+                    ${captionHtml ? `<div class="v-desc-container">
                         <p class="v-caption clamped" id="cap-${i}" onscroll="handleCaptionScroll(this)">${captionHtml}</p>
                         <button class="v-see-more" id="seeMore-${i}" onclick="toggleCaption(${i})">see more</button>
-                    </div>
+                    </div>` : ''}
                     <div class="v-music-tag" onclick="event.stopPropagation(); openSoundPage(${i})" title="View sound details">
                         <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
                         <span class="sound-label">${escapeHtml(v.sound)}</span>
@@ -3914,7 +3968,7 @@
             document.getElementById('backdrop').classList.remove('open', 'comments-mode');
         }
 
-        // ─── FIX #6: loadSimilarPosts() ─────────────────────────────
+        // ─── FIX #6: loadSimilarPosts() — skip text posts / no-thumbnail posts ───
 
         async function loadSimilarPosts(postId) {
             const section = document.getElementById('similarPostsSection');
@@ -3922,7 +3976,8 @@
             if (!section || !scroll || !window.PostsAPI || typeof window.PostsAPI.findSimilarPosts !== 'function') return;
 
             try {
-                const similar = await window.PostsAPI.findSimilarPosts(postId, 8);
+                let similar = await window.PostsAPI.findSimilarPosts(postId, 8);
+                similar = (similar || []).filter(p => p.thumbnailUrl || (p.mediaType === 'image' && p.mediaUrl));
                 if (!similar || !similar.length) {
                     section.style.display = 'none';
                     return;
@@ -3958,8 +4013,6 @@
             }
             return html;
         }
-
-        // ─── FIX #2: renderCommentThread() with ⋯ button, pin badge, edited tag ───
 
         function renderCommentThread(comment, allComments, postId) {
             const profile = comment.profile || {};
@@ -4044,8 +4097,6 @@
                 '</div>' +
                 '</div>';
         }
-
-        // ─── FIX #3: renderReplyItem() with ⋯ button and edited tag ───
 
         function renderReplyItem(reply, allComments, postId) {
             const profile = reply.profile || {};
@@ -4135,8 +4186,6 @@
                 throw err;
             }
         }
-
-        // ─── FIX #5: refreshCommentsList() — pinned comments to top ───
 
         async function refreshCommentsList(postId) {
             const container = document.getElementById('comments-list');
@@ -4682,7 +4731,8 @@
             const cap = document.getElementById('sharePreviewCaption');
             const handle = document.getElementById('sharePreviewHandle');
             if (thumb) thumb.src = v.poster || v.src || '';
-            if (cap) cap.textContent = (v.caption || '').split('\n')[0].slice(0, 60);
+            // ─── FIX #3e: fall back to textBody ───
+            if (cap) cap.textContent = (v.caption || v.textBody || '').split('\n')[0].slice(0, 60);
             if (handle) handle.textContent = v.handle || '';
             openSheet('shareSheet');
         }
@@ -4695,7 +4745,8 @@
 
         function getPostTitle(idx) {
             const post = videoPosts && videoPosts[idx];
-            return (post && post.caption) || 'Check this out on Freeupper';
+            // ─── FIX #3e: fall back to textBody ───
+            return (post && (post.caption || post.textBody)) || 'Check this out on Freeupper';
         }
 
         async function shareAction(type) {
@@ -4921,7 +4972,6 @@
                 showToast('Refresh failed, using cached data');
                 let filtered = buildEligibleFeed(feedMode);
                 if (filtered.length === 0) filtered = buildEligibleFeed('foryou');
-                // No skeleton fallback — just show empty state or nothing
                 if (filtered.length === 0 && videoPosts.length === 0) {
                     const track = document.getElementById('feedTrack');
                     const emptyState = document.getElementById('emptyState');
@@ -5014,9 +5064,6 @@
             }
             updateNavAvatar();
 
-            // ─── FIX #7: SKELETON LOADER REMOVED ──────────────────
-            // No more renderFeedSkeletons() call — feed starts empty.
-
             await Promise.all([loadFollows(), loadBookmarks()]);
 
             const fresh = await loadVideoPosts();
@@ -5079,7 +5126,7 @@
                 pullOffset = 0;
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · 7 fixes applied ✓');
+            console.log('Freeupper Video Feed · fixes #1, #3, similar-posts filter applied ✓');
         }
 
         if (document.readyState === 'loading') {
@@ -5130,9 +5177,7 @@
         window.toggleCommentsFromMore = toggleCommentsFromMore;
         window.applyCommentBarLockState = applyCommentBarLockState;
         window.openSoundPage = openSoundPage;
-        // FIX #6: expose loadSimilarPosts
         window.loadSimilarPosts = loadSimilarPosts;
-        // FIX #4: expose action-menu functions
         window.openCommentActionsMenu = openCommentActionsMenu;
         window.startEditComment = startEditComment;
         window.confirmDeleteComment = confirmDeleteComment;
