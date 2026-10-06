@@ -6,6 +6,7 @@
 //   - resolving a post's sound_id, fetching/caching sound metadata,
 //     rendering the "🎵 title · @creator" pill/disc markup used under videos,
 //     and handling the tap → sound.html navigation.
+//   - Playing a selected sound for image/text posts (no native video audio).
 //   - Text‑card templates (shared between studio.html editor and
 //     video.html renderer, so a card looks identical in both).
 //
@@ -26,6 +27,91 @@
     // ─── Simple in-memory cache so the same sound isn't re-fetched
     //     for every card in a feed that shares it. ──────────────────
     const _soundCache = new Map(); // soundId -> resolved meta object | Promise
+
+    // ─── Persistent audio player for image/text post sounds ────────────
+    // Only ONE sound plays at a time. callers should call
+    // stopSoundPlayback() when leaving a card that isn't a video.
+    let _postSoundAudio = null;
+    let _postSoundId = null;
+    // Generation token — invalidates an in-flight load if the user
+    // swipes to a different card before loadSound() resolves.
+    let _soundLoadToken = 0;
+
+    function stopSoundPlayback() {
+        // Invalidate any pending playSoundForPost() that's mid-await.
+        _soundLoadToken++;
+        if (_postSoundAudio) {
+            try {
+                _postSoundAudio.pause();
+                _postSoundAudio.currentTime = 0;
+            } catch (e) { /* noop */ }
+        }
+        _postSoundAudio = null;
+        _postSoundId = null;
+    }
+
+    async function playSoundForPost(post) {
+        const soundId = resolveSoundId(post);
+
+        // No selected sound = nothing to play.
+        if (!soundId) {
+            stopSoundPlayback();
+            return;
+        }
+
+        // Same sound is already playing.
+        if (_postSoundAudio && _postSoundId === soundId && !_postSoundAudio.paused) {
+            return;
+        }
+
+        stopSoundPlayback();
+
+        // Capture the token AFTER stopSoundPlayback() bumped it — any
+        // further stopSoundPlayback() (from a later card) will change
+        // _soundLoadToken and cause this continuation to bail out.
+        const myToken = _soundLoadToken;
+
+        try {
+            const sound = await SoundsAPI.loadSound(soundId);
+
+            // Superseded by a newer card — abort.
+            if (myToken !== _soundLoadToken) return;
+
+            if (!sound || !sound.audioUrl) {
+                console.warn('VideoRender: sound has no playable audio:', soundId);
+                return;
+            }
+
+            _postSoundId = soundId;
+            _postSoundAudio = new Audio(sound.audioUrl);
+            _postSoundAudio.preload = 'auto';
+            _postSoundAudio.loop = true;
+
+            try {
+                await _postSoundAudio.play();
+            } catch (playErr) {
+                // Safari/iOS can block unmuted autoplay. Fall back to a
+                // muted start, then unmute on the next user gesture.
+                if (playErr && playErr.name === 'NotAllowedError') {
+                    _postSoundAudio.muted = true;
+                    try { await _postSoundAudio.play(); } catch (e) { /* give up */ }
+
+                    const unmute = () => {
+                        document.removeEventListener('pointerdown', unmute, true);
+                        // Only unmute if this audio is still the active one.
+                        if (_postSoundAudio && _postSoundId === soundId) {
+                            try { _postSoundAudio.muted = false; } catch (e) {}
+                        }
+                    };
+                    document.addEventListener('pointerdown', unmute, true);
+                } else {
+                    throw playErr;
+                }
+            }
+        } catch (error) {
+            console.warn('VideoRender: could not play post sound:', error);
+        }
+    }
 
     // ─── Text-card templates (shared between studio.html editor and
     //     video.html renderer, so a card looks identical in both) ──────
@@ -107,7 +193,9 @@
     // returns null.
     function resolveSoundId(post) {
         if (!post) return null;
-        return post.sound_id || null;
+        // Supports both raw posts (snake_case) and video.html's mapped
+        // shape (camelCase soundId).
+        return post.sound_id || post.soundId || null;
     }
 
     // ─── Fetch (and cache) sound metadata for display ───────────────
@@ -234,6 +322,8 @@
         renderSoundPillHTML,
         renderSoundDiscHTML,
         hydrateSoundLabel,
+        playSoundForPost,
+        stopSoundPlayback,
 
         // Text‑card templates (shared)
         TXT_TEMPLATES,
