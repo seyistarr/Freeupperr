@@ -147,7 +147,14 @@
       .maybeSingle();
 
     if (error || !sound) {
-      if (error) console.error('loadSound error:', error);
+      console.error(
+        '❌ loadSound failed',
+        {
+          soundId,
+          error,
+          sound
+        }
+      );
       return null;
     }
 
