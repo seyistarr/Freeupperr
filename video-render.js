@@ -102,7 +102,7 @@
     }
 
     // ─── Resolve the sound_id for a post ────────────────────────────
-    // NOW: ONLY returns a real sound_id from the posts table.
+    // ONLY returns a real sound_id from the posts table.
     // No fallback/synthetic IDs are invented. If there's no sound_id,
     // returns null.
     function resolveSoundId(post) {
@@ -155,12 +155,20 @@
     }
 
     // ─── Navigation ───────────────────────────────────────────────────
+    // IMPORTANT: The ONLY valid sound ID is the real `posts.sound_id`
+    // from Supabase (which maps to `sounds.id`). We never invent IDs
+    // like 'sound_' + userId or "Original sound". If soundId is null,
+    // we bail out and log a warning instead of navigating.
     function openSoundPage(soundId) {
-        if (!soundId) return;
+        if (!soundId) {
+            console.warn('VideoRender: No sound ID available');
+            return;
+        }
         if (window.Router && typeof window.Router.openSound === 'function') {
             window.Router.openSound(soundId);
         } else {
-            window.location.href = 'sound.html?id=' + encodeURIComponent(soundId);
+            window.location.href =
+                'sound.html?id=' + encodeURIComponent(soundId);
         }
     }
 
