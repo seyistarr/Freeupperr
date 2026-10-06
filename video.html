@@ -322,7 +322,7 @@
             opacity: 0;
         }
 
-        /* Upload badge – now hidden, replaced by header button */
+        /* Upload badge – hidden, replaced by header button */
         .v-upload-badge {
             position: absolute;
             top: max(env(safe-area-inset-top), 14px);
@@ -3134,7 +3134,7 @@
                     const soundArt = post.sound_art || author.avatar ||
                         'https://api.dicebear.com/7.x/avataaars/svg?seed=' + author.name;
 
-                    // ─── FIX #3a: text posts get their body on the card, only hashtags under the avatar ───
+                    // ─── Text posts: body goes on the card, only hashtags under the avatar ───
                     const isTextPost = mediaType === 'text';
                     const tagsLine = (post.tags && post.tags.length) ? post.tags.map(t => '#' + t).join(' ') : '';
                     const textBody = isTextPost ? (post.content || post.title || '') : '';
@@ -3305,7 +3305,7 @@
                 </div>`;
             }
 
-            // ─── FIX #3c: text card uses textBody with dynamic font sizing ───
+            // ─── Text card: body with dynamic font sizing, padding tuned so it sits above the user row ───
             const tpl = window.VideoRender ? VideoRender.getTemplate(v.textTemplateId) : { color: '#fff', font: '800', shadow: 'none' };
             const body = v.textBody || '';
             const len = body.length;
@@ -3315,7 +3315,7 @@
                 <canvas class="v-text-card-canvas" id="txcCanvas-${i}" onclick="handleCardTap(event,${i})"
                         style="position:absolute;inset:0;width:100%;height:100%;display:block;"></canvas>
                 <div class="v-text-card-overlay" onclick="handleCardTap(event,${i})"
-                     style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:110px 56px 240px;">
+                     style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:90px 56px 170px;">
                     <p style="font-size:${fs}px;font-weight:${tpl.font};color:${tpl.color};text-shadow:${tpl.shadow};line-height:1.35;text-align:center;white-space:pre-wrap;word-break:break-word;max-height:100%;overflow:hidden;">${escapeHtml(body)}</p>
                 </div>
             </div>`;
@@ -3336,6 +3336,8 @@
             const timeStr = formatRelativeTime(v.timestamp);
             const mediaHtml = buildMediaHtml(v, i);
             const repostLabel = buildVideoRepostLabel(v.id);
+
+            const isTextPost = v.mediaType === 'text';
 
             return `
             <div class="v-card" data-idx="${i}" data-post-id="${v.id}" data-author-id="${v.authorId}">
@@ -3397,25 +3399,75 @@
                     ${repostLabel}
                     <div class="v-user-row">
                         <div class="v-avatar-wrap" onclick="event.stopPropagation(); goToProfile('${v.authorId}')">
-                            <img data-author-avatar class="v-avatar" src="${avatar}" alt="${displayName}" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}'">
-                            <div class="v-plus-badge ${v.isOwn || v.following ? 'hidden' : ''}" id="followDot-${i}" onclick="event.stopPropagation(); toggleFollow(${i})">+</div>
+                            <img
+                                data-author-avatar
+                                class="v-avatar"
+                                src="${avatar}"
+                                alt="${displayName}"
+                                onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}'"
+                            >
+                            <div
+                                class="v-plus-badge ${v.isOwn || v.following ? 'hidden' : ''}"
+                                id="followDot-${i}"
+                                onclick="event.stopPropagation(); toggleFollow(${i})"
+                            >+</div>
                         </div>
                         <div class="v-user-meta">
-                            <div class="v-creator" onclick="event.stopPropagation(); goToProfile('${v.authorId}')">
-                                <span data-author-name class="v-creator-name">${displayName}</span>
-                                <span data-author-badge-wrapper>${window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : ''}</span>
+                            <div
+                                class="v-creator"
+                                onclick="event.stopPropagation(); goToProfile('${v.authorId}')"
+                            >
+                                <span data-author-name class="v-creator-name">
+                                    ${displayName}
+                                </span>
+                                <span data-author-badge-wrapper>
+                                    ${window.getVerifiedBadgeHTML
+                                        ? window.getVerifiedBadgeHTML(verifiedStatus)
+                                        : ''}
+                                </span>
                             </div>
                             <div class="v-post-time">${timeStr}</div>
                         </div>
                     </div>
-                    ${captionHtml ? `<div class="v-desc-container">
-                        <p class="v-caption clamped" id="cap-${i}" onscroll="handleCaptionScroll(this)">${captionHtml}</p>
-                        <button class="v-see-more" id="seeMore-${i}" onclick="toggleCaption(${i})">see more</button>
-                    </div>` : ''}
-                    <div class="v-music-tag" onclick="event.stopPropagation(); openSoundPage(${i})" title="View sound details">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                        <span class="sound-label">${escapeHtml(v.sound)}</span>
-                    </div>
+                    ${
+                        !isTextPost && captionHtml
+                            ? `<div class="v-desc-container">
+                                <p
+                                    class="v-caption clamped"
+                                    id="cap-${i}"
+                                    onscroll="handleCaptionScroll(this)"
+                                >${captionHtml}</p>
+                                <button
+                                    class="v-see-more"
+                                    id="seeMore-${i}"
+                                    onclick="toggleCaption(${i})"
+                                >see more</button>
+                            </div>`
+                            : ''
+                    }
+                    ${
+                        !isTextPost
+                            ? `<div
+                                class="v-music-tag"
+                                onclick="event.stopPropagation(); openSoundPage(${i})"
+                                title="View sound details"
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="white"
+                                    stroke-width="2"
+                                >
+                                    <path d="M9 18V5l12-2v13"/>
+                                    <circle cx="6" cy="18" r="3"/>
+                                    <circle cx="18" cy="16" r="3"/>
+                                </svg>
+                                <span class="sound-label">
+                                    ${escapeHtml(v.sound)}
+                                </span>
+                            </div>`
+                            : ''
+                    }
                 </div>
 
                 <div class="v-progress" id="prog-${i}" onpointerdown="startScrub(event,${i})">
@@ -3993,7 +4045,7 @@
             document.getElementById('backdrop').classList.remove('open', 'comments-mode');
         }
 
-        // ─── FIX #6: loadSimilarPosts() — skip text posts / no-thumbnail posts ───
+        // ─── loadSimilarPosts() — skip text posts / no-thumbnail posts ───
 
         async function loadSimilarPosts(postId) {
             const section = document.getElementById('similarPostsSection');
@@ -4339,7 +4391,7 @@
             if (isOff) input.value = '';
         }
 
-        // ─── FIX #4: action-menu logic ──────────────────────────────
+        // ─── action-menu logic ──────────────────────────────────────
 
         function openCommentActionsMenu(event, commentId, isMine, isPostOwner, isPinned) {
             event.stopPropagation();
@@ -4463,7 +4515,7 @@
                 .catch(err => showToast(err.message || 'Failed to report comment', 'r'));
         }
 
-        // ─── openComments() — now loads similar posts ──────────────
+        // ─── openComments() — loads similar posts ──────────────────
 
         function openComments(idx) {
             const v = videoPosts[idx];
@@ -4483,7 +4535,7 @@
             const locked = !!v.commentsHidden && !isOwner;
             applyCommentBarLockState(locked);
 
-            // ─── FIX #6: load similar posts ──────────────────────────
+            // Load similar posts
             loadSimilarPosts(v.id);
 
             if (locked) {
@@ -4756,7 +4808,6 @@
             const cap = document.getElementById('sharePreviewCaption');
             const handle = document.getElementById('sharePreviewHandle');
             if (thumb) thumb.src = v.poster || v.src || '';
-            // ─── FIX #3e: fall back to textBody ───
             if (cap) cap.textContent = (v.caption || v.textBody || '').split('\n')[0].slice(0, 60);
             if (handle) handle.textContent = v.handle || '';
             // Show Delete only on own posts
@@ -4773,7 +4824,6 @@
 
         function getPostTitle(idx) {
             const post = videoPosts && videoPosts[idx];
-            // ─── FIX #3e: fall back to textBody ───
             return (post && (post.caption || post.textBody)) || 'Check this out on Freeupper';
         }
 
@@ -5201,7 +5251,7 @@
                 pullOffset = 0;
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · fixes #1, #3, similar-posts filter, Delete button applied ✓');
+            console.log('Freeupper Video Feed · text-card v-info fix + padding tuned ✓');
         }
 
         if (document.readyState === 'loading') {
