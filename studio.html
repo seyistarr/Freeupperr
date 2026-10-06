@@ -1500,8 +1500,24 @@ async function publishPost() {
     // sound_id: null gracefully (sound_id: fields.sound_id || null).
     const post = await PostsAPI.createPost(payload);
 
+    // Record sound usage only when the user actually selected a real sound.
+    // Posts without a sound do not create or increment anything.
+    if (post.id && finalSoundId && window.SoundsAPI?.incrementSoundUsage) {
+      try {
+        await window.SoundsAPI.incrementSoundUsage(finalSoundId);
+      } catch (soundErr) {
+        console.warn('Sound usage update failed:', soundErr);
+      }
+    }
+
     if (post.id && mentions.length && window.Mentions?.notifyMentionedUsers) {
-      window.Mentions.notifyMentionedUsers('post', post.id, mentions, user.id, null).catch(() => {});
+      window.Mentions.notifyMentionedUsers(
+        'post',
+        post.id,
+        mentions,
+        user.id,
+        null
+      ).catch(() => {});
     }
 
     setProgress(100, 'Done!', '');
