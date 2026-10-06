@@ -3195,21 +3195,42 @@
                 };
 
                 const videoEntries = feedItems.map(mapEntryToVideoPost).filter(Boolean);
-                const seen = new Set();
-                const deduped = [];
-                for (const v of videoEntries) {
-                    if (!seen.has(v.id)) {
-                        seen.add(v.id);
-                        deduped.push(v);
-                    }
-                }
-                return deduped;
-            } catch (err) {
-                console.error('Failed to load video posts:', err);
-                showToast('Error loading videos');
-                return [];
+const seen = new Set();
+const deduped = [];
+
+for (const v of videoEntries) {
+    if (!seen.has(v.id)) {
+        seen.add(v.id);
+        deduped.push(v);
+    }
+}
+
+// Resolve the REAL sound owner's avatar.
+// The disc represents the sound, so it must use the
+// person who created/owns that sound.
+if (window.VideoRender?.getSoundMetaForPost) {
+    await Promise.all(deduped.map(async (v) => {
+        if (!v.soundId) return;
+
+        try {
+            const soundMeta =
+                await window.VideoRender.getSoundMetaForPost(v.postData || v);
+
+            const ownerAvatar = soundMeta?.creatorAvatarUrl || '';
+
+            if (ownerAvatar) {
+                v.soundImg = ownerAvatar;
             }
+        } catch (e) {
+            console.warn(
+                'Could not resolve sound owner avatar:',
+                e
+            );
         }
+    }));
+}
+
+return deduped;
 
         // ─── BUILD COMPACT REPOST LABEL ────────────────────────────
 
