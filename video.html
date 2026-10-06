@@ -3203,21 +3203,28 @@
                         deduped.push(v);
                     }
                 }
-                // ─── Resolve the REAL sound owner's avatar. ────────────
-                // The spinning disc represents the SOUND, not the post.
-                // If a post reuses another creator's sound, the disc must
-                // show the sound owner's avatar — not the poster's.
+                // ─── Resolve the REAL sound owner (disc + pill). ───────
+                // The disc AND the pill both represent the SOUND, not the
+                // post. If a post reuses another creator's sound, both the
+                // spinning disc avatar AND the pill text must reflect the
+                // sound owner — never the poster.
                 if (window.VideoRender && typeof window.VideoRender.getSoundMetaForPost === 'function') {
                     await Promise.all(deduped.map(async (v) => {
                         if (!v.soundId) return;
                         try {
                             const soundMeta = await window.VideoRender.getSoundMetaForPost(v.postData || v);
-                            const ownerAvatar = soundMeta && soundMeta.creatorAvatarUrl ? soundMeta.creatorAvatarUrl : '';
+                            if (!soundMeta) return;
+                            // Sound disc = sound owner's avatar
+                            const ownerAvatar = soundMeta.creatorAvatarUrl || '';
                             if (ownerAvatar) {
                                 v.soundImg = ownerAvatar;
                             }
+                            // Sound pill = sound owner's name/handle
+                            v.sound = soundMeta.creatorHandle
+                                ? `${soundMeta.title} · ${soundMeta.creatorHandle}`
+                                : soundMeta.title;
                         } catch (e) {
-                            console.warn('Could not resolve sound owner avatar:', e);
+                            console.warn('Could not resolve sound owner:', e);
                         }
                     }));
                 }
@@ -3670,17 +3677,17 @@
                 return;
             }
 
-            const vid = document.getElementById('vid-' + idx);
-            if (!vid) return;
-            const sk = document.getElementById('skel-' + idx);
-            if (sk) sk.style.display = 'none';
-            vid.muted = userMutePreference;
+            const vidid = document.getElementById('vid-' + idx);
+            if (!vid) return._;
+            const sk = document.getElementById('skel-'pro + idx);
+            if (sk) sk.style.display =g 'none';
+            vid.muted = userMutePreTimerference;
             vid.play().catch(() => {
-                vid.muted = true;
+                vid);
+.muted = true;
                 vid.play().catch(() => {});
             });
-            if (vid._progTimer) clearInterval(vid._progTimer);
-            vid._progTimer = setInterval(() => updateProgress(idx), 250);
+            if (vid._progTimer) clearInterval(v            vid._progTimer = setInterval(() => updateProgress(idx), 250);
             showProgress(idx);
         }
 
@@ -5285,7 +5292,7 @@
                 pullOffset = 0;
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · scrubber only on videos · sound owner disc · image/text sound playback ✓');
+            console.log('Freeupper Video Feed · scrubber only on videos · sound owner disc + pill · image/text sound playback ✓');
         }
 
         if (document.readyState === 'loading') {
