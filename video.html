@@ -3340,6 +3340,14 @@
 
             const isTextPost = v.mediaType === 'text';
 
+            // ─── CHANGE #1: Only render the scrubber for video posts ───
+            const scrubberHtml = v.mediaType === 'video' ? `
+                <div class="v-progress" id="prog-${i}" onpointerdown="startScrub(event,${i})">
+                    <div class="v-progress-fill" id="progFill-${i}" style="width:0%"></div>
+                    <div class="v-progress-thumb" id="progThumb-${i}"></div>
+                </div>
+            ` : '';
+
             return `
             <div class="v-card" data-idx="${i}" data-post-id="${v.id}" data-author-id="${v.authorId}">
                 ${mediaHtml}
@@ -3478,10 +3486,7 @@
                     }
                 </div>
 
-                <div class="v-progress" id="prog-${i}" onpointerdown="startScrub(event,${i})">
-                    <div class="v-progress-fill" id="progFill-${i}" style="width:0%"></div>
-                    <div class="v-progress-thumb" id="progThumb-${i}"></div>
-                </div>
+                ${scrubberHtml}
             </div>
             `;
         }
@@ -3587,9 +3592,17 @@
 
         // ─── PAUSE / ACTIVE / SCRUB / TAP ──────────────────────────
 
+        // ─── CHANGE #3: pauseCard now also stops image/text sounds ───
         function pauseCard(idx) {
             const v = videoPosts[idx];
-            if (!v || v.mediaType !== 'video') return;
+            if (!v) return;
+            // Stop selected sound attached to image/text posts.
+            if (v.mediaType !== 'video') {
+                if (window.VideoRender && typeof VideoRender.stopSoundPlayback === 'function') {
+                    VideoRender.stopSoundPlayback();
+                }
+                return;
+            }
             if (v.isYouTube) {
                 ytPostMessage(idx, 'pauseVideo');
                 if (ytState[idx]) ytState[idx].playing = false;
@@ -3599,6 +3612,7 @@
             }
         }
 
+        // ─── CHANGE #2: onCardActive now plays sounds for image/text ───
         function onCardActive(idx) {
             if (idx === _curIdx && idx !== 0) return;
             pauseCard(_curIdx);
@@ -3616,6 +3630,10 @@
                 // Text and image posts do not need the video loading skeleton.
                 const sk = document.getElementById('skel-' + idx);
                 if (sk) sk.style.display = 'none';
+                // Image/text posts can still play a selected FreeUpper sound.
+                if (window.VideoRender && typeof VideoRender.playSoundForPost === 'function') {
+                    VideoRender.playSoundForPost(v.postData || v);
+                }
                 return;
             }
 
@@ -5251,7 +5269,7 @@
                 pullOffset = 0;
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · no fake sound IDs · text/image skeleton fix ✓');
+            console.log('Freeupper Video Feed · scrubber only on videos · image/text sound playback ✓');
         }
 
         if (document.readyState === 'loading') {
