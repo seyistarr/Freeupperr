@@ -642,30 +642,63 @@
         async function loadSoundPage(soundId) {
             renderSkeleton();
             try {
-                const [sound, videos, stats] = await Promise.all([
-                    SoundsAPI.loadSound(soundId),
-                    SoundsAPI.loadSoundVideos(soundId),
-                    SoundsAPI.loadSoundStats(soundId),
-                ]);
+                if (!soundId) {
+                    console.error('Sound page: missing sound ID');
+                    renderEmpty();
+                    return;
+                }
 
-                console.log('🎵 Sound:', sound);
-                console.log('📹 Videos:', videos);
-                console.log('📊 Stats:', stats);
+                console.log('🎵 Loading sound ID:', soundId);
+
+                // Load the sound itself first.
+                const sound = await SoundsAPI.loadSound(soundId);
+                console.log('🎵 Loaded sound:', sound);
 
                 if (!sound) {
+                    console.error('❌ Sound not found:', soundId);
                     renderEmpty();
                     return;
                 }
 
                 soundData = sound;
-                soundVideos = videos;
-                soundStats = stats;
 
-                isSaved = await SoundsAPI.isSoundSaved(soundId);
+                // Load related data independently.
+                let videos = [];
+                let stats = {
+                    videoCount: 0,
+                    totalUses: sound.usageCount || 0,
+                    totalLikes: 0,
+                    totalShares: 0
+                };
+
+                try {
+                    videos = await SoundsAPI.loadSoundVideos(soundId);
+                } catch (videoErr) {
+                    console.error('Sound videos failed:', videoErr);
+                }
+
+                try {
+                    stats = await SoundsAPI.loadSoundStats(soundId);
+                } catch (statsErr) {
+                    console.error('Sound stats failed:', statsErr);
+                }
+
+                console.log('📹 Sound videos:', videos);
+                console.log('📊 Sound stats:', stats);
+
+                soundVideos = videos || [];
+                soundStats = stats || {};
+
+                try {
+                    isSaved = await SoundsAPI.isSoundSaved(soundId);
+                } catch (saveErr) {
+                    console.warn('Could not check saved state:', saveErr);
+                    isSaved = false;
+                }
 
                 renderSoundPage();
             } catch (err) {
-                console.error('loadSoundPage error:', err);
+                console.error('❌ loadSoundPage error:', err);
                 renderEmpty();
             }
         }
