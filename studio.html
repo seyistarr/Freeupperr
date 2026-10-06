@@ -139,7 +139,8 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .pv-top{position:absolute;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;
   justify-content:space-between;padding:max(env(safe-area-inset-top),14px) 16px 10px;
   background:linear-gradient(to bottom,rgba(0,0,0,.6),transparent)}
-.pv-text-layer{position:absolute;inset:0;z-index:15}
+.pv-text-layer{position:absolute;inset:0;z-index:15;pointer-events:none}
+.pv-text-layer .pv-text-item{pointer-events:auto}
 .pv-text-item{position:absolute;cursor:move;font-family:var(--font-head);font-weight:800;
   font-size:1.5rem;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7);padding:4px 10px;
   border-radius:8px;user-select:none;touch-action:none;max-width:82%;word-wrap:break-word}
@@ -245,6 +246,15 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .det-thumb{width:78px;height:104px;border-radius:12px;overflow:hidden;background:var(--inp-bg);
   flex-shrink:0;position:relative}
 .det-thumb img,.det-thumb video,.det-thumb canvas{width:100%;height:100%;object-fit:cover}
+.thumb-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:8px;text-align:center;font-family:var(--font-head);font-size:9px;line-height:1.3;
+  word-break:break-word;overflow:hidden}
+.thumb-count{position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;
+  font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px}
+.prog-preview{width:96px;height:128px;border-radius:14px;overflow:hidden;position:relative;
+  background:#111;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.prog-preview img,.prog-preview video,.prog-preview canvas{width:100%;height:100%;object-fit:cover}
+.prog-preview .thumb-text{font-size:10px}
 .det-caption-col{flex:1;display:flex;flex-direction:column}
 .det-caption{width:100%;min-height:104px;resize:none;color:var(--text);font-size:.9rem;line-height:1.55}
 .det-caption::placeholder{color:var(--muted2)}
@@ -608,6 +618,7 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 <div id="scProgress" class="screen">
   <svg width="0" height="0"><defs><linearGradient id="ringGrad"><stop offset="0%" stop-color="#8b5cf6"/><stop offset="100%" stop-color="#6c3fc5"/></linearGradient></defs></svg>
   <div class="prog-card" id="progActive">
+    <div class="prog-preview" id="progPreview"></div>
     <div class="prog-ring-wrap">
       <svg class="prog-ring" viewBox="0 0 96 96">
         <circle class="prog-bg" cx="48" cy="48" r="42"/>
@@ -619,6 +630,7 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
     <div class="prog-sub" id="progSub">Sending your media to Freeupper</div>
   </div>
   <div class="prog-card prog-success" id="progSuccess">
+    <div class="prog-preview" id="progPreview2"></div>
     <div class="success-ring"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
     <div class="success-title">You're live! 🎉</div>
     <div class="success-sub">Your post has been published to your profile.</div>
@@ -847,19 +859,21 @@ async function handleGalleryFiles(e) {
     valid.push({ blob: file, url: URL.createObjectURL(file), type: isVideo ? 'video' : 'image' });
   }
   if (!valid.length) return;
-  // If it's a single video or single image, treat as S.media
-  if (valid.length === 1) {
-    S.media = valid[0];
-    S.mediaFiles = [];
-    S.textPost = null;
-    goToPreview();
-  } else {
-    // Multiple images → store in mediaFiles, set S.media to the first one for preview
-    S.mediaFiles = valid;
-    S.media = valid[0]; // preview the first one
-    S.textPost = null;
-    goToPreview();
+  let picked = valid;
+  if (valid.length > 1) {
+    picked = valid.filter(f => f.type === 'image');
+    if (picked.length !== valid.length) showToast('Carousels support photos only. Videos skipped');
+    if (!picked.length) picked = [valid.find(f => f.type === 'video')];
   }
+  if (picked.length === 1) {
+    S.media = picked[0];
+    S.mediaFiles = [];
+  } else {
+    S.mediaFiles = picked;
+    S.media = picked[0];
+  }
+  S.textPost = null;
+  goToPreview();
   e.target.value = '';
 }
 
@@ -1241,19 +1255,56 @@ function backFromDetails() {
   if (S.textPost) { showScreen('scTextStyle'); applyTemplatePreview(TXT_TEMPLATES[_tplActiveIdx]); }
   else { showScreen('scPreview'); }
 }
-function goToDetails() {
-  const thumb = document.getElementById('detThumb');
-  if (S.mediaFiles && S.mediaFiles.length > 1) {
-    // Multi‑image: show first image + badge
-    thumb.style.position = 'relative';
-    thumb.innerHTML = `<img src="${S.mediaFiles[0].url}" alt=""><span style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;">1/${S.mediaFiles.length}</span>`;
-  } else if (S.media) {
-    thumb.innerHTML = S.media.type === 'video'
-      ? `<video src="${S.media.url}" muted playsinline autoplay loop></video>`
-      : `<img src="${S.media.url}" alt="">`;
-  } else {
-    thumb.innerHTML = ''; // text‑only
+function renderPostThumb(box) {
+  if (!box) return;
+  box.innerHTML = '';
+  box.style.position = 'relative';
+
+  // Text card: styled background + text
+  if (S.textPost && !S.media) {
+    const tpl = VideoRender.getTemplate(S.textPost.templateId);
+    const cv = document.createElement('canvas');
+    cv.width = 156; cv.height = 208;
+    VideoRender.drawTemplateBackground(tpl.id, cv.getContext('2d'), cv.width, cv.height, 1);
+    box.appendChild(cv);
+    const tx = document.createElement('div');
+    tx.className = 'thumb-text';
+    tx.style.color = tpl.color;
+    tx.style.fontWeight = tpl.font;
+    tx.style.textShadow = tpl.shadow;
+    const t = S.textPost.text;
+    tx.textContent = t.length > 70 ? t.slice(0, 70) + '…' : t;
+    box.appendChild(tx);
+    return;
   }
+
+  // Image / video / carousel
+  const multi = S.mediaFiles && S.mediaFiles.length > 1;
+  const first = multi ? S.mediaFiles[0] : S.media;
+  if (!first) return;
+
+  if (first.type === 'video') {
+    const v = document.createElement('video');
+    v.src = first.url;
+    v.muted = true; v.loop = true; v.playsInline = true;
+    v.setAttribute('playsinline', '');
+    box.appendChild(v);
+    v.play().catch(() => {});
+  } else {
+    const im = document.createElement('img');
+    im.src = first.url; im.alt = '';
+    box.appendChild(im);
+  }
+  if (multi) {
+    const b = document.createElement('span');
+    b.className = 'thumb-count';
+    b.textContent = '1/' + S.mediaFiles.length;
+    box.appendChild(b);
+  }
+}
+
+function goToDetails() {
+  renderPostThumb(document.getElementById('detThumb'));
   renderSoundSection();
   showScreen('scPost');
 }
@@ -1357,6 +1408,8 @@ async function publishPost() {
   showScreen('scProgress');
   document.getElementById('progActive').style.display = 'flex';
   document.getElementById('progSuccess').style.display = 'none';
+  renderPostThumb(document.getElementById('progPreview'));
+  renderPostThumb(document.getElementById('progPreview2'));
 
   try {
     let mentions = [];
