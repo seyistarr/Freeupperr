@@ -3195,42 +3195,39 @@
                 };
 
                 const videoEntries = feedItems.map(mapEntryToVideoPost).filter(Boolean);
-const seen = new Set();
-const deduped = [];
-
-for (const v of videoEntries) {
-    if (!seen.has(v.id)) {
-        seen.add(v.id);
-        deduped.push(v);
-    }
-}
-
-// Resolve the REAL sound owner's avatar.
-// The disc represents the sound, so it must use the
-// person who created/owns that sound.
-if (window.VideoRender?.getSoundMetaForPost) {
-    await Promise.all(deduped.map(async (v) => {
-        if (!v.soundId) return;
-
-        try {
-            const soundMeta =
-                await window.VideoRender.getSoundMetaForPost(v.postData || v);
-
-            const ownerAvatar = soundMeta?.creatorAvatarUrl || '';
-
-            if (ownerAvatar) {
-                v.soundImg = ownerAvatar;
+                const seen = new Set();
+                const deduped = [];
+                for (const v of videoEntries) {
+                    if (!seen.has(v.id)) {
+                        seen.add(v.id);
+                        deduped.push(v);
+                    }
+                }
+                // ─── Resolve the REAL sound owner's avatar. ────────────
+                // The spinning disc represents the SOUND, not the post.
+                // If a post reuses another creator's sound, the disc must
+                // show the sound owner's avatar — not the poster's.
+                if (window.VideoRender && typeof window.VideoRender.getSoundMetaForPost === 'function') {
+                    await Promise.all(deduped.map(async (v) => {
+                        if (!v.soundId) return;
+                        try {
+                            const soundMeta = await window.VideoRender.getSoundMetaForPost(v.postData || v);
+                            const ownerAvatar = soundMeta && soundMeta.creatorAvatarUrl ? soundMeta.creatorAvatarUrl : '';
+                            if (ownerAvatar) {
+                                v.soundImg = ownerAvatar;
+                            }
+                        } catch (e) {
+                            console.warn('Could not resolve sound owner avatar:', e);
+                        }
+                    }));
+                }
+                return deduped;
+            } catch (err) {
+                console.error('Failed to load video posts:', err);
+                showToast('Error loading videos');
+                return [];
             }
-        } catch (e) {
-            console.warn(
-                'Could not resolve sound owner avatar:',
-                e
-            );
         }
-    }));
-}
-
-return deduped;
 
         // ─── BUILD COMPACT REPOST LABEL ────────────────────────────
 
@@ -3361,7 +3358,7 @@ return deduped;
 
             const isTextPost = v.mediaType === 'text';
 
-            // ─── CHANGE #1: Only render the scrubber for video posts ───
+            // ─── Only render the scrubber for video posts ───
             const scrubberHtml = v.mediaType === 'video' ? `
                 <div class="v-progress" id="prog-${i}" onpointerdown="startScrub(event,${i})">
                     <div class="v-progress-fill" id="progFill-${i}" style="width:0%"></div>
@@ -3613,7 +3610,6 @@ return deduped;
 
         // ─── PAUSE / ACTIVE / SCRUB / TAP ──────────────────────────
 
-        // ─── CHANGE #3: pauseCard now also stops image/text sounds ───
         function pauseCard(idx) {
             const v = videoPosts[idx];
             if (!v) return;
@@ -3633,7 +3629,6 @@ return deduped;
             }
         }
 
-        // ─── CHANGE #2: onCardActive now plays sounds for image/text ───
         function onCardActive(idx) {
             if (idx === _curIdx && idx !== 0) return;
             pauseCard(_curIdx);
@@ -5290,7 +5285,7 @@ return deduped;
                 pullOffset = 0;
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · scrubber only on videos · image/text sound playback ✓');
+            console.log('Freeupper Video Feed · scrubber only on videos · sound owner disc · image/text sound playback ✓');
         }
 
         if (document.readyState === 'loading') {
