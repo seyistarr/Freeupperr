@@ -1339,7 +1339,8 @@ function renderSoundList(sounds) {
   list.innerHTML = sounds.map(sound => {
     const creator = sound.creator || {};
     const creatorName = creator.username ? '@' + creator.username : creator.displayName || '';
-    const avatar = sound.artUrl || null;
+    // Hierarchy: sound artwork → creator avatar → 🎵 (final fallback)
+    const avatar = sound.artUrl || creator.avatarUrl || null;
     return `
       <div class="sound-item">
         ${
@@ -1452,10 +1453,11 @@ function useSound(sound) {
     creator.username ? '@' + creator.username
     : creator.displayName ? creator.displayName
     : '';
+  // Hierarchy: sound artwork → creator avatar → 🎵 (final fallback)
   S.attachedSound = {
     id: sound.id,
     title: sound.title || 'Original sound',
-    art_url: sound.artUrl || '',
+    art_url: sound.artUrl || creator.avatarUrl || '',
     creatorHandle,
     creatorId: creator.id || sound.createdBy || null
   };
@@ -1495,11 +1497,15 @@ function normalizeSavedSound(raw) {
     id,
     title: raw.title || 'Original sound',
     audioUrl: raw.audio_url || raw.audioUrl || '',
+    // Hierarchy: sound artwork → creator avatar (real profile image only)
     artUrl:
       raw.artUrl ||
       raw.cover_url ||
       raw.artwork_url ||
       raw.coverUrl ||
+      creator.avatarUrl ||
+      raw.avatar_url ||
+      raw.creator_avatar_url ||
       '',
     creator: {
       id: creator.id || raw.creator_id || raw.createdBy || null,
@@ -1522,6 +1528,7 @@ function createStudioSoundCard(sound) {
 
   let visual;
   if (artwork) {
+    // onerror swaps in 🎵 if the artwork URL is broken (404/dead link)
     visual = `<img src="${escapeStudioSoundHtml(artwork)}" alt="" class="studio-sound-image" onerror="this.outerHTML='<div class=&quot;studio-sound-music-placeholder&quot;>🎵</div>'">`;
   } else {
     visual = `<div class="studio-sound-music-placeholder">🎵</div>`;
@@ -1660,6 +1667,8 @@ function goToDetails() {
 function renderSoundSection() {
   const el = document.getElementById('soundSection');
   if (S.attachedSound) {
+    // S.attachedSound.art_url already follows hierarchy (sound art → creator avatar)
+    // If neither exists, art_url is '' → render 🎵
     el.innerHTML = `
       <div class="sound-banner" onclick="openSoundSheet('post')">
         ${S.attachedSound.art_url
