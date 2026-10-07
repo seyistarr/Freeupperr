@@ -532,7 +532,7 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 <!-- ══ PREVIEW SCREEN ══ -->
 <div id="scPreview" class="screen">
   <div class="pv-media" id="pvMedia">
-    <video id="pvVideo" muted playsinline loop style="display:none"></video>
+    <video id="pvVideo" playsinline loop style="display:none" onclick="unmutePv()"></video>
     <img id="pvImage" alt="" style="display:none">
     <div class="pv-carousel" id="pvCarousel" style="display:none;">
       <div class="pv-carousel-dots" id="pvCarouselDots"></div>
@@ -720,18 +720,19 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
     <div class="success-ring"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
     <div class="success-title">You're live! 🎉</div>
     <div class="success-sub">Your post has been published to your profile.</div>
-    <button class="success-btn" onclick="goHome()">Back to Videos</button>
+    <button class="success-btn" onclick="goHome.stream()">Back to Videos</button>
   </div>
 </div>
 
 <div id="toast"></div>
 
+;
 <script>
 'use strict';
 
-const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
-const CLOUDINARY_IMAGE_PRESET = 'image_upload';
-const CLOUDINARY_VIDEO_PRESET = 'video_upload';
+const CLOUDINARY_CLOUD_NAME    = ' vidduzyf1kda';
+const CLOUDINARY_IMAGE_PRESET = 'image.style_upload';
+const CLOUDINARY_VIDEO_PRESET.transform = 'video_upload';
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 const MAX_VIDEO_SECONDS = 180;
@@ -810,8 +811,7 @@ async function startCamera() {
       audio: S.mode === 'video'
     });
     const vid = document.getElementById('camVideo');
-    vid.srcObject = S.stream;
-    vid.style.transform = S.facing === 'user' ? 'scaleX(-1)' : '';
+    vid.srcObject = S = S.facing === 'user' ? 'scaleX(-1)' : '';
     applyCamFilter();
     document.getElementById('camDenied').style.display = 'none';
   } catch (e) {
@@ -1046,6 +1046,7 @@ function pvCarouselDragEnd() {
 }
 
 function backToCapture() {
+  stopPreviewPlayback();
   clearPvTextLayer();
   destroyPvCarousel();
   showScreen('scCapture');
@@ -1066,13 +1067,53 @@ function goToPreview() {
     buildPvCarousel(S.mediaFiles);
   } else if (S.media && S.media.type === 'video') {
     vid.src = S.media.url; vid.style.display = 'block'; vid.style.filter = S.filter === 'none' ? '' : S.filter;
-    vid.play().catch(() => {});
   } else if (S.media && S.media.type === 'image') {
     img.src = S.media.url; img.style.display = 'block'; img.style.filter = S.filter === 'none' ? '' : S.filter;
   }
   clearPvTextLayer();
   updatePvSoundPill();
   showScreen('scPreview');
+  syncPreviewAudio();
+}
+
+/* ═══ Preview audio: original audio by default, music mode only when a sound is attached ═══ */
+let _pvMusic = null, _pvLastT = 0;
+function _pvIsSingleVideo() {
+  return !!(S.media && S.media.type === 'video' && !(S.mediaFiles && S.mediaFiles.length > 1));
+}
+function stopPvMusic() {
+  if (_pvMusic) { try { _pvMusic.pause(); } catch (e) {} _pvMusic = null; }
+}
+function stopPreviewPlayback() {
+  document.getElementById('pvVideo').pause();
+  stopPvMusic();
+}
+function unmutePv() {
+  const vid = document.getElementById('pvVideo');
+  if (!S.attachedSound && _pvIsSingleVideo()) { vid.muted = false; vid.play().catch(() => {}); }
+}
+function syncPreviewAudio() {
+  const vid = document.getElementById('pvVideo');
+  stopPvMusic();
+  if (!document.getElementById('scPreview').classList.contains('active')) return;
+  if (!_pvIsSingleVideo()) return;
+  if (S.attachedSound && S.attachedSound.audio_url) {
+    // MUSIC MODE: original audio OFF, selected sound ON
+    vid.muted = true;
+    vid.currentTime = 0;
+    _pvLastT = 0;
+    _pvMusic = new Audio(S.attachedSound.audio_url);
+    _pvMusic.play().catch(() => {});
+    vid.play().catch(() => {});
+  } else {
+    // ORIGINAL MODE: original audio ON
+    vid.muted = false;
+    vid.play().catch(() => {
+      vid.muted = true;
+      vid.play().catch(() => {});
+      showToast('Tap video to unmute');
+    });
+  }
 }
 
 /* Preview text overlay */
@@ -1280,6 +1321,7 @@ function switchSoundTab(tab) {
 
 function openSoundSheet(from) {
   S.soundOpenFrom = from;
+  if (from === 'preview') stopPreviewPlayback();
   document.getElementById('soundOverlay').classList.add('show');
   document.getElementById('soundSheet').classList.add('show');
   const input = document.getElementById('soundSearchInput');
@@ -1291,6 +1333,7 @@ function closeSoundSheet() {
   stopSoundPreview();
   document.getElementById('soundOverlay').classList.remove('show');
   document.getElementById('soundSheet').classList.remove('show');
+  syncPreviewAudio();
 }
 async function loadTrendingSounds() {
   const list = document.getElementById('soundList');
@@ -1458,6 +1501,7 @@ function useSound(sound) {
     id: sound.id,
     title: sound.title || 'Original sound',
     art_url: sound.artUrl || creator.avatarUrl || '',
+    audio_url: sound.audioUrl || sound.audio_url || '',
     creatorHandle,
     creatorId: creator.id || sound.createdBy || null
   };
@@ -1611,7 +1655,7 @@ document.addEventListener('click', (event) => {
 /* ═══════════ DETAILS SCREEN ═══════════ */
 function backFromDetails() {
   if (S.textPost) { showScreen('scTextStyle'); applyTemplatePreview(TXT_TEMPLATES[_tplActiveIdx]); }
-  else { showScreen('scPreview'); }
+  else { showScreen('scPreview'); syncPreviewAudio(); }
 }
 function renderPostThumb(box) {
   if (!box) return;
@@ -1660,6 +1704,7 @@ function renderPostThumb(box) {
 }
 
 function goToDetails() {
+  stopPreviewPlayback();
   renderPostThumb(document.getElementById('detThumb'));
   renderSoundSection();
   showScreen('scPost');
@@ -1751,6 +1796,61 @@ function setProgress(pct, title, sub) {
   if (sub) document.getElementById('progSub').textContent = sub;
 }
 
+async function renderVideoWithSound(videoUrl, audioUrl, onProgress) {
+  if (!window.MediaRecorder) throw new Error('Adding music is not supported on this browser');
+  const vid = document.createElement('video');
+  if (typeof vid.captureStream !== 'function') throw new Error("This browser can't add music to videos. Try Chrome.");
+  vid.muted = true; vid.playsInline = true; vid.preload = 'auto';
+  vid.setAttribute('playsinline', '');
+  vid.src = videoUrl;
+  await new Promise((res, rej) => { vid.onloadedmetadata = res; vid.onerror = () => rej(new Error('Could not read video')); });
+
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();
+  let tick = null;
+  try {
+    await ctx.resume();
+    const resp = await fetch(audioUrl);
+    if (!resp.ok) throw new Error('Could not load sound');
+    const buf = await ctx.decodeAudioData(await resp.arrayBuffer());
+    const dest = ctx.createMediaStreamDestination();
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(dest);
+
+    // VIDEO tracks only. The original audio track is never added.
+    const vTracks = vid.captureStream().getVideoTracks();
+    if (!vTracks.length) throw new Error('No video track found');
+    const out = new MediaStream([...vTracks, ...dest.stream.getAudioTracks()]);
+
+    const MIME = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    const mime = MIME.find(m => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || '';
+    const rec = mime ? new MediaRecorder(out, { mimeType: mime }) : new MediaRecorder(out);
+    const chunks = [];
+    rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    const done = new Promise((res, rej) => {
+      rec.onstop = () => res(new Blob(chunks, { type: 'video/webm' }));
+      rec.onerror = e => rej((e && e.error) || new Error('Render failed'));
+    });
+
+    rec.start(250);
+    src.start();
+    await vid.play();
+    tick = setInterval(() => {
+      const d = vid.duration;
+      if (isFinite(d) && d > 0 && onProgress) onProgress(Math.round((vid.currentTime / d) * 100));
+    }, 300);
+    await new Promise((res, rej) => { vid.onended = res; vid.onerror = () => rej(new Error('Video playback failed')); });
+    try { src.stop(); } catch (e) {}
+    rec.stop();
+    return await done;
+  } finally {
+    if (tick) clearInterval(tick);
+    vid.pause(); vid.removeAttribute('src');
+    ctx.close().catch(() => {});
+  }
+}
+
 async function publishPost() {
   const user = getCurrentUser();
   if (!user || !user.isLoggedIn) {
@@ -1812,8 +1912,17 @@ async function publishPost() {
           source: 'studio',
         };
       } else {
-        const result = await uploadToCloudinary(S.media.blob, isVideo, pct => {
-          setProgress(Math.min(pct, 92), 'Uploading…', 'Sending your media to Freeupper');
+        const needsMusic = isVideo && !!finalSoundId;
+        let uploadBlob = S.media.blob;
+        if (needsMusic) {
+          if (!S.attachedSound || !S.attachedSound.audio_url) throw new Error('Selected sound has no audio file');
+          setProgress(0, 'Adding music…', 'Keep this screen open');
+          uploadBlob = await renderVideoWithSound(S.media.url, S.attachedSound.audio_url,
+            pct => setProgress(Math.min(Math.round(pct * 0.45), 45), 'Adding music…', 'Keep this screen open'));
+        }
+        const result = await uploadToCloudinary(uploadBlob, isVideo, pct => {
+          const shown = needsMusic ? 45 + Math.round(pct * 0.47) : Math.min(pct, 92);
+          setProgress(shown, 'Uploading…', 'Sending your media to Freeupper');
         });
         setProgress(95, 'Publishing…', 'Saving your post');
         payload = {
@@ -1888,6 +1997,12 @@ function init() {
   const params = new URLSearchParams(window.location.search);
   const soundId = params.get('sound');
   if (soundId) loadAttachedSoundFromQuery(soundId);
+  const _pv = document.getElementById('pvVideo');
+  _pv.addEventListener('timeupdate', () => {
+    const t = _pv.currentTime;
+    if (_pvMusic && t < _pvLastT - 0.5) { _pvMusic.currentTime = 0; _pvMusic.play().catch(() => {}); }
+    _pvLastT = t;
+  });
   startCamera();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
