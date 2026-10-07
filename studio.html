@@ -328,7 +328,8 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .sound-item-icon{width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--inp-bg);flex-shrink:0}
 .sound-item-info{flex:1;min-width:0}
 .sound-item-title{font-size:.82rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sound-item-sub{font-size:.72rem;color:var(--muted);margin-top:1px}
+.sound-item-creator{margin-top:3px;font-size:12px;color:var(--muted);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
 .sound-use-btn{padding:7px 15px;border-radius:100px;background:var(--pdim);border:1.5px solid var(--pbrd);
   color:var(--p);font-family:var(--font-head);font-size:.72rem;font-weight:700;flex-shrink:0}
 .sound-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:.85rem;line-height:1.6}
@@ -690,41 +691,28 @@ function getCurrentUser() {
 }
 
 // ─── ORIGINAL SOUND: derive an MP3 URL from a Cloudinary video URL ───
-//     Cloudinary can deliver an uploaded video asset as an audio
-//     format (e.g. MP3) by changing the delivered extension.
-//     The transformed asset is generated on demand and cached.
-//     We use this to give a freshly-published video its own real
-//     FreeUpper sound without needing an FFmpeg pipeline yet.
 function buildOriginalAudioUrl(videoUrl) {
   if (!videoUrl) return null;
   try {
     const url = new URL(videoUrl);
-    // Cloudinary video assets can be delivered as audio by changing
-    // the output extension to a supported audio format.
     if (/\.(mp4|mov|webm|m4v)$/i.test(url.pathname)) {
-      url.pathname = url.pathname.replace(
-        /\.(mp4|mov|webm|m4v)$/i,
-        '.mp3'
-      );
+      url.pathname = url.pathname.replace(/\.(mp4|mov|webm|m4v)$/i, '.mp3');
     } else if (!/\.mp3$/i.test(url.pathname)) {
       url.pathname += '.mp3';
     }
     return url.toString();
   } catch (error) {
-    console.warn(
-      'Could not build original audio URL:',
-      error
-    );
+    console.warn('Could not build original audio URL:', error);
     return null;
   }
 }
 
 function closeStudio() {
   stopCameraStream();
-  window.location.href = 'video.html';  // ─── GO TO VIDEO FEED ───
+  window.location.href = 'video.html';
 }
 function goHome() {
-  window.location.href = 'video.html?refresh=' + Date.now();  // ─── GO TO VIDEO FEED ───
+  window.location.href = 'video.html?refresh=' + Date.now();
 }
 
 /* ═══════════ CAMERA ═══════════ */
@@ -869,11 +857,9 @@ async function getVideoDuration(file) {
     v.onerror = () => resolve(0);
   });
 }
-// ─── GALLERY: support up to 10 images ──────────────────────────────
 async function handleGalleryFiles(e) {
   const files = e.target.files;
   if (!files || !files.length) return;
-  // Filter: only images and videos
   const valid = [];
   const maxImages = MAX_GALLERY_IMAGES;
   for (let i = 0; i < Math.min(files.length, maxImages); i++) {
@@ -999,8 +985,6 @@ function goToPreview() {
     vid.play().catch(() => {});
   } else if (S.media && S.media.type === 'image') {
     img.src = S.media.url; img.style.display = 'block'; img.style.filter = S.filter === 'none' ? '' : S.filter;
-  } else {
-    // text-only preview (no media)
   }
   clearPvTextLayer();
   updatePvSoundPill();
@@ -1083,7 +1067,6 @@ function makeDraggable(el) {
 }
 
 /* ═══════════ TEXT CARD FLOW ═══════════ */
-// ─── Use shared templates from VideoRender ──────────────────────────
 const TXT_TEMPLATES = VideoRender.TXT_TEMPLATES;
 const TXT_CATS = [...new Set(TXT_TEMPLATES.map(t => t.cat))];
 let _tplActiveIdx = 0, _tplActiveCat = TXT_CATS[0], _tplAnimId = null;
@@ -1177,7 +1160,7 @@ function goToDetailsFromText() {
   goToDetails();
 }
 
-/* ═══════════ SOUND (real Supabase) ═══════════ */
+/* ═══════════ SOUND — USE SoundsAPI AS SINGLE SOURCE OF TRUTH ═══════════ */
 function updateCapSoundPill() {
   const pill = document.getElementById('capSoundPill');
   const label = document.getElementById('capSoundLabel');
@@ -1194,7 +1177,8 @@ function openSoundSheet(from) {
   S.soundOpenFrom = from;
   document.getElementById('soundOverlay').classList.add('show');
   document.getElementById('soundSheet').classList.add('show');
-  document.getElementById('soundSearchInput').value = '';
+  const input = document.getElementById('soundSearchInput');
+  input.value = '';
   loadTrendingSounds();
 }
 function closeSoundSheet() {
@@ -1203,18 +1187,19 @@ function closeSoundSheet() {
 }
 async function loadTrendingSounds() {
   const list = document.getElementById('soundList');
-  list.innerHTML = `<div class="sound-empty">Loading sounds…</div>`;
+  list.innerHTML = `
+    <div class="sound-empty">Loading sounds…</div>
+  `;
   try {
-    const { data, error } = await window.sb
-      .from('sounds')
-      .select('id,title,art_url,created_by')
-      .order('created_at', { ascending: false })
-      .limit(20);
-    if (error) throw error;
-    renderSoundList(data || []);
-  } catch (e) {
-    console.error('loadTrendingSounds error:', e);
-    list.innerHTML = `<div class="sound-empty">Couldn't load sounds. Pull down to retry.</div>`;
+    const sounds = await SoundsAPI.loadTrendingSounds(0, 20);
+    renderSoundList(sounds);
+  } catch (error) {
+    console.error('loadTrendingSounds error:', error);
+    list.innerHTML = `
+      <div class="sound-empty">
+        Couldn't load sounds. Pull down to retry.
+      </div>
+    `;
   }
 }
 let _soundSearchTimer = null;
@@ -1222,45 +1207,106 @@ function searchSounds(q) {
   clearTimeout(_soundSearchTimer);
   _soundSearchTimer = setTimeout(async () => {
     const query = q.trim();
-    if (!query) { loadTrendingSounds(); return; }
+    if (!query) {
+      loadTrendingSounds();
+      return;
+    }
     const list = document.getElementById('soundList');
-    list.innerHTML = `<div class="sound-empty">Searching…</div>`;
+    list.innerHTML = `
+      <div class="sound-empty">Searching…</div>
+    `;
     try {
-      const { data, error } = await window.sb
-        .from('sounds')
-        .select('id,title,art_url,created_by')
-        .ilike('title', `%${query}%`)
-        .limit(20);
-      if (error) throw error;
-      renderSoundList(data || []);
-    } catch (e) {
-      list.innerHTML = `<div class="sound-empty">Search failed. Try again.</div>`;
+      const sounds = await SoundsAPI.searchSounds(query, 20);
+      renderSoundList(sounds);
+    } catch (error) {
+      console.error('searchSounds error:', error);
+      list.innerHTML = `
+        <div class="sound-empty">
+          Search failed. Try again.
+        </div>
+      `;
     }
   }, 350);
 }
 function renderSoundList(sounds) {
   const list = document.getElementById('soundList');
-  if (!sounds.length) { list.innerHTML = `<div class="sound-empty">No sounds found.</div>`; return; }
-  list.innerHTML = sounds.map(s => `
-    <div class="sound-item">
-      <img class="sound-item-icon" src="${s.art_url || ''}" alt=""
-           onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.title || 'sound')}'">
-      <div class="sound-item-info">
-        <div class="sound-item-title">🎵 ${escapeHtml(s.title || 'Original sound')}</div>
+  if (!sounds || !sounds.length) {
+    list.innerHTML = `
+      <div class="sound-empty">
+        No sounds found.
       </div>
-      <button class="sound-use-btn" onclick='useSound(${JSON.stringify(s).replace(/'/g,"&#39;")})'>Use</button>
-    </div>
-  `).join('');
-}
-async function useSound(sound) {
-  let creatorHandle = '';
-  if (sound.created_by) {
-    try {
-      const { data: profile } = await window.sb.from('profiles').select('username,display_name').eq('id', sound.created_by).maybeSingle();
-      if (profile) creatorHandle = '@' + (profile.username || profile.display_name || 'user');
-    } catch (e) {}
+    `;
+    return;
   }
-  S.attachedSound = { id: sound.id, title: sound.title || 'Original sound', art_url: sound.art_url, creatorHandle };
+  list.innerHTML = sounds.map(sound => {
+    const creator = sound.creator || {};
+    const creatorName =
+      creator.username
+        ? '@' + creator.username
+        : creator.displayName || '';
+    const avatar =
+      sound.artUrl ||
+      creator.avatarUrl ||
+      '';
+    return `
+      <div class="sound-item">
+        <img
+          class="sound-item-icon"
+          src="${avatar}"
+          alt=""
+          onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+            creator.displayName || sound.title || 'sound'
+          )}'"
+        >
+        <div class="sound-item-info">
+          <div class="sound-item-title">
+            🎵 ${escapeHtml(sound.title || 'Original sound')}
+          </div>
+          ${
+            creatorName
+              ? `<div class="sound-item-creator">
+                  ${escapeHtml(creatorName)}
+                 </div>`
+              : ''
+          }
+        </div>
+        <button
+          class="sound-use-btn"
+          onclick='useSound(${JSON.stringify(sound).replace(/'/g, "&#39;")})'
+        >
+          Use
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+function useSound(sound) {
+  if (!sound || !sound.id) {
+    showToast('Unable to attach this sound');
+    return;
+  }
+  const creator = sound.creator || {};
+  const creatorHandle =
+    creator.username
+      ? '@' + creator.username
+      : creator.displayName
+        ? creator.displayName
+        : '';
+  S.attachedSound = {
+    id: sound.id,
+    title:
+      sound.title ||
+      'Original sound',
+    art_url:
+      sound.artUrl ||
+      creator.avatarUrl ||
+      '',
+    creatorHandle,
+    creatorId:
+      creator.id ||
+      sound.createdBy ||
+      null
+  };
   updateCapSoundPill();
   updatePvSoundPill();
   renderSoundSection();
@@ -1268,11 +1314,18 @@ async function useSound(sound) {
   showToast('Sound attached ✓');
 }
 async function loadAttachedSoundFromQuery(soundId) {
+  if (!soundId) return;
   try {
-    const { data: sound, error } = await window.sb.from('sounds').select('*').eq('id', soundId).maybeSingle();
-    if (error || !sound) { showToast("Couldn't load sound"); return; }
-    await useSound(sound);
-  } catch (e) { console.error(e); }
+    const sound = await SoundsAPI.loadSound(soundId);
+    if (!sound) {
+      showToast("Couldn't load sound");
+      return;
+    }
+    useSound(sound);
+  } catch (error) {
+    console.error('loadAttachedSoundFromQuery error:', error);
+    showToast("Couldn't load sound");
+  }
 }
 function removeSound() {
   S.attachedSound = null;
@@ -1450,26 +1503,18 @@ async function publishPost() {
     }
 
     // ─── Determine media kind up front ──────────────────────────────
-    // `isVideo` is used later by the original-sound block, so it must
-    // be in function scope, not nested inside the S.media branch.
     const isVideo = !!(S.media && S.media.type === 'video');
 
     // ─── Sound is OPTIONAL ──────────────────────────────────────────
-    // finalSoundId is the ID of a sound the user explicitly picked
-    // from the FreeUpper library. If null, this post has no chosen
-    // sound — and (if it's a video) we will create an ORIGINAL sound
-    // from the video's own audio below.
     const finalSoundId = S.attachedSound?.id || null;
 
     let payload;
     if (S.media) {
       setProgress(0, 'Uploading…', 'Sending your media to Freeupper');
 
-      // Handle multiple images: upload each, collect URLs
       let mediaUrls = [];
       let mediaItems = [];
       if (S.mediaFiles && S.mediaFiles.length > 1) {
-        // Multiple images – upload all
         const allFiles = S.mediaFiles;
         const total = allFiles.length;
         for (let i = 0; i < total; i++) {
@@ -1494,7 +1539,6 @@ async function publishPost() {
           source: 'studio',
         };
       } else {
-        // Single media (video or single image)
         const result = await uploadToCloudinary(S.media.blob, isVideo, pct => {
           setProgress(Math.min(pct, 92), 'Uploading…', 'Sending your media to Freeupper');
         });
@@ -1513,7 +1557,6 @@ async function publishPost() {
         };
       }
     } else {
-      // ─── Text‑only post ──────────────────────────────────────────
       setProgress(50, 'Publishing…', 'Saving your text post');
       payload = {
         title: S.textPost.text.slice(0, 100),
@@ -1536,14 +1579,6 @@ async function publishPost() {
     // ────────────────────────────────────────────────────────────────
     // ORIGINAL SOUND
     // ────────────────────────────────────────────────────────────────
-    // If this is a video and the user did NOT explicitly select
-    // another FreeUpper sound, turn the video's original audio
-    // into a real FreeUpper sound.
-    //
-    // This does NOT create a fake "Original sound" record.
-    // It creates a real sounds row linked to this exact post
-    // via the idempotent create_original_sound_for_post() RPC.
-    // ────────────────────────────────────────────────────────────────
     if (
       post.id &&
       isVideo &&
@@ -1563,32 +1598,16 @@ async function publishPost() {
               post.id,
               audioUrl
             );
-          console.log(
-            '🎵 Original sound created:',
-            createdOriginalSound
-          );
+          console.log('🎵 Original sound created:', createdOriginalSound);
         }
       } catch (soundErr) {
-        // The video post already exists, so we deliberately do NOT
-        // roll back the publication. But we DO surface the failure
-        // loudly instead of silently swallowing it — otherwise the
-        // user is left with a video that has no linked sound and
-        // no visible reason why.
-        console.error(
-          'Original sound creation failed:',
-          soundErr
-        );
-        showToast(
-          'Video published, but original sound could not be created'
-        );
+        console.error('Original sound creation failed:', soundErr);
+        showToast('Video published, but original sound could not be created');
       }
     }
 
     // ────────────────────────────────────────────────────────────────
     // SELECTED FREEUPPER SOUND
-    // ────────────────────────────────────────────────────────────────
-    // If the user explicitly selected an existing sound,
-    // count this publication as one use.
     // ────────────────────────────────────────────────────────────────
     if (
       post.id &&
@@ -1598,10 +1617,7 @@ async function publishPost() {
       try {
         await window.SoundsAPI.incrementSoundUsage(finalSoundId);
       } catch (soundErr) {
-        console.warn(
-          'Sound usage update failed:',
-          soundErr
-        );
+        console.warn('Sound usage update failed:', soundErr);
       }
     }
 
