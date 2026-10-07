@@ -366,7 +366,7 @@
               type="button"
               class="saved-sound-remove"
               aria-label="Remove saved sound"
-              onclick='SavedSounds.removeSound(${safeSound.id ? JSON.stringify(sound.id) : "null"}, this)'
+              onclick='SavedSounds.removeSound(${JSON.stringify(sound.id)}, this)'
             >
               ×
             </button>
