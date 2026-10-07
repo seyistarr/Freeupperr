@@ -1820,37 +1820,41 @@ function setProgress(pct, title, sub) {
   if (sub) document.getElementById('progSub').textContent = sub;
 }
 
+/* ═══════════ CLOUDINARY MUSIC COMPOSITION ═══════════
+ * Uses Cloudinary's ac_none + l_audio layer so the phone only uploads
+ * the raw original video. Cloudinary removes the original audio and adds
+ * the selected FreeUpper sound on the delivery URL.
+ *
+ * Folder slashes in the sound's public ID must become `:` inside the
+ * l_audio layer, per Cloudinary's documented syntax.
+ */
 function buildCloudinaryMusicVideoUrl(videoUrl, audioUrl) {
-  if (!videoUrl || !audioUrl) {
-    throw new Error('Video or sound URL is missing');
-  }
-  if (!/^https:\/\/res\.cloudinary\.com\//i.test(videoUrl)) {
+  const marker = '/video/upload/';
+  if (
+    !/^https:\/\/res\.cloudinary\.com\//i.test(videoUrl || '') ||
+    !videoUrl.includes(marker)
+  ) {
     throw new Error('Video must be hosted on Cloudinary');
   }
-  if (!/^https:\/\/res\.cloudinary\.com\//i.test(audioUrl)) {
-    throw new Error('Sound must be hosted on Cloudinary');
-  }
-  // Sound assets must be Cloudinary video resources because Cloudinary
-  // stores audio under the video resource type.
-  const audioMatch = audioUrl.match(
-    /\/video\/upload\/(?:v\d+\/)?(.+?)(?:\.[a-z0-9]+)(?:\?.*)?$/i
-  );
-  if (!audioMatch) {
-    throw new Error('Selected sound is not a valid Cloudinary audio asset');
-  }
-  const audioPublicId = audioMatch[1];
-  // Reject obvious non-audio assets accidentally stored in sounds.audio_url.
-  if (/\.(jpe?g|png|gif|webp)(?:\?.*)?$/i.test(audioUrl)) {
+  if (
+    !/^https:\/\/res\.cloudinary\.com\//i.test(audioUrl || '') ||
+    !audioUrl.includes(marker)
+  ) {
     throw new Error('Selected sound has no audio file');
   }
-  const marker = '/video/upload/';
-  if (!videoUrl.includes(marker)) {
-    throw new Error('Invalid Cloudinary video URL');
+  const publicId = audioUrl
+    .split(marker)[1]
+    .split('?')[0]
+    .replace(/^v\d+\//, '')
+    .replace(/\.[a-z0-9]+$/i, '')
+    .split('/')
+    .join(':');
+  if (!publicId) {
+    throw new Error('Selected sound has no audio file');
   }
-  // Remove the existing video's audio, then add the selected FreeUpper sound.
   return videoUrl.replace(
     marker,
-    `${marker}ac_none/l_audio:${audioPublicId}/fl_layer_apply/`
+    `${marker}ac_none/l_audio:${publicId}/fl_layer_apply/`
   );
 }
 
@@ -1943,8 +1947,8 @@ async function publishPost() {
             'Adding music…',
             'Finalizing your video'
           );
-          result.secure_url = buildCloudinaryMusicVideoUrl(
-            result.secure_url,
+          result.url = buildCloudinaryMusicVideoUrl(
+            result.url,
             S.attachedSound.audio_url
           );
         }
@@ -1954,7 +1958,7 @@ async function publishPost() {
           content: caption,
           tags: S.tags.slice(),
           media: [{ url: result.url, type: result.type, public_id: result.public_id }],
-          mediaUrl: result.secure_url || result.url,
+          mediaUrl: result.url,
           mediaType: result.type,
           mentions,
           commentsHidden: hideComments,
