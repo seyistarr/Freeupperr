@@ -364,6 +364,9 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
   height:20px;
   display:block;
 }
+.sound-play-btn svg[hidden]{
+  display:none;
+}
 .sound-play-btn:hover{
   background:rgba(255,255,255,.2);
 }
@@ -1336,7 +1339,7 @@ function renderSoundList(sounds) {
   list.innerHTML = sounds.map(sound => {
     const creator = sound.creator || {};
     const creatorName = creator.username ? '@' + creator.username : creator.displayName || '';
-    const avatar = sound.artUrl || creator.avatarUrl || null;
+    const avatar = sound.artUrl || null;
     return `
       <div class="sound-item">
         ${
@@ -1344,9 +1347,9 @@ function renderSoundList(sounds) {
             ? `
               <img class="sound-item-icon" src="${escapeHtml(avatar)}" alt=""
                 onerror="this.style.display='none'; if (this.nextElementSibling) this.nextElementSibling.style.display='flex';">
-              <div class="sound-item-icon sound-item-music-icon" style="display:none;">♪</div>
+              <div class="sound-item-icon sound-item-music-icon" style="display:none;">🎵</div>
             `
-            : `<div class="sound-item-icon sound-item-music-icon">♪</div>`
+            : `<div class="sound-item-icon sound-item-music-icon">🎵</div>`
         }
         <div class="sound-item-info">
           <div class="sound-item-title">🎵 ${escapeHtml(sound.title || 'Original sound')}</div>
@@ -1452,7 +1455,7 @@ function useSound(sound) {
   S.attachedSound = {
     id: sound.id,
     title: sound.title || 'Original sound',
-    art_url: sound.artUrl || creator.avatarUrl || '',
+    art_url: sound.artUrl || '',
     creatorHandle,
     creatorId: creator.id || sound.createdBy || null
   };
@@ -1493,12 +1496,10 @@ function normalizeSavedSound(raw) {
     title: raw.title || 'Original sound',
     audioUrl: raw.audio_url || raw.audioUrl || '',
     artUrl:
+      raw.artUrl ||
       raw.cover_url ||
       raw.artwork_url ||
       raw.coverUrl ||
-      raw.artUrl ||
-      creator.avatarUrl ||
-      raw.avatar_url ||
       '',
     creator: {
       id: creator.id || raw.creator_id || raw.createdBy || null,
@@ -1521,9 +1522,9 @@ function createStudioSoundCard(sound) {
 
   let visual;
   if (artwork) {
-    visual = `<img src="${escapeStudioSoundHtml(artwork)}" alt="" class="studio-sound-image">`;
+    visual = `<img src="${escapeStudioSoundHtml(artwork)}" alt="" class="studio-sound-image" onerror="this.outerHTML='<div class=&quot;studio-sound-music-placeholder&quot;>🎵</div>'">`;
   } else {
-    visual = `<div class="studio-sound-music-placeholder">♪</div>`;
+    visual = `<div class="studio-sound-music-placeholder">🎵</div>`;
   }
 
   card.innerHTML = `
@@ -1558,7 +1559,7 @@ async function loadStudioSavedSounds() {
     if (!Array.isArray(sounds) || sounds.length === 0) {
       container.innerHTML = `
         <div class="saved-sounds-empty">
-          <div class="saved-sounds-empty-icon">♪</div>
+          <div class="saved-sounds-empty-icon">🎵</div>
           <div class="saved-sounds-empty-title">No saved sounds yet</div>
           <div class="saved-sounds-empty-text">Sounds you save will appear here.</div>
         </div>`;
@@ -1596,7 +1597,6 @@ document.addEventListener('click', (event) => {
   }
   const savedTab = event.target.closest('[data-sound-tab="saved"]');
   if (savedTab && !savedTab.classList.contains('on')) {
-    // Ensure Saved list loads even if opened via delegation
     loadStudioSavedSounds();
   }
 });
@@ -1662,8 +1662,10 @@ function renderSoundSection() {
   if (S.attachedSound) {
     el.innerHTML = `
       <div class="sound-banner" onclick="openSoundSheet('post')">
-        <img class="sound-banner-art" src="${S.attachedSound.art_url || ''}" alt=""
-             onerror="this.style.visibility='hidden'">
+        ${S.attachedSound.art_url
+          ? `<img class="sound-banner-art" src="${escapeHtml(S.attachedSound.art_url)}" alt=""
+               onerror="this.outerHTML='<div class=&quot;sound-banner-art&quot; style=&quot;display:flex;align-items:center;justify-content:center;font-size:20px;&quot;>🎵</div>'">`
+          : `<div class="sound-banner-art" style="display:flex;align-items:center;justify-content:center;font-size:20px;">🎵</div>`}
         <div class="sound-banner-meta">
           <div class="sound-banner-title">🎵 ${escapeHtml(S.attachedSound.title)}</div>
           <div class="sound-banner-sub">${escapeHtml(S.attachedSound.creatorHandle || '')}</div>
