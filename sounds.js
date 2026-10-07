@@ -409,44 +409,150 @@
     return mapSound(sound, profile);
   }
 
-  // ─── SAVE / UNSAVE ──────────────────────────────────────────────────
+  // ─── SAVE SOUND ─────────────────────────────────────────────────────
+  //
+  //   Session-based auth (not getUser) so RLS sees the same user the
+  //   client is acting as. Upsert with onConflict + ignoreDuplicates
+  //   makes repeated saves idempotent, relying on the
+  //   saved_sounds_user_sound_uniq (user_id, sound_id) unique index.
+  //
   async function saveSound(soundId) {
-    const userId = await _getUserId();
-    const { error } = await sb
-      .from('saved_sounds')
-      .insert({ user_id: userId, sound_id: soundId });
+    if (!soundId) {
+      throw new Error('A sound ID is required.');
+    }
 
-    // 23505 = unique_violation → already saved, treat as success
-    if (error && error.code !== '23505') throw error;
-    return { saved: true };
-  }
+    const {
+      data: { session },
+      error: sessionError
+    } = await sb.auth.getSession();
 
-  async function unsaveSound(soundId) {
-    const userId = await _getUserId();
-    const { error } = await sb
-      .from('saved_sounds')
-      .delete()
-      .eq('user_id', userId)
-      .eq('sound_id', soundId);
+    if (sessionError) {
+      console.error('saveSound session error:', sessionError);
+      throw sessionError;
+    }
 
-    if (error) throw error;
-    return { saved: false };
-  }
+    const user = session?.user;
+    if (!user?.id) {
+      throw new Error('You must be logged in to save a sound.');
+    }
 
-  async function isSoundSaved(soundId) {
-    const userId = await _getCurrentUserIdSafe();
-    if (!userId) return false;
+    console.log('Saving sound:', {
+      userId: user.id,
+      soundId: String(soundId)
+    });
+
     const { data, error } = await sb
       .from('saved_sounds')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('sound_id', soundId)
+      .upsert(
+        {
+          user_id: user.id,
+          sound_id: String(soundId)
+        },
+        {
+          onConflict: 'user_id,sound_id',
+          ignoreDuplicates: true
+        }
+      )
+      .select()
       .maybeSingle();
 
     if (error) {
-      console.warn('isSoundSaved error:', error);
+      console.error('❌ saveSound Supabase error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        userId: user.id,
+        soundId: String(soundId)
+      });
+      throw error;
+    }
+
+    return {
+      saved: true,
+      data: data || null
+    };
+  }
+
+  // ─── UNSAVE SOUND ───────────────────────────────────────────────────
+  async function unsaveSound(soundId) {
+    if (!soundId) {
+      throw new Error('A sound ID is required.');
+    }
+
+    const {
+      data: { session },
+      error: sessionError
+    } = await sb.auth.getSession();
+
+    if (sessionError) {
+      console.error(
+        'unsaveSound session error:',
+        sessionError
+      );
+      throw sessionError;
+    }
+
+    const user = session?.user;
+    if (!user?.id) {
+      throw new Error(
+        'You must be logged in to remove a saved sound.'
+      );
+    }
+
+    const { error } = await sb
+      .from('saved_sounds')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('sound_id', String(soundId));
+
+    if (error) {
+      console.error('❌ unsaveSound error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+      throw error;
+    }
+
+    return {
+      saved: false
+    };
+  }
+
+  // ─── IS SOUND SAVED ─────────────────────────────────────────────────
+  async function isSoundSaved(soundId) {
+    if (!soundId) {
       return false;
     }
+
+    const {
+      data: { session },
+      error: sessionError
+    } = await sb.auth.getSession();
+
+    if (sessionError || !session?.user?.id) {
+      return false;
+    }
+
+    const { data, error } = await sb
+      .from('saved_sounds')
+      .select('id')
+      .eq('user_id', session.user.id)
+      .eq('sound_id', String(soundId))
+      .maybeSingle();
+
+    if (error) {
+      console.warn('isSoundSaved error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+      return false;
+    }
+
     return !!data;
   }
 
