@@ -1820,59 +1820,38 @@ function setProgress(pct, title, sub) {
   if (sub) document.getElementById('progSub').textContent = sub;
 }
 
-async function renderVideoWithSound(videoUrl, audioUrl, onProgress) {
-  if (!window.MediaRecorder) throw new Error('Adding music is not supported on this browser');
-  const vid = document.createElement('video');
-  if (typeof vid.captureStream !== 'function') throw new Error("This browser can't add music to videos. Try Chrome.");
-  vid.muted = true; vid.playsInline = true; vid.preload = 'auto';
-  vid.setAttribute('playsinline', '');
-  vid.src = videoUrl;
-  await new Promise((res, rej) => { vid.onloadedmetadata = res; vid.onerror = () => rej(new Error('Could not read video')); });
-
-  const AC = window.AudioContext || window.webkitAudioContext;
-  const ctx = new AC();
-  let tick = null;
-  try {
-    await ctx.resume();
-    const resp = await fetch(audioUrl);
-    if (!resp.ok) throw new Error('Could not load sound');
-    const buf = await ctx.decodeAudioData(await resp.arrayBuffer());
-    const dest = ctx.createMediaStreamDestination();
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(dest);
-
-    // VIDEO tracks only. The original audio track is never added.
-    const vTracks = vid.captureStream().getVideoTracks();
-    if (!vTracks.length) throw new Error('No video track found');
-    const out = new MediaStream([...vTracks, ...dest.stream.getAudioTracks()]);
-
-    const MIME = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-    const mime = MIME.find(m => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || '';
-    const rec = mime ? new MediaRecorder(out, { mimeType: mime }) : new MediaRecorder(out);
-    const chunks = [];
-    rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-    const done = new Promise((res, rej) => {
-      rec.onstop = () => res(new Blob(chunks, { type: 'video/webm' }));
-      rec.onerror = e => rej((e && e.error) || new Error('Render failed'));
-    });
-
-    rec.start(250);
-    src.start();
-    await vid.play();
-    tick = setInterval(() => {
-      const d = vid.duration;
-      if (isFinite(d) && d > 0 && onProgress) onProgress(Math.round((vid.currentTime / d) * 100));
-    }, 300);
-    await new Promise((res, rej) => { vid.onended = res; vid.onerror = () => rej(new Error('Video playback failed')); });
-    try { src.stop(); } catch (e) {}
-    rec.stop();
-    return await done;
-  } finally {
-    if (tick) clearInterval(tick);
-    vid.pause(); vid.removeAttribute('src');
-    ctx.close().catch(() => {});
+function buildCloudinaryMusicVideoUrl(videoUrl, audioUrl) {
+  if (!videoUrl || !audioUrl) {
+    throw new Error('Video or sound URL is missing');
   }
+  if (!/^https:\/\/res\.cloudinary\.com\//i.test(videoUrl)) {
+    throw new Error('Video must be hosted on Cloudinary');
+  }
+  if (!/^https:\/\/res\.cloudinary\.com\//i.test(audioUrl)) {
+    throw new Error('Sound must be hosted on Cloudinary');
+  }
+  // Sound assets must be Cloudinary video resources because Cloudinary
+  // stores audio under the video resource type.
+  const audioMatch = audioUrl.match(
+    /\/video\/upload\/(?:v\d+\/)?(.+?)(?:\.[a-z0-9]+)(?:\?.*)?$/i
+  );
+  if (!audioMatch) {
+    throw new Error('Selected sound is not a valid Cloudinary audio asset');
+  }
+  const audioPublicId = audioMatch[1];
+  // Reject obvious non-audio assets accidentally stored in sounds.audio_url.
+  if (/\.(jpe?g|png|gif|webp)(?:\?.*)?$/i.test(audioUrl)) {
+    throw new Error('Selected sound has no audio file');
+  }
+  const marker = '/video/upload/';
+  if (!videoUrl.includes(marker)) {
+    throw new Error('Invalid Cloudinary video URL');
+  }
+  // Remove the existing video's audio, then add the selected FreeUpper sound.
+  return videoUrl.replace(
+    marker,
+    `${marker}ac_none/l_audio:${audioPublicId}/fl_layer_apply/`
+  );
 }
 
 async function publishPost() {
@@ -1937,24 +1916,45 @@ async function publishPost() {
         };
       } else {
         const needsMusic = isVideo && !!finalSoundId;
-        let uploadBlob = S.media.blob;
+        setProgress(
+          0,
+          needsMusic ? 'Uploading video…' : 'Uploading…',
+          'Sending your media to Freeupper'
+        );
+        const result = await uploadToCloudinary(
+          S.media.blob,
+          isVideo,
+          pct => {
+            setProgress(
+              Math.min(pct, 92),
+              'Uploading…',
+              'Sending your media to Freeupper'
+            );
+          }
+        );
+        // If the user selected a sound, Cloudinary creates the final
+        // video with the original audio removed and the selected sound added.
         if (needsMusic) {
-          if (!S.attachedSound || !S.attachedSound.audio_url) throw new Error('Selected sound has no audio file');
-          setProgress(0, 'Adding music…', 'Keep this screen open');
-          uploadBlob = await renderVideoWithSound(S.media.url, S.attachedSound.audio_url,
-            pct => setProgress(Math.min(Math.round(pct * 0.45), 45), 'Adding music…', 'Keep this screen open'));
+          if (!S.attachedSound || !S.attachedSound.audio_url) {
+            throw new Error('Selected sound has no audio file');
+          }
+          setProgress(
+            94,
+            'Adding music…',
+            'Finalizing your video'
+          );
+          result.secure_url = buildCloudinaryMusicVideoUrl(
+            result.secure_url,
+            S.attachedSound.audio_url
+          );
         }
-        const result = await uploadToCloudinary(uploadBlob, isVideo, pct => {
-          const shown = needsMusic ? 45 + Math.round(pct * 0.47) : Math.min(pct, 92);
-          setProgress(shown, 'Uploading…', 'Sending your media to Freeupper');
-        });
         setProgress(95, 'Publishing…', 'Saving your post');
         payload = {
           title: caption.slice(0, 100) || (isVideo ? 'Video' : 'Photo'),
           content: caption,
           tags: S.tags.slice(),
           media: [{ url: result.url, type: result.type, public_id: result.public_id }],
-          mediaUrl: result.url,
+          mediaUrl: result.secure_url || result.url,
           mediaType: result.type,
           mentions,
           commentsHidden: hideComments,
