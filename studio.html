@@ -55,6 +55,7 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .cap-icon-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;
   stroke-linecap:round;stroke-linejoin:round}
 .cap-icon-btn:active{background:rgba(255,255,255,.2)}
+.cap-icon-btn.on{background:rgba(139,92,246,.35);border-color:var(--p)}
 
 .cap-music-pill{display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:100px;
   background:rgba(0,0,0,.45);backdrop-filter:blur(14px);border:1.5px solid rgba(255,255,255,.22);
@@ -720,19 +721,18 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
     <div class="success-ring"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
     <div class="success-title">You're live! 🎉</div>
     <div class="success-sub">Your post has been published to your profile.</div>
-    <button class="success-btn" onclick="goHome.stream()">Back to Videos</button>
+    <button class="success-btn" onclick="goHome()">Back to Videos</button>
   </div>
 </div>
 
 <div id="toast"></div>
 
-;
 <script>
 'use strict';
 
-const CLOUDINARY_CLOUD_NAME    = ' vidduzyf1kda';
-const CLOUDINARY_IMAGE_PRESET = 'image.style_upload';
-const CLOUDINARY_VIDEO_PRESET.transform = 'video_upload';
+const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
+const CLOUDINARY_IMAGE_PRESET = 'image_upload';
+const CLOUDINARY_VIDEO_PRESET = 'video_upload';
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 const MAX_VIDEO_SECONDS = 180;
@@ -749,6 +749,7 @@ const S = {
   recTimer: null,
   filter: 'none',
   beauty: false,
+  flashOn: false,
   media: null,
   mediaFiles: [],
   textOverlay: null,
@@ -811,7 +812,8 @@ async function startCamera() {
       audio: S.mode === 'video'
     });
     const vid = document.getElementById('camVideo');
-    vid.srcObject = S = S.facing === 'user' ? 'scaleX(-1)' : '';
+    vid.srcObject = S.stream;
+    vid.style.transform = S.facing === 'user' ? 'scaleX(-1)' : '';
     applyCamFilter();
     document.getElementById('camDenied').style.display = 'none';
   } catch (e) {
@@ -821,7 +823,23 @@ async function startCamera() {
 function stopCameraStream() {
   if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
 }
-function flipCamera() { S.facing = S.facing === 'user' ? 'environment' : 'user'; startCamera(); }
+async function toggleFlash() {
+  try {
+    const track = S.stream && S.stream.getVideoTracks()[0];
+    const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+    if (!caps.torch) { showToast('Flash not supported on this camera'); return; }
+    S.flashOn = !S.flashOn;
+    await track.applyConstraints({ advanced: [{ torch: S.flashOn }] });
+    document.getElementById('flashBtn').classList.toggle('on', S.flashOn);
+  } catch (e) { showToast('Flash not available'); }
+}
+function flipCamera() {
+  if (S.recording) { showToast('Stop recording to flip'); return; }
+  S.facing = S.facing === 'user' ? 'environment' : 'user';
+  S.flashOn = false;
+  const fb = document.getElementById('flashBtn'); if (fb) fb.classList.remove('on');
+  startCamera();
+}
 function applyCamFilter() {
   const vid = document.getElementById('camVideo');
   const parts = [];
@@ -852,24 +870,27 @@ function setCapMode(mode, el) {
   S.mode = mode;
   document.querySelectorAll('.cap-mode').forEach(m => m.classList.remove('on'));
   el.classList.add('on');
-  if (mode === 'text') { openTextWrite(); return; }
+  document.getElementById('recordBtn').classList.toggle('photo-mode', mode === 'photo');
+  if (mode === 'text') { stopCameraStream(); openTextWrite(); return; }
   document.getElementById('capRecordRow').style.display = 'flex';
   startCamera();
 }
 function haptic(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
-let holdTimer = null, isHolding = false;
+let holdTimer = null, isHolding = false, isPressed = false;
 function handleRecordDown(e) {
   e.preventDefault();
   if (S.mode === 'photo') { capturePhoto(); return; }
-  isHolding = false;
+  if (S.recording) { stopRecording(); isPressed = false; isHolding = false; return; }
+  isPressed = true; isHolding = false;
   holdTimer = setTimeout(() => { isHolding = true; haptic(15); startRecording(); }, 150);
 }
 function handleRecordUp(e) {
   e.preventDefault();
-  if (S.mode === 'photo') return;
+  if (S.mode === 'photo' || !isPressed) return;
+  isPressed = false;
   clearTimeout(holdTimer);
-  if (isHolding && S.recording) { stopRecording(); }
-  else if (!isHolding && !S.recording) { haptic(15); startRecording(); }
+  if (isHolding) { stopRecording(); }
+  else { haptic(15); startRecording(); }
   isHolding = false;
 }
 function capturePhoto() {
@@ -927,7 +948,7 @@ function stopRecording() {
 }
 function onRecordingStop() {
   if (!S.recordChunks.length) return;
-  const blob = new Blob(S.recordChunks, { type: 'video/webm' });
+  const blob = new Blob(S.recordChunks, { type: (S.recorder && S.recorder.mimeType) || 'video/webm' });
   const url = URL.createObjectURL(blob);
   S.media = { blob, url, type: 'video' };
   S.mediaFiles = [];
@@ -961,7 +982,7 @@ async function handleGalleryFiles(e) {
     }
     valid.push({ blob: file, url: URL.createObjectURL(file), type: isVideo ? 'video' : 'image' });
   }
-  if (!valid.length) return;
+  if (!valid.length) { e.target.value = ''; return; }
   let picked = valid;
   if (valid.length > 1) {
     picked = valid.filter(f => f.type === 'image');
@@ -1170,6 +1191,7 @@ function renderPvTextLayer() {
   layer.appendChild(item);
 }
 function clearPvTextLayer() {
+  S.textOverlay = null;
   document.getElementById('pvTextLayer').innerHTML = '';
   document.getElementById('pvAddTextHint').style.display = S.media || (S.mediaFiles && S.mediaFiles.length) ? 'flex' : 'none';
 }
@@ -1194,7 +1216,7 @@ function makeDraggable(el) {
 /* ═══════════ TEXT CARD FLOW ═══════════ */
 const TXT_TEMPLATES = VideoRender.TXT_TEMPLATES;
 const TXT_CATS = [...new Set(TXT_TEMPLATES.map(t => t.cat))];
-let _tplActiveIdx = 0, _tplActiveCat = TXT_CATS[0], _tplAnimId = null;
+let _tplActiveIdx = 0, _tplActiveCat = TXT_CATS[0], _tplAnimId = null, _tplGen = 0;
 
 function openTextWrite() {
   showScreen('scTextWrite');
@@ -1249,10 +1271,12 @@ function buildTxsRow() {
     row.appendChild(card);
     const cv = card.querySelector('canvas');
     let tt = Math.random()*10;
+    const gen = _tplGen;
     (function loop(){
+      if (gen !== _tplGen) return;
       tt += 0.035;
       VideoRender.drawTemplateBackground(t.id, cv.getContext('2d'), 70, 94, tt);
-      cv._raf = requestAnimationFrame(loop);
+      requestAnimationFrame(loop);
     })();
   });
   applyTemplatePreview(TXT_TEMPLATES[_tplActiveIdx]);
@@ -1277,7 +1301,7 @@ function applyTemplatePreview(t) {
   }
   _tplAnimId = requestAnimationFrame(frame);
 }
-function _stopTplAnim() { if (_tplAnimId) { cancelAnimationFrame(_tplAnimId); _tplAnimId = null; } }
+function _stopTplAnim() { _tplGen++; if (_tplAnimId) { cancelAnimationFrame(_tplAnimId); _tplAnimId = null; } }
 function goToDetailsFromText() {
   _stopTplAnim();
   S.media = null;
@@ -1654,7 +1678,7 @@ document.addEventListener('click', (event) => {
 
 /* ═══════════ DETAILS SCREEN ═══════════ */
 function backFromDetails() {
-  if (S.textPost) { showScreen('scTextStyle'); applyTemplatePreview(TXT_TEMPLATES[_tplActiveIdx]); }
+  if (S.textPost) { showScreen('scTextStyle'); buildTxsRow(); }
   else { showScreen('scPreview'); syncPreviewAudio(); }
 }
 function renderPostThumb(box) {
