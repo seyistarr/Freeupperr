@@ -2403,12 +2403,14 @@
         }
         .v-img-dots {
             position: absolute;
-            top: max(env(safe-area-inset-top), 14px);
+            top: auto;
+            bottom: calc(var(--nav-h, 78px) + 150px); /* fallback, JS sets exact top under the image */
             left: 50%;
             transform: translateX(-50%);
             display: flex;
-            gap: 5px;
+            gap: 6px;
             z-index: 22;
+            pointer-events: none;
         }
         .v-img-dots .dot {
             width: 6px;
@@ -2488,6 +2490,187 @@
         }
         .clear-display-hint.show {
             opacity: 1;
+        }
+
+        /* ─── COMMENT IMAGE UPLOAD ─── */
+        .comment-media-preview {
+            padding: 8px 14px 0;
+            background: var(--sheet-bg);
+            border-top: 1px solid var(--sheet-bd);
+            flex-shrink: 0;
+        }
+        .cmp-wrap {
+            position: relative;
+            width: 76px;
+            height: 76px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--sheet-bd);
+        }
+        .cmp-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .cmp-remove {
+            position: absolute;
+            top: 3px;
+            right: 3px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(0, 0, 0, .7);
+            color: #fff;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .comment-media {
+            display: block;
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin: 2px 0 8px;
+            cursor: pointer;
+            background: var(--bg4);
+        }
+        .reply-media {
+            display: block;
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin: 4px 0;
+            cursor: pointer;
+            background: var(--bg4);
+        }
+
+        /* ─── FULLSCREEN COMMENT IMAGE VIEWER ─── */
+        #commentImageViewer {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: #000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity .2s, visibility .2s;
+        }
+        #commentImageViewer.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .civ-track {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+        .civ-track::-webkit-scrollbar {
+            display: none;
+        }
+        .civ-slide {
+            flex: 0 0 100%;
+            height: 100%;
+            scroll-snap-align: center;
+            scroll-snap-stop: always;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .civ-slide img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        .civ-close {
+            position: absolute;
+            top: max(env(safe-area-inset-top), 14px);
+            left: 16px;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, .15);
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            z-index: 3;
+        }
+        .civ-count {
+            position: absolute;
+            top: max(env(safe-area-inset-top), 20px);
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            background: rgba(0, 0, 0, .5);
+            padding: 5px 12px;
+            border-radius: 100px;
+            z-index: 3;
+        }
+        .civ-nav {
+            display: none;
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, .15);
+            color: #fff;
+            font-size: 28px;
+            line-height: 1;
+            cursor: pointer;
+            z-index: 3;
+            align-items: center;
+            justify-content: center;
+        }
+        .civ-nav.prev { left: 16px; }
+        .civ-nav.next { right: 16px; }
+        @media (min-width: 768px) {
+            #commentImageViewer.multi .civ-nav { display: flex; }
+        }
+
+        /* ─── DESKTOP / TABLET SPLIT: video left, comments right ─── */
+        @media (min-width: 768px) {
+            :root { --split-w: clamp(340px, 34vw, 440px); }
+
+            #feedTrack,
+            .video-topbar {
+                transition: right .3s cubic-bezier(.4, 0, .2, 1);
+            }
+            .main.split-open #feedTrack,
+            .main.split-open .video-topbar {
+                right: var(--split-w);
+            }
+
+            #commentSheet.comments-split {
+                top: 0;
+                bottom: 0;
+                left: auto;
+                right: 0;
+                width: var(--split-w);
+                height: 100dvh;
+                max-height: 100dvh;
+                border-radius: 0;
+                border-left: 1px solid var(--sheet-bd);
+                transform: translateX(100%);
+            }
+            #commentSheet.comments-split.open {
+                transform: translateX(0);
+            }
+            #commentSheet.comments-split .sheet-handle {
+                display: none;
+            }
         }
 
         /* ── Pull-to-refresh indicator ── */
@@ -2700,11 +2883,18 @@
             </div>
             <div id="comments-list"></div>
         </div>
+        <div class="comment-media-preview" id="commentMediaPreview" style="display:none;">
+            <div class="cmp-wrap">
+                <img id="commentMediaPreviewImg" src="" alt="" />
+                <button class="cmp-remove" type="button" onclick="clearCommentMedia()">✕</button>
+            </div>
+        </div>
         <div class="comment-inp-row">
             <img class="comment-inp-ava" id="commentUserAvatar" src="" alt="" onerror="this.style.display='none'" />
             <div class="comment-inp-wrap">
                 <input class="comment-inp" id="commentInput" placeholder="Add a comment…" maxlength="280" />
-                <button class="comment-icon-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
+                <button class="comment-icon-btn" type="button" onclick="document.getElementById('commentMediaInput').click()" aria-label="Add image"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
+                <input type="file" id="commentMediaInput" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handleCommentMediaSelect(this)" />
                 <button class="comment-icon-btn">@</button>
                 <button class="comment-icon-btn"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4"/><path d="M12 8v13M19 12v9H5v-9M12 8a3 3 0 1 0-3-3c0 1.5 3 3 3 3zM12 8a3 3 0 1 1 3-3c0 1.5-3 3-3 3z"/></svg></button>
             </div>
@@ -2873,6 +3063,15 @@
         <div class="more-list" id="moreList"></div>
     </div>
 
+    <!-- ════ COMMENT IMAGE VIEWER ════ -->
+    <div id="commentImageViewer">
+        <button class="civ-close" onclick="closeCommentImageViewer()">✕</button>
+        <div class="civ-count" id="civCount"></div>
+        <button class="civ-nav prev" onclick="civStep(-1)">‹</button>
+        <button class="civ-nav next" onclick="civStep(1)">›</button>
+        <div class="civ-track" id="civTrack" onscroll="updateCivCount()"></div>
+    </div>
+
     <!-- ════ TOAST ════ -->
     <div id="toast"></div>
 
@@ -2911,6 +3110,128 @@
         let ytState = {};
         let ytInfo = {};
         let ytWindows = {};
+
+        // ─── CAROUSEL DOTS: sit centered directly beneath the image ───
+        function positionImgDots(idx) {
+            const wrap = document.getElementById('mediaWrap-' + idx);
+            const dots = document.getElementById('imgDots-' + idx);
+            const track = document.getElementById('imgTrack-' + idx);
+            if (!wrap || !dots || !track) return;
+            const slide = track.children[parseInt(track.dataset.idx, 10) || 0];
+            if (!slide || !slide.naturalWidth) return;
+            const W = wrap.clientWidth, H = wrap.clientHeight;
+            const renderedH = Math.min(H, W * slide.naturalHeight / slide.naturalWidth);
+            let top = (H + renderedH) / 2 + 12;
+            top = Math.min(top, H - 210); // never collide with caption area
+            dots.style.bottom = 'auto';
+            dots.style.top = top + 'px';
+        }
+        window.addEventListener('resize', () => positionImgDots(_curIdx));
+
+        // ─── COMMENT IMAGE UPLOAD ───
+        const COMMENT_MEDIA_MAX_BYTES = 10 * 1024 * 1024;
+        const COMMENT_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+        let commentMedia = null; // { file, url }
+
+        function handleCommentMediaSelect(input) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            if (!COMMENT_MEDIA_TYPES.includes(file.type)) {
+                showToast('Only JPG, PNG or WebP images');
+                input.value = '';
+                return;
+            }
+            if (file.size > COMMENT_MEDIA_MAX_BYTES) {
+                showToast('Image must be under 10MB');
+                input.value = '';
+                return;
+            }
+            if (commentMedia) URL.revokeObjectURL(commentMedia.url);
+            commentMedia = { file, url: URL.createObjectURL(file) };
+            renderCommentMediaPreview();
+        }
+
+        function renderCommentMediaPreview() {
+            const box = document.getElementById('commentMediaPreview');
+            const img = document.getElementById('commentMediaPreviewImg');
+            if (!box || !img) return;
+            if (commentMedia) {
+                img.src = commentMedia.url;
+                box.style.display = 'block';
+            } else {
+                img.removeAttribute('src');
+                box.style.display = 'none';
+            }
+        }
+
+        function clearCommentMedia() {
+            if (commentMedia) URL.revokeObjectURL(commentMedia.url);
+            commentMedia = null;
+            const input = document.getElementById('commentMediaInput');
+            if (input) input.value = '';
+            renderCommentMediaPreview();
+        }
+
+        function buildCommentMedia(c, cls) {
+            if (!c || !c.imageUrl) return '';
+            return '<img class="' + cls + '" src="' + escapeHtml(c.imageUrl) +
+                '" loading="lazy" alt="" onclick="event.stopPropagation(); openCommentImageViewer(this.currentSrc || this.src)">';
+        }
+
+        // ─── FULLSCREEN COMMENT IMAGE VIEWER (swipe through all images) ───
+        function openCommentImageViewer(url) {
+            const nodes = document.querySelectorAll('#comments-list .comment-media, #comments-list .reply-media');
+            const urls = [];
+            nodes.forEach(n => {
+                const u = n.currentSrc || n.src;
+                if (u && !urls.includes(u)) urls.push(u);
+            });
+            if (!urls.includes(url)) urls.unshift(url);
+
+            const viewer = document.getElementById('commentImageViewer');
+            const track = document.getElementById('civTrack');
+            track.innerHTML = urls.map(u =>
+                '<div class="civ-slide" onclick="if(event.target===this)closeCommentImageViewer()">' +
+                '<img src="' + escapeHtml(u) + '" alt="" draggable="false"></div>'
+            ).join('');
+            viewer.classList.toggle('multi', urls.length > 1);
+            viewer.classList.add('show');
+            const start = urls.indexOf(url);
+            requestAnimationFrame(() => {
+                track.scrollLeft = start * track.clientWidth;
+                updateCivCount();
+            });
+        }
+
+        function updateCivCount() {
+            const track = document.getElementById('civTrack');
+            const el = document.getElementById('civCount');
+            if (!track || !el) return;
+            const total = track.children.length;
+            const i = Math.round(track.scrollLeft / (track.clientWidth || 1)) + 1;
+            el.textContent = total > 1 ? (i + ' / ' + total) : '';
+        }
+
+        function civStep(dir) {
+            const track = document.getElementById('civTrack');
+            track.scrollBy({ left: dir * track.clientWidth, behavior: 'smooth' });
+        }
+
+        function closeCommentImageViewer() {
+            document.getElementById('commentImageViewer').classList.remove('show');
+        }
+
+        document.addEventListener('keydown', function(e) {
+            const viewer = document.getElementById('commentImageViewer');
+            if (!viewer || !viewer.classList.contains('show')) return;
+            if (e.key === 'Escape') closeCommentImageViewer();
+            if (e.key === 'ArrowRight') civStep(1);
+            if (e.key === 'ArrowLeft') civStep(-1);
+        });
+
+        function isSplitLayout() {
+            return window.matchMedia('(min-width: 768px)').matches;
+        }
 
         // ─── FOLLOW / BOOKMARK STATE ────────────────────────────────
         let followingSet = new Set();
@@ -3342,7 +3663,7 @@
             }
 
             if (v.mediaType === 'image') {
-                const slides = v.images.map(src => `<img class="v-img-slide" src="${src}" alt="" draggable="false">`).join('');
+                const slides = v.images.map(src => `<img class="v-img-slide" src="${src}" alt="" draggable="false" onload="positionImgDots(${i})">`).join('');
                 const dots = v.images.length > 1 ?
                     `<div class="v-img-dots" id="imgDots-${i}">${v.images.map((_, di) => `<div class="dot ${di === 0 ? 'active' : ''}"></div>`).join('')}</div>` :
                     '';
@@ -3543,10 +3864,10 @@
 
         // ─── BUILD FEED ──────────────────────────────────────────────
 
-        function buildEligibleFeed(mode) {
-            const isEligible = (v) => {
-                if (mode === 'foryou') return true;
-                return isFollowing(v.authorId);
+        function buildEligibleFeed(mode function) {
+            const isEligible = (v) => start {
+                if (mode === 'foryouText') return true;
+                return isFollowing(v.authorIdCard);
             };
             const eligible = videoPosts.filter(isEligible);
             const seen = new Set();
@@ -3556,7 +3877,7 @@
             });
         }
 
-        function startTextCardAnimation(canvas, templateId) {
+       Animation(canvas, templateId) {
             let t = Math.random() * 10;
 
             function frame() {
@@ -3677,6 +3998,10 @@
             const v = videoPosts[idx];
             if (!v) return;
             currentPostId = v.id;
+
+            if (isSplitLayout() && document.getElementById('commentSheet').classList.contains('open')) {
+                populateComments(idx);
+            }
 
             if (window.PostsAPI && window.PostsAPI.incrementView) {
                 window.PostsAPI.incrementView(v.id);
@@ -3987,6 +4312,7 @@
             setTimeout(() => { track.style.transition = ''; }, 320);
 
             document.querySelectorAll('#imgDots-' + idx + ' .dot').forEach((d, di) => d.classList.toggle('active', di === next));
+            positionImgDots(idx);
 
             if (!moved) handleCardTap(e, idx);
             _imgDrag = null;
@@ -4058,7 +4384,7 @@
                 return;
             }
             document.getElementById(id).classList.remove('open');
-            const anyOpen = document.querySelectorAll('.sheet.open').length > 0;
+            const anyOpen = document.querySelectorAll('.sheet.open:not(.comments-split)').length > 0;
             if (!anyOpen) {
                 document.getElementById('backdrop').classList.remove('open');
                 const v = videoPosts[_curIdx];
@@ -4088,6 +4414,19 @@
         const COMMENTS_PREVIEW_TOP = 70;
 
         function openCommentsSheet(idx) {
+            const sheet = document.getElementById('commentSheet');
+
+            // Desktop / tablet: side panel, video stays on the left
+            if (isSplitLayout()) {
+                sheet.classList.remove('tiktok-sheet');
+                sheet.classList.add('comments-split', 'open');
+                document.getElementById('mainScroll').classList.add('split-open');
+                setTimeout(() => positionImgDots(idx), 320);
+                return;
+            }
+
+            // Phone: original TikTok-style shrink + bottom sheet
+            sheet.classList.remove('comments-split');
             const card = document.getElementById('card-' + idx);
             const wrap = document.getElementById('mediaWrap-' + idx);
             if (!wrap) return;
@@ -4111,10 +4450,19 @@
 
             if (card) card.classList.add('comments-active');
             document.getElementById('backdrop').classList.add('open', 'comments-mode');
-            document.getElementById('commentSheet').classList.add('open', 'tiktok-sheet');
+            sheet.classList.add('open', 'tiktok-sheet');
         }
 
         function closeCommentsSheet(idx) {
+            const sheet = document.getElementById('commentSheet');
+
+            if (sheet.classList.contains('comments-split')) {
+                sheet.classList.remove('open');
+                document.getElementById('mainScroll').classList.remove('split-open');
+                setTimeout(() => positionImgDots(_curIdx), 320);
+                return;
+            }
+
             const targetIdx = (idx !== undefined) ? idx : _curIdx;
             const card = document.getElementById('card-' + targetIdx);
             const wrap = document.getElementById('mediaWrap-' + targetIdx);
@@ -4127,7 +4475,7 @@
                 wrap.classList.remove('comments-shrink-init');
             }
             if (card) card.classList.remove('comments-active');
-            document.getElementById('commentSheet').classList.remove('open', 'tiktok-sheet');
+            sheet.classList.remove('open', 'tiktok-sheet');
             document.getElementById('backdrop').classList.remove('open', 'comments-mode');
         }
 
@@ -4244,6 +4592,7 @@
                 '<span class="comment-time">' + formatRelativeTime(comment.time) + editedTagHtml + '</span>' +
                 '</div>' +
                 '<div class="comment-text" data-cid="' + comment.id + '">' + commentTextHtml + '</div>' +
+                buildCommentMedia(comment, 'comment-media') +
                 '<button class="comment-reply-btn" onclick="replyToComment(\'' + comment.id + '\',\'' + escapeHtml(
                     username) + '\')">Reply</button>' +
                 repliesHtml +
@@ -4296,6 +4645,7 @@
                 '<span data-author-badge-wrapper>' + badgeHtml + '</span>' +
                 '</div>' +
                 '<div class="reply-text">' + mention + replyTextHtml + editedTagHtml + '</div>' +
+                buildCommentMedia(reply, 'reply-media') +
                 '<div class="reply-meta">' +
                 '<span class="reply-time">' + formatRelativeTime(reply.time) + '</span>' +
                 '<button class="reply-reply-btn" onclick="replyToComment(\'' + reply.id + '\',\'' + escapeHtml(
@@ -4337,9 +4687,9 @@
             return getCommentsVisible()[postId] || 5;
         }
 
-        async function addComment(postId, parentId, message, mentions) {
+        async function addComment(postId, parentId, message, mentions, imageUrl) {
             try {
-                const comment = await window.PostsAPI.addComment(postId, parentId, message, mentions || []);
+                const comment = await window.PostsAPI.addComment(postId, parentId, message, mentions || [], imageUrl || '');
                 const v = videoPosts.find(p => p.id === postId);
                 if (v) v.comments = (v.comments || 0) + 1;
                 return comment;
@@ -4602,13 +4952,18 @@
 
         // ─── openComments() — loads similar posts ──────────────────
 
-        function openComments(idx) {
+        function populateComments(idx) {
             const v = videoPosts[idx];
+            if (!v) return;
             currentPostId = v.id;
             const countEl = document.getElementById('commentCount');
             if (countEl) countEl.textContent = fmtNum(v.comments) + ' comments';
             replyTarget = null;
             updateReplyContextUI();
+            clearCommentMedia();
+            const input = document.getElementById('commentInput');
+            if (input) input.value = '';
+
             const user = getCurrentUser();
             const avatarEl = document.getElementById('commentUserAvatar');
             if (avatarEl) {
@@ -4634,54 +4989,70 @@
             } else {
                 refreshCommentsList(v.id);
             }
+        }
+
+        function openComments(idx) {
+            populateComments(idx);
             openCommentsSheet(idx);
         }
 
         // ─── COMMENT SUBMISSION ────────────────────────────────────
 
-        function submitCommentFromBar() {
+        async function submitCommentFromBar() {
             const input = document.getElementById('commentInput');
             if (input.disabled) return;
             const message = input.value.trim();
-            if (!message) return showToast('Comment cannot be empty.', 'o');
+            if (!message && !commentMedia) return showToast('Comment cannot be empty.');
 
             let mentions = [];
             if (window.Mentions && typeof window.Mentions.extractMentions === 'function') {
                 mentions = window.Mentions.extractMentions(input);
             } else {
-                const atRegex = /@(\w+)/g;
-                const matches = message.matchAll(atRegex);
-                const usernames = [];
-                for (const m of matches) {
-                    if (m[1]) usernames.push(m[1]);
+                for (const m of message.matchAll(/@(\w+)/g)) {
+                    if (m[1]) mentions.push(m[1]);
                 }
-                mentions = usernames;
             }
 
             const parentId = replyTarget ? replyTarget.commentId : null;
             const submitBtn = document.querySelector('.comment-send');
             if (submitBtn) submitBtn.disabled = true;
 
-            addComment(currentPostId, parentId, message, mentions)
-                .then(() => {
-                    input.value = '';
-                    replyTarget = null;
-                    updateReplyContextUI();
-                    refreshCommentsList(currentPostId);
-                    showToast(parentId ? 'Reply posted' : 'Comment posted', 'g');
-                    const v = videoPosts.find(p => p.id === currentPostId);
-                    if (v) {
-                        const countEl = document.getElementById('commentCount');
-                        if (countEl) countEl.textContent = fmtNum(v.comments) + ' comments';
-                        const idx = videoPosts.indexOf(v);
-                        const lbl = document.getElementById('commentCountLbl-' + idx);
-                        if (lbl) lbl.textContent = fmtNum(v.comments);
+            try {
+                let imageUrl = '';
+                if (commentMedia) {
+                    showToast('Uploading image…');
+                    try {
+                        imageUrl = await window.AuthUser.uploadCommentMedia(commentMedia.file) || '';
+                    } catch (e) { imageUrl = ''; }
+                    if (!imageUrl) {
+                        showToast('Image upload failed');
+                        return;
                     }
-                })
-                .catch(() => {})
-                .finally(() => {
-                    if (submitBtn) submitBtn.disabled = false;
-                });
+                }
+
+                await addComment(currentPostId, parentId, message, mentions, imageUrl);
+
+                input.value = '';
+                replyTarget = null;
+                updateReplyContextUI();
+                input.placeholder = 'Add a comment…';
+                clearCommentMedia();
+                refreshCommentsList(currentPostId);
+                showToast(parentId ? 'Reply posted' : 'Comment posted');
+
+                const v = videoPosts.find(p => p.id === currentPostId);
+                if (v) {
+                    const countEl = document.getElementById('commentCount');
+                    if (countEl) countEl.textContent = fmtNum(v.comments) + ' comments';
+                    const idx = videoPosts.indexOf(v);
+                    const lbl = document.getElementById('commentCountLbl-' + idx);
+                    if (lbl) lbl.textContent = fmtNum(v.comments);
+                }
+            } catch (e) {
+                /* addComment already toasted the error */
+            } finally {
+                if (submitBtn) submitBtn.disabled = false;
+            }
         }
 
         // ─── LIKE / SAVE / FOLLOW ──────────────────────────────────
@@ -5064,9 +5435,9 @@
             const followRow = v.isOwn ? '' :
                 '<button class="more-follow-row" id="moreFollowRow" onclick="toggleFollowFromMore(' + idx + ')">' +
                 '<img class="more-follow-avatar" src="' + author.avatar +
-                '" alt="' + author.name +
-                '" onerror="this.src=\'https://api.dicebear.com/7.x/avataaars/svg?seed=' + author.name + '\'">' +
-                '<div>' +
+               8 '" alt="' + author.name +
+                 '" onerror="this.src=\'https://api.d8icebear.com/7.x/avvataaars/svg?seed=' + author.name + '\'">' +
+                '<.div>' +
                 '<div class="more-row-lbl" id="moreFollowLbl">' + (v.following ? 'Following' : 'Follow') + ' ' + author
                 .name + '</div>' +
                 '<div class="more-row-sub">' + v.handle + '</div>' +
@@ -5075,7 +5446,7 @@
 
             const commentsToggleRow = v.isOwn ?
                 '<button class="more-toggle-row" onclick="toggleCommentsFromMore(' + idx + ')">' +
-                '<svg class="more-row-ico" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>' +
+                '<svg class="more-row-ico" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 5z"/></svg>' +
                 '<div><div class="more-row-lbl" id="moreCommentsLbl">' + (v.commentsHidden ? 'Turn On Comments' : 'Turn Off Comments') + '</div></div>' +
                 '</button>' : '';
 
@@ -5386,6 +5757,14 @@
         window.renderCommentThread = renderCommentThread;
         window.renderReplyItem = renderReplyItem;
         window.deleteCurrentPost = deleteCurrentPost;
+        window.handleCommentMediaSelect = handleCommentMediaSelect;
+        window.clearCommentMedia = clearCommentMedia;
+        window.openCommentImageViewer = openCommentImageViewer;
+        window.closeCommentImageViewer = closeCommentImageViewer;
+        window.civStep = civStep;
+        window.updateCivCount = updateCivCount;
+        window.positionImgDots = positionImgDots;
+        window.populateComments = populateComments;
     </script>
 </body>
 </html>
