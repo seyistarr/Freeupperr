@@ -294,8 +294,7 @@
             transform: translate(-50%, -50%) scale(0);
             width: 68px;
             height: 68px;
-            background: rgba(0, 0, 0, .5);
-            border-radius: 50%;
+            background: none;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -305,9 +304,10 @@
             pointer-events: none;
         }
         .v-pause-icon svg {
-            width: 28px;
-            height: 28px;
+            width: 56px;
+            height: 56px;
             fill: #fff;
+            filter: drop-shadow(0 1px 4px rgba(0, 0, 0, .5));
         }
         .v-pause-icon.show {
             transform: translate(-50%, -50%) scale(1);
@@ -754,7 +754,7 @@
             position: absolute;
             bottom: calc(var(--nav-h, 78px) + 10px);
             left: 20px;
-            right: 20px;
+            right: 64px;
             height: 20px;
             display: flex;
             align-items: center;
@@ -2789,6 +2789,77 @@
             border-radius: 100px;
             text-shadow: 0 1px 4px rgba(0, 0, 0, .4);
         }
+
+        /* hide native iOS/Safari video controls completely */
+        .v-video { pointer-events: none; }
+        .v-video::-webkit-media-controls,
+        .v-video::-webkit-media-controls-panel,
+        .v-video::-webkit-media-controls-enclosure,
+        .v-video::-webkit-media-controls-overlay-play-button,
+        .v-video::-webkit-media-controls-start-playback-button {
+            display: none !important;
+            -webkit-appearance: none;
+        }
+
+        /* mute button next to scrubber */
+        .v-mute-btn {
+            position: absolute;
+            right: 14px;
+            bottom: calc(var(--nav-h, 78px) + 2px);
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            border: none;
+            background: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 61;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .v-mute-btn svg {
+            width: 22px;
+            height: 22px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6));
+        }
+        .v-mute-btn:active { transform: scale(.9); }
+        @media (min-width: 768px) { .v-mute-btn { bottom: 12px; } }
+        .v-card.comments-active .v-mute-btn,
+        .clear-display .v-mute-btn { opacity: 0 !important; pointer-events: none !important; }
+
+        /* compact share sheet */
+        #shareSheet .share-preview { padding: 10px 16px; }
+        #shareSheet .share-preview-thumb { width: 36px; height: 45px; }
+        #shareSheet .share-grid { padding: 8px 8px 0; gap: 0; }
+        #shareSheet .share-item { padding: 8px 4px; gap: 5px; }
+        #shareSheet .share-ico { width: 42px; height: 42px; border-radius: 12px; }
+        #shareSheet .share-ico-3d img { width: 28px; height: 28px; }
+        #shareSheet .share-ico svg { width: 22px !important; height: 22px !important; }
+        #shareSheet .share-lbl { font-size: 11px; }
+        #shareSheet .share-links {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0;
+            padding: 0 8px 4px;
+        }
+        #shareSheet .share-link-row {
+            flex-direction: column;
+            justify-content: flex-start;
+            gap: 5px;
+            padding: 8px 4px;
+            text-align: center;
+        }
+        #shareSheet .share-link-ico { width: 42px; height: 42px; }
+        #shareSheet .share-link-ico-3d img { width: 28px; height: 28px; }
+        #shareSheet .share-link-ico svg { width: 22px; height: 22px; }
+        #shareSheet .share-link-txt { font-size: 11px; }
+        #shareSheet .share-cancel-btn { padding: 10px; margin-top: 0; }
     </style>
 </head>
 <body>
@@ -3041,7 +3112,9 @@
         let _toastTimer = null;
         let feedMode = 'foryou';
         const MUTE_PREF_KEY = 'freeupper_video_muted';
-        let userMutePreference = localStorage.getItem(MUTE_PREF_KEY) !== 'false';
+        let userMutePreference = localStorage.getItem(MUTE_PREF_KEY) === 'true';
+        let _soundBlocked = false;
+        let _swallowTap = false;
 
         function setMutePreference(muted) {
             userMutePreference = muted;
@@ -3327,15 +3400,6 @@
         function toggleYtControls(idx) {
             if (!ytState[idx]) ytState[idx] = { muted: userMutePreference, playing: true };
             const state = ytState[idx];
-            if (userMutePreference || state.muted) {
-                ytPostMessage(idx, 'unMute');
-                state.muted = false;
-                setMutePreference(false);
-                hideAllUnmuteHints();
-                showToast('Sound on 🔊');
-                _showYtPauseIcon(idx, true);
-                return;
-            }
             if (state.playing) {
                 ytPostMessage(idx, 'pauseVideo');
                 state.playing = false;
@@ -3575,11 +3639,7 @@
 
         function buildMediaHtml(v, i) {
             if (v.mediaType === 'video') {
-                const hintHtml = '<div class="v-unmute-hint' + (userMutePreference ? ' show' : '') + '" id="unmuteHint-' + i +
-                    '">' +
-                    '<div class="unmute-circle"><svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg></div>' +
-                    '<span>Tap to unmute</span>' +
-                    '</div>';
+                const hintHtml = '';
                 if (v.isYouTube && v.ytId) {
                     return `
                     <div class="v-media-wrap" id="mediaWrap-${i}">
@@ -3601,9 +3661,10 @@
                         playsinline
                         webkit-playsinline
                         loop
-                        muted
                         preload="metadata"
-                        controls="false"
+                        disablepictureinpicture
+                        disableremoteplayback
+                        controlslist="nodownload noplaybackrate noremoteplayback"
                     ></video>
                     ${hintHtml}
                     <div class="v-upload-badge" id="uploadBadge-${i}" onclick="event.stopPropagation(); openStudio()">
@@ -3666,6 +3727,7 @@
                     <div class="v-progress-fill" id="progFill-${i}" style="width:0%"></div>
                     <div class="v-progress-thumb" id="progThumb-${i}"></div>
                 </div>
+                <button class="v-mute-btn" id="muteBtn-${i}" onclick="event.stopPropagation(); toggleMute(${i})" aria-label="Mute or unmute">${muteIconSvg(userMutePreference)}</button>
             ` : '';
 
             return `
@@ -4024,15 +4086,18 @@
             const sk = document.getElementById('skel-' + idx);
             if (sk) sk.style.display = 'none';
 
-            // ─── FIX #5: autoplay muted always (Safari-safe) ───
-            vid.muted = true;
-            vid.setAttribute('muted', '');
+            vid.muted = userMutePreference;
             const playPromise = vid.play();
             if (playPromise && typeof playPromise.catch === 'function') {
-                playPromise.catch(err => {
-                    console.warn('[video] Autoplay failed:', err);
+                playPromise.catch(() => {
+                    // Browser blocked sound autoplay: play muted, unmute on first touch
+                    vid.muted = true;
+                    _soundBlocked = true;
+                    vid.play().catch(() => {});
+                    updateMuteButtons(true);
                 });
             }
+            updateMuteButtons(vid.muted);
 
             if (vid._progTimer) clearInterval(vid._progTimer);
             vid._progTimer = setInterval(() => updateProgress(idx), 250);
@@ -4067,23 +4132,50 @@
             showToast('Sound on 🔊');
         }
 
-        function toggleMute(idx) {
+        function muteIconSvg(muted) {
+            return muted
+                ? '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+                : '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+        }
+
+        function updateMuteButtons(muted) {
+            document.querySelectorAll('.v-mute-btn').forEach(b => { b.innerHTML = muteIconSvg(muted); });
+        }
+
+        function applyMuteToCard(idx, muted) {
             const v = videoPosts[idx];
-            if (!v || v.isYouTube) return;
-            if (userMutePreference) {
-                unmuteCurrentVideo(idx);
+            if (!v) return;
+            if (v.isYouTube) {
+                ytPostMessage(idx, muted ? 'mute' : 'unMute');
+                if (ytState[idx]) ytState[idx].muted = muted;
                 return;
             }
             const vid = document.getElementById('vid-' + idx);
-            if (!vid) return;
-            vid.muted = !vid.muted;
-            if (vid.muted) {
-                showToast('Sound off 🔇');
-            } else {
-                vid.play().catch(() => {});
-                showToast('Sound on 🔊');
-            }
+            if (vid) vid.muted = muted;
         }
+
+        function toggleMute(idx) {
+            const v = videoPosts[idx];
+            if (!v) return;
+            const vid = document.getElementById('vid-' + idx);
+            const currentlyMuted = v.isYouTube ? userMutePreference : (vid ? vid.muted : userMutePreference);
+            const next = !currentlyMuted;
+            setMutePreference(next);
+            _soundBlocked = false;
+            applyMuteToCard(idx, next);
+            updateMuteButtons(next);
+        }
+
+        // First touch after a blocked autoplay: turn sound on
+        document.addEventListener('pointerdown', function(e) {
+            if (!_soundBlocked || userMutePreference) return;
+            if (e.target.closest && e.target.closest('.v-mute-btn')) return;
+            _soundBlocked = false;
+            _swallowTap = true;
+            setTimeout(() => { _swallowTap = false; }, 450);
+            applyMuteToCard(_curIdx, false);
+            updateMuteButtons(false);
+        }, true);
 
         let _scrubIdx = null;
         let _scrubWasPlaying = false;
@@ -4158,11 +4250,7 @@
 
         function handleCardTap(e, idx) {
             showProgress(idx);
-
-            if (userMutePreference) {
-                unmuteCurrentVideo(idx);
-                return;
-            }
+            if (_swallowTap) return;
 
             if (_tapTimer) {
                 clearTimeout(_tapTimer);
@@ -4357,6 +4445,49 @@
         }
 
         // ─── SHARED SHEET LOGIC ─────────────────────────────────────
+
+        function attachSheetDrag(id, wholeSheet) {
+            const sheet = document.getElementById(id);
+            if (!sheet) return;
+            const zones = wholeSheet ? [sheet] :
+                [sheet.querySelector('.sheet-handle'), sheet.querySelector('.sheet-hdr')];
+            let startY = 0, dy = 0, dragging = false, pid = null;
+
+            zones.forEach(z => {
+                if (!z) return;
+                z.style.touchAction = 'none';
+                z.addEventListener('pointerdown', e => {
+                    if (!sheet.classList.contains('open')) return;
+                    startY = e.clientY; dy = 0; dragging = true; pid = e.pointerId;
+                });
+            });
+
+            window.addEventListener('pointermove', e => {
+                if (!dragging || e.pointerId !== pid) return;
+                dy = Math.max(0, e.clientY - startY);
+                if (dy > 6) {
+                    sheet.style.transition = 'none';
+                    sheet.style.transform = 'translateY(' + dy + 'px)';
+                }
+            });
+
+            const end = e => {
+                if (!dragging || e.pointerId !== pid) return;
+                dragging = false;
+                if (dy > 6) {
+                    const stop = ev => { ev.stopPropagation(); ev.preventDefault(); };
+                    sheet.addEventListener('click', stop, { capture: true, once: true });
+                    setTimeout(() => sheet.removeEventListener('click', stop, true), 300);
+                }
+                sheet.style.transition = '';
+                const shouldClose = dy > 100 || dy > sheet.offsetHeight * 0.25;
+                if (shouldClose) closeSheet(id);
+                sheet.style.transform = '';
+                dy = 0;
+            };
+            window.addEventListener('pointerup', end);
+            window.addEventListener('pointercancel', end);
+        }
 
         function openSheet(id) {
             document.getElementById('backdrop').classList.add('open');
@@ -5614,6 +5745,11 @@
                 });
             }
             updateNavAvatar();
+
+            attachSheetDrag('shareSheet', true);
+            attachSheetDrag('moreSheet', false);
+            attachSheetDrag('repostSheet', false);
+            attachSheetDrag('quoteSheet', false);
 
             await Promise.all([loadFollows(), loadBookmarks()]);
 
