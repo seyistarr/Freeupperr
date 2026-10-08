@@ -10,6 +10,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black" />
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
 <script src="global.js"></script>
 <script src="auth.js"></script>
 <script src="posts.js"></script>
@@ -176,6 +178,7 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .pv-txt-cancel,.pv-txt-done{font-family:var(--font-head);font-size:.82rem;font-weight:800;
   padding:8px 6px}
 .pv-txt-cancel{color:rgba(255,255,255,.5)}
+.pv-txt-del{font-family:var(--font-head);font-size:.82rem;font-weight:800;padding:8px 6px;color:var(--red);display:none}
 .pv-txt-done{color:var(--p)}
 
 /* ═══ TEXT CARD FLOW ═══ */
@@ -416,6 +419,14 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .saved-sounds-empty-title{font-family:var(--font-head);font-size:.9rem;font-weight:800;margin-bottom:4px}
 .saved-sounds-empty-text{font-size:.78rem;color:var(--muted);line-height:1.5}
 
+/* ═══ SOUND EDITOR (B5) ═══ */
+.trim-card{padding:12px 14px;border-radius:14px;background:var(--inp-bg);border:1.5px solid var(--brd);margin:-6px 0 16px}
+.trim-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-family:var(--font-head);font-size:.76rem;font-weight:700}
+.trim-sub{font-size:.72rem;color:var(--muted);line-height:1.45;margin-top:8px}
+.trim-prev{padding:6px 16px;border-radius:100px;background:var(--pdim);border:1.5px solid var(--pbrd);color:var(--p);font-size:.72rem;font-weight:700;min-width:70px}
+.trim-prev:disabled{opacity:.4}
+.wf-box{width:100%;min-height:64px;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.04)}
+
 /* ═══ PROGRESS SCREEN ═══ */
 #scProgress{background:#000;align-items:center;justify-content:center;padding:24px}
 .prog-card{width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:18px}
@@ -549,7 +560,9 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
       <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       <span id="pvSoundLabel">Add music</span>
     </button>
-    <div style="width:38px"></div>
+    <button class="cap-icon-btn" onclick="openPvTextEditor()" aria-label="Add text">
+      <span style="font-family:var(--font-head);font-weight:800;font-size:.9rem">Aa</span>
+    </button>
   </div>
 
   <div class="pv-text-layer" id="pvTextLayer"></div>
@@ -574,6 +587,7 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
   <div class="pv-txt-colors" id="pvTxtColors"></div>
   <div class="pv-txt-actions">
     <span class="pv-txt-cancel" onclick="cancelPvText()">Cancel</span>
+    <span class="pv-txt-del" id="pvTxtDel" onclick="deletePvText()">Delete</span>
     <span class="pv-txt-done" onclick="commitPvText()">Done ✓</span>
   </div>
 </div>
@@ -649,6 +663,7 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
     </div>
 
     <div id="soundSection"></div>
+    <div id="soundTrim"></div>
 
     <div class="tag-section">
       <div class="tag-lbl">Tags</div>
@@ -752,9 +767,11 @@ const S = {
   flashOn: false,
   media: null,
   mediaFiles: [],
-  textOverlay: null,
+  textOverlays: [],
   textPost: null,
   attachedSound: null,
+  soundStart: 0,
+  recStartedAt: 0,
   soundOpenFrom: null,
   tags: [],
 };
@@ -922,7 +939,7 @@ function startRecording() {
   S.recorder.ondataavailable = e => { if (e.data.size > 0) S.recordChunks.push(e.data); };
   S.recorder.onstop = onRecordingStop;
   S.recorder.start(250);
-  S.recording = true; S.recSecs = 0;
+  S.recording = true; S.recSecs = 0; S.recStartedAt = Date.now();
   document.getElementById('recordBtn').classList.add('recording');
   document.getElementById('recordRing').classList.add('pulsing');
   document.getElementById('capTimer').classList.add('show');
@@ -950,7 +967,7 @@ function onRecordingStop() {
   if (!S.recordChunks.length) return;
   const blob = new Blob(S.recordChunks, { type: (S.recorder && S.recorder.mimeType) || 'video/webm' });
   const url = URL.createObjectURL(blob);
-  S.media = { blob, url, type: 'video' };
+  S.media = { blob, url, type: 'video', duration: (Date.now() - (S.recStartedAt || Date.now())) / 1000 };
   S.mediaFiles = [];
   S.textPost = null;
   goToPreview();
@@ -971,16 +988,18 @@ async function handleGalleryFiles(e) {
   const maxImages = MAX_GALLERY_IMAGES;
   for (let i = 0; i < Math.min(files.length, maxImages); i++) {
     const file = files[i];
-    const isImage = file.type.startsWith('image/');
-    const isVideo = file.type.startsWith('video/');
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const isVideo = file.type.startsWith('video/') || ['mov', 'mp4', 'm4v', 'webm'].includes(ext);
+    const isImage = !isVideo && (file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'gif'].includes(ext));
     if (!isImage && !isVideo) { showToast('Only images or videos allowed'); continue; }
     if (isImage && file.size > MAX_IMAGE_SIZE) { showToast('Image too large (max 8MB)'); continue; }
     if (isVideo && file.size > MAX_VIDEO_SIZE) { showToast('Video too large (max 100MB)'); continue; }
+    let dur = 0;
     if (isVideo) {
-      const dur = await getVideoDuration(file);
+      dur = await getVideoDuration(file);
       if (dur > MAX_VIDEO_SECONDS) { showToast(`Video must be under ${MAX_VIDEO_SECONDS}s`); continue; }
     }
-    valid.push({ blob: file, url: URL.createObjectURL(file), type: isVideo ? 'video' : 'image' });
+    valid.push({ blob: file, url: URL.createObjectURL(file), type: isVideo ? 'video' : 'image', duration: dur });
   }
   if (!valid.length) { e.target.value = ''; return; }
   let picked = valid;
@@ -1111,7 +1130,15 @@ function stopPreviewPlayback() {
 }
 function unmutePv() {
   const vid = document.getElementById('pvVideo');
-  if (!S.attachedSound && _pvIsSingleVideo()) { vid.muted = false; vid.play().catch(() => {}); }
+  if (!_pvIsSingleVideo()) return;
+  if (S.attachedSound) {
+    // iOS only allows audio.play() from a tap, so tapping the video starts the music
+    if (_pvMusic) _pvMusic.play().catch(() => {});
+    vid.play().catch(() => {});
+    return;
+  }
+  vid.muted = false;
+  vid.play().catch(() => {});
 }
 function syncPreviewAudio() {
   const vid = document.getElementById('pvVideo');
@@ -1124,7 +1151,9 @@ function syncPreviewAudio() {
     vid.currentTime = 0;
     _pvLastT = 0;
     _pvMusic = new Audio(S.attachedSound.audio_url);
-    _pvMusic.play().catch(() => {});
+    _pvMusic.loop = true; // short sounds loop, same as the final video
+    _pvMusic.addEventListener('loadedmetadata', () => { _pvMusic.currentTime = S.soundStart || 0; }, { once: true });
+    _pvMusic.play().catch(() => showToast('Tap video to play music'));
     vid.play().catch(() => {});
   } else {
     // ORIGINAL MODE: original audio ON
@@ -1137,20 +1166,46 @@ function syncPreviewAudio() {
   }
 }
 
-/* Preview text overlay */
+/* ═══ Preview text overlays: multiple, positions stored relative to the media frame (0..1) ═══ */
 const PV_COLORS = ['#ffffff','#000000','#fe2c55','#ffb800','#25f4ee','#a259ff','#2dce89'];
+const PV_TEXT_SIZE = 0.075; // font size as a fraction of media width
+const PV_TEXT_MAXW = 0.8;   // max text width as a fraction of media width
 let _pvTxtColor = '#ffffff';
-function openPvTextEditor() {
+let _pvEditingId = null;
+
+/* Where the video/photo is actually drawn inside the letterboxed preview */
+function getPvMediaRect() {
+  const layer = document.getElementById('pvTextLayer');
+  const lw = layer.clientWidth, lh = layer.clientHeight;
+  let nw = 0, nh = 0;
+  if (S.media && S.media.type === 'video') {
+    const v = document.getElementById('pvVideo'); nw = v.videoWidth; nh = v.videoHeight;
+  } else if (S.media && S.media.type === 'image') {
+    const im = document.getElementById('pvImage'); nw = im.naturalWidth; nh = im.naturalHeight;
+  }
+  if (!nw || !nh) return { left: 0, top: 0, w: lw, h: lh };
+  const sc = Math.min(lw / nw, lh / nh);
+  const w = nw * sc, h = nh * sc;
+  return { left: (lw - w) / 2, top: (lh - h) / 2, w, h };
+}
+
+function openPvTextEditor(id) {
+  if (S.mediaFiles && S.mediaFiles.length > 1) { showToast('Text isn’t available on photo carousels yet'); return; }
+  if (!S.media) return;
+  _pvEditingId = (typeof id === 'string') ? id : null;
+  const ov = _pvEditingId ? S.textOverlays.find(o => o.id === _pvEditingId) : null;
+  if (!ov) _pvEditingId = null; else _pvTxtColor = ov.color;
+
   document.getElementById('pvAddTextHint').style.display = 'none';
   const wrap = document.getElementById('pvTxtInputWrap');
   const bar = document.getElementById('pvTxtBar');
   const ta = document.getElementById('pvTxtInput');
-  ta.value = S.textOverlay ? S.textOverlay.text : '';
+  ta.value = ov ? ov.text : '';
   ta.style.color = _pvTxtColor;
   wrap.style.display = 'block';
   bar.style.display = 'flex';
-  const colorsEl = document.getElementById('pvTxtColors');
-  colorsEl.innerHTML = PV_COLORS.map(c =>
+  document.getElementById('pvTxtDel').style.display = ov ? 'inline' : 'none';
+  document.getElementById('pvTxtColors').innerHTML = PV_COLORS.map(c =>
     `<div class="pv-txt-color ${c === _pvTxtColor ? 'on' : ''}" style="background:${c}" onclick="setPvTxtColor('${c}')"></div>`
   ).join('');
   setTimeout(() => ta.focus(), 50);
@@ -1164,53 +1219,85 @@ function hexToRgbStr(hex) {
   const n = parseInt(hex.slice(1), 16);
   return `rgb(${(n>>16)&255}, ${(n>>8)&255}, ${n&255})`;
 }
-function cancelPvText() {
+function closePvTextEditor() {
   document.getElementById('pvTxtInputWrap').style.display = 'none';
   document.getElementById('pvTxtBar').style.display = 'none';
-  if (!S.textOverlay) document.getElementById('pvAddTextHint').style.display = 'flex';
+  document.getElementById('pvAddTextHint').style.display = S.textOverlays.length ? 'none' : 'flex';
+}
+function cancelPvText() { _pvEditingId = null; closePvTextEditor(); }
+function deletePvText() {
+  S.textOverlays = S.textOverlays.filter(o => o.id !== _pvEditingId);
+  _pvEditingId = null;
+  closePvTextEditor();
+  renderPvTextLayer();
 }
 function commitPvText() {
   const text = document.getElementById('pvTxtInput').value.trim();
-  document.getElementById('pvTxtInputWrap').style.display = 'none';
-  document.getElementById('pvTxtBar').style.display = 'none';
-  if (!text) { if (!S.textOverlay) document.getElementById('pvAddTextHint').style.display = 'flex'; return; }
-  S.textOverlay = { text, color: _pvTxtColor };
+  if (!text) { if (_pvEditingId) deletePvText(); else cancelPvText(); return; }
+  if (_pvEditingId) {
+    const ov = S.textOverlays.find(o => o.id === _pvEditingId);
+    if (ov) { ov.text = text; ov.color = _pvTxtColor; }
+  } else {
+    if (S.textOverlays.length >= 5) { showToast('Max 5 text layers'); cancelPvText(); return; }
+    S.textOverlays.push({
+      id: 't' + Date.now(),
+      text,
+      color: _pvTxtColor,
+      nx: 0.5,                                              // center X, 0..1 of media width
+      ny: Math.min(0.8, 0.4 + 0.12 * S.textOverlays.length), // center Y, 0..1 of media height
+      fs: PV_TEXT_SIZE,
+      mw: PV_TEXT_MAXW
+    });
+  }
+  _pvEditingId = null;
+  closePvTextEditor();
   renderPvTextLayer();
 }
 function renderPvTextLayer() {
   const layer = document.getElementById('pvTextLayer');
   layer.innerHTML = '';
-  if (!S.textOverlay) return;
-  const item = document.createElement('div');
-  item.className = 'pv-text-item';
-  item.textContent = S.textOverlay.text;
-  item.style.color = S.textOverlay.color;
-  item.style.left = '50%'; item.style.top = '40%'; item.style.transform = 'translate(-50%,-50%)';
-  makeDraggable(item);
-  item.ondblclick = () => { S.textOverlay = null; renderPvTextLayer(); document.getElementById('pvAddTextHint').style.display = 'flex'; };
-  layer.appendChild(item);
+  const r = getPvMediaRect();
+  S.textOverlays.forEach(ov => {
+    const item = document.createElement('div');
+    item.className = 'pv-text-item';
+    item.textContent = ov.text;
+    item.style.color = ov.color;
+    item.style.textAlign = 'center';
+    item.style.fontSize = (ov.fs * r.w) + 'px';
+    item.style.maxWidth = (ov.mw * r.w) + 'px';
+    item.style.left = (r.left + ov.nx * r.w) + 'px';
+    item.style.top = (r.top + ov.ny * r.h) + 'px';
+    item.style.transform = 'translate(-50%,-50%)';
+    makeDraggable(item, ov);
+    layer.appendChild(item);
+  });
 }
 function clearPvTextLayer() {
-  S.textOverlay = null;
+  S.textOverlays = [];
   document.getElementById('pvTextLayer').innerHTML = '';
   document.getElementById('pvAddTextHint').style.display = S.media || (S.mediaFiles && S.mediaFiles.length) ? 'flex' : 'none';
 }
-function makeDraggable(el) {
-  let sx, sy, ol, ot;
+/* Drag = move (saved as 0..1 of the media frame). Tap without moving = edit. */
+function makeDraggable(el, ov) {
+  let sx, sy, ox, oy, moved = false;
   el.addEventListener('pointerdown', e => {
     e.preventDefault();
-    const rect = el.getBoundingClientRect();
-    const parentRect = el.parentElement.getBoundingClientRect();
+    moved = false;
     sx = e.clientX; sy = e.clientY;
-    ol = rect.left - parentRect.left; ot = rect.top - parentRect.top;
+    ox = el.offsetLeft; oy = el.offsetTop;
     el.setPointerCapture(e.pointerId);
   });
   el.addEventListener('pointermove', e => {
     if (!el.hasPointerCapture(e.pointerId)) return;
-    el.style.left = (ol + e.clientX - sx) + 'px';
-    el.style.top = (ot + e.clientY - sy) + 'px';
-    el.style.transform = 'none';
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+    const r = getPvMediaRect();
+    ov.nx = Math.min(1, Math.max(0, (ox + dx - r.left) / r.w));
+    ov.ny = Math.min(1, Math.max(0, (oy + dy - r.top) / r.h));
+    el.style.left = (r.left + ov.nx * r.w) + 'px';
+    el.style.top = (r.top + ov.ny * r.h) + 'px';
   });
+  el.addEventListener('pointerup', () => { if (!moved) openPvTextEditor(ov.id); });
 }
 
 /* ═══════════ TEXT CARD FLOW ═══════════ */
@@ -1345,6 +1432,7 @@ function switchSoundTab(tab) {
 
 function openSoundSheet(from) {
   S.soundOpenFrom = from;
+  if (typeof pauseWaveform === 'function') pauseWaveform();
   if (from === 'preview') stopPreviewPlayback();
   document.getElementById('soundOverlay').classList.add('show');
   document.getElementById('soundSheet').classList.add('show');
@@ -1515,24 +1603,32 @@ function useSound(sound) {
     showToast('Unable to attach this sound');
     return;
   }
+  // Older records may have a .jpg or other non-audio asset in audio_url
+  const audioUrl = sound.audioUrl || sound.audio_url || '';
+  if (!isPlayableSoundUrl(audioUrl)) {
+    showToast('This sound has no valid audio file');
+    return;
+  }
   const creator = sound.creator || {};
   const creatorHandle =
     creator.username ? '@' + creator.username
     : creator.displayName ? creator.displayName
     : '';
-  // Hierarchy: sound artwork → creator avatar → 🎵 (final fallback)
+  S.soundStart = 0;
   S.attachedSound = {
     id: sound.id,
     title: sound.title || 'Original sound',
     art_url: sound.artUrl || creator.avatarUrl || '',
-    audio_url: sound.audioUrl || sound.audio_url || '',
+    audio_url: audioUrl,
     creatorHandle,
-    creatorId: creator.id || sound.createdBy || null
+    creatorId: creator.id || sound.createdBy || null,
+    duration: 0
   };
   updateCapSoundPill();
   updatePvSoundPill();
   renderSoundSection();
   closeSoundSheet();
+  renderSoundTrim();
   showToast('Sound attached ✓');
 }
 
@@ -1550,9 +1646,11 @@ async function loadAttachedSoundFromQuery(soundId) {
 
 function removeSound() {
   S.attachedSound = null;
+  S.soundStart = 0;
   updateCapSoundPill();
   updatePvSoundPill();
   renderSoundSection();
+  renderSoundTrim();
 }
 
 /* ═══════════ SAVED SOUNDS (Studio) ═══════════ */
@@ -1678,6 +1776,7 @@ document.addEventListener('click', (event) => {
 
 /* ═══════════ DETAILS SCREEN ═══════════ */
 function backFromDetails() {
+  destroyWaveform();
   if (S.textPost) { showScreen('scTextStyle'); buildTxsRow(); }
   else { showScreen('scPreview'); syncPreviewAudio(); }
 }
@@ -1732,6 +1831,7 @@ function goToDetails() {
   renderPostThumb(document.getElementById('detThumb'));
   renderSoundSection();
   showScreen('scPost');
+  renderSoundTrim();
 }
 function renderSoundSection() {
   const el = document.getElementById('soundSection');
@@ -1760,6 +1860,140 @@ function renderSoundSection() {
       </div>`;
   }
 }
+
+/* ═══════════ B5 — SOUND EDITOR (WaveSurfer + Regions) ═══════════ */
+let _wf = null, _wfRegions = null, _wfRegion = null, _wfToken = 0;
+
+function fmtT(s) {
+  s = Math.max(0, s || 0);
+  return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+}
+function destroyWaveform() {
+  _wfToken++;
+  if (_wf) { try { _wf.destroy(); } catch (e) {} }
+  _wf = null; _wfRegions = null; _wfRegion = null;
+}
+function pauseWaveform() { if (_wf) { try { _wf.pause(); } catch (e) {} } }
+
+function showTrimNote(msg) {
+  const t = document.getElementById('trimTitle');
+  const s = document.getElementById('trimSub');
+  const p = document.getElementById('trimPlay');
+  if (t) t.textContent = 'Sound timing';
+  if (s) s.textContent = msg;
+  if (p) p.style.display = 'none';
+}
+function setTrimPlayLabel(playing) {
+  const p = document.getElementById('trimPlay');
+  if (p) p.textContent = playing ? 'Pause' : 'Play';
+}
+function toggleTrimPlay() {
+  if (!_wf) return;
+  stopSoundPreview();
+  if (_wf.isPlaying()) { _wf.pause(); return; }
+  if (_wfRegion && typeof _wfRegion.play === 'function') _wfRegion.play();
+  else _wf.play();
+}
+
+function renderSoundTrim() {
+  const el = document.getElementById('soundTrim');
+  if (!el) return;
+  destroyWaveform();
+  el.innerHTML = '';
+  const snd = S.attachedSound;
+  if (!snd || !_pvIsSingleVideo() || !(S.media.duration > 0)) return;
+  if (!document.getElementById('scPost').classList.contains('active')) return;
+
+  el.innerHTML = `
+    <div class="trim-card">
+      <div class="trim-row">
+        <span id="trimTitle">Loading waveform…</span>
+        <button type="button" class="trim-prev" id="trimPlay" onclick="toggleTrimPlay()" disabled>Play</button>
+      </div>
+      <div id="wfBox" class="wf-box"></div>
+      <div class="trim-sub" id="trimSub"></div>
+    </div>`;
+
+  const token = _wfToken;
+  if (!isPlayableSoundUrl(snd.audio_url)) { showTrimNote('This sound file can’t be edited.'); return; }
+  if (!window.WaveSurfer || !WaveSurfer.Regions) { fallbackTrim(token); return; }
+
+  try {
+    _wfRegions = WaveSurfer.Regions.create();
+    _wf = WaveSurfer.create({
+      container: '#wfBox',
+      height: 64,
+      waveColor: 'rgba(255,255,255,.35)',
+      progressColor: '#8b5cf6',
+      cursorColor: '#ffffff',
+      barWidth: 2, barGap: 1, barRadius: 2,
+      normalize: true,
+      url: snd.audio_url,
+      plugins: [_wfRegions]
+    });
+    _wf.on('ready', dur => { if (token === _wfToken) onWaveReady(dur); });
+    _wf.on('error', () => { if (token === _wfToken) fallbackTrim(token); });
+    _wf.on('play', () => setTrimPlayLabel(true));
+    _wf.on('pause', () => setTrimPlayLabel(false));
+    _wf.on('finish', () => setTrimPlayLabel(false));
+  } catch (e) {
+    console.error('Waveform init failed:', e);
+    fallbackTrim(token);
+  }
+}
+
+function onWaveReady(dur) {
+  const snd = S.attachedSound;
+  if (!snd || !_wf) return;
+  snd.duration = dur;
+  const t = computeTiming(S.media.duration, dur, S.soundStart);
+  const title = document.getElementById('trimTitle');
+  const sub = document.getElementById('trimSub');
+  const play = document.getElementById('trimPlay');
+  if (play) play.disabled = false;
+
+  if (t.maxStart < 0.5) {
+    S.soundStart = 0;
+    title.textContent = 'Sound timing';
+    sub.textContent = dur < t.target - 0.05
+      ? `Your sound (${fmtT(dur)}) is shorter than your video (${fmtT(t.target)}), so it will loop automatically.`
+      : 'Your sound fits your video exactly.';
+    return;
+  }
+
+  S.soundStart = t.start;
+  title.innerHTML = `Sound starts at <b id="trimLbl">${fmtT(t.start)}</b>`;
+  sub.textContent = `Drag the highlighted part. Video ${fmtT(t.target)} · Sound ${fmtT(dur)}.`;
+  _wfRegion = _wfRegions.addRegion({
+    start: t.start,
+    end: t.start + t.target,
+    color: 'rgba(139,92,246,.35)',
+    drag: true,
+    resize: false
+  });
+  _wfRegions.on('region-updated', r => {
+    S.soundStart = Math.min(Math.max(0, r.start), t.maxStart);
+    const l = document.getElementById('trimLbl');
+    if (l) l.textContent = fmtT(S.soundStart);
+  });
+}
+
+/* If WaveSurfer can't load/decode (CORS, bad file), still get the duration for loop/trim */
+function fallbackTrim(token) {
+  if (_wf) { try { _wf.destroy(); } catch (e) {} }
+  _wf = null; _wfRegions = null; _wfRegion = null;
+  const box = document.getElementById('wfBox');
+  if (box) box.style.display = 'none';
+  S.soundStart = 0;
+  getRemoteMediaDuration(S.attachedSound.audio_url).then(d => {
+    if (token !== _wfToken || !S.attachedSound) return;
+    S.attachedSound.duration = d;
+    showTrimNote(d < (S.media.duration || 0)
+      ? 'Waveform unavailable. Your sound is shorter than the video, so it will loop.'
+      : 'Waveform unavailable. Your sound will start from 0:00.');
+  }).catch(() => showTrimNote('Waveform unavailable. Your sound will start from 0:00.'));
+}
+
 function updateCharCount() {
   const el = document.getElementById('detCaption');
   document.getElementById('detCharCount').textContent = el.value.length + '/300';
@@ -1781,7 +2015,7 @@ function renderTags() {
   ).join('');
 }
 
-/* ═══════════ UPLOAD & PUBLISH ═══════════ */
+/* ═══════════ UPLOAD ═══════════ */
 function uploadToCloudinary(file, isVideo, onProgress) {
   return new Promise((resolve, reject) => {
     const resourceType = isVideo ? 'video' : 'image';
@@ -1800,7 +2034,14 @@ function uploadToCloudinary(file, isVideo, onProgress) {
       if (xhr.status === 200) {
         try {
           const data = JSON.parse(xhr.responseText);
-          resolve({ url: data.secure_url, type: resourceType, public_id: data.public_id });
+          resolve({
+            url: data.secure_url,
+            type: resourceType,
+            public_id: data.public_id,
+            duration: Number(data.duration) || 0,
+            width: Number(data.width) || 0,
+            height: Number(data.height) || 0
+          });
         } catch (e) { reject(new Error('Invalid upload response')); }
       } else {
         let msg = `Upload failed (HTTP ${xhr.status})`;
@@ -1820,42 +2061,118 @@ function setProgress(pct, title, sub) {
   if (sub) document.getElementById('progSub').textContent = sub;
 }
 
-/* ═══════════ CLOUDINARY MUSIC COMPOSITION ═══════════
- * Uses Cloudinary's ac_none + l_audio layer so the phone only uploads
- * the raw original video. Cloudinary removes the original audio and adds
- * the selected FreeUpper sound on the delivery URL.
- *
- * Folder slashes in the sound's public ID must become `:` inside the
- * l_audio layer, per Cloudinary's documented syntax.
+/* ═══════════ CLOUDINARY FINAL-MEDIA COMPOSITION (B4 + B5 + B6) ═══════════
+ * One timing model, one URL builder.
+ *  - Video duration is the master (from the Cloudinary upload response)
+ *  - Sound loops if shorter, trims if longer, starts at S.soundStart
+ *  - Text overlays are burned in as l_text layers (B6)
+ *  - Video output is always H.264 MP4 (iPhone / Android / desktop safe)
  */
-function buildCloudinaryMusicVideoUrl(videoUrl, audioUrl) {
-  const marker = '/video/upload/';
-  if (
-    !/^https:\/\/res\.cloudinary\.com\//i.test(videoUrl || '') ||
-    !videoUrl.includes(marker)
-  ) {
-    throw new Error('Video must be hosted on Cloudinary');
+const AUDIO_BAD_EXT = /\.(jpe?g|png|gif|webp|svg|heic|heif|avif|bmp)(\?.*)?$/i;
+function isPlayableSoundUrl(url) {
+  return /^https:\/\/res\.cloudinary\.com\/[^/]+\/video\/upload\//i.test(url || '') && !AUDIO_BAD_EXT.test(url);
+}
+
+function getRemoteMediaDuration(url) {
+  return new Promise((resolve, reject) => {
+    const media = new Audio();
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      media.onloadedmetadata = null;
+      media.onerror = null;
+      try { media.removeAttribute('src'); media.load(); } catch (_) {}
+      fn(value);
+    };
+    const timer = setTimeout(() => finish(reject, new Error('Could not read media duration')), 15000);
+    media.preload = 'metadata';
+    media.onloadedmetadata = () => {
+      const d = Number(media.duration);
+      if (!Number.isFinite(d) || d <= 0) finish(reject, new Error('Invalid media duration'));
+      else finish(resolve, d);
+    };
+    media.onerror = () => finish(reject, new Error('Could not read media duration'));
+    media.src = url;
+    try { media.load(); } catch (_) {}
+  });
+}
+
+/* Shared timing model: used by the waveform editor AND the Cloudinary URL */
+function computeTiming(videoDur, soundDur, start) {
+  const target = videoDur > 0 ? Math.min(videoDur, MAX_VIDEO_SECONDS) : 0;
+  const known = soundDur > 0 && target > 0;
+  const maxStart = known ? Math.max(0, soundDur - target) : 0;
+  const s = Math.min(Math.max(0, Number(start) || 0), maxStart);
+  // e_loop = ADDITIONAL repeats (5s sound on 30s video => 5 extra)
+  const loops = known && soundDur < target ? Math.ceil(target / soundDur) - 1 : 0;
+  return { target, soundDur, maxStart, start: s, loops };
+}
+
+async function buildCloudinaryFinalUrl(rawUrl, opts = {}) {
+  const isVideo = opts.type !== 'image';
+  const marker = isVideo ? '/video/upload/' : '/image/upload/';
+  if (!/^https:\/\/res\.cloudinary\.com\//i.test(rawUrl || '') || !rawUrl.includes(marker)) {
+    throw new Error('Media must be hosted on Cloudinary');
   }
-  if (
-    !/^https:\/\/res\.cloudinary\.com\//i.test(audioUrl || '') ||
-    !audioUrl.includes(marker)
-  ) {
-    throw new Error('Selected sound has no audio file');
+  const parts = [];
+
+  if (isVideo && opts.audioUrl) {
+    if (!isPlayableSoundUrl(opts.audioUrl)) throw new Error('Selected sound has no playable audio file');
+    const publicId = opts.audioUrl
+      .split('/video/upload/')[1]
+      .split('?')[0]
+      .replace(/^v\d+\//, '')
+      .replace(/\.[a-z0-9]+$/i, '')
+      .split('/')
+      .join(':');
+    if (!publicId) throw new Error('Selected sound has no audio file');
+
+    let soundDur = Number(opts.audioDuration) || 0;
+    if (!soundDur) { try { soundDur = await getRemoteMediaDuration(opts.audioUrl); } catch (_) {} }
+    const t = computeTiming(Number(opts.videoDuration) || 0, soundDur, opts.start);
+
+    const layer = [];
+    if (t.loops > 0) layer.push(`e_loop:${t.loops}`);
+    const trim = [];
+    if (t.start > 0.05) trim.push(`so_${t.start.toFixed(2)}`);
+    if (t.target > 0) trim.push(`du_${t.target.toFixed(2)}`);
+    if (trim.length) layer.push(trim.join(','));
+
+    parts.push('ac_none', `l_audio:${publicId}`, ...layer, 'fl_layer_apply');
   }
-  const publicId = audioUrl
-    .split(marker)[1]
-    .split('?')[0]
-    .replace(/^v\d+\//, '')
-    .replace(/\.[a-z0-9]+$/i, '')
-    .split('/')
-    .join(':');
-  if (!publicId) {
-    throw new Error('Selected sound has no audio file');
+
+  if (opts.textLayers) parts.push(opts.textLayers);
+  if (isVideo) parts.push('f_mp4,vc_h264');
+  if (!parts.length) return rawUrl;
+
+  let out = rawUrl.replace(marker, `${marker}${parts.join('/')}/`);
+  if (isVideo) {
+    if (/\.(mov|webm|mp4|m4v)(\?.*)?$/i.test(out)) out = out.replace(/\.(mov|webm|mp4|m4v)(\?.*)?$/i, '.mp4$2');
+    else out += '.mp4';
   }
-  return videoUrl.replace(
-    marker,
-    `${marker}ac_none/l_audio:${publicId}/fl_layer_apply/`
-  );
+  return out;
+}
+
+/* ═══════════ B6 — TEXT OVERLAYS → CLOUDINARY l_text ═══════════ */
+function encodeCloudinaryText(str) {
+  return encodeURIComponent(str)
+    .replace(/%2C/g, '%252C')   // comma must be double-encoded
+    .replace(/%2F/g, '%252F');  // slash must be double-encoded
+}
+function buildCloudinaryTextLayers(overlays, dims) {
+  if (!overlays || !overlays.length) return '';
+  const W = Number(dims && dims.w) || 0, H = Number(dims && dims.h) || 0;
+  if (!W || !H) return '';
+  return overlays.map(ov => {
+    const size = Math.max(14, Math.round(ov.fs * W));
+    const maxW = Math.max(100, Math.round(ov.mw * W));
+    const x = Math.round((ov.nx - 0.5) * W);   // offsets from the frame center
+    const y = Math.round((ov.ny - 0.5) * H);
+    const color = String(ov.color || '#ffffff').replace('#', '');
+    return `l_text:Arial_${size}_bold_center:${encodeCloudinaryText(ov.text)},co_rgb:${color},w_${maxW},c_fit/fl_layer_apply,g_center,x_${x},y_${y}`;
+  }).join('/');
 }
 
 async function publishPost() {
@@ -1872,6 +2189,7 @@ async function publishPost() {
   const hideComments = document.getElementById('hideComments').checked;
 
   document.getElementById('publishBtn').disabled = true;
+  if (typeof pauseWaveform === 'function') pauseWaveform();
   showScreen('scProgress');
   document.getElementById('progActive').style.display = 'flex';
   document.getElementById('progSuccess').style.display = 'none';
@@ -1887,6 +2205,7 @@ async function publishPost() {
 
     const isVideo = !!(S.media && S.media.type === 'video');
     const finalSoundId = S.attachedSound?.id || null;
+    let rawVideoUrl = null; // untouched upload URL, used for original-sound extraction
 
     let payload;
     if (S.media) {
@@ -1919,39 +2238,26 @@ async function publishPost() {
           source: 'studio',
         };
       } else {
-        const needsMusic = isVideo && !!finalSoundId;
-        setProgress(
-          0,
-          needsMusic ? 'Uploading video…' : 'Uploading…',
-          'Sending your media to Freeupper'
-        );
+        const wantsMusic = isVideo && !!finalSoundId;
         const result = await uploadToCloudinary(
           S.media.blob,
           isVideo,
-          pct => {
-            setProgress(
-              Math.min(pct, 92),
-              'Uploading…',
-              'Sending your media to Freeupper'
-            );
-          }
+          pct => { setProgress(Math.min(pct, 90), 'Uploading…', 'Sending your media to Freeupper'); }
         );
-        // If the user selected a sound, Cloudinary creates the final
-        // video with the original audio removed and the selected sound added.
-        if (needsMusic) {
-          if (!S.attachedSound || !S.attachedSound.audio_url) {
-            throw new Error('Selected sound has no audio file');
-          }
-          setProgress(
-            94,
-            'Adding music…',
-            'Finalizing your video'
-          );
-          result.url = buildCloudinaryMusicVideoUrl(
-            result.url,
-            S.attachedSound.audio_url
-          );
+        if (isVideo) rawVideoUrl = result.url;
+
+        if (isVideo || wantsMusic || S.textOverlays.length) {
+          setProgress(93, wantsMusic ? 'Adding music…' : 'Finalizing…', 'Finalizing your post');
+          result.url = await buildCloudinaryFinalUrl(result.url, {
+            type: result.type,
+            videoDuration: result.duration || S.media.duration || 0,
+            audioUrl: wantsMusic ? S.attachedSound.audio_url : null,
+            audioDuration: S.attachedSound?.duration || 0,
+            start: S.soundStart || 0,
+            textLayers: buildCloudinaryTextLayers(S.textOverlays, { w: result.width, h: result.height }),
+          });
         }
+
         setProgress(95, 'Publishing…', 'Saving your post');
         payload = {
           title: caption.slice(0, 100) || (isVideo ? 'Video' : 'Photo'),
@@ -1988,7 +2294,9 @@ async function publishPost() {
 
     if (post.id && isVideo && !finalSoundId && window.SoundsAPI?.createOriginalSoundForPost) {
       try {
-        const audioUrl = buildOriginalAudioUrl(payload.mediaUrl);
+        // Use the RAW upload URL: the final URL now has f_mp4 / text layers,
+        // which would conflict with the .mp3 extension.
+        const audioUrl = buildOriginalAudioUrl(rawVideoUrl || payload.mediaUrl);
         if (audioUrl) {
           setProgress(97, 'Creating original sound…', 'Making your audio available on FreeUpper');
           createdOriginalSound = await window.SoundsAPI.createOriginalSoundForPost(post.id, audioUrl);
@@ -2000,8 +2308,7 @@ async function publishPost() {
       }
     }
 
-    // NOTE: usage_count is now incremented by the database trigger on posts.sound_id.
-    // Do NOT call SoundsAPI.incrementSoundUsage() here — that would double-count.
+    // usage_count is incremented by the DB trigger on posts.sound_id. Do NOT double-count here.
 
     if (post.id && mentions.length && window.Mentions?.notifyMentionedUsers) {
       window.Mentions.notifyMentionedUsers('post', post.id, mentions, user.id, null).catch(() => {});
@@ -2028,7 +2335,7 @@ function init() {
   const _pv = document.getElementById('pvVideo');
   _pv.addEventListener('timeupdate', () => {
     const t = _pv.currentTime;
-    if (_pvMusic && t < _pvLastT - 0.5) { _pvMusic.currentTime = 0; _pvMusic.play().catch(() => {}); }
+    if (_pvMusic && t < _pvLastT - 0.5) { _pvMusic.currentTime = S.soundStart || 0; _pvMusic.play().catch(() => {}); }
     _pvLastT = t;
   });
   startCamera();
