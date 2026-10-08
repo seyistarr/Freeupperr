@@ -179,6 +179,8 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
   padding:8px 6px}
 .pv-txt-cancel{color:rgba(255,255,255,.5)}
 .pv-txt-del{font-family:var(--font-head);font-size:.82rem;font-weight:800;padding:8px 6px;color:var(--red);display:none}
+.pv-txt-tools{display:flex;gap:8px;overflow-x:auto}
+.pv-txt-chip{padding:7px 14px;border-radius:100px;background:rgba(255,255,255,.1);font-family:var(--font-head);font-size:.74rem;font-weight:700;color:#fff;white-space:nowrap;flex-shrink:0}
 .pv-txt-done{color:var(--p)}
 
 /* ═══ TEXT CARD FLOW ═══ */
@@ -581,9 +583,15 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 
 <!-- Floating text editor -->
 <div class="pv-txt-input-wrap" id="pvTxtInputWrap">
-  <textarea class="pv-txt-input" id="pvTxtInput" rows="1" maxlength="200" placeholder="Add text…"></textarea>
+  <textarea class="pv-txt-input" id="pvTxtInput" rows="3" maxlength="200" placeholder="Add text…"></textarea>
 </div>
 <div class="pv-txt-bar" id="pvTxtBar">
+  <div class="pv-txt-tools">
+    <button type="button" class="pv-txt-chip" id="pvStyleBtn" onclick="cyclePvStyle()">Shadow</button>
+    <button type="button" class="pv-txt-chip" id="pvAlignBtn" onclick="cyclePvAlign()">Center</button>
+    <button type="button" class="pv-txt-chip" onclick="adjustPvSize(-1)">A−</button>
+    <button type="button" class="pv-txt-chip" onclick="adjustPvSize(1)">A+</button>
+  </div>
   <div class="pv-txt-colors" id="pvTxtColors"></div>
   <div class="pv-txt-actions">
     <span class="pv-txt-cancel" onclick="cancelPvText()">Cancel</span>
@@ -1166,12 +1174,100 @@ function syncPreviewAudio() {
   }
 }
 
-/* ═══ Preview text overlays: multiple, positions stored relative to the media frame (0..1) ═══ */
+/* ═══ TEXT OVERLAYS (B6.1): one renderer for preview AND export ═══ */
 const PV_COLORS = ['#ffffff','#000000','#fe2c55','#ffb800','#25f4ee','#a259ff','#2dce89'];
-const PV_TEXT_SIZE = 0.075; // font size as a fraction of media width
-const PV_TEXT_MAXW = 0.8;   // max text width as a fraction of media width
+const PV_TEXT_SIZE = 0.075;   // font size = fraction of frame width
+const PV_TEXT_MAXW = 0.8;     // max text width = fraction of frame width
+const TXT_STYLES = ['shadow', 'bg', 'outline'];
+const TXT_STYLE_LABEL = { shadow: 'Shadow', bg: 'Background', outline: 'Outline' };
+const TXT_ALIGNS = ['center', 'left', 'right'];
+const TXT_ALIGN_LABEL = { center: 'Center', left: 'Left', right: 'Right' };
 let _pvTxtColor = '#ffffff';
 let _pvEditingId = null;
+let _pvDraft = { style: 'shadow', align: 'center', fs: PV_TEXT_SIZE };
+
+function _lum(hex) {
+  const n = parseInt(String(hex).slice(1), 16) || 0;
+  return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+}
+function wrapTextLines(ctx, text, maxW) {
+  const out = [];
+  String(text).split('\n').forEach(par => {
+    if (!par.trim()) { out.push(''); return; }
+    let line = '';
+    par.split(/\s+/).forEach(word => {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width <= maxW) { line = test; return; }
+      if (line) out.push(line);
+      let chunk = '';
+      for (const ch of Array.from(word)) {
+        if (chunk && ctx.measureText(chunk + ch).width > maxW) { out.push(chunk); chunk = ch; }
+        else chunk += ch;
+      }
+      line = chunk;
+    });
+    out.push(line);
+  });
+  return out;
+}
+/* refW = frame width in pixels at the target scale (preview px, or exported video px) */
+function renderTextCanvas(ov, refW, dpr) {
+  dpr = dpr || 1;
+  const fs = ov.fs * refW * dpr;
+  const maxTextW = ov.mw * refW * dpr;
+  const font = `800 ${fs}px Outfit, "Plus Jakarta Sans", system-ui, sans-serif`;
+  const style = ov.style || 'shadow';
+  const align = ov.align || 'center';
+  const m = document.createElement('canvas').getContext('2d');
+  m.font = font;
+  const padX = style === 'bg' ? fs * 0.45 : 0;
+  const padY = style === 'bg' ? fs * 0.25 : 0;
+  const lines = wrapTextLines(m, ov.text, maxTextW - padX * 2);
+  const lineH = fs * 1.28;
+  let tw = 1;
+  lines.forEach(l => { tw = Math.max(tw, m.measureText(l).width); });
+  const margin = Math.ceil(fs * 0.3);
+  const w = Math.ceil(tw + padX * 2 + margin * 2);
+  const h = Math.ceil(lines.length * lineH + padY * 2 + margin * 2);
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.font = font; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.textAlign = align;
+
+  const innerX = margin + padX;
+  const x = align === 'left' ? innerX : align === 'right' ? innerX + tw : innerX + tw / 2;
+  const light = _lum(ov.color) > 0.5;
+
+  if (style === 'bg') {
+    const r = fs * 0.35, bx = margin, by = margin, bw = w - margin * 2, bh = h - margin * 2;
+    ctx.fillStyle = light ? 'rgba(0,0,0,.62)' : 'rgba(255,255,255,.92)';
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.arcTo(bx + bw, by, bx + bw, by + bh, r);
+    ctx.arcTo(bx + bw, by + bh, bx, by + bh, r);
+    ctx.arcTo(bx, by + bh, bx, by, r);
+    ctx.arcTo(bx, by, bx + bw, by, r);
+    ctx.closePath(); ctx.fill();
+  }
+  lines.forEach((l, i) => {
+    const y = margin + padY + lineH * (i + 0.5);
+    if (style === 'outline') {
+      ctx.strokeStyle = light ? '#000' : '#fff';
+      ctx.lineWidth = fs * 0.16;
+      ctx.strokeText(l, x, y);
+    }
+    if (style === 'shadow') {
+      ctx.shadowColor = 'rgba(0,0,0,.7)';
+      ctx.shadowBlur = fs * 0.18;
+      ctx.shadowOffsetY = fs * 0.04;
+    }
+    ctx.fillStyle = ov.color;
+    ctx.fillText(l, x, y);
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  });
+  cv._cssW = w / dpr; cv._cssH = h / dpr;
+  return cv;
+}
 
 /* Where the video/photo is actually drawn inside the letterboxed preview */
 function getPvMediaRect() {
@@ -1189,13 +1285,30 @@ function getPvMediaRect() {
   return { left: (lw - w) / 2, top: (lh - h) / 2, w, h };
 }
 
+function syncPvTools() {
+  document.getElementById('pvStyleBtn').textContent = TXT_STYLE_LABEL[_pvDraft.style];
+  document.getElementById('pvAlignBtn').textContent = TXT_ALIGN_LABEL[_pvDraft.align];
+  document.getElementById('pvTxtInput').style.textAlign = _pvDraft.align;
+}
+function cyclePvStyle() { _pvDraft.style = TXT_STYLES[(TXT_STYLES.indexOf(_pvDraft.style) + 1) % TXT_STYLES.length]; syncPvTools(); }
+function cyclePvAlign() { _pvDraft.align = TXT_ALIGNS[(TXT_ALIGNS.indexOf(_pvDraft.align) + 1) % TXT_ALIGNS.length]; syncPvTools(); }
+function adjustPvSize(dir) {
+  _pvDraft.fs = Math.min(0.13, Math.max(0.04, _pvDraft.fs + dir * 0.012));
+  showToast('Size ' + Math.round(_pvDraft.fs / PV_TEXT_SIZE * 100) + '%');
+}
+
 function openPvTextEditor(id) {
   if (S.mediaFiles && S.mediaFiles.length > 1) { showToast('Text isn’t available on photo carousels yet'); return; }
   if (!S.media) return;
   _pvEditingId = (typeof id === 'string') ? id : null;
   const ov = _pvEditingId ? S.textOverlays.find(o => o.id === _pvEditingId) : null;
-  if (!ov) _pvEditingId = null; else _pvTxtColor = ov.color;
-
+  if (!ov) _pvEditingId = null;
+  if (ov) {
+    _pvTxtColor = ov.color;
+    _pvDraft = { style: ov.style || 'shadow', align: ov.align || 'center', fs: ov.fs };
+  } else {
+    _pvDraft = { style: 'shadow', align: 'center', fs: PV_TEXT_SIZE };
+  }
   document.getElementById('pvAddTextHint').style.display = 'none';
   const wrap = document.getElementById('pvTxtInputWrap');
   const bar = document.getElementById('pvTxtBar');
@@ -1208,6 +1321,7 @@ function openPvTextEditor(id) {
   document.getElementById('pvTxtColors').innerHTML = PV_COLORS.map(c =>
     `<div class="pv-txt-color ${c === _pvTxtColor ? 'on' : ''}" style="background:${c}" onclick="setPvTxtColor('${c}')"></div>`
   ).join('');
+  syncPvTools();
   setTimeout(() => ta.focus(), 50);
 }
 function setPvTxtColor(c) {
@@ -1236,16 +1350,18 @@ function commitPvText() {
   if (!text) { if (_pvEditingId) deletePvText(); else cancelPvText(); return; }
   if (_pvEditingId) {
     const ov = S.textOverlays.find(o => o.id === _pvEditingId);
-    if (ov) { ov.text = text; ov.color = _pvTxtColor; }
+    if (ov) { ov.text = text; ov.color = _pvTxtColor; ov.style = _pvDraft.style; ov.align = _pvDraft.align; ov.fs = _pvDraft.fs; }
   } else {
     if (S.textOverlays.length >= 5) { showToast('Max 5 text layers'); cancelPvText(); return; }
     S.textOverlays.push({
       id: 't' + Date.now(),
       text,
       color: _pvTxtColor,
-      nx: 0.5,                                              // center X, 0..1 of media width
-      ny: Math.min(0.8, 0.4 + 0.12 * S.textOverlays.length), // center Y, 0..1 of media height
-      fs: PV_TEXT_SIZE,
+      style: _pvDraft.style,
+      align: _pvDraft.align,
+      nx: 0.5,
+      ny: Math.min(0.8, 0.4 + 0.12 * S.textOverlays.length),
+      fs: _pvDraft.fs,
       mw: PV_TEXT_MAXW
     });
   }
@@ -1257,19 +1373,20 @@ function renderPvTextLayer() {
   const layer = document.getElementById('pvTextLayer');
   layer.innerHTML = '';
   const r = getPvMediaRect();
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
   S.textOverlays.forEach(ov => {
-    const item = document.createElement('div');
-    item.className = 'pv-text-item';
-    item.textContent = ov.text;
-    item.style.color = ov.color;
-    item.style.textAlign = 'center';
-    item.style.fontSize = (ov.fs * r.w) + 'px';
-    item.style.maxWidth = (ov.mw * r.w) + 'px';
-    item.style.left = (r.left + ov.nx * r.w) + 'px';
-    item.style.top = (r.top + ov.ny * r.h) + 'px';
-    item.style.transform = 'translate(-50%,-50%)';
-    makeDraggable(item, ov);
-    layer.appendChild(item);
+    const cv = renderTextCanvas(ov, r.w, dpr);
+    cv.className = 'pv-text-item';
+    cv.style.width = cv._cssW + 'px';
+    cv.style.height = cv._cssH + 'px';
+    cv.style.padding = '0';
+    cv.style.maxWidth = 'none';
+    cv.style.borderRadius = '0';
+    cv.style.left = (r.left + ov.nx * r.w) + 'px';
+    cv.style.top = (r.top + ov.ny * r.h) + 'px';
+    cv.style.transform = 'translate(-50%,-50%)';
+    makeDraggable(cv, ov);
+    layer.appendChild(cv);
   });
 }
 function clearPvTextLayer() {
@@ -1936,6 +2053,10 @@ function renderSoundTrim() {
     _wf.on('play', () => setTrimPlayLabel(true));
     _wf.on('pause', () => setTrimPlayLabel(false));
     _wf.on('finish', () => setTrimPlayLabel(false));
+    // If the file never decodes (CORS, bad file), fall back to duration-only after 12s
+    setTimeout(() => {
+      if (token === _wfToken && _wf && S.attachedSound && !S.attachedSound.duration) fallbackTrim(token);
+    }, 12000);
   } catch (e) {
     console.error('Waveform init failed:', e);
     fallbackTrim(token);
@@ -2065,7 +2186,7 @@ function setProgress(pct, title, sub) {
  * One timing model, one URL builder.
  *  - Video duration is the master (from the Cloudinary upload response)
  *  - Sound loops if shorter, trims if longer, starts at S.soundStart
- *  - Text overlays are burned in as l_text layers (B6)
+ *  - Text overlays are burned in as uploaded PNG image layers (B6.1)
  *  - Video output is always H.264 MP4 (iPhone / Android / desktop safe)
  */
 const AUDIO_BAD_EXT = /\.(jpe?g|png|gif|webp|svg|heic|heif|avif|bmp)(\?.*)?$/i;
@@ -2117,6 +2238,7 @@ async function buildCloudinaryFinalUrl(rawUrl, opts = {}) {
     throw new Error('Media must be hosted on Cloudinary');
   }
   const parts = [];
+  if (isVideo) parts.push(`c_limit,w_${EXPORT_MAX_W},h_${EXPORT_MAX_H}`);
 
   if (isVideo && opts.audioUrl) {
     if (!isPlayableSoundUrl(opts.audioUrl)) throw new Error('Selected sound has no playable audio file');
@@ -2155,24 +2277,60 @@ async function buildCloudinaryFinalUrl(rawUrl, opts = {}) {
   return out;
 }
 
-/* ═══════════ B6 — TEXT OVERLAYS → CLOUDINARY l_text ═══════════ */
-function encodeCloudinaryText(str) {
-  return encodeURIComponent(str)
-    .replace(/%2C/g, '%252C')   // comma must be double-encoded
-    .replace(/%2F/g, '%252F');  // slash must be double-encoded
+/* ═══════════ B6.1 — TEXT PNG OVERLAYS + FRAME DIMENSIONS ═══════════ */
+const EXPORT_MAX_W = 1080, EXPORT_MAX_H = 1920;
+
+/* Final frame size. Browser orientation wins if Cloudinary reports swapped width/height
+   (iPhone rotation metadata). Videos are capped by c_limit, so dims match the final render. */
+function resolveFrameDims(result, isVideo) {
+  let W = Number(result.width) || 0, H = Number(result.height) || 0;
+  let pw = 0, ph = 0;
+  if (isVideo) { const v = document.getElementById('pvVideo'); pw = v.videoWidth; ph = v.videoHeight; }
+  else { const im = document.getElementById('pvImage'); pw = im.naturalWidth; ph = im.naturalHeight; }
+  if (W && H && pw && ph && (W > H) !== (pw > ph)) { const t = W; W = H; H = t; }
+  if (!W || !H) { W = pw; H = ph; }
+  if (!W || !H) return null;
+  if (isVideo) {
+    const sc = Math.min(1, EXPORT_MAX_W / W, EXPORT_MAX_H / H);
+    W = Math.round(W * sc); H = Math.round(H * sc);
+  }
+  return { w: W, h: H };
 }
-function buildCloudinaryTextLayers(overlays, dims) {
-  if (!overlays || !overlays.length) return '';
-  const W = Number(dims && dims.w) || 0, H = Number(dims && dims.h) || 0;
-  if (!W || !H) return '';
-  return overlays.map(ov => {
-    const size = Math.max(14, Math.round(ov.fs * W));
-    const maxW = Math.max(100, Math.round(ov.mw * W));
-    const x = Math.round((ov.nx - 0.5) * W);   // offsets from the frame center
-    const y = Math.round((ov.ny - 0.5) * H);
-    const color = String(ov.color || '#ffffff').replace('#', '');
-    return `l_text:Arial_${size}_bold_center:${encodeCloudinaryText(ov.text)},co_rgb:${color},w_${maxW},c_fit/fl_layer_apply,g_center,x_${x},y_${y}`;
-  }).join('/');
+
+async function uploadTextLayers(overlays, dims, onStep) {
+  if (!overlays || !overlays.length || !dims) return '';
+  if (document.fonts && document.fonts.load) { try { await document.fonts.load('800 24px Outfit'); } catch (_) {} }
+  const layers = [];
+  for (let i = 0; i < overlays.length; i++) {
+    const ov = overlays[i];
+    if (onStep) onStep(i + 1, overlays.length);
+    const cv = renderTextCanvas(ov, dims.w, 1);
+    const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+    if (!blob) throw new Error('Could not render text');
+    const up = await uploadToCloudinary(blob, false, () => {});
+    const id = String(up.public_id).replace(/\//g, ':');
+    const x = Math.round((ov.nx - 0.5) * dims.w);
+    const y = Math.round((ov.ny - 0.5) * dims.h);
+    layers.push(`l_${id},w_${cv.width}/fl_layer_apply,g_center,x_${x},y_${y}`);
+  }
+  return layers.join('/');
+}
+
+/* B5.5/B6.5: catch a broken transformation BEFORE the post is created. Also warms Cloudinary's cache. */
+async function preflightFinalUrl(url) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 25000);
+  try {
+    const res = await fetch(url, { method: 'HEAD', signal: ctl.signal });
+    if (res.status === 400 || res.status === 404) {
+      throw new Error('Cloudinary could not build the final video (' + res.status + ')');
+    }
+  } catch (e) {
+    if (e && /Cloudinary could not/.test(e.message)) throw e;
+    // timeout / network / CORS: result unknown, continue
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function publishPost() {
@@ -2247,6 +2405,12 @@ async function publishPost() {
         if (isVideo) rawVideoUrl = result.url;
 
         if (isVideo || wantsMusic || S.textOverlays.length) {
+          const dims = resolveFrameDims(result, isVideo);
+          let textLayers = '';
+          if (S.textOverlays.length && dims) {
+            textLayers = await uploadTextLayers(S.textOverlays, dims, (i, n) =>
+              setProgress(91, `Adding text ${i}/${n}…`, 'Finalizing your post'));
+          }
           setProgress(93, wantsMusic ? 'Adding music…' : 'Finalizing…', 'Finalizing your post');
           result.url = await buildCloudinaryFinalUrl(result.url, {
             type: result.type,
@@ -2254,8 +2418,12 @@ async function publishPost() {
             audioUrl: wantsMusic ? S.attachedSound.audio_url : null,
             audioDuration: S.attachedSound?.duration || 0,
             start: S.soundStart || 0,
-            textLayers: buildCloudinaryTextLayers(S.textOverlays, { w: result.width, h: result.height }),
+            textLayers,
           });
+          if (isVideo) {
+            setProgress(94, 'Rendering video…', 'This can take a moment');
+            await preflightFinalUrl(result.url);
+          }
         }
 
         setProgress(95, 'Publishing…', 'Saving your post');
@@ -2332,6 +2500,7 @@ function init() {
   const params = new URLSearchParams(window.location.search);
   const soundId = params.get('sound');
   if (soundId) loadAttachedSoundFromQuery(soundId);
+  if (document.fonts && document.fonts.load) document.fonts.load('800 24px Outfit').catch(() => {});
   const _pv = document.getElementById('pvVideo');
   _pv.addEventListener('timeupdate', () => {
     const t = _pv.currentTime;
