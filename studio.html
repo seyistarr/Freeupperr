@@ -1288,12 +1288,17 @@ function getPvMediaRect() {
 function syncPvTools() {
   document.getElementById('pvStyleBtn').textContent = TXT_STYLE_LABEL[_pvDraft.style];
   document.getElementById('pvAlignBtn').textContent = TXT_ALIGN_LABEL[_pvDraft.align];
-  document.getElementById('pvTxtInput').style.textAlign = _pvDraft.align;
+  const ta = document.getElementById('pvTxtInput');
+  if (!ta) return;
+  ta.style.textAlign = _pvDraft.align;
+  // fs is a fraction of frame width, so vw approximates the on-video size
+  ta.style.fontSize = (Math.round(_pvDraft.fs * 1000) / 10) + 'vw';
 }
 function cyclePvStyle() { _pvDraft.style = TXT_STYLES[(TXT_STYLES.indexOf(_pvDraft.style) + 1) % TXT_STYLES.length]; syncPvTools(); }
 function cyclePvAlign() { _pvDraft.align = TXT_ALIGNS[(TXT_ALIGNS.indexOf(_pvDraft.align) + 1) % TXT_ALIGNS.length]; syncPvTools(); }
 function adjustPvSize(dir) {
   _pvDraft.fs = Math.min(0.13, Math.max(0.04, _pvDraft.fs + dir * 0.012));
+  syncPvTools();
   showToast('Size ' + Math.round(_pvDraft.fs / PV_TEXT_SIZE * 100) + '%');
 }
 
@@ -2308,10 +2313,13 @@ async function uploadTextLayers(overlays, dims, onStep) {
     const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
     if (!blob) throw new Error('Could not render text');
     const up = await uploadToCloudinary(blob, false, () => {});
+    if (!up.public_id) {
+      throw new Error('Text PNG upload failed');
+    }
     const id = String(up.public_id).replace(/\//g, ':');
     const x = Math.round((ov.nx - 0.5) * dims.w);
     const y = Math.round((ov.ny - 0.5) * dims.h);
-    layers.push(`l_${id},w_${cv.width}/fl_layer_apply,g_center,x_${x},y_${y}`);
+    layers.push(`l_${id}/c_scale,w_${cv.width}/fl_layer_apply,g_center,x_${x},y_${y}`);
   }
   return layers.join('/');
 }
@@ -2323,7 +2331,9 @@ async function preflightFinalUrl(url) {
   try {
     const res = await fetch(url, { method: 'HEAD', signal: ctl.signal });
     if (res.status === 400 || res.status === 404) {
-      throw new Error('Cloudinary could not build the final video (' + res.status + ')');
+      const why = res.headers.get('x-cld-error');
+      console.error('Final URL failed:', res.status, why, url);
+      throw new Error('Cloudinary could not build the final video (' + res.status + ')' + (why ? ': ' + why : ''));
     }
   } catch (e) {
     if (e && /Cloudinary could not/.test(e.message)) throw e;
@@ -2502,6 +2512,19 @@ function init() {
   if (soundId) loadAttachedSoundFromQuery(soundId);
   if (document.fonts && document.fonts.load) document.fonts.load('800 24px Outfit').catch(() => {});
   const _pv = document.getElementById('pvVideo');
+  const rerenderPvText = () => {
+    if (S.textOverlays.length && document.getElementById('scPreview').classList.contains('active')) {
+      renderPvTextLayer();
+    }
+  };
+  _pv.addEventListener('loadedmetadata', rerenderPvText);
+  _pv.addEventListener('resize', rerenderPvText);
+  let pvResizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(pvResizeTimer);
+    pvResizeTimer = setTimeout(rerenderPvText, 100);
+  });
+  window.addEventListener('orientationchange', () => setTimeout(rerenderPvText, 250));
   _pv.addEventListener('timeupdate', () => {
     const t = _pv.currentTime;
     if (_pvMusic && t < _pvLastT - 0.5) { _pvMusic.currentTime = S.soundStart || 0; _pvMusic.play().catch(() => {}); }
