@@ -1131,18 +1131,28 @@ function saveCurrentCarouselText() {
   const cur = S.mediaFiles[_pvCarouselState.idx];
   if (cur && Array.isArray(S.textOverlays)) cur.textOverlays = S.textOverlays;
 }
+
+/* ─── PATCH 1 APPLIED: token-guarded carousel text rendering ─── */
+let _pvTextRenderToken = 0;
 function loadCarouselText(index) {
   const item = S.mediaFiles && S.mediaFiles[index];
   if (!item) return;
-  if (!Array.isArray(item.textOverlays)) item.textOverlays = [];
+  if (!Array.isArray(item.textOverlays)) {
+    item.textOverlays = [];
+  }
   S.textOverlays = item.textOverlays;
   const layer = document.getElementById('pvTextLayer');
+  const token = ++_pvTextRenderToken;
+  clearTimeout(_pvTextShowTimer);
   layer.style.opacity = '0';
   layer.innerHTML = '';
-  whenActiveSlideReady(renderPvTextLayer);
-  // Always restored, even if the swipe was cancelled or the slide never changed
-  clearTimeout(_pvTextShowTimer);
-  _pvTextShowTimer = setTimeout(() => { layer.style.opacity = ''; }, 340);
+  whenActiveSlideReady(() => {
+    // Ignore callbacks from an older slide selection.
+    if (token !== _pvTextRenderToken) return;
+    if (!_pvCarouselState || _pvCarouselState.idx !== index) return;
+    renderPvTextLayer();
+    layer.style.opacity = '';
+  });
 }
 
 /* ─── Patch 3: goTo uses live width and translate3d ─── */
@@ -1198,7 +1208,8 @@ function pvCarouselDragMove(e) {
   const base = -_pvCarouselState.idx * _pvCarouselState.width;
   // rubber-band at the first and last photo
   const atEdge = (_pvCarouselState.idx === 0 && dx > 0) || (_pvCarouselState.idx === _pvCarouselState.count - 1 && dx < 0);
-  track.style.transform = `translateX(${base + (atEdge ? dx * 0.35 : dx)}px)`;
+  /* ─── PATCH 3 APPLIED: consistent translate3d ─── */
+  track.style.transform = `translate3d(${base + (atEdge ? dx * 0.35 : dx)}px, 0, 0)`;
 }
 function pvCarouselDragEnd(e) {
   if (e && e.pointerId !== undefined && e.pointerId !== _pvDragPid) return;
@@ -1569,21 +1580,30 @@ function makeDraggable(el, ov) {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onEnd);
     window.removeEventListener('pointercancel', onEnd);
+    try { el.releasePointerCapture(e.pointerId); } catch (_) {}
     pid = null;
     _pvTextDragging = false;
     if (!moved && e.type === 'pointerup') openPvTextEditor(ov.id);   // tap = edit
     else saveCurrentCarouselText();                                   // drag = keep the new position
   };
+  /* ─── PATCH 2 APPLIED: pointer capture for mobile reliability ─── */
   el.addEventListener('pointerdown', e => {
     if (pid !== null) return;
     e.preventDefault();
     e.stopPropagation();
     const r = getPvMediaRect();
-    rw = r.w || 1; rh = r.h || 1;
-    startNx = ov.nx; startNy = ov.ny;
-    sx = e.clientX; sy = e.clientY;
-    pid = e.pointerId; moved = false;
+    rw = r.w || 1;
+    rh = r.h || 1;
+    startNx = ov.nx;
+    startNy = ov.ny;
+    sx = e.clientX;
+    sy = e.clientY;
+    pid = e.pointerId;
+    moved = false;
     _pvTextDragging = true;
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch (_) {}
     window.addEventListener('pointermove', onMove, { passive: false });
     window.addEventListener('pointerup', onEnd);
     window.addEventListener('pointercancel', onEnd);
