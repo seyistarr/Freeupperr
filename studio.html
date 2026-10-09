@@ -1030,15 +1030,86 @@ async function handleGalleryFiles(e) {
 
 /* ═══════════ PREVIEW SCREEN ═══════════ */
 let _pvCarouselState = null;
+
+/* ─── Patch 1: explicit track/slide sizing ─── */
 function buildPvCarousel(files) {
+  const carousel = document.getElementById('pvCarousel');
   const track = document.getElementById('pvCarouselTrack');
   const dots = document.getElementById('pvCarouselDots');
-  track.innerHTML = files.map(f => `<img class="pv-carousel-slide" src="${f.url}" alt="" draggable="false">`).join('');
-  dots.innerHTML = files.map((_, i) => `<div class="dot ${i===0?'active':''}"></div>`).join('');
-  _pvCarouselState = { idx: 0, count: files.length, width: track.parentElement.clientWidth };
-  track.style.transform = 'translateX(0px)';
+  if (!carousel || !track || !dots || !Array.isArray(files) || !files.length) {
+    console.error('Cannot build carousel: required elements or photos are missing.');
+    return;
+  }
+  // Explicitly size every slide and the complete track.
+  const width = carousel.getBoundingClientRect().width || window.innerWidth;
+  const height = carousel.getBoundingClientRect().height || window.innerHeight;
+  track.innerHTML = '';
+  dots.innerHTML = '';
+  track.style.width = `${width * files.length}px`;
+  track.style.height = `${height}px`;
+  track.style.display = 'flex';
+  track.style.transform = 'translate3d(0, 0, 0)';
+  track.style.transition = '';
+  files.forEach((file, index) => {
+    const slide = document.createElement('img');
+    slide.className = 'pv-carousel-slide';
+    slide.src = file.url;
+    slide.alt = '';
+    slide.draggable = false;
+    slide.style.flex = `0 0 ${width}px`;
+    slide.style.width = `${width}px`;
+    slide.style.height = `${height}px`;
+    track.appendChild(slide);
+    const dot = document.createElement('div');
+    dot.className = `dot${index === 0 ? ' active' : ''}`;
+    dots.appendChild(dot);
+  });
+  _pvCarouselState = {
+    idx: 0,
+    count: files.length,
+    width
+  };
+  track.removeEventListener('pointerdown', pvCarouselDragStart);
   track.addEventListener('pointerdown', pvCarouselDragStart);
+  // Re-measure after the preview screen becomes active.
+  requestAnimationFrame(() => {
+    if (!_pvCarouselState) return;
+    syncPvCarouselSize();
+  });
 }
+
+/* ─── Patch 2: keep carousel sized on resize / orientation change ─── */
+function syncPvCarouselSize() {
+  if (!_pvCarouselState) return;
+  const carousel = document.getElementById('pvCarousel');
+  const track = document.getElementById('pvCarouselTrack');
+  if (!carousel || !track) return;
+  const rect = carousel.getBoundingClientRect();
+  const width = rect.width || window.innerWidth;
+  const height = rect.height || window.innerHeight;
+  if (!width || !height) return;
+  _pvCarouselState.width = width;
+  track.style.width = `${width * _pvCarouselState.count}px`;
+  track.style.height = `${height}px`;
+  track.querySelectorAll('.pv-carousel-slide').forEach(slide => {
+    slide.style.flex = `0 0 ${width}px`;
+    slide.style.width = `${width}px`;
+    slide.style.height = `${height}px`;
+  });
+  track.style.transition = 'none';
+  track.style.transform =
+    `translate3d(${-_pvCarouselState.idx * width}px, 0, 0)`;
+  requestAnimationFrame(() => {
+    if (track.isConnected) track.style.transition = '';
+  });
+}
+window.addEventListener('resize', () => {
+  requestAnimationFrame(syncPvCarouselSize);
+});
+window.addEventListener('orientationchange', () => {
+  setTimeout(syncPvCarouselSize, 250);
+});
+
 function destroyPvCarousel() {
   const track = document.getElementById('pvCarouselTrack');
   track.removeEventListener('pointerdown', pvCarouselDragStart);
@@ -1073,19 +1144,28 @@ function loadCarouselText(index) {
   clearTimeout(_pvTextShowTimer);
   _pvTextShowTimer = setTimeout(() => { layer.style.opacity = ''; }, 340);
 }
+
+/* ─── Patch 3: goTo uses live width and translate3d ─── */
 function pvCarouselGoTo(idx) {
   if (!_pvCarouselState) return;
-  idx = Math.max(0, Math.min(_pvCarouselState.count - 1, idx));
-  saveCurrentCarouselText();            // save outgoing photo's text first
-  _pvCarouselState.idx = idx;
+  const state = _pvCarouselState;
+  idx = Math.max(0, Math.min(state.count - 1, idx));
+  saveCurrentCarouselText();
+  state.idx = idx;
   const track = document.getElementById('pvCarouselTrack');
-  _pvCarouselState.width = track.parentElement.clientWidth || _pvCarouselState.width;
+  if (!track) return;
+  const carousel = document.getElementById('pvCarousel');
+  const width = carousel.getBoundingClientRect().width || window.innerWidth;
+  state.width = width;
   track.style.transition = 'transform .3s cubic-bezier(.4,0,.2,1)';
-  track.style.transform = `translateX(${-idx * _pvCarouselState.width}px)`;
-  setTimeout(() => { track.style.transition = ''; }, 320);
-  document.querySelectorAll('#pvCarouselDots .dot').forEach((d,i) => d.classList.toggle('active', i===idx));
-  loadCarouselText(idx);                // then show the incoming photo's text
+  track.style.transform =
+    `translate3d(${-idx * width}px, 0, 0)`;
+  document.querySelectorAll('#pvCarouselDots .dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === idx);
+  });
+  loadCarouselText(idx);
 }
+
 let _pvDragStartX = 0, _pvDragCurrentX = 0, _pvDragStartT = 0, _pvDragPid = null;
 function _pvDragUnbind() {
   window.removeEventListener('pointermove', pvCarouselDragMove);
@@ -1097,7 +1177,8 @@ function pvCarouselDragStart(e) {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   _pvDragUnbind();                                   // clears any half-finished drag
   const track = document.getElementById('pvCarouselTrack');
-  _pvCarouselState.width = track.parentElement.clientWidth || window.innerWidth;  // fresh width every drag
+  /* ─── Patch 4: refresh sizing before measuring ─── */
+  syncPvCarouselSize();
   _pvDragPid = e.pointerId;
   _pvDragStartX = e.clientX;
   _pvDragCurrentX = 0;
