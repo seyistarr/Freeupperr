@@ -349,7 +349,6 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
   font-size:25px;font-weight:700;line-height:1}
 .sound-item-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
 
-/* SVG play / pause button */
 .sound-play-btn{
   width:42px;
   height:42px;
@@ -386,7 +385,6 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .sound-loading{padding:40px 20px;text-align:center;color:var(--muted);font-size:.85rem;line-height:1.6}
 .sound-error{padding:40px 20px;text-align:center;color:var(--muted);font-size:.85rem;line-height:1.6}
 
-/* Studio saved sounds cards */
 .studio-sound-card{
   display:flex;
   align-items:center;
@@ -412,7 +410,6 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
   color:var(--p);font-family:var(--font-head);font-size:.72rem;font-weight:700;flex-shrink:0;
 }
 
-/* Saved empty state */
 .saved-sounds-empty{padding:40px 20px;text-align:center}
 .saved-sounds-empty-icon{
   width:56px;height:56px;margin:0 auto 12px;border-radius:16px;background:#202020;color:#fff;
@@ -421,7 +418,6 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .saved-sounds-empty-title{font-family:var(--font-head);font-size:.9rem;font-weight:800;margin-bottom:4px}
 .saved-sounds-empty-text{font-size:.78rem;color:var(--muted);line-height:1.5}
 
-/* ═══ SOUND EDITOR (B5) ═══ */
 .trim-card{padding:12px 14px;border-radius:14px;background:var(--inp-bg);border:1.5px solid var(--brd);margin:-6px 0 16px}
 .trim-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-family:var(--font-head);font-size:.76rem;font-weight:700}
 .trim-sub{font-size:.72rem;color:var(--muted);line-height:1.45;margin-top:8px}
@@ -429,7 +425,6 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .trim-prev:disabled{opacity:.4}
 .wf-box{width:100%;min-height:64px;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.04)}
 
-/* ═══ PROGRESS SCREEN ═══ */
 #scProgress{background:#000;align-items:center;justify-content:center;padding:24px}
 .prog-card{width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:18px}
 .prog-ring-wrap{position:relative;width:96px;height:96px}
@@ -1031,7 +1026,6 @@ async function handleGalleryFiles(e) {
 /* ═══════════ PREVIEW SCREEN ═══════════ */
 let _pvCarouselState = null;
 
-/* ─── Patch 1: explicit track/slide sizing ─── */
 function buildPvCarousel(files) {
   const carousel = document.getElementById('pvCarousel');
   const track = document.getElementById('pvCarouselTrack');
@@ -1040,7 +1034,6 @@ function buildPvCarousel(files) {
     console.error('Cannot build carousel: required elements or photos are missing.');
     return;
   }
-  // Explicitly size every slide and the complete track.
   const width = carousel.getBoundingClientRect().width || window.innerWidth;
   const height = carousel.getBoundingClientRect().height || window.innerHeight;
   track.innerHTML = '';
@@ -1071,14 +1064,12 @@ function buildPvCarousel(files) {
   };
   track.removeEventListener('pointerdown', pvCarouselDragStart);
   track.addEventListener('pointerdown', pvCarouselDragStart);
-  // Re-measure after the preview screen becomes active.
   requestAnimationFrame(() => {
     if (!_pvCarouselState) return;
     syncPvCarouselSize();
   });
 }
 
-/* ─── Patch 2: keep carousel sized on resize / orientation change ─── */
 function syncPvCarouselSize() {
   if (!_pvCarouselState) return;
   const carousel = document.getElementById('pvCarousel');
@@ -1119,7 +1110,6 @@ function destroyPvCarousel() {
   _pvCarouselState = null;
 }
 let _pvTextShowTimer = null;
-/* Run cb once the active carousel photo has real dimensions */
 function whenActiveSlideReady(cb) {
   const i = _pvCarouselState ? _pvCarouselState.idx : 0;
   const slide = document.querySelectorAll('#pvCarouselTrack .pv-carousel-slide')[i];
@@ -1132,7 +1122,6 @@ function saveCurrentCarouselText() {
   if (cur && Array.isArray(S.textOverlays)) cur.textOverlays = S.textOverlays;
 }
 
-/* ─── PATCH 1 APPLIED: token-guarded carousel text rendering ─── */
 let _pvTextRenderToken = 0;
 function loadCarouselText(index) {
   const item = S.mediaFiles && S.mediaFiles[index];
@@ -1147,7 +1136,6 @@ function loadCarouselText(index) {
   layer.style.opacity = '0';
   layer.innerHTML = '';
   whenActiveSlideReady(() => {
-    // Ignore callbacks from an older slide selection.
     if (token !== _pvTextRenderToken) return;
     if (!_pvCarouselState || _pvCarouselState.idx !== index) return;
     renderPvTextLayer();
@@ -1155,11 +1143,21 @@ function loadCarouselText(index) {
   });
 }
 
-/* ─── Patch 3: goTo uses live width and translate3d ─── */
+/* ─── PATCH 1 APPLIED: text-editor lock on carousel navigation ─── */
+function isPvTextEditorOpen() {
+  const wrap = document.getElementById('pvTxtInputWrap');
+  const bar = document.getElementById('pvTxtBar');
+  return !!(
+    (wrap && getComputedStyle(wrap).display !== 'none') ||
+    (bar && getComputedStyle(bar).display !== 'none')
+  );
+}
 function pvCarouselGoTo(idx) {
   if (!_pvCarouselState) return;
   const state = _pvCarouselState;
   idx = Math.max(0, Math.min(state.count - 1, idx));
+  // Never change photos while text is being edited.
+  if (isPvTextEditorOpen() && idx !== state.idx) return;
   saveCurrentCarouselText();
   state.idx = idx;
   const track = document.getElementById('pvCarouselTrack');
@@ -1168,8 +1166,7 @@ function pvCarouselGoTo(idx) {
   const width = carousel.getBoundingClientRect().width || window.innerWidth;
   state.width = width;
   track.style.transition = 'transform .3s cubic-bezier(.4,0,.2,1)';
-  track.style.transform =
-    `translate3d(${-idx * width}px, 0, 0)`;
+  track.style.transform = `translate3d(${-idx * width}px, 0, 0)`;
   document.querySelectorAll('#pvCarouselDots .dot').forEach((dot, i) => {
     dot.classList.toggle('active', i === idx);
   });
@@ -1182,23 +1179,35 @@ function _pvDragUnbind() {
   window.removeEventListener('pointerup', pvCarouselDragEnd);
   window.removeEventListener('pointercancel', pvCarouselDragEnd);
 }
+
+/* ─── PATCH 2 APPLIED: block swipe while editing text or dragging a text layer ─── */
 function pvCarouselDragStart(e) {
   if (!_pvCarouselState || _pvCarouselState.count <= 1) return;
+  // The user must finish or cancel text editing before swiping.
+  if (isPvTextEditorOpen()) {
+    e.preventDefault();
+    return;
+  }
+  // Do not start a carousel swipe while dragging a text layer.
+  if (_pvTextDragging) {
+    e.preventDefault();
+    return;
+  }
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-  _pvDragUnbind();                                   // clears any half-finished drag
+  _pvDragUnbind();
   const track = document.getElementById('pvCarouselTrack');
-  /* ─── Patch 4: refresh sizing before measuring ─── */
+  if (!track) return;
   syncPvCarouselSize();
   _pvDragPid = e.pointerId;
   _pvDragStartX = e.clientX;
   _pvDragCurrentX = 0;
   _pvDragStartT = Date.now();
   track.classList.add('dragging');
-  // window-level listeners: they keep firing even if the browser changes the touch target
   window.addEventListener('pointermove', pvCarouselDragMove);
   window.addEventListener('pointerup', pvCarouselDragEnd);
   window.addEventListener('pointercancel', pvCarouselDragEnd);
 }
+
 function pvCarouselDragMove(e) {
   if (!_pvCarouselState || e.pointerId !== _pvDragPid) return;
   const dx = e.clientX - _pvDragStartX;
@@ -1206,9 +1215,7 @@ function pvCarouselDragMove(e) {
   if (Math.abs(dx) > 6) document.getElementById('pvTextLayer').style.opacity = '0';
   const track = document.getElementById('pvCarouselTrack');
   const base = -_pvCarouselState.idx * _pvCarouselState.width;
-  // rubber-band at the first and last photo
   const atEdge = (_pvCarouselState.idx === 0 && dx > 0) || (_pvCarouselState.idx === _pvCarouselState.count - 1 && dx < 0);
-  /* ─── PATCH 3 APPLIED: consistent translate3d ─── */
   track.style.transform = `translate3d(${base + (atEdge ? dx * 0.35 : dx)}px, 0, 0)`;
 }
 function pvCarouselDragEnd(e) {
@@ -1221,7 +1228,7 @@ function pvCarouselDragEnd(e) {
   const dx = _pvDragCurrentX;
   const dt = Math.max(1, Date.now() - _pvDragStartT);
   const far = Math.abs(dx) > Math.min(_pvCarouselState.width * 0.18, 70);
-  const flick = Math.abs(dx) > 24 && Math.abs(dx) / dt > 0.35;   // quick short swipe also counts
+  const flick = Math.abs(dx) > 24 && Math.abs(dx) / dt > 0.35;
   let next = _pvCarouselState.idx;
   if (far || flick) next = dx < 0 ? next + 1 : next - 1;
   pvCarouselGoTo(next);
@@ -1259,7 +1266,6 @@ function goToPreview() {
   txtLayer.style.opacity = '';
   if (isCarousel) {
     S.textOverlays = S.mediaFiles[0].textOverlays;
-    // hint hidden on carousels so it can't block swiping; use the "Aa" button
     document.getElementById('pvAddTextHint').style.display = 'none';
   } else {
     clearPvTextLayer();
@@ -1270,7 +1276,7 @@ function goToPreview() {
   if (isCarousel) requestAnimationFrame(() => whenActiveSlideReady(renderPvTextLayer));
 }
 
-/* ═══ Preview audio: original audio by default, music mode only when a sound is attached ═══ */
+/* ═══ Preview audio ═══ */
 let _pvMusic = null, _pvLastT = 0;
 function _pvIsSingleVideo() {
   return !!(S.media && S.media.type === 'video' && !(S.mediaFiles && S.mediaFiles.length > 1));
@@ -1286,7 +1292,6 @@ function unmutePv() {
   const vid = document.getElementById('pvVideo');
   if (!_pvIsSingleVideo()) return;
   if (S.attachedSound) {
-    // iOS only allows audio.play() from a tap, so tapping the video starts the music
     if (_pvMusic) _pvMusic.play().catch(() => {});
     vid.play().catch(() => {});
     return;
@@ -1300,17 +1305,15 @@ function syncPreviewAudio() {
   if (!document.getElementById('scPreview').classList.contains('active')) return;
   if (!_pvIsSingleVideo()) return;
   if (S.attachedSound && S.attachedSound.audio_url) {
-    // MUSIC MODE: original audio OFF, selected sound ON
     vid.muted = true;
     vid.currentTime = 0;
     _pvLastT = 0;
     _pvMusic = new Audio(S.attachedSound.audio_url);
-    _pvMusic.loop = true; // short sounds loop, same as the final video
+    _pvMusic.loop = true;
     _pvMusic.addEventListener('loadedmetadata', () => { _pvMusic.currentTime = S.soundStart || 0; }, { once: true });
     _pvMusic.play().catch(() => showToast('Tap video to play music'));
     vid.play().catch(() => {});
   } else {
-    // ORIGINAL MODE: original audio ON
     vid.muted = false;
     vid.play().catch(() => {
       vid.muted = true;
@@ -1320,10 +1323,10 @@ function syncPreviewAudio() {
   }
 }
 
-/* ═══ TEXT OVERLAYS (B6.1): one renderer for preview AND export ═══ */
+/* ═══ TEXT OVERLAYS ═══ */
 const PV_COLORS = ['#ffffff','#000000','#fe2c55','#ffb800','#25f4ee','#a259ff','#2dce89'];
-const PV_TEXT_SIZE = 0.075;   // font size = fraction of frame width
-const PV_TEXT_MAXW = 0.8;     // max text width = fraction of frame width
+const PV_TEXT_SIZE = 0.075;
+const PV_TEXT_MAXW = 0.8;
 const TXT_STYLES = ['shadow', 'bg', 'outline'];
 const TXT_STYLE_LABEL = { shadow: 'Shadow', bg: 'Background', outline: 'Outline' };
 const TXT_ALIGNS = ['center', 'left', 'right'];
@@ -1356,7 +1359,6 @@ function wrapTextLines(ctx, text, maxW) {
   });
   return out;
 }
-/* refW = frame width in pixels at the target scale (preview px, or exported video px) */
 function renderTextCanvas(ov, refW, dpr) {
   dpr = dpr || 1;
   const fs = ov.fs * refW * dpr;
@@ -1415,7 +1417,6 @@ function renderTextCanvas(ov, refW, dpr) {
   return cv;
 }
 
-/* Where the video/photo is actually drawn inside the letterboxed preview */
 function getPvMediaRect() {
   const layer = document.getElementById('pvTextLayer');
   const lw = layer.clientWidth, lh = layer.clientHeight;
@@ -1440,7 +1441,6 @@ function syncPvTools() {
   const ta = document.getElementById('pvTxtInput');
   if (!ta) return;
   ta.style.textAlign = _pvDraft.align;
-  // fs is a fraction of frame width, so vw approximates the on-video size
   ta.style.fontSize = (Math.round(_pvDraft.fs * 1000) / 10) + 'vw';
 }
 function cyclePvStyle() { _pvDraft.style = TXT_STYLES[(TXT_STYLES.indexOf(_pvDraft.style) + 1) % TXT_STYLES.length]; syncPvTools(); }
@@ -1458,7 +1458,7 @@ function openPvTextEditor(id) {
     const cur = S.mediaFiles[_pvCarouselState ? _pvCarouselState.idx : 0];
     if (!cur || cur.type !== 'image') { showToast('Select a photo to add text'); return; }
     if (!Array.isArray(cur.textOverlays)) cur.textOverlays = [];
-    S.textOverlays = cur.textOverlays;          // edit only THIS photo's array
+    S.textOverlays = cur.textOverlays;
     document.getElementById('pvTextLayer').style.opacity = '';
   }
   _pvEditingId = (typeof id === 'string') ? id : null;
@@ -1503,7 +1503,7 @@ function closePvTextEditor() {
 function cancelPvText() { _pvEditingId = null; closePvTextEditor(); }
 function deletePvText() {
   const _di = S.textOverlays.findIndex(o => o.id === _pvEditingId);
-  if (_di > -1) S.textOverlays.splice(_di, 1);   // in place, keeps the photo's own array
+  if (_di > -1) S.textOverlays.splice(_di, 1);
   saveCurrentCarouselText();
   _pvEditingId = null;
   closePvTextEditor();
@@ -1559,14 +1559,13 @@ function clearPvTextLayer() {
   document.getElementById('pvTextLayer').innerHTML = '';
   document.getElementById('pvAddTextHint').style.display = S.media || (S.mediaFiles && S.mediaFiles.length) ? 'flex' : 'none';
 }
-/* Drag = move (saved as 0..1 of the media frame). Tap without moving = edit. */
-let _pvTextDragging = false;   // blocks re-renders while a text layer is being dragged
+let _pvTextDragging = false;
 function makeDraggable(el, ov) {
   let pid = null, sx = 0, sy = 0, startNx = 0, startNy = 0, rw = 1, rh = 1, moved = false;
   const onMove = e => {
     if (e.pointerId !== pid) return;
     const dx = e.clientX - sx, dy = e.clientY - sy;
-    if (!moved && Math.abs(dx) + Math.abs(dy) < 6) return;   // small wobble still counts as a tap
+    if (!moved && Math.abs(dx) + Math.abs(dy) < 6) return;
     moved = true;
     e.preventDefault();
     const r = getPvMediaRect();
@@ -1583,10 +1582,9 @@ function makeDraggable(el, ov) {
     try { el.releasePointerCapture(e.pointerId); } catch (_) {}
     pid = null;
     _pvTextDragging = false;
-    if (!moved && e.type === 'pointerup') openPvTextEditor(ov.id);   // tap = edit
-    else saveCurrentCarouselText();                                   // drag = keep the new position
+    if (!moved && e.type === 'pointerup') openPvTextEditor(ov.id);
+    else saveCurrentCarouselText();
   };
-  /* ─── PATCH 2 APPLIED: pointer capture for mobile reliability ─── */
   el.addEventListener('pointerdown', e => {
     if (pid !== null) return;
     e.preventDefault();
@@ -1706,7 +1704,7 @@ function goToDetailsFromText() {
   goToDetails();
 }
 
-/* ═══════════ SOUND — USE SoundsAPI AS SINGLE SOURCE OF TRUTH ═══════════ */
+/* ═══════════ SOUND ═══════════ */
 function updateCapSoundPill() {
   const pill = document.getElementById('capSoundPill');
   const label = document.getElementById('capSoundLabel');
@@ -1720,7 +1718,6 @@ function updatePvSoundPill() {
   else { label.textContent = 'Add music'; pill.classList.remove('attached'); }
 }
 
-/* ─── Tabs ─── */
 function switchSoundTab(tab) {
   document.querySelectorAll('.sound-tab').forEach(t => {
     t.classList.toggle('on', t.dataset.soundTab === tab);
@@ -1804,7 +1801,6 @@ function renderSoundList(sounds) {
   list.innerHTML = sounds.map(sound => {
     const creator = sound.creator || {};
     const creatorName = creator.username ? '@' + creator.username : creator.displayName || '';
-    // Hierarchy: sound artwork → creator avatar → 🎵 (final fallback)
     const avatar = sound.artUrl || creator.avatarUrl || null;
     return `
       <div class="sound-item">
@@ -1834,7 +1830,6 @@ function renderSoundList(sounds) {
   }).join('');
 }
 
-/* ═══════════ SOUND PREVIEW PLAYER ═══════════ */
 let studioSoundPreview = null;
 let studioSoundPreviewId = null;
 let studioSoundPreviewButton = null;
@@ -1913,7 +1908,6 @@ function useSound(sound) {
     showToast('Unable to attach this sound');
     return;
   }
-  // Older records may have a .jpg or other non-audio asset in audio_url
   const audioUrl = sound.audioUrl || sound.audio_url || '';
   if (!isPlayableSoundUrl(audioUrl)) {
     showToast('This sound has no valid audio file');
@@ -1963,7 +1957,7 @@ function removeSound() {
   renderSoundTrim();
 }
 
-/* ═══════════ SAVED SOUNDS (Studio) ═══════════ */
+/* ═══════════ SAVED SOUNDS ═══════════ */
 const _savedSoundsMap = new Map();
 
 function normalizeSavedSound(raw) {
@@ -1973,7 +1967,6 @@ function normalizeSavedSound(raw) {
     id,
     title: raw.title || 'Original sound',
     audioUrl: raw.audio_url || raw.audioUrl || '',
-    // Hierarchy: sound artwork → creator avatar (real profile image only)
     artUrl:
       raw.artUrl ||
       raw.cover_url ||
@@ -2004,7 +1997,6 @@ function createStudioSoundCard(sound) {
 
   let visual;
   if (artwork) {
-    // onerror swaps in 🎵 if the artwork URL is broken (404/dead link)
     visual = `<img src="${escapeStudioSoundHtml(artwork)}" alt="" class="studio-sound-image" onerror="this.outerHTML='<div class=&quot;studio-sound-music-placeholder&quot;>🎵</div>'">`;
   } else {
     visual = `<div class="studio-sound-music-placeholder">🎵</div>`;
@@ -2062,7 +2054,6 @@ async function loadStudioSavedSounds() {
   }
 }
 
-/* Saved-card delegation (scoped so we don't clash with trending inline handlers) */
 document.addEventListener('click', (event) => {
   const savedPlay = event.target.closest('#saved-sounds-list .sound-play-btn[data-sound-id]');
   if (savedPlay) {
@@ -2146,8 +2137,6 @@ function goToDetails() {
 function renderSoundSection() {
   const el = document.getElementById('soundSection');
   if (S.attachedSound) {
-    // S.attachedSound.art_url already follows hierarchy (sound art → creator avatar)
-    // If neither exists, art_url is '' → render 🎵
     el.innerHTML = `
       <div class="sound-banner" onclick="openSoundSheet('post')">
         ${S.attachedSound.art_url
@@ -2171,7 +2160,7 @@ function renderSoundSection() {
   }
 }
 
-/* ═══════════ B5 — SOUND EDITOR (WaveSurfer + Regions) ═══════════ */
+/* ═══════════ SOUND EDITOR ═══════════ */
 let _wf = null, _wfRegions = null, _wfRegion = null, _wfToken = 0;
 
 function fmtT(s) {
@@ -2246,7 +2235,6 @@ function renderSoundTrim() {
     _wf.on('play', () => setTrimPlayLabel(true));
     _wf.on('pause', () => setTrimPlayLabel(false));
     _wf.on('finish', () => setTrimPlayLabel(false));
-    // If the file never decodes (CORS, bad file), fall back to duration-only after 12s
     setTimeout(() => {
       if (token === _wfToken && _wf && S.attachedSound && !S.attachedSound.duration) fallbackTrim(token);
     }, 12000);
@@ -2292,7 +2280,6 @@ function onWaveReady(dur) {
   });
 }
 
-/* If WaveSurfer can't load/decode (CORS, bad file), still get the duration for loop/trim */
 function fallbackTrim(token) {
   if (_wf) { try { _wf.destroy(); } catch (e) {} }
   _wf = null; _wfRegions = null; _wfRegion = null;
@@ -2375,13 +2362,7 @@ function setProgress(pct, title, sub) {
   if (sub) document.getElementById('progSub').textContent = sub;
 }
 
-/* ═══════════ CLOUDINARY FINAL-MEDIA COMPOSITION (B4 + B5 + B6) ═══════════
- * One timing model, one URL builder.
- *  - Video duration is the master (from the Cloudinary upload response)
- *  - Sound loops if shorter, trims if longer, starts at S.soundStart
- *  - Text overlays are burned in as uploaded PNG image layers (B6.1)
- *  - Video output is always H.264 MP4 (iPhone / Android / desktop safe)
- */
+/* ═══════════ CLOUDINARY FINAL-MEDIA COMPOSITION ═══════════ */
 const AUDIO_BAD_EXT = /\.(jpe?g|png|gif|webp|svg|heic|heif|avif|bmp)(\?.*)?$/i;
 function isPlayableSoundUrl(url) {
   return /^https:\/\/res\.cloudinary\.com\/[^/]+\/video\/upload\//i.test(url || '') && !AUDIO_BAD_EXT.test(url);
@@ -2413,13 +2394,11 @@ function getRemoteMediaDuration(url) {
   });
 }
 
-/* Shared timing model: used by the waveform editor AND the Cloudinary URL */
 function computeTiming(videoDur, soundDur, start) {
   const target = videoDur > 0 ? Math.min(videoDur, MAX_VIDEO_SECONDS) : 0;
   const known = soundDur > 0 && target > 0;
   const maxStart = known ? Math.max(0, soundDur - target) : 0;
   const s = Math.min(Math.max(0, Number(start) || 0), maxStart);
-  // e_loop = ADDITIONAL repeats (5s sound on 30s video => 5 extra)
   const loops = known && soundDur < target ? Math.ceil(target / soundDur) - 1 : 0;
   return { target, soundDur, maxStart, start: s, loops };
 }
@@ -2470,11 +2449,8 @@ async function buildCloudinaryFinalUrl(rawUrl, opts = {}) {
   return out;
 }
 
-/* ═══════════ B6.1 — TEXT PNG OVERLAYS + FRAME DIMENSIONS ═══════════ */
 const EXPORT_MAX_W = 1080, EXPORT_MAX_H = 1920;
 
-/* Final frame size. Browser orientation wins if Cloudinary reports swapped width/height
-   (iPhone rotation metadata). Videos are capped by c_limit, so dims match the final render. */
 function resolveFrameDims(result, isVideo) {
   let W = Number(result.width) || 0, H = Number(result.height) || 0;
   let pw = 0, ph = 0;
@@ -2512,7 +2488,6 @@ async function uploadTextLayers(overlays, dims, onStep) {
   return layers.join('/');
 }
 
-/* B5.5/B6.5: catch a broken transformation BEFORE the post is created. Also warms Cloudinary's cache. */
 async function preflightFinalUrl(url) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 25000);
@@ -2525,7 +2500,6 @@ async function preflightFinalUrl(url) {
     }
   } catch (e) {
     if (e && /Cloudinary could not/.test(e.message)) throw e;
-    // timeout / network / CORS: result unknown, continue
   } finally {
     clearTimeout(timer);
   }
@@ -2539,7 +2513,6 @@ function loadImageSize(url) {
     im.src = url;
   });
 }
-/* Per-photo frame size. Never uses #pvImage (empty for carousels). */
 async function resolveCarouselFrameDims(result, item) {
   let W = Number(result.width) || 0, H = Number(result.height) || 0;
   const nat = await loadImageSize(item.url);
@@ -2578,7 +2551,7 @@ async function publishPost() {
 
     const isVideo = !!(S.media && S.media.type === 'video');
     const finalSoundId = S.attachedSound?.id || null;
-    let rawVideoUrl = null; // untouched upload URL, used for original-sound extraction
+    let rawVideoUrl = null;
 
     let payload;
     if (S.media) {
@@ -2604,8 +2577,8 @@ async function publishPost() {
             if (!textLayers) throw new Error(`Could not apply text to photo ${i+1}`);
             finalUrl = await buildCloudinaryFinalUrl(result.url, { type: 'image', textLayers });
             if (finalUrl === result.url) throw new Error(`Text was not applied to photo ${i+1}`);
-            await preflightFinalUrl(finalUrl);                 // catches Cloudinary 400/404
-            const check = await loadImageSize(finalUrl);       // proves the image really renders
+            await preflightFinalUrl(finalUrl);
+            const check = await loadImageSize(finalUrl);
             if (!check.w) throw new Error(`Photo ${i+1} could not be rendered with its text. Nothing was published.`);
           }
           mediaItems.push({ url: finalUrl, type: 'image', public_id: result.public_id });
@@ -2691,8 +2664,6 @@ async function publishPost() {
 
     if (post.id && isVideo && !finalSoundId && window.SoundsAPI?.createOriginalSoundForPost) {
       try {
-        // Use the RAW upload URL: the final URL now has f_mp4 / text layers,
-        // which would conflict with the .mp3 extension.
         const audioUrl = buildOriginalAudioUrl(rawVideoUrl || payload.mediaUrl);
         if (audioUrl) {
           setProgress(97, 'Creating original sound…', 'Making your audio available on FreeUpper');
@@ -2704,8 +2675,6 @@ async function publishPost() {
         showToast('Video published, but original sound could not be created');
       }
     }
-
-    // usage_count is incremented by the DB trigger on posts.sound_id. Do NOT double-count here.
 
     if (post.id && mentions.length && window.Mentions?.notifyMentionedUsers) {
       window.Mentions.notifyMentionedUsers('post', post.id, mentions, user.id, null).catch(() => {});
