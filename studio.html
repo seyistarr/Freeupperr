@@ -131,10 +131,10 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .pv-media{position:absolute;inset:0;background:#000}
 .pv-media video,.pv-media img{width:100%;height:100%;object-fit:contain;display:block}
 
-.pv-carousel{position:absolute;inset:0;overflow:hidden;touch-action:pan-y;background:#000;}
-.pv-carousel-track{display:flex;width:100%;height:100%;cursor:grab;}
+.pv-carousel{position:absolute;inset:0;overflow:hidden;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;background:#000;}
+.pv-carousel-track{display:flex;width:100%;height:100%;cursor:grab;touch-action:none;}
 .pv-carousel-track.dragging{transition:none!important;cursor:grabbing;}
-.pv-carousel-slide{flex:0 0 100%;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none;display:block;}
+.pv-carousel-slide{flex:0 0 100%;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none;-webkit-touch-callout:none;pointer-events:none;display:block;}
 .pv-carousel-dots{position:absolute;top:max(env(safe-area-inset-top),14px);left:50%;transform:translateX(-50%);display:flex;gap:5px;z-index:22;}
 .pv-carousel-dots .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);transition:background .2s,transform .2s;}
 .pv-carousel-dots .dot.active{background:#fff;transform:scale(1.2);}
@@ -1042,9 +1042,7 @@ function buildPvCarousel(files) {
 function destroyPvCarousel() {
   const track = document.getElementById('pvCarouselTrack');
   track.removeEventListener('pointerdown', pvCarouselDragStart);
-  track.removeEventListener('pointermove', pvCarouselDragMove);
-  track.removeEventListener('pointerup', pvCarouselDragEnd);
-  track.removeEventListener('pointercancel', pvCarouselDragEnd);
+  _pvDragUnbind();
   track.innerHTML = '';
   document.getElementById('pvCarouselDots').innerHTML = '';
   _pvCarouselState = null;
@@ -1081,44 +1079,59 @@ function pvCarouselGoTo(idx) {
   saveCurrentCarouselText();            // save outgoing photo's text first
   _pvCarouselState.idx = idx;
   const track = document.getElementById('pvCarouselTrack');
+  _pvCarouselState.width = track.parentElement.clientWidth || _pvCarouselState.width;
   track.style.transition = 'transform .3s cubic-bezier(.4,0,.2,1)';
   track.style.transform = `translateX(${-idx * _pvCarouselState.width}px)`;
   setTimeout(() => { track.style.transition = ''; }, 320);
   document.querySelectorAll('#pvCarouselDots .dot').forEach((d,i) => d.classList.toggle('active', i===idx));
   loadCarouselText(idx);                // then show the incoming photo's text
 }
-let _pvDragStartX = 0, _pvDragCurrentX = 0;
+let _pvDragStartX = 0, _pvDragCurrentX = 0, _pvDragStartT = 0, _pvDragPid = null;
+function _pvDragUnbind() {
+  window.removeEventListener('pointermove', pvCarouselDragMove);
+  window.removeEventListener('pointerup', pvCarouselDragEnd);
+  window.removeEventListener('pointercancel', pvCarouselDragEnd);
+}
 function pvCarouselDragStart(e) {
   if (!_pvCarouselState || _pvCarouselState.count <= 1) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  _pvDragUnbind();                                   // clears any half-finished drag
+  const track = document.getElementById('pvCarouselTrack');
+  _pvCarouselState.width = track.parentElement.clientWidth || window.innerWidth;  // fresh width every drag
+  _pvDragPid = e.pointerId;
   _pvDragStartX = e.clientX;
   _pvDragCurrentX = 0;
-  const track = document.getElementById('pvCarouselTrack');
+  _pvDragStartT = Date.now();
   track.classList.add('dragging');
-  track.setPointerCapture?.(e.pointerId);
-  track.addEventListener('pointermove', pvCarouselDragMove);
-  track.addEventListener('pointerup', pvCarouselDragEnd);
-  track.addEventListener('pointercancel', pvCarouselDragEnd);
+  // window-level listeners: they keep firing even if the browser changes the touch target
+  window.addEventListener('pointermove', pvCarouselDragMove);
+  window.addEventListener('pointerup', pvCarouselDragEnd);
+  window.addEventListener('pointercancel', pvCarouselDragEnd);
 }
 function pvCarouselDragMove(e) {
-  if (!_pvCarouselState) return;
+  if (!_pvCarouselState || e.pointerId !== _pvDragPid) return;
   const dx = e.clientX - _pvDragStartX;
   _pvDragCurrentX = dx;
   if (Math.abs(dx) > 6) document.getElementById('pvTextLayer').style.opacity = '0';
   const track = document.getElementById('pvCarouselTrack');
   const base = -_pvCarouselState.idx * _pvCarouselState.width;
-  track.style.transform = `translateX(${base + dx}px)`;
+  // rubber-band at the first and last photo
+  const atEdge = (_pvCarouselState.idx === 0 && dx > 0) || (_pvCarouselState.idx === _pvCarouselState.count - 1 && dx < 0);
+  track.style.transform = `translateX(${base + (atEdge ? dx * 0.35 : dx)}px)`;
 }
-function pvCarouselDragEnd() {
-  if (!_pvCarouselState) return;
+function pvCarouselDragEnd(e) {
+  if (e && e.pointerId !== undefined && e.pointerId !== _pvDragPid) return;
+  _pvDragUnbind();
+  _pvDragPid = null;
   const track = document.getElementById('pvCarouselTrack');
   track.classList.remove('dragging');
-  track.removeEventListener('pointermove', pvCarouselDragMove);
-  track.removeEventListener('pointerup', pvCarouselDragEnd);
-  track.removeEventListener('pointercancel', pvCarouselDragEnd);
+  if (!_pvCarouselState) return;
+  const dx = _pvDragCurrentX;
+  const dt = Math.max(1, Date.now() - _pvDragStartT);
+  const far = Math.abs(dx) > Math.min(_pvCarouselState.width * 0.18, 70);
+  const flick = Math.abs(dx) > 24 && Math.abs(dx) / dt > 0.35;   // quick short swipe also counts
   let next = _pvCarouselState.idx;
-  if (Math.abs(_pvDragCurrentX) > _pvCarouselState.width * 0.18) {
-    next = _pvDragCurrentX < 0 ? _pvCarouselState.idx + 1 : _pvCarouselState.idx - 1;
-  }
+  if (far || flick) next = dx < 0 ? next + 1 : next - 1;
   pvCarouselGoTo(next);
 }
 
@@ -1455,26 +1468,45 @@ function clearPvTextLayer() {
   document.getElementById('pvAddTextHint').style.display = S.media || (S.mediaFiles && S.mediaFiles.length) ? 'flex' : 'none';
 }
 /* Drag = move (saved as 0..1 of the media frame). Tap without moving = edit. */
+let _pvTextDragging = false;   // blocks re-renders while a text layer is being dragged
 function makeDraggable(el, ov) {
-  let sx, sy, ox, oy, moved = false;
-  el.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    moved = false;
-    sx = e.clientX; sy = e.clientY;
-    ox = el.offsetLeft; oy = el.offsetTop;
-    el.setPointerCapture(e.pointerId);
-  });
-  el.addEventListener('pointermove', e => {
-    if (!el.hasPointerCapture(e.pointerId)) return;
+  let pid = null, sx = 0, sy = 0, startNx = 0, startNy = 0, rw = 1, rh = 1, moved = false;
+  const onMove = e => {
+    if (e.pointerId !== pid) return;
     const dx = e.clientX - sx, dy = e.clientY - sy;
-    if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+    if (!moved && Math.abs(dx) + Math.abs(dy) < 6) return;   // small wobble still counts as a tap
+    moved = true;
+    e.preventDefault();
     const r = getPvMediaRect();
-    ov.nx = Math.min(1, Math.max(0, (ox + dx - r.left) / r.w));
-    ov.ny = Math.min(1, Math.max(0, (oy + dy - r.top) / r.h));
+    ov.nx = Math.min(1, Math.max(0, startNx + dx / rw));
+    ov.ny = Math.min(1, Math.max(0, startNy + dy / rh));
     el.style.left = (r.left + ov.nx * r.w) + 'px';
     el.style.top = (r.top + ov.ny * r.h) + 'px';
+  };
+  const onEnd = e => {
+    if (e.pointerId !== pid) return;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onEnd);
+    window.removeEventListener('pointercancel', onEnd);
+    pid = null;
+    _pvTextDragging = false;
+    if (!moved && e.type === 'pointerup') openPvTextEditor(ov.id);   // tap = edit
+    else saveCurrentCarouselText();                                   // drag = keep the new position
+  };
+  el.addEventListener('pointerdown', e => {
+    if (pid !== null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const r = getPvMediaRect();
+    rw = r.w || 1; rh = r.h || 1;
+    startNx = ov.nx; startNy = ov.ny;
+    sx = e.clientX; sy = e.clientY;
+    pid = e.pointerId; moved = false;
+    _pvTextDragging = true;
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
   });
-  el.addEventListener('pointerup', () => { if (!moved) openPvTextEditor(ov.id); });
 }
 
 /* ═══════════ TEXT CARD FLOW ═══════════ */
@@ -2599,7 +2631,7 @@ function init() {
   if (document.fonts && document.fonts.load) document.fonts.load('800 24px Outfit').catch(() => {});
   const _pv = document.getElementById('pvVideo');
   const rerenderPvText = () => {
-    if (S.textOverlays.length && document.getElementById('scPreview').classList.contains('active')) {
+    if (!_pvTextDragging && S.textOverlays.length && document.getElementById('scPreview').classList.contains('active')) {
       renderPvTextLayer();
     }
   };
