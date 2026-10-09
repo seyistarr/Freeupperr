@@ -142,7 +142,7 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .pv-top{position:absolute;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;
   justify-content:space-between;padding:max(env(safe-area-inset-top),14px) 16px 10px;
   background:#000}
-.pv-text-layer{position:absolute;inset:0;z-index:15;pointer-events:none}
+.pv-text-layer{position:absolute;inset:0;z-index:15;pointer-events:none;transition:opacity .18s}
 .pv-text-layer .pv-text-item{pointer-events:auto}
 .pv-text-item{position:absolute;cursor:move;font-family:var(--font-head);font-weight:800;
   font-size:1.5rem;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7);padding:4px 10px;
@@ -1049,15 +1049,43 @@ function destroyPvCarousel() {
   document.getElementById('pvCarouselDots').innerHTML = '';
   _pvCarouselState = null;
 }
+let _pvTextShowTimer = null;
+/* Run cb once the active carousel photo has real dimensions */
+function whenActiveSlideReady(cb) {
+  const i = _pvCarouselState ? _pvCarouselState.idx : 0;
+  const slide = document.querySelectorAll('#pvCarouselTrack .pv-carousel-slide')[i];
+  if (!slide || (slide.complete && slide.naturalWidth)) { cb(); return; }
+  slide.addEventListener('load', () => cb(), { once: true });
+}
+function saveCurrentCarouselText() {
+  if (!_pvCarouselState || !S.mediaFiles || S.mediaFiles.length < 2) return;
+  const cur = S.mediaFiles[_pvCarouselState.idx];
+  if (cur && Array.isArray(S.textOverlays)) cur.textOverlays = S.textOverlays;
+}
+function loadCarouselText(index) {
+  const item = S.mediaFiles && S.mediaFiles[index];
+  if (!item) return;
+  if (!Array.isArray(item.textOverlays)) item.textOverlays = [];
+  S.textOverlays = item.textOverlays;
+  const layer = document.getElementById('pvTextLayer');
+  layer.style.opacity = '0';
+  layer.innerHTML = '';
+  whenActiveSlideReady(renderPvTextLayer);
+  // Always restored, even if the swipe was cancelled or the slide never changed
+  clearTimeout(_pvTextShowTimer);
+  _pvTextShowTimer = setTimeout(() => { layer.style.opacity = ''; }, 340);
+}
 function pvCarouselGoTo(idx) {
   if (!_pvCarouselState) return;
   idx = Math.max(0, Math.min(_pvCarouselState.count - 1, idx));
+  saveCurrentCarouselText();            // save outgoing photo's text first
   _pvCarouselState.idx = idx;
   const track = document.getElementById('pvCarouselTrack');
   track.style.transition = 'transform .3s cubic-bezier(.4,0,.2,1)';
   track.style.transform = `translateX(${-idx * _pvCarouselState.width}px)`;
   setTimeout(() => { track.style.transition = ''; }, 320);
   document.querySelectorAll('#pvCarouselDots .dot').forEach((d,i) => d.classList.toggle('active', i===idx));
+  loadCarouselText(idx);                // then show the incoming photo's text
 }
 let _pvDragStartX = 0, _pvDragCurrentX = 0;
 function pvCarouselDragStart(e) {
@@ -1075,6 +1103,7 @@ function pvCarouselDragMove(e) {
   if (!_pvCarouselState) return;
   const dx = e.clientX - _pvDragStartX;
   _pvDragCurrentX = dx;
+  if (Math.abs(dx) > 6) document.getElementById('pvTextLayer').style.opacity = '0';
   const track = document.getElementById('pvCarouselTrack');
   const base = -_pvCarouselState.idx * _pvCarouselState.width;
   track.style.transform = `translateX(${base + dx}px)`;
@@ -1111,6 +1140,7 @@ function goToPreview() {
   destroyPvCarousel();
 
   if (S.mediaFiles && S.mediaFiles.length > 1) {
+    S.mediaFiles.forEach(f => { if (!Array.isArray(f.textOverlays)) f.textOverlays = []; });
     carousel.style.display = 'block';
     buildPvCarousel(S.mediaFiles);
   } else if (S.media && S.media.type === 'video') {
@@ -1118,10 +1148,21 @@ function goToPreview() {
   } else if (S.media && S.media.type === 'image') {
     img.src = S.media.url; img.style.display = 'block'; img.style.filter = S.filter === 'none' ? '' : S.filter;
   }
-  clearPvTextLayer();
+  const isCarousel = !!(S.mediaFiles && S.mediaFiles.length > 1);
+  const txtLayer = document.getElementById('pvTextLayer');
+  txtLayer.innerHTML = '';
+  txtLayer.style.opacity = '';
+  if (isCarousel) {
+    S.textOverlays = S.mediaFiles[0].textOverlays;
+    // hint hidden on carousels so it can't block swiping; use the "Aa" button
+    document.getElementById('pvAddTextHint').style.display = 'none';
+  } else {
+    clearPvTextLayer();
+  }
   updatePvSoundPill();
   showScreen('scPreview');
   syncPreviewAudio();
+  if (isCarousel) requestAnimationFrame(() => whenActiveSlideReady(renderPvTextLayer));
 }
 
 /* ═══ Preview audio: original audio by default, music mode only when a sound is attached ═══ */
@@ -1274,7 +1315,10 @@ function getPvMediaRect() {
   const layer = document.getElementById('pvTextLayer');
   const lw = layer.clientWidth, lh = layer.clientHeight;
   let nw = 0, nh = 0;
-  if (S.media && S.media.type === 'video') {
+  if (S.mediaFiles && S.mediaFiles.length > 1 && _pvCarouselState) {
+    const slide = document.querySelectorAll('#pvCarouselTrack .pv-carousel-slide')[_pvCarouselState.idx];
+    if (slide) { nw = slide.naturalWidth; nh = slide.naturalHeight; }
+  } else if (S.media && S.media.type === 'video') {
     const v = document.getElementById('pvVideo'); nw = v.videoWidth; nh = v.videoHeight;
   } else if (S.media && S.media.type === 'image') {
     const im = document.getElementById('pvImage'); nw = im.naturalWidth; nh = im.naturalHeight;
@@ -1303,8 +1347,15 @@ function adjustPvSize(dir) {
 }
 
 function openPvTextEditor(id) {
-  if (S.mediaFiles && S.mediaFiles.length > 1) { showToast('Text isn’t available on photo carousels yet'); return; }
-  if (!S.media) return;
+  const _isCarousel = !!(S.mediaFiles && S.mediaFiles.length > 1);
+  if (!_isCarousel && !S.media) return;
+  if (_isCarousel) {
+    const cur = S.mediaFiles[_pvCarouselState ? _pvCarouselState.idx : 0];
+    if (!cur || cur.type !== 'image') { showToast('Select a photo to add text'); return; }
+    if (!Array.isArray(cur.textOverlays)) cur.textOverlays = [];
+    S.textOverlays = cur.textOverlays;          // edit only THIS photo's array
+    document.getElementById('pvTextLayer').style.opacity = '';
+  }
   _pvEditingId = (typeof id === 'string') ? id : null;
   const ov = _pvEditingId ? S.textOverlays.find(o => o.id === _pvEditingId) : null;
   if (!ov) _pvEditingId = null;
@@ -1341,11 +1392,14 @@ function hexToRgbStr(hex) {
 function closePvTextEditor() {
   document.getElementById('pvTxtInputWrap').style.display = 'none';
   document.getElementById('pvTxtBar').style.display = 'none';
-  document.getElementById('pvAddTextHint').style.display = S.textOverlays.length ? 'none' : 'flex';
+  const _car = !!(S.mediaFiles && S.mediaFiles.length > 1);
+  document.getElementById('pvAddTextHint').style.display = (_car || S.textOverlays.length) ? 'none' : 'flex';
 }
 function cancelPvText() { _pvEditingId = null; closePvTextEditor(); }
 function deletePvText() {
-  S.textOverlays = S.textOverlays.filter(o => o.id !== _pvEditingId);
+  const _di = S.textOverlays.findIndex(o => o.id === _pvEditingId);
+  if (_di > -1) S.textOverlays.splice(_di, 1);   // in place, keeps the photo's own array
+  saveCurrentCarouselText();
   _pvEditingId = null;
   closePvTextEditor();
   renderPvTextLayer();
@@ -1370,6 +1424,7 @@ function commitPvText() {
       mw: PV_TEXT_MAXW
     });
   }
+  saveCurrentCarouselText();
   _pvEditingId = null;
   closePvTextEditor();
   renderPvTextLayer();
@@ -2333,7 +2388,7 @@ async function preflightFinalUrl(url) {
     if (res.status === 400 || res.status === 404) {
       const why = res.headers.get('x-cld-error');
       console.error('Final URL failed:', res.status, why, url);
-      throw new Error('Cloudinary could not build the final video (' + res.status + ')' + (why ? ': ' + why : ''));
+      throw new Error('Cloudinary could not build the final media (' + res.status + ')' + (why ? ': ' + why : ''));
     }
   } catch (e) {
     if (e && /Cloudinary could not/.test(e.message)) throw e;
@@ -2341,6 +2396,23 @@ async function preflightFinalUrl(url) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function loadImageSize(url) {
+  return new Promise(resolve => {
+    const im = new Image();
+    im.onload = () => resolve({ w: im.naturalWidth, h: im.naturalHeight });
+    im.onerror = () => resolve({ w: 0, h: 0 });
+    im.src = url;
+  });
+}
+/* Per-photo frame size. Never uses #pvImage (empty for carousels). */
+async function resolveCarouselFrameDims(result, item) {
+  let W = Number(result.width) || 0, H = Number(result.height) || 0;
+  const nat = await loadImageSize(item.url);
+  if (W && H && nat.w && nat.h && (W > H) !== (nat.w > nat.h)) { const t = W; W = H; H = t; }
+  if (!W || !H) { W = nat.w; H = nat.h; }
+  return (W && H) ? { w: W, h: H } : null;
 }
 
 async function publishPost() {
@@ -2384,13 +2456,27 @@ async function publishPost() {
       if (S.mediaFiles && S.mediaFiles.length > 1) {
         const allFiles = S.mediaFiles;
         const total = allFiles.length;
+        saveCurrentCarouselText();
         for (let i = 0; i < total; i++) {
           const item = allFiles[i];
-          const isImgVideo = item.type === 'video';
-          setProgress(Math.round((i / total) * 70), `Uploading image ${i+1}/${total}…`, '');
-          const result = await uploadToCloudinary(item.blob, isImgVideo, () => {});
-          mediaItems.push({ url: result.url, type: result.type, public_id: result.public_id });
-          mediaUrls.push(result.url);
+          setProgress(Math.round((i / total) * 80), `Uploading photo ${i+1}/${total}…`, 'Preparing your carousel');
+          const result = await uploadToCloudinary(item.blob, false, () => {});
+          let finalUrl = result.url;
+          const overlays = Array.isArray(item.textOverlays) ? item.textOverlays : [];
+          if (overlays.length) {
+            const dims = await resolveCarouselFrameDims(result, item);
+            if (!dims) throw new Error(`Could not read the size of photo ${i+1}`);
+            const textLayers = await uploadTextLayers(overlays, dims, (n, m) =>
+              setProgress(Math.round(((i + 0.5) / total) * 80), `Photo ${i+1}/${total}: adding text ${n}/${m}…`, 'Applying your text'));
+            if (!textLayers) throw new Error(`Could not apply text to photo ${i+1}`);
+            finalUrl = await buildCloudinaryFinalUrl(result.url, { type: 'image', textLayers });
+            if (finalUrl === result.url) throw new Error(`Text was not applied to photo ${i+1}`);
+            await preflightFinalUrl(finalUrl);                 // catches Cloudinary 400/404
+            const check = await loadImageSize(finalUrl);       // proves the image really renders
+            if (!check.w) throw new Error(`Photo ${i+1} could not be rendered with its text. Nothing was published.`);
+          }
+          mediaItems.push({ url: finalUrl, type: 'image', public_id: result.public_id });
+          mediaUrls.push(finalUrl);
         }
         setProgress(85, 'Publishing…', 'Saving your post');
         payload = {
