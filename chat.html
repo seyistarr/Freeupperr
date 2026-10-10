@@ -6621,7 +6621,7 @@
                         message_type: msg.message_type,
                         media_url: msg.media_url || null,
                         media_urls: msg.media_urls || null,
-                        ...(msg.media_meta ? { media_meta: msg.media_meta } : {}),
+                        ...(msg.metadata ? { metadata: msg.metadata } : {}),
                         poll_data: null,
                     }));
                     const { error } = await sb.from('messages').insert(rows);
@@ -7124,7 +7124,7 @@
                     poll_data: pollData || null,
                     media_urls: mediaUrls || null,
                     voice_duration: voiceDurationSecs || null,
-                    ...(mediaMeta ? { media_meta: mediaMeta } : {}),
+                    ...(mediaMeta ? { metadata: mediaMeta } : {}),
                 };
                 const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
                 const tempMsg = { ...payload, id: tempId, created_at: new Date().toISOString() };
@@ -7157,7 +7157,7 @@
                 messages.splice(idx, 1);
                 renderMessages();
                 sendMessageToConv(msg.text, msg.message_type, msg.media_url, msg.reply_to, msg.poll_data, msg
-                .media_urls, msg.voice_duration, msg.media_meta);
+                .media_urls, msg.voice_duration, msg.metadata);
             };
 
             function subscribeToMessages() {
@@ -8939,10 +8939,10 @@
                                 </div>`;
                     }).join('') : `<div class="fu-empty-tab">No links shared yet.</div>`;
                 } else {
-                    const { data } = await sb.from('messages').select('id, media_url, media_meta').eq('conversation_id', conv.id)
+                    const { data } = await sb.from('messages').select('id, media_url, metadata').eq('conversation_id', conv.id)
                         .eq('message_type', 'document').order('created_at', { ascending: false });
                     content.innerHTML = (data && data.length) ? data.map(m => {
-                        const name = (m.media_meta && m.media_meta.name) || (m.media_url || '').split('/').pop() || 'Document';
+                        const name = (m.metadata && m.metadata.name) || (m.media_url || '').split('/').pop() || 'Document';
                         const ext = name.split('.').pop()?.toLowerCase() || '';
                         const icons = { pdf: 'ri-file-pdf-2-line', doc: 'ri-file-word-2-line',
                             docx: 'ri-file-word-2-line',
@@ -9430,7 +9430,7 @@
             function docExt(name) { return ((name || '').split('?')[0].split('.').pop() || '').toLowerCase(); }
 
             function docCardHtml(msg, textContent) {
-                const meta = msg.media_meta || {};
+                const meta = msg.metadata || {};
                 const name = meta.name || safeDecode((msg.media_url || '').split('?')[0].split('/').pop() || 'Document');
                 const ext = meta.ext || docExt(name);
                 const cls = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt'].includes(ext) ? ext : 'other';
@@ -9530,7 +9530,7 @@
 
             window.openDocument = function(url, msgId) {
                 const msg = messages.find(m => m.id === msgId);
-                const meta = (msg && msg.media_meta) || {};
+                const meta = (msg && msg.metadata) || {};
                 const fileName = meta.name || safeDecode((url.split('?')[0].split('/').pop()) || 'Document');
                 const ext = meta.ext || docExt(fileName);
                 const isMine = msg && msg.sender_id === currentUserId;
@@ -9746,7 +9746,7 @@
                 }
             }
             async function sendDocumentItem(it, caption) {
-                const tempId = pushTemp({ message_type: 'document', media_url: it.url, media_meta: it.meta, text: caption });
+                const tempId = pushTemp({ message_type: 'document', media_url: it.url, metadata: it.meta, text: caption });
                 try {
                     const up = await uploadToCloudinary(it.file, 'raw');
                     let thumb = null;
