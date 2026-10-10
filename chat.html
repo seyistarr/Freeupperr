@@ -17,8 +17,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js">
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         if (window['pdfjs-dist/build/pdf']) {
             pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -52,8 +51,7 @@
 
     <script src="notification-permission.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer>
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="global.js" defer></script>
 <script src="auth.js" defer></script>
 <script src="router.js" defer></script>
@@ -1867,6 +1865,51 @@
         }
 
         /* ─── VIEW-ONCE BADGES & LIGHTBOX OVERLAY ─── */
+        /* FreeUpper view-once privacy cover */
+        .fu-vo-cover {
+            position: absolute;
+            inset: 0;
+            z-index: 4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            overflow: hidden;
+            color: #fff;
+            border-radius: inherit;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    rgba(255,255,255,.12) 0 2px,
+                    transparent 2px 7px
+                ),
+                linear-gradient(135deg, #35234f, #6e42a0, #302b65);
+            animation: fuVoBreathe 2s ease-in-out infinite;
+            text-align: center;
+            pointer-events: none;
+        }
+        .fu-vo-cover strong {
+            font-size: .72rem;
+            letter-spacing: .12em;
+            font-weight: 800;
+        }
+        .fu-vo-cover small {
+            font-size: .65rem;
+            opacity: .82;
+        }
+        .fu-vo-cover .fu-vo-lock {
+            font-size: 1.45rem;
+            line-height: 1;
+        }
+        .fu-vo-opened {
+            filter: brightness(.25) blur(4px);
+        }
+        @keyframes fuVoBreathe {
+            0%, 100% { opacity: .78; transform: scale(.985); }
+            50% { opacity: 1; transform: scale(1); }
+        }
+
         .message-bubble .fu-tile .vo-badge {
             position: absolute;
             top: 6px;
@@ -4877,8 +4920,9 @@
     </div>
 
     <!-- ============================================================
-         THE SCRIPT STARTS HERE — this is where Part 2 begins.
-         ============================================================ --><script>
+         THE SCRIPT STARTS HERE — PART 1
+         ============================================================ -->
+    <script>
         (function() {
             'use strict';
 
@@ -4942,16 +4986,16 @@
             let chatSearch = { open: false, term: '', matchIds: [], idx: -1 };
             let composerItems = [];
             let composerIdx = 0;
-            let composerViewOnce = false;                      // NEW: view-once toggle
+            let composerViewOnce = false;
             const linkPreviewCache = {};
 
-            // NEW: Realtime Broadcast typing state
+            // Realtime Broadcast typing state
             let typingChannel = null;
-            let typingUsersMap = new Map();                    // userId -> profile
-            let typingExpiryTimers = new Map();                // userId -> timeout id
+            let typingUsersMap = new Map();
+            let typingExpiryTimers = new Map();
             let myTypingActive = false;
 
-            // NEW: view-once consumed-index cache per message
+            // view-once consumed-index cache per message
             const viewOnceStateByMsg = new Map();              // msgId -> Set<index>
 
             function senderColorFor(userId) {
@@ -4991,9 +5035,8 @@
                 let tries = 0;
                 const iv = setInterval(() => {
                     tries++;
-                    if (window.sb) { clearInterval(iv);
-                        cb(window.sb); } else if (tries > 100) { clearInterval(iv);
-                        console.error('Supabase client failed to load'); }
+                    if (window.sb) { clearInterval(iv); cb(window.sb); }
+                    else if (tries > 100) { clearInterval(iv); console.error('Supabase client failed to load'); }
                 }, 50);
             }
 
@@ -5266,48 +5309,53 @@
                 return `<div class="fu-media-grid-wrap ${cls}">${tiles}</div>`;
             }
 
-            // ═══════════════ NEW: MIXED-MEDIA GALLERY ═══════════════
+            // ═══════════════ VIEW-ONCE / MIXED-MEDIA GALLERY (PATCHED) ═══════════════
             function renderMixedMediaGallery(msg) {
                 const items = (msg.metadata && msg.metadata.media_items) || [];
                 if (!items.length) return '';
                 const isViewOnce = !!(msg.metadata && msg.metadata.view_once);
+                const isSender = msg.sender_id === currentUserId;
                 const consumed = isViewOnce ? getConsumedIndicesForMsg(msg.id) : new Set();
                 const n = items.length;
                 const displayLimit = n >= 5 ? 4 : n;
                 const cls = n > 4 ? 'count-more' : 'count-' + n;
-                const msgReactions = messages.find(m => m.id === msg.id)?.message_reactions || [];
-
                 const tiles = items.slice(0, displayLimit).map((item, i) => {
                     const isConsumed = consumed.has(i);
                     const thumb = item.type === 'video'
                         ? (item.thumb || videoThumbUrl(item.url))
                         : item.url;
-                    const more = (n >= 5 && i === 3)
+                    const more = n >= 5 && i === 3
                         ? `<div class="fu-tile-more">+${n - 4}</div>`
                         : '';
-                    const play = (item.type === 'video' && !isViewOnce)
+                    const click = isViewOnce
+                        ? (isSender
+                            ? `onclick="event.stopPropagation();showToast('You sent this view-once media.','o')"`
+                            : (isConsumed
+                                ? `onclick="event.stopPropagation();showToast('This media has already been opened','o')"`
+                                : `onclick="event.stopPropagation();openViewOnceConfirm('${msg.id}', ${i})"`))
+                        : `onclick="openMixedMedia('${msg.id}', ${i})"`;
+                    const cover = isViewOnce
+                        ? `<div class="fu-vo-cover">
+                               <span class="fu-vo-lock">${isConsumed ? '✓' : '◉'}</span>
+                               <strong>${isConsumed ? 'OPENED' : (isSender ? 'SENT' : 'VIEW ONCE')}</strong>
+                               <small>${isConsumed ? 'No longer available' : (isSender ? 'Recipient can open once' : 'Tap to open')}</small>
+                           </div>`
+                        : '';
+                    const preview = (!isViewOnce)
+                        ? `<img src="${thumb}" loading="lazy" alt="${item.type}">`
+                        : (isConsumed
+                            ? `<div class="fu-vo-opened" style="position:absolute;inset:0;background:#171321;"></div>`
+                            : `<img src="${isSender ? '' : thumb}" loading="lazy" alt="" style="${isSender ? 'visibility:hidden;' : 'filter:blur(22px) brightness(.35);transform:scale(1.12);'}">`);
+                    const play = (!isViewOnce && item.type === 'video')
                         ? `<div class="vid-play-overlay"><div class="vid-play-btn"><svg viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg></div></div>`
                         : '';
-                    const voBadge = isViewOnce
-                        ? `<div class="vo-badge"><svg viewBox="0 0 24 24" width="11" height="11" stroke="#fff" fill="none" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/></svg>1</div>`
-                        : '';
-                    const consumedBadge = isConsumed
-                        ? `<div class="fu-tile-more" style="background:rgba(0,0,0,.72);font-size:.75rem;font-weight:700;">Opened</div>`
-                        : '';
-                    const click = isConsumed
-                        ? `onclick="event.stopPropagation();showToast('This view-once media has already been opened','o')"`
-                        : (isViewOnce
-                            ? `onclick="event.stopPropagation();openViewOnceConfirm('${msg.id}', ${i})"`
-                            : `onclick="openMixedMedia('${msg.id}', ${i})"`);
-                    const slate = renderReactionSlate(msgReactions.filter(r => r.media_index === i), msg.id, i);
                     return `
-                        <div class="fu-tile" ${click} oncontextmenu="event.preventDefault();event.stopPropagation();openMediaReactionSheet('${msg.id}', ${i})" style="position:relative;">
-                            <img src="${thumb}" loading="lazy" alt="${item.type}">
+                        <div class="fu-tile" ${click}
+                             style="position:relative;overflow:hidden;">
+                            ${preview}
                             ${play}
                             ${more}
-                            ${voBadge}
-                            ${consumedBadge}
-                            ${slate}
+                            ${cover}
                         </div>`;
                 }).join('');
                 return `<div class="fu-media-grid-wrap ${cls}">${tiles}</div>`;
@@ -5327,7 +5375,7 @@
                 );
             };
 
-            // ═══════════════ NEW: VIEW-ONCE ═══════════════
+            // ═══════════════ VIEW-ONCE HELPERS ═══════════════
             function getConsumedIndicesForMsg(msgId) {
                 return viewOnceStateByMsg.get(msgId) || new Set();
             }
@@ -5371,6 +5419,7 @@
                 modal.classList.add('open');
             };
 
+            // ═══════════════ PATCHED: sender cannot open their own view-once ═══════════════
             window.confirmViewOnce = async function(messageId, index) {
                 document.getElementById('fuViewOnceConfirm').classList.remove('open');
                 const msg = messages.find(m => m.id === messageId);
@@ -5379,9 +5428,8 @@
                 const item = items[index];
                 if (!item) { showToast('Media unavailable', 'r'); return; }
 
-                // Sender can always re-open their own view-once message normally.
                 if (msg.sender_id === currentUserId) {
-                    openMediaLightbox([{ url: item.url, type: item.type }], 0, messageId, 'You', msg.created_at);
+                    showToast('You sent this view-once media and cannot open it.', 'o');
                     return;
                 }
 
@@ -5439,7 +5487,18 @@
                 if (sheet) sheet.classList.remove('open');
             };
 
-            function videoThumbUrl(url) {
+            // ═══════════════════════════════════════════════════════════════
+            // >>>>>> PART 1 ENDS HERE — continue in Part 2 <<<<<<
+            // Part 2 resumes with:
+            //   function videoThumbUrl(url) { ... }
+            //   ...lightbox, lbNav, updateLbView, lbReact, lbReply...
+            //   ...loadMyBlockList, loadMutualFollowers, loadConversations...
+            //   ...renderMessages, renderConversations, sendMessage, etc...
+            //   ...subscriptions, typing channel, uploadToCloudinary, voice recording...
+            //   ...openChatProfile, group permissions, theme/wallpaper/bubble color...
+            //   ...report modal, disappearing screen, initChat(), etc...
+            // ═══════════════════════════════════════════════════════════════
+function videoThumbUrl(url) {
                 if (!url) return '';
                 return url.replace(/\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i, '.jpg$2');
             }
@@ -5568,8 +5627,7 @@
                     if (i === lbIndex) t.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
                 });
                 document.querySelector('.fu-lb-nav-prev').style.visibility = lbIndex > 0 ? 'visible' : 'hidden';
-                document.querySelector('.fu-lb-nav-next').style.visibility = lbIndex < lbItems.length - 1 ? 'visible' :
-                    'hidden';
+                document.querySelector('.fu-lb-nav-next').style.visibility = lbIndex < lbItems.length - 1 ? 'visible' : 'hidden';
             }
 
             window.lbNav = function(dir) {
@@ -5579,7 +5637,7 @@
                 updateLbView();
             };
 
-            lbVideoEl && document.addEventListener('DOMContentLoaded', () => {
+            document.addEventListener('DOMContentLoaded', () => {
                 const vid = lbVideoEl();
                 if (!vid) return;
                 vid.addEventListener('timeupdate', () => {
@@ -5610,9 +5668,8 @@
                 stage.addEventListener('touchstart', e => { lbTouchStartX = e.changedTouches[0].screenX; }, { passive: true });
                 stage.addEventListener('touchend', e => {
                     const dx = e.changedTouches[0].screenX - lbTouchStartX;
-                    if (dx < -50 && lbIndex < lbItems.length - 1) { lbIndex++;
-                        updateLbView(); } else if (dx > 50 && lbIndex > 0) { lbIndex--;
-                        updateLbView(); }
+                    if (dx < -50 && lbIndex < lbItems.length - 1) { lbIndex++; updateLbView(); }
+                    else if (dx > 50 && lbIndex > 0) { lbIndex--; updateLbView(); }
                 }, { passive: true });
                 stage.addEventListener('click', e => {
                     if (e.target.closest('#lbFloating') || e.target.closest('#lbReplyDrawer') || e.target.closest('#lbVoOverlay')) return;
@@ -5890,8 +5947,7 @@
                         const muteIcon = isMuted ?
                             '<svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:var(--muted2);fill:none;stroke-width:2;flex-shrink:0;"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>' :
                             '';
-                        const pinIcon = isPinned ? '<i class="ri-pushpin-2-fill" style="font-size:.7rem;color:var(--p);"></i>' :
-                            '';
+                        const pinIcon = isPinned ? '<i class="ri-pushpin-2-fill" style="font-size:.7rem;color:var(--p);"></i>' : '';
                         const hasDisappearing = c.disappearing_duration > 0;
                         return `
                                     <div class="conv-swipe-wrap" data-conv-id="${c.id}">
@@ -5987,8 +6043,7 @@
                 if (disapBadgeEl) disapBadgeEl.classList.toggle('hidden', !(conv.disappearing_duration > 0));
 
                 renderTypingIndicator(false);
-                messagesArea.innerHTML =
-                    `<div class="no-messages">${emptyChatIllustration()}<p>Loading…</p></div>`;
+                messagesArea.innerHTML = `<div class="no-messages">${emptyChatIllustration()}<p>Loading…</p></div>`;
 
                 let status = { blocked: false, theyBlockedMe: false };
                 if (!conv.is_group) {
@@ -6028,14 +6083,12 @@
                 renderPinnedBar();
                 renderConversations(convSearch.value);
 
-                // ═══ NEW: subscribe to typing channel for this conversation
                 await setupTypingChannel(convId);
             };
 
             function renderPartnerStatus(conv) {
                 if (!conv || conv.is_group || conv.is_note) return;
                 if (selectedConversationId !== conv.id) return;
-                // ═══ Typing users take priority over presence
                 if (typingUsersMap.size > 0) {
                     chatPartnerStatus.textContent = 'Typing…';
                     return;
@@ -6098,7 +6151,7 @@
                     messages = (data || []).filter(m => !(m.deleted_for || []).includes(currentUserId) &&
                         (m.expires_at === null || new Date(m.expires_at) > new Date()));
                     await loadMyPollVotes(messages);
-                    await loadViewOnceConsumptions(convId);          // ═══ NEW
+                    await loadViewOnceConsumptions(convId);
                     const conv = conversations.find(c => c.id === convId);
                     if (conv && conv.is_group) {
                         const senderIds = [...new Set(messages.map(m => m.sender_id))];
@@ -6198,8 +6251,7 @@
             function renderLinkPreview(preview, isSent) {
                 if (!preview) return '';
                 let domain = preview.domain || preview.siteName || '';
-                if (!domain && preview.url) { try { domain = new URL(preview.url).hostname.replace('www.', ''); } catch (
-                    e) {} }
+                if (!domain && preview.url) { try { domain = new URL(preview.url).hostname.replace('www.', ''); } catch (e) {} }
 
                 if (preview.failed || (!preview.title && !preview.image)) {
                     return `
@@ -6346,7 +6398,6 @@
 
                     const isViewOnceMsg = !!(msg.metadata && msg.metadata.view_once);
 
-                    // ═══ NEW: mixed-media branch (checked BEFORE 'image'/'video')
                     if (msg.message_type === 'media' && msg.metadata && msg.metadata.media_items && msg.metadata.media_items.length) {
                         contentHtml = renderMixedMediaGallery(msg) + (textContent ? captionHtml(textContent) : '');
                     } else if (msg.message_type === 'image' && msg.media_url) {
@@ -6825,8 +6876,7 @@
 
             function renderForwardList(list) {
                 const body = document.getElementById('forwardListBody');
-                if (!list.length) { body.innerHTML =
-                    `<div class="fu-empty-tab">No conversations found.</div>`; return; }
+                if (!list.length) { body.innerHTML = `<div class="fu-empty-tab">No conversations found.</div>`; return; }
                 body.innerHTML = list.map(c => {
                     const checked = forwardSelected.has(c.id);
                     return `
@@ -7017,8 +7067,7 @@
             window.copyMessage = function(msgId) {
                 const msg = messages.find(m => m.id === msgId);
                 if (msg && msg.text) {
-                    navigator.clipboard.writeText(msg.text).then(() => showToast('Copied to clipboard', 'g')).catch(() =>
-                    {});
+                    navigator.clipboard.writeText(msg.text).then(() => showToast('Copied to clipboard', 'g')).catch(() => {});
                 }
             };
 
@@ -7363,7 +7412,7 @@
                 if (mic) mic.classList.add('visible');
                 replyTargetMessage = null;
                 cancelReplyPreview();
-                stopTypingBroadcast();                 // ═══ NEW
+                stopTypingBroadcast();
 
                 sendMessageToConv(text, 'text', null, replyTo).then(() => {
                     sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
@@ -7396,8 +7445,7 @@
                 try {
                     const { data, error } = await sb.from('messages').insert(payload).select().single();
                     if (error) {
-                        console.error('sendMessage error:', error.message || error, error.details || '', error.hint ||
-                            '');
+                        console.error('sendMessage error:', error.message || error, error.details || '', error.hint || '');
                         throw error;
                     }
                     const idx = messages.findIndex(m => m.id === tempId);
@@ -7434,8 +7482,7 @@
                                 messages.push(newMsg);
                                 renderMessages();
                                 scrollToBottom();
-                                if (newMsg.sender_id !== currentUserId) markVisibleMessagesRead(
-                                selectedConversationId);
+                                if (newMsg.sender_id !== currentUserId) markVisibleMessagesRead(selectedConversationId);
                             }
                         } else if (newMsg.sender_id !== currentUserId) {
                             notifyIncomingMessage(newMsg);
@@ -7539,7 +7586,6 @@
                     .subscribe();
             }
 
-            // ═══════════════ NEW: TYPING BROADCAST + AVATAR INDICATOR ═══════════════
             async function setupTypingChannel(convId) {
                 if (typingChannel) {
                     try { await sb.removeChannel(typingChannel); } catch (e) {}
@@ -7656,11 +7702,9 @@
                         preset = CLOUDINARY_DOC_PRESET;
                         type = 'raw';
                     } else if (resourceType === 'viewonce_image') {
-                        // FIX: use the existing image preset instead of a separate one
                         preset = CLOUDINARY_IMAGE_PRESET;
                         type = 'image';
                     } else if (resourceType === 'viewonce_video') {
-                        // FIX: use the existing video preset instead of a separate one
                         preset = CLOUDINARY_VIDEO_PRESET;
                         type = 'video';
                     }
@@ -8225,9 +8269,7 @@
                 { id: 'midnight', name: 'Midnight', preview: '#1e1b4b' },
             ];
 
-            const FU_WALLPAPER_COLORS = ['#0b0b0f', '#1e1b4b', '#3730a3', '#065f46', '#7c2d12', '#831843', '#164e63',
-                '#312e81'
-            ];
+            const FU_WALLPAPER_COLORS = ['#0b0b0f', '#1e1b4b', '#3730a3', '#065f46', '#7c2d12', '#831843', '#164e63', '#312e81'];
             const FU_WALLPAPER_PRESETS = [
                 { id: 'default', label: 'Default', url: null },
                 { id: 'theme1', label: 'Nebula', url: '/themes/theme1.png' },
@@ -8308,8 +8350,7 @@
                     document.getElementById('cpUploadBadge').classList.remove('hidden');
                     document.getElementById('cpSubtext').textContent = 'Only visible to you';
                     const { count: mediaCount } = await sb.from('messages').select('id', { count: 'exact', head: true })
-                        .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document', 'link',
-                        'media']);
+                        .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document', 'link', 'media']);
                     document.getElementById('cpMediaCount').textContent = mediaCount || 0;
                     document.getElementById('cpMuteToggle').checked = false;
                     document.getElementById('editGroupRow').style.display = 'none';
@@ -8336,10 +8377,8 @@
                     document.getElementById('blockRowBtn').style.display = 'none';
 
                     const [{ count: memberCount }, { count: mediaCount }] = await Promise.all([
-                        sb.from('conversation_members').select('id', { count: 'exact', head: true }).eq(
-                            'conversation_id', conv.id),
-                        sb.from('messages').select('id', { count: 'exact', head: true }).eq('conversation_id',
-                            conv.id).in('message_type', ['image', 'video', 'document', 'link', 'media'])
+                        sb.from('conversation_members').select('id', { count: 'exact', head: true }).eq('conversation_id', conv.id),
+                        sb.from('messages').select('id', { count: 'exact', head: true }).eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document', 'link', 'media'])
                     ]);
                     document.getElementById('cpSubtext').textContent = `${memberCount || 0} members` +
                         (conv.group_description ? ` · ${conv.group_description}` : '');
@@ -8358,8 +8397,7 @@
                     document.getElementById('editGroupRow').style.display = 'none';
                     document.getElementById('permissionsRow').style.display = 'none';
                     const { count: mediaCount } = await sb.from('messages').select('id', { count: 'exact', head: true })
-                        .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document', 'link',
-                        'media']);
+                        .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document', 'link', 'media']);
                     document.getElementById('cpMediaCount').textContent = mediaCount || 0;
                     document.getElementById('reportRowLabel').textContent = 'Report';
 
@@ -8397,8 +8435,7 @@
                     try {
                         showToast('Uploading photo…', 'p');
                         const result = await uploadToCloudinary(inp.files[0], 'image');
-                        const { error } = await sb.from('conversations').update({ [field]: result.url })
-                            .eq('id', conv2.id);
+                        const { error } = await sb.from('conversations').update({ [field]: result.url }).eq('id', conv2.id);
                         if (error) throw error;
                         conv2[field] = result.url;
                         document.getElementById('cpAvatar').src = result.url;
@@ -8451,16 +8488,13 @@
                 const arr = Array.from(list);
                 const { error } = await sb.from('conversations').update({ muted_by: arr }).eq('id', conv.id);
                 if (!error) { conv.muted_by = arr;
-                    showToast(muted ? 'Notifications muted' : 'Notifications unmuted', 'g'); } else document.getElementById(
-                    'cpMuteToggle').checked = !muted;
+                    showToast(muted ? 'Notifications muted' : 'Notifications unmuted', 'g'); } else document.getElementById('cpMuteToggle').checked = !muted;
             };
 
             window.blockUser = async function(targetUserId) {
-                if (!confirm('Block this user? They will no longer be able to message you, and you will not see their messages.'))
-                    return;
+                if (!confirm('Block this user? They will no longer be able to message you, and you will not see their messages.')) return;
                 try {
-                    const { error } = await sb.from('user_blocks').insert({ blocker_id: currentUserId,
-                    blocked_id: targetUserId });
+                    const { error } = await sb.from('user_blocks').insert({ blocker_id: currentUserId, blocked_id: targetUserId });
                     if (error) throw error;
                     showToast('User blocked', 'g');
                     closeChatProfileModal();
@@ -8727,20 +8761,20 @@
                             </div>
                             <div class="am-friend-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
                         </div>
-                    `).join('');
+                    `free).join('');
                 } catch (err) {
-                    if (myToken === amAllUsersSearchToken) {
-                        list.innerHTML = '<div class="fu-empty-tab">Search failed. Please try again.</div>';
+                    ifupper (myToken === amAllUsersSearchToken) {
+.                        list.innerHTML = '<div class="fu-empty-tverab">Search failed. Please try again.</divcel>';
                     }
                 }
             }
 
-            window.confirmAddMembers = async function() {
-                const conv = currentConv();
-                if (!conv || amSelectedIds.size === 0) return;
+            window.confirm.appAddMembers = async function() {
+                const conv =/ currentConv();
+                if (!conv || amSelectedIds.sizejoin === 0) return;
 
-                const rows = Array.from(amSelectedIds).map(uid => ({
-                    conversation_id: conv.id, user_id: uid, role: amAddAsAdmin ? 'admin' : 'member'
+                const rows = Array/${.from(amSelectedIds).map(uid => ({
+code                    conversation_id: conv.id, user_id: uid}`, role: amAddAsAdmin ? 'admin' : 'member'
                 }));
                 try {
                     const { error } = await sb.from('conversation_members').insert(rows);
@@ -8783,7 +8817,7 @@
                 try {
                     const { data: code, error } = await sb.rpc('get_or_create_invite_code', { p_conversation_id: conv.id });
                     if (error) throw error;
-                    currentInviteLink = `https://freeupper.vercel.app/join/${code}`;
+                    currentInviteLink = `https://;
                     document.getElementById('amInviteLinkText').textContent = currentInviteLink;
                     document.getElementById('amQrImg').src =
                         `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentInviteLink)}`;
@@ -8898,8 +8932,7 @@
                 const conv = currentConv();
                 if (!conv) return;
                 try {
-                    const { error } = await sb.from('conversations').update({ disappearing_duration: seconds }).eq('id',
-                        conv.id);
+                    const { error } = await sb.from('conversations').update({ disappearing_duration: seconds }).eq('id', conv.id);
                     if (error) throw error;
                     conv.disappearing_duration = seconds;
 
@@ -8928,8 +8961,7 @@
                 const members = await loadGroupMembers(convId);
                 groupMembersCache = members;
                 const isCallerOwner = members.some(m => m.user_id === currentUserId && m.role === 'owner');
-                document.getElementById('fuMembersList').innerHTML = members.map(m => renderMemberRow(m, isCallerOwner))
-                    .join('');
+                document.getElementById('fuMembersList').innerHTML = members.map(m => renderMemberRow(m, isCallerOwner)).join('');
                 document.getElementById('fuMembersScreen').classList.add('open');
             };
 
@@ -9030,8 +9062,7 @@
                 const conv = currentConv();
                 if (!conv) return;
                 try {
-                    const { error } = await sb.from('conversation_members').delete().eq('conversation_id', conv.id).eq(
-                        'user_id', userId);
+                    const { error } = await sb.from('conversation_members').delete().eq('conversation_id', conv.id).eq('user_id', userId);
                     if (error) throw error;
                     openMembersScreen(conv.id);
                     showToast(`Removed ${name}`, 'g');
@@ -9043,8 +9074,7 @@
                 if (!conv) return;
                 if (!confirm(`Leave "${conv.group_name || 'this group'}"?`)) return;
                 try {
-                    const { error } = await sb.from('conversation_members').delete().eq('conversation_id', conv.id).eq(
-                        'user_id', currentUserId);
+                    const { error } = await sb.from('conversation_members').delete().eq('conversation_id', conv.id).eq('user_id', currentUserId);
                     if (error) throw error;
                     closeChatProfileModal();
                     showToast('You left the group', 'g');
@@ -9202,8 +9232,7 @@
             };
 
             window.switchMediaTab = async function(tab) {
-                document.querySelectorAll('#fuMediaTabs .fu-tab').forEach(t => t.classList.toggle('active', t.dataset.tab ===
-                    tab));
+                document.querySelectorAll('#fuMediaTabs .fu-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
                 const tabs = ['media', 'links', 'docs'];
                 const idx = tabs.indexOf(tab);
                 const indicator = document.getElementById('fuMediaTabIndicator');
@@ -9216,10 +9245,8 @@
                 content.innerHTML = `<div class="fu-empty-tab">Loading…</div>`;
 
                 if (tab === 'media') {
-                    // ═══ include 'media' messages (mixed photo+video) here too
                     const { data } = await sb.from('messages').select('id, message_type, media_url, media_urls, metadata')
-                        .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'media']).order(
-                            'created_at', { ascending: false });
+                        .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'media']).order('created_at', { ascending: false });
                     const items = [];
                     (data || []).forEach(m => {
                         if (m.message_type === 'media') {
@@ -9227,9 +9254,7 @@
                             const vo = !!(m.metadata && m.metadata.view_once);
                             mi.forEach(it => items.push({ url: it.url, type: it.type, vo }));
                         } else {
-                            const urls = m.media_urls && m.media_urls.length ? m.media_urls : (m.media_url ? [m
-                                .media_url
-                            ] : []);
+                            const urls = m.media_urls && m.media_urls.length ? m.media_urls : (m.media_url ? [m.media_url] : []);
                             urls.forEach(u => items.push({ url: u, type: m.message_type, vo: false }));
                         }
                     });
@@ -9244,15 +9269,13 @@
                     let data = null;
                     try {
                         const res = await sb.from('messages').select('id, text, link_previews, created_at')
-                            .eq('conversation_id', conv.id).not('text', 'is', null).order('created_at', { ascending: false })
-                            .limit(200);
+                            .eq('conversation_id', conv.id).not('text', 'is', null).order('created_at', { ascending: false }).limit(200);
                         if (res.error) throw res.error;
                         data = res.data;
                     } catch (err) {
                         console.warn('link_previews query failed, falling back to text-only:', err);
                         const res2 = await sb.from('messages').select('id, text, created_at')
-                            .eq('conversation_id', conv.id).not('text', 'is', null).order('created_at', { ascending: false })
-                            .limit(200);
+                            .eq('conversation_id', conv.id).not('text', 'is', null).order('created_at', { ascending: false }).limit(200);
                         data = res2.data;
                     }
                     const urlRe = /(https?:\/\/[^\s"'<>]+)/gi;
@@ -9263,8 +9286,7 @@
                             found.forEach(u => {
                                 let preview = null;
                                 if (m.link_previews && m.link_previews.length) {
-                                    const p = m.link_previews.find(l => l.url === u || l.url === u
-                                        .replace(/\/$/, ''));
+                                    const p = m.link_previews.find(l => l.url === u || l.url === u.replace(/\/$/, ''));
                                     if (p) preview = p;
                                 }
                                 links.push({ url: u, preview: preview });
@@ -9306,8 +9328,7 @@
 
             function renderLinkPreviewItem(preview, url) {
                 const img = preview.image ?
-                    `<img class="lp-image" src="${preview.image}" alt="" loading="lazy" onerror="this.style.display='none'">` :
-                    '';
+                    `<img class="lp-image" src="${preview.image}" alt="" loading="lazy" onerror="this.style.display='none'">` : '';
                 return `<div class="fu-link-row" data-open-url="${escapeHtml(url).replace(/"/g, '&quot;')}">
                             ${preview.image ? `<img class="fu-link-thumb" src="${preview.image}" onerror="this.style.display='none'">` : `<div class="fu-doc-ico"><i class="ri-link"></i></div>`}
                             <div class="fu-link-info">
@@ -9412,7 +9433,6 @@
 
             window.closeChatView = function() {
                 if (chatSearch.open) closeChatSearch();
-                // ═══ NEW: tear down typing channel
                 if (typingChannel) {
                     try { sb.removeChannel(typingChannel); } catch (e) {}
                     typingChannel = null;
@@ -9483,7 +9503,6 @@
                 if (mic) mic.classList.toggle('visible', !hasText);
                 if (eb) eb.classList.toggle('show', e.target.scrollHeight > 50 || byId('messageInputArea').classList.contains('expanded'));
 
-                // ═══ NEW: broadcast typing state
                 if (selectedConversationId && hasText) {
                     startTypingBroadcast();
                     if (typingTimeout) clearTimeout(typingTimeout);
@@ -9679,8 +9698,7 @@
             function captionHtml(t) { return '<div class="msg-caption">' + renderMessageText(t) + '</div>'; }
             function hasMediaBubble(msg, text) {
                 return msg.message_type === 'document' ||
-                    ((msg.message_type === 'image' || msg.message_type === 'video' || msg.message_type ===
-                        'media') && !!text);
+                    ((msg.message_type === 'image' || msg.message_type === 'video' || msg.message_type === 'media') && !!text);
             }
 
             function fetchLinkPreview(url) {
@@ -10055,7 +10073,6 @@
                 byId('cmpViewOnceCheck').checked = false;
             };
 
-            // ═══════════════ view-once toggle wiring
             document.addEventListener('change', function(e) {
                 if (e.target && e.target.id === 'cmpViewOnceCheck') {
                     composerViewOnce = e.target.checked;
@@ -10081,7 +10098,6 @@
                 loadConversations();
             };
 
-            // ═══════════════ MIXED MEDIA SENDER (photos + videos in ONE message) ═══════════════
             async function sendMixedMediaItems(items, caption, viewOnce) {
                 const tempItems = items.map(item => ({ url: item.url, type: item.kind }));
                 const tempMeta = { media_items: tempItems };
@@ -10112,16 +10128,7 @@
                     const urls = uploaded.map(item => item.url);
                     const finalMeta = { media_items: uploaded };
                     if (viewOnce) finalMeta.view_once = true;
-                    await sendMessageToConv(
-                        caption,
-                        'media',
-                        urls[0],
-                        null,
-                        null,
-                        urls,
-                        null,
-                        finalMeta
-                    );
+                    await sendMessageToConv(caption, 'media', urls[0], null, null, urls, null, finalMeta);
                 } catch (err) {
                     dropTemp(tempId);
                     renderMessages();
@@ -10432,17 +10439,17 @@
                             await selectConversation(existing.id);
                         } else {
                             await loadConversations();
-                            const loaded = conversations.find(c => c.id === conversationId);
+                            const loaded = conversations.find(c stroke => c.id === conversationId);
                             if (loaded) {
                                 await selectConversation(loaded.id);
                             } else {
-                                showToast('Conversation not found', 'o');
+                                showToast('Conversation not: found', 'o');
                             }
                         }
                         history.replaceState({}, '', window.location.pathname);
-                    } else if (uid) {
-                        const existing = conversations.find(c => c.otherUserId === uid);
-                        if (existing) {
+                    } var else if (uid) {
+                        const existing =(-- conversations.find(c => c.otherUserId === uid);
+                        ifm (existing)uted {
                             await selectConversation(existing.id);
                         } else {
                             const { data, error } = await sb.from('profiles').select('id').eq('id', uid).single();
@@ -10473,7 +10480,7 @@
         })();
     </script>
 
-    <!-- Styles for full-screen modal (new chat) -->
+    <!-- Second style block (mfs) -->
     <style>
         .mfs {
             position: fixed;
@@ -10525,7 +10532,7 @@
         .fs-x svg {
             width: 18px;
             height: 18px;
-            stroke: var(--muted);
+           );
             fill: none;
             stroke-width: 2.2;
             stroke-linecap: round;
