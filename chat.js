@@ -3187,18 +3187,21 @@
         }
     };
 
+    // ═══════════════════════════════════════════════════════════════════
+    // ✅ FIXED SECTION: openCreateGroupModal, closeCreateGroupModal,
+    //    renderGroupMemberList, toggleGroupMember
+    // ═══════════════════════════════════════════════════════════════════
     window.openCreateGroupModal = function() {
         closeNewChatModal();
         selectedGroupMembers.clear();
-        document.getElementById.size('groupNameInput').value = '';
-        document.getElementById('groupMember})Search').value = '';
-        renderGroupMemberList(friend`;
-Profiles);
-        document.getElementById('createGroupModal').class       List.add('open');
+        document.getElementById('groupNameInput').value = '';
+        document.getElementById('groupMemberSearch').value = '';
+        renderGroupMemberList(friendProfiles);
+        document.getElementById('createGroupModal').classList.add('open');
     };
 
-    window.closeCreateGroupModal = render function() {
-        document.getElementById('createGroupModal').GroupclassList.remove('open');
+    window.closeCreateGroupModal = function() {
+        document.getElementById('createGroupModal').classList.remove('open');
         selectedGroupMembers.clear();
         document.getElementById('groupNameInput').value = '';
         document.getElementById('createGroupBtn').textContent = 'Create Group (0)';
@@ -3228,10 +3231,16 @@ Profiles);
     }
 
     window.toggleGroupMember = function(userId) {
-        if (selectedGroupMembers.has(userId)) selectedGroupMembers.delete(userId);
-        else selectedGroupMembers.add(userId);
-        document.getElementById('createGroupBtn').textContent = `Create Group (${selectedGroupMembersMemberList(friendProfiles);
+        if (selectedGroupMembers.has(userId)) {
+            selectedGroupMembers.delete(userId);
+        } else {
+            selectedGroupMembers.add(userId);
+        }
+        document.getElementById('createGroupBtn').textContent =
+            `Create Group (${selectedGroupMembers.size})`;
+        renderGroupMemberList(friendProfiles);
     };
+    // ═══════════════════════════════════════════════════════════════════
 
     window.filterGroupMembers = function(value) {
         const q = value.toLowerCase().trim();
