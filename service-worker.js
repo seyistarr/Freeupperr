@@ -1,4 +1,5 @@
-const CACHE_NAME = 'freeupper-pwa-v2';
+const CACHE_NAME = 'freeupper-pwa-v3';
+
 const URLS_TO_CACHE = [
   './',
   './index.html',
@@ -7,7 +8,8 @@ const URLS_TO_CACHE = [
   './search.html',
   './settings.html',
   './video.html',
-  './chat.html',         // added
+  './chat.html',
+  './chat.js',
   './global.css',
   './global.js',
   './manifest.webmanifest',
@@ -32,15 +34,33 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
+
       return fetch(event.request).then(response => {
-        if (!response || response.status !== 200 || response.type !== 'basic') return response;
+        if (
+          !response ||
+          response.status !== 200 ||
+          response.type !== 'basic'
+        ) {
+          return response;
+        }
+
         const responseClone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
+        caches.open(CACHE_NAME).then(cache => {
+          cache.put(event.request, responseClone);
+        });
+
         return response;
-      }).catch(() => caches.match('./index.html'));
+      }).catch(async () => {
+        // Never return index.html as JavaScript or CSS.
+        if (event.request.mode === 'navigate') {
+          return (await caches.match('./index.html')) || Response.error();
+        }
+        return Response.error();
+      });
     })
   );
 });
