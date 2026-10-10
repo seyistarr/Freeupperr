@@ -6068,7 +6068,27 @@
                 await setupTypingChannel(convId);
             };
 
-            function renderPartnerStatus(conv) {
+            
+function renderPartnerStatus(conv) {
+    if (!conv || conv.is_note) return;
+    if (selectedConversationId !== conv.id) return;
+
+    if (typingUsersMap.size > 0) {
+        chatPartnerStatus.textContent = 'Typing…';
+        return;
+    }
+
+    if (conv.is_group) {
+        populateGroupHeaderSubtitle(conv.id);
+        return;
+    }
+
+    const other = conv.otherUser || {};
+    chatPartnerStatus.textContent = other.is_online
+        ? 'Online'
+        : formatLastSeen(other.last_seen_at);
+}
+
                 if (!conv || conv.is_group || conv.is_note) return;
                 if (selectedConversationId !== conv.id) return;
                 if (typingUsersMap.size > 0) {
@@ -7584,7 +7604,7 @@
                 myTypingActive = false;
                 renderTypingIndicator(false);
                 const c0 = currentConv();
-                if (c0 && !c0.is_group) renderPartnerStatus(c0);
+                if (c0 && !c0.is_note) renderPartnerStatus(c0);
 
                 if (!convId) return;
                 try {
@@ -7607,7 +7627,7 @@
                                 typingExpiryTimers.delete(uid);
                                 renderTypingIndicator(typingUsersMap.size > 0);
                                 const c = currentConv();
-                                if (c && !c.is_group) renderPartnerStatus(c);
+                                if (c && !c.is_note) renderPartnerStatus(c);
                             }, 4000));
                             renderTypingIndicator(true);
                             const c = currentConv();
