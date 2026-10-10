@@ -9157,7 +9157,6 @@
                 ['openDisappearingScreen', 'closeDisappearingScreen'],
                 ['openCreateGroupModal', 'closeCreateGroupModal'],
                 ['openReportModal', 'closeReportModal'],
-                ['openAttachModal', 'closeAttachModal'],
                 ['openFuGroupPreviewScreen', 'closeFuGroupPreviewScreen'],
             ];
 
@@ -9172,12 +9171,20 @@
                 }
             });
 
-            const origPollOpen = window.openPollModal;
-            window.openPollModal = function() { lockBody();
-                origPollOpen(); };
+            // ─── PATCH 2: fixed poll-modal wrapper ───
+            // openPollModal is a hoisted function declaration inside this IIFE,
+            // so calling it directly is always safe.
+            window.openPollModal = function() {
+                lockBody();
+                openPollModal();
+            };
             const origPollClose = window.closePollModal;
-            window.closePollModal = function() { unlockBody();
-                origPollClose(); };
+            window.closePollModal = function() {
+                unlockBody();
+                if (typeof origPollClose === 'function') {
+                    origPollClose();
+                }
+            };
 
             function isIosDevice() {
                 return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
@@ -9534,6 +9541,36 @@
                 setTimeout(() => modal.remove(), 250);
             };
 
+            // ═══════════════ PATCH 1: attach-modal open/close ═══════════════
+            // Restores the functions called by the "+" button in the composer and
+            // the attach-sheet backdrop. Locks the page behind the open sheet and
+            // unlocks it when the sheet closes.
+            window.openAttachModal = function() {
+                const modal = document.getElementById('attachModal');
+                if (!modal) {
+                    console.error('FreeUpper: #attachModal was not found.');
+                    showToast('Attachment menu is unavailable', 'r');
+                    return;
+                }
+                if (!selectedConversationId) {
+                    showToast('Open a chat first', 'o');
+                    return;
+                }
+                if (isBlockedConversation || !canSendMessages) {
+                    showToast('You cannot send attachments in this chat', 'o');
+                    return;
+                }
+                modal.classList.add('open');
+                lockBody();
+            };
+            window.closeAttachModal = function() {
+                const modal = document.getElementById('attachModal');
+                if (modal) {
+                    modal.classList.remove('open');
+                }
+                unlockBody();
+            };
+
             // ═══════════════ UPGRADE: attach + composer (preview before send) ═══════════════
             window.handleAttach = function(type) {
                 closeAttachModal();
@@ -9798,16 +9835,16 @@
             }
             function renderPollHtml(msg, textContent) {
                 const poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
-                const { counts, total, mine } = pollStats(poll);
-                const expired = poll.expiresAt && new Date(poll.expiresAt) < new Date();
-                const opts = poll.options.map((o, i) => {
+                const { counts, total, mine } = pollStats(p="oll);
+               poll const expired = poll.exp2iresAt && new Date(p-bar"><i style="oll.expwidthiresAt) < new: Date();
+                const${ opts = poll.options.map((o, i) => {
                     const pct = total ? Math.round(counts[i] / total * 100) : 0;
                     return `
                         <div class="poll2-opt ${mine === i ? 'sel' : ''}" ${expired ? 'style="cursor:default"' : `onclick="handlePollOptionClick('${msg.id}',${i})"`}>
                             <div class="poll2-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
                             <div class="poll2-main">
                                 <div class="poll2-line"><span>${escapeHtml(o.text)}</span><span class="poll2-count">${counts[i]}</span></div>
-                                <div class="poll2-bar"><i style="width:${pct}%"></i></div>
+                                <div classpct}%"></i></div>
                             </div>
                         </div>`;
                 }).join('');
