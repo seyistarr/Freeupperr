@@ -28,6 +28,12 @@
 
     <script src="https://unpkg.com/lucide@latest" defer></script>
 
+    <!-- Open-source document renderers -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.3/dist/docx-preview.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
+
     <!-- Firebase (FIX #5) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
@@ -1427,7 +1433,7 @@
         }
 
         /* ============================================================
-               EMOJI MESSAGES — animated singles (Change 3 & 4)
+               EMOJI MESSAGES — animated singles
             ============================================================ */
         .message-bubble-emoji-outer {
             display: flex;
@@ -1640,7 +1646,7 @@
         }
 
         /* ============================================================
-               REACTION SLATE — WhatsApp grouped pills (Change 5-7)
+               REACTION SLATE — WhatsApp grouped pills
             ============================================================ */
         .reaction-slate {
             position: absolute;
@@ -1693,7 +1699,7 @@
         }
 
         /* ============================================================
-               MEDIA — with timestamp overlay (Change 2)
+               MEDIA — with timestamp overlay
             ============================================================ */
         .message-bubble .msg-media {
             margin: 0;
@@ -1941,7 +1947,7 @@
             text-align: right;
         }
 
-        /* ─── POLL ─── */
+        /* ─── POLL (legacy, superseded by .poll2) ─── */
         .message-bubble .poll-container {
             margin: 4px 0 2px;
             padding: 2px 0;
@@ -2465,7 +2471,7 @@
             display: none !important;
         }
 
-        /* ─── ATTACH MODAL ─── */
+        /* ─── ATTACH MODAL (legacy; superseded by attach-sheet) ─── */
         .attach-option {
             display: flex;
             align-items: center;
@@ -3992,6 +3998,139 @@
             line-height: 1.45;
             color: var(--muted2);
         }
+
+        /* ═══════════ UPGRADE CSS ═══════════ */
+
+        /* header + input never themed */
+        .chat-view-header.wp-glass, .message-input-area.wp-glass { background: var(--bg2) !important; }
+        .chat-view-header.wp-glass::before, .chat-view-header.wp-glass::after,
+        .message-input-area.wp-glass::before, .message-input-area.wp-glass::after { display: none !important; }
+
+        /* links in messages */
+        a.msg-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; word-break: break-all; cursor: pointer; }
+        .message-bubble.received a.msg-link { color: #60a5fa; }
+        .msg-caption { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
+
+        /* media / document bubbles (WhatsApp-style tight frame + caption below) */
+        .message-bubble.has-media { padding: 3px 3px 6px; width: 268px; max-width: 90%; }
+        .message-bubble.has-media .msg-media, .message-bubble.has-media .fu-media-grid-wrap { max-width: none; width: 100%; border-radius: 17px 17px 4px 4px; }
+        .message-bubble.has-media .msg-caption { padding: 4px 8px 0; }
+        .message-bubble.has-media .msg-footer { padding: 0 6px; }
+
+        /* document card */
+        .wa-doc { border-radius: 14px 14px 4px 4px; overflow: hidden; background: rgba(0,0,0,.18); cursor: pointer; width: 100%; }
+        .wa-doc-thumb { height: 130px; background: #fff center top / cover no-repeat; }
+        .wa-doc-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+        .wa-doc-ico { width: 36px; height: 42px; border-radius: 7px; display: flex; align-items: flex-end; justify-content: center; color: #fff; font-size: .58rem; font-weight: 800; padding-bottom: 5px; flex-shrink: 0; background: #8b5cf6; }
+        .wa-doc-ico.pdf { background: #ef4444; } .wa-doc-ico.doc, .wa-doc-ico.docx { background: #2563eb; }
+        .wa-doc-ico.xls, .wa-doc-ico.xlsx, .wa-doc-ico.csv { background: #16a34a; } .wa-doc-ico.ppt, .wa-doc-ico.pptx { background: #ea580c; }
+        .wa-doc-ico.txt { background: #6b7280; }
+        .wa-doc-info { min-width: 0; flex: 1; }
+        .wa-doc-name { font-weight: 700; font-size: .88rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .wa-doc-sub { font-size: .72rem; opacity: .7; margin-top: 2px; }
+
+        /* document viewer renderers */
+        .doc-canvas { display: block; margin: 8px auto; max-width: 100%; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.4); }
+        .docx-wrapper { background: transparent !important; padding: 8px 0 !important; }
+        .docx-wrapper > section.docx { margin-bottom: 10px !important; box-shadow: 0 2px 12px rgba(0,0,0,.4); }
+        .sheet-wrap { background: #fff; color: #111; padding: 8px; overflow: auto; width: 100%; }
+        .sheet-wrap table { border-collapse: collapse; font-size: 12px; }
+        .sheet-wrap td, .sheet-wrap th { border: 1px solid #ddd; padding: 3px 7px; white-space: nowrap; }
+        .doc-text { color: #eee; white-space: pre-wrap; padding: 16px; font: 13px/1.5 ui-monospace, Menlo, monospace; width: 100%; }
+        .doc-msg { color: #aaa; text-align: center; padding: 40px 24px; }
+        .doc-dl { margin-top: 14px; background: var(--p); color: #fff; border: none; padding: 11px 24px; border-radius: 100px; font-weight: 700; cursor: pointer; }
+
+        /* attach bottom sheet */
+        .poll-modal.attach-sheet { align-items: flex-end; padding: 0; background: rgba(0,0,0,.45); }
+        .attach-panel { width: 100%; max-width: 520px; margin: 0 auto; background: var(--bg2); border-radius: 24px 24px 0 0; border-top: 1px solid var(--brd); padding: 10px 20px calc(26px + env(safe-area-inset-bottom, 0px)); animation: sheetUp .28s cubic-bezier(.32,1,.64,1) both; }
+        .attach-grip { width: 38px; height: 4px; border-radius: 4px; background: var(--brd2); margin: 0 auto 20px; }
+        .attach-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px 6px; }
+        .attach-item { display: flex; flex-direction: column; align-items: center; gap: 8px; background: none; border: none; color: var(--text); cursor: pointer; font-size: .74rem; font-weight: 600; }
+        .attach-item .ai-ico { width: 58px; height: 58px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(0,0,0,.28); transition: transform .12s; }
+        .attach-item:active .ai-ico { transform: scale(.92); }
+        .ai-ico svg { width: 26px; height: 26px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        @keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
+
+        /* composer (preview before send) */
+        #fuComposer { background: #000; z-index: 420; }
+        .cmp-top { display: flex; align-items: center; gap: 10px; padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 10px; flex-shrink: 0; }
+        .cmp-btn { width: 42px; height: 42px; border-radius: 50%; border: none; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .cmp-btn svg { width: 20px; height: 20px; stroke: #fff; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+        .cmp-title { flex: 1; color: #fff; font-weight: 700; font-size: .95rem; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .cmp-stage { flex: 1; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center; -webkit-overflow-scrolling: touch; }
+        .cmp-stage.doc { display: block; background: #1a1a1a; padding: 8px 0; }
+        .cmp-stage img, .cmp-stage video { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .cmp-thumbs { display: flex; gap: 8px; padding: 10px 14px 4px; overflow-x: auto; justify-content: center; flex-shrink: 0; }
+        .cmp-thumbs:empty { display: none; }
+        .cmp-thumb { width: 54px; height: 54px; border-radius: 10px; overflow: hidden; position: relative; flex-shrink: 0; border: 2px solid transparent; opacity: .6; cursor: pointer; }
+        .cmp-thumb.active { border-color: #fff; opacity: 1; }
+        .cmp-thumb img, .cmp-thumb video { width: 100%; height: 100%; object-fit: cover; }
+        .cmp-thumb-x { position: absolute; top: 1px; right: 1px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(0,0,0,.7); color: #fff; font-size: 13px; line-height: 1; cursor: pointer; }
+        .cmp-capwrap { padding: 8px 14px 4px; flex-shrink: 0; }
+        .cmp-capwrap textarea { width: 100%; background: #1c1c1e; border: 1.5px solid #2c2c2e; color: #fff; border-radius: 22px; padding: 11px 16px; font: inherit; font-size: 15px; resize: none; outline: none; max-height: 120px; }
+        .cmp-bottom { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px calc(14px + env(safe-area-inset-bottom, 0px)); flex-shrink: 0; }
+        .cmp-to { background: #1c1c1e; color: #fff; border-radius: 12px; padding: 8px 14px; font-weight: 700; font-size: .9rem; max-width: 70%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .cmp-send { width: 52px; height: 52px; border-radius: 50%; border: none; background: var(--p); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .cmp-send svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+        /* in-app browser */
+        #fuBrowserScreen { z-index: 440; background: var(--bg); }
+        .br-top { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px; border-bottom: 1px solid var(--brd); background: var(--bg2); flex-shrink: 0; }
+        .br-top button { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--pdim); color: var(--p); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .br-url { flex: 1; min-width: 0; background: var(--inp); border-radius: 100px; padding: 8px 14px; font-size: .82rem; font-weight: 600; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .br-progress { height: 2px; width: 0; background: var(--p); transition: width .3s; flex-shrink: 0; }
+        .br-body { flex: 1; position: relative; background: #fff; min-height: 0; }
+        .br-body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+        .br-blocked { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 30px; }
+        .br-bottom { display: flex; justify-content: space-around; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--brd); background: var(--bg2); flex-shrink: 0; }
+        .br-act { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: var(--text); font-size: .68rem; font-weight: 700; cursor: pointer; }
+
+        /* in-chat search */
+        .chat-search-bar { display: none; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg2); border-bottom: 1px solid var(--brd); flex-shrink: 0; }
+        .chat-view.searching .chat-search-bar { display: flex; }
+        .chat-view.searching .chat-view-header, .chat-view.searching .message-input-area, .chat-view.searching #pinnedMsgBar { display: none !important; }
+        .csb-input { flex: 1; display: flex; align-items: center; gap: 8px; background: var(--inp); border-radius: 12px; padding: 0 12px; }
+        .csb-input svg { width: 17px; height: 17px; stroke: var(--muted); fill: none; stroke-width: 2.2; stroke-linecap: round; flex-shrink: 0; }
+        .csb-input input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-size: 16px; padding: 11px 0; min-width: 0; }
+        .csb-cancel { background: none; border: none; color: var(--p); font-weight: 700; font-size: .95rem; cursor: pointer; }
+        .chat-search-nav { display: none; align-items: center; justify-content: space-between; padding: 8px 16px calc(8px + var(--safe-bottom)); background: var(--bg2); border-top: 1px solid var(--brd); flex-shrink: 0; font-size: .85rem; font-weight: 700; color: var(--muted); }
+        .chat-view.searching .chat-search-nav { display: flex; }
+        .csn-arrows { display: flex; gap: 6px; }
+        .csn-arrows button { width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pdim); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .csn-arrows button:disabled { opacity: .3; cursor: default; }
+        .csn-arrows svg { width: 20px; height: 20px; stroke: var(--p); fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+        mark.srch { background: #facc15; color: #000; border-radius: 3px; padding: 0 1px; }
+        .message-bubble.search-current, .message-bubble-emoji-outer.search-current { outline: 2px solid var(--p); outline-offset: 3px; }
+
+        /* expandable composer */
+        .expand-btn { display: none; align-self: flex-start; margin-top: 6px; width: 28px; height: 28px; border: none; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; align-items: center; justify-content: center; flex-shrink: 0; }
+        .expand-btn.show { display: flex; }
+        .expand-btn svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+        .message-input-area.expanded .input-wrapper { border-radius: 18px; }
+        .message-input-area.expanded .input-wrapper textarea { min-height: 38vh; max-height: 55vh; }
+
+        /* modern poll */
+        .poll2 { min-width: 250px; padding: 2px 2px 0; }
+        .poll2-q { font-weight: 800; font-size: 1rem; line-height: 1.3; margin-bottom: 4px; }
+        .poll2-hint { font-size: .72rem; opacity: .7; margin-bottom: 10px; }
+        .poll2-opt { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; cursor: pointer; }
+        .poll2-check { width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55); flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+        .message-bubble.received .poll2-check { border-color: var(--muted2); }
+        .poll2-check svg { width: 12px; height: 12px; stroke: var(--p); fill: none; stroke-width: 3.5; opacity: 0; }
+        .poll2-opt.sel .poll2-check { background: #fff; border-color: #fff; }
+        .message-bubble.received .poll2-opt.sel .poll2-check { background: var(--p); border-color: var(--p); }
+        .message-bubble.received .poll2-check svg { stroke: #fff; }
+        .poll2-opt.sel .poll2-check svg { opacity: 1; }
+        .poll2-main { flex: 1; min-width: 0; }
+        .poll2-line { display: flex; justify-content: space-between; gap: 10px; font-size: .9rem; font-weight: 600; }
+        .poll2-count { font-weight: 700; opacity: .85; }
+        .poll2-bar { height: 6px; border-radius: 6px; background: rgba(255,255,255,.2); margin-top: 6px; overflow: hidden; }
+        .message-bubble.received .poll2-bar { background: var(--brd); }
+        .poll2-bar i { display: block; height: 100%; border-radius: 6px; background: #fff; transition: width .4s cubic-bezier(.4,0,.2,1); }
+        .message-bubble.received .poll2-bar i { background: var(--p); }
+        .poll2-foot { font-size: .72rem; opacity: .65; margin-top: 6px; }
+        .poll2-view { display: block; width: 100%; margin-top: 10px; padding: 10px 0 4px; border: none; border-top: 1px solid rgba(255,255,255,.2); background: none; color: inherit; font-weight: 800; font-size: .84rem; cursor: pointer; }
+        .message-bubble.received .poll2-view { border-top-color: var(--brd); color: var(--p); }
     </style>
 </head>
 <body>
@@ -4059,10 +4198,28 @@
                         </div>
                     </div>
 
+                    <div class="chat-search-bar" id="chatSearchBar">
+                        <div class="csb-input">
+                            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="text" id="chatSearchInput" placeholder="Search" autocomplete="off"
+                                   oninput="onChatSearchInput(this.value)"
+                                   onkeydown="if(event.key==='Enter'){event.preventDefault();chatSearchStep(-1)}">
+                        </div>
+                        <button class="csb-cancel" onclick="closeChatSearch()">Cancel</button>
+                    </div>
+
                     <!-- Pinned message bar -->
                     <div id="pinnedMsgBar" style="display:none;"></div>
 
                     <div class="messages-area" id="messagesArea"></div>
+
+                    <div class="chat-search-nav" id="chatSearchNav">
+                        <div class="csn-arrows">
+                            <button id="csnUp" onclick="chatSearchStep(-1)"><svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg></button>
+                            <button id="csnDown" onclick="chatSearchStep(1)"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>
+                        </div>
+                        <span id="csnCount"></span>
+                    </div>
 
                     <div class="message-input-area" id="messageInputArea">
                         <button class="attach-btn-round" onclick="openAttachModal()" title="Add">
@@ -4070,6 +4227,9 @@
                         </button>
                         <div class="input-wrapper" style="position:relative;" id="textInputWrapper">
                             <textarea id="messageInput" rows="1" placeholder="Type a message..." disabled></textarea>
+                            <button class="expand-btn" id="expandBtn" type="button" onclick="toggleComposerExpand()" title="Expand">
+                                <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                            </button>
                             <input type="file" id="fileInput" accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style="display:none" multiple />
                         </div>
                         <div class="voice-record-bar" id="voiceRecordBar">
@@ -4199,28 +4359,26 @@
         </div>
     </div>
 
-    <!-- ===== ATTACH MODAL ===== -->
-    <div class="poll-modal" id="attachModal">
-        <div class="poll-sheet" style="max-height:60vh;">
-            <div class="poll-header">
-                <h3>Add to chat</h3>
-                <button onclick="closeAttachModal()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-            </div>
-            <div class="attach-option" onclick="handleAttach('media')">
-                <span class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
-                <span class="label">Photo or Video</span>
-            </div>
-            <div class="attach-option" onclick="handleAttach('voice')">
-                <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>
-                <span class="label">Voice note</span>
-            </div>
-            <div class="attach-option" onclick="handleAttach('document')">
-                <span class="icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-                <span class="label">Document</span>
-            </div>
-            <div class="attach-option" onclick="handleAttach('poll')">
-                <span class="icon"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
-                <span class="label">Poll</span>
+    <!-- ===== ATTACH SHEET ===== -->
+    <div class="poll-modal attach-sheet" id="attachModal" onclick="if(event.target===this)closeAttachModal()">
+        <div class="attach-panel">
+            <div class="attach-grip"></div>
+            <div class="attach-grid">
+                <button class="attach-item" onclick="handleAttach('media')">
+                    <span class="ai-ico" style="background:linear-gradient(135deg,#60a5fa,#2563eb)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>Photos
+                </button>
+                <button class="attach-item" onclick="handleAttach('camera')">
+                    <span class="ai-ico" style="background:linear-gradient(135deg,#fb7185,#e11d48)"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>Camera
+                </button>
+                <button class="attach-item" onclick="handleAttach('document')">
+                    <span class="ai-ico" style="background:linear-gradient(135deg,#22d3ee,#0891b2)"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>Document
+                </button>
+                <button class="attach-item" onclick="handleAttach('voice')">
+                    <span class="ai-ico" style="background:linear-gradient(135deg,#fb923c,#ea580c)"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>Voice note
+                </button>
+                <button class="attach-item" onclick="handleAttach('poll')">
+                    <span class="ai-ico" style="background:linear-gradient(135deg,#facc15,#ca8a04)"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>Poll
+                </button>
             </div>
         </div>
     </div>
@@ -4574,6 +4732,47 @@
         </div>
     </div>
 
+    <!-- ===== MEDIA / DOCUMENT COMPOSER (preview before send) ===== -->
+    <div class="fu-screen" id="fuComposer">
+        <div class="cmp-top">
+            <button class="cmp-btn" onclick="closeComposer()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            <div class="cmp-title" id="cmpTitle"></div>
+            <button class="cmp-btn" id="cmpAddBtn" onclick="composerAddMore()"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        </div>
+        <div class="cmp-stage" id="cmpStage"></div>
+        <div class="cmp-thumbs" id="cmpThumbs"></div>
+        <div class="cmp-capwrap"><textarea id="cmpCaption" rows="1" placeholder="Add a caption..."></textarea></div>
+        <div class="cmp-bottom">
+            <span class="cmp-to" id="cmpTo"></span>
+            <button class="cmp-send" onclick="sendComposer()"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+        </div>
+    </div>
+
+    <!-- ===== IN-APP BROWSER ===== -->
+    <div class="fu-screen" id="fuBrowserScreen">
+        <div class="br-top">
+            <button onclick="closeInAppBrowser()"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            <div class="br-url"><span id="brLock">🔒 </span><span id="brDomain"></span></div>
+            <button onclick="brReload()"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg></button>
+        </div>
+        <div class="br-progress" id="brProgress"></div>
+        <div class="br-body">
+            <iframe id="brFrame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+            <div class="br-blocked hidden" id="brBlocked">
+                <div style="font-size:2.6rem">🌐</div>
+                <div style="font-weight:800;font-size:1.05rem">Can't open inside FreeUpper</div>
+                <div id="brBlockedMsg" style="color:var(--muted);font-size:.85rem;line-height:1.5;max-width:300px"></div>
+                <button class="cg-create-btn" style="padding:12px 26px;flex:none" onclick="brOpenExternal()">Open in browser</button>
+            </div>
+        </div>
+        <div class="br-bottom">
+            <button class="br-act" onclick="brOpenExternal()"><svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Open in browser</button>
+            <button class="br-act" onclick="brOpenChrome()"><svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>Chrome</button>
+            <button class="br-act" onclick="brCopy()"><svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy link</button>
+            <button class="br-act" onclick="brShare()"><svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>Share</button>
+        </div>
+    </div>
+
     <!-- ===== GROUP PREVIEW SCREEN ===== -->
     <div class="fu-screen" id="fuGroupPreviewScreen">
         <div class="fu-screen-header">
@@ -4613,7 +4812,7 @@
             let blockedByMeIds = new Set();
             let messageSubscription = null;
             let conversationSubscription = null;
-            let presenceSubscription = null; // for online status
+            let presenceSubscription = null;
             let typingTimeout = null;
             let replyTargetMessage = null;
             let userSearchDebounce = null;
@@ -4630,10 +4829,8 @@
             let groupSenderNameCache = {};
             const SENDER_NAME_COLORS = ['#e17076', '#7bc862', '#65aadd', '#a695e7', '#ee7aae', '#6ec9cb', '#faa774', '#a6a6a6'];
 
-            // ─── FIX #1: presence heartbeat ───
             let presenceHeartbeatInterval = null;
 
-            // ===== AM (Add Members) state =====
             let amSelectedIds = new Set();
             let amFriendsCache = [];
             let amAllUsersProfileCache = {};
@@ -4642,8 +4839,11 @@
             let currentInviteLink = '';
             let amAddAsAdmin = false;
 
-            // ===== Permission enforcement state =====
             let canSendMessages = true;
+            let chatSearch = { open: false, term: '', matchIds: [], idx: -1 };
+            let composerItems = [];
+            let composerIdx = 0;
+            const linkPreviewCache = {};
 
             function senderColorFor(userId) {
                 let x = 0;
@@ -4651,7 +4851,6 @@
                 return SENDER_NAME_COLORS[x % SENDER_NAME_COLORS.length];
             }
 
-            // ─── Helper: can the current user send messages in a given conversation? ───
             async function canSendInConversation(conv) {
                 if (!conv.is_group || conv.is_note) return true;
                 if (conv.permissions?.send_messages === 'everyone') return true;
@@ -4689,9 +4888,6 @@
                 }, 50);
             }
 
-            // ============================================================
-            // DOM REFS
-            // ============================================================
             const convList = document.getElementById('conversationList');
             const messagesArea = document.getElementById('messagesArea');
             let messageInput = document.getElementById('messageInput');
@@ -4703,9 +4899,6 @@
             const fileInput = document.getElementById('fileInput');
             const messageInputArea = document.getElementById('messageInputArea');
 
-            // ============================================================
-            // HELPERS
-            // ============================================================
             function showToast(msg, type) {
                 const w = document.getElementById('tw');
                 if (!w) return;
@@ -4786,7 +4979,6 @@
                 return `onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'"`;
             }
 
-            // ─── Empty illustration helper ───
             function emptyChatIllustration() {
                 return '<img class="empty-illustration-img" src="illustration.png" alt="">';
             }
@@ -4797,7 +4989,6 @@
                 selectConversation(convId);
             };
 
-            // ─── FIX #2: resolve message sender name for reply preview ───
             function resolveMsgSenderName(senderId) {
                 if (senderId === currentUserId) return 'You';
                 const conv = currentConv();
@@ -4810,9 +5001,6 @@
                 return 'User';
             }
 
-            // ============================================================
-            // TRUNCATION / RENDER HELPERS
-            // ============================================================
             const MESSAGE_COLLAPSE_LIMIT = 1000;
 
             function findTruncationPoint(text, limit) {
@@ -4828,11 +5016,11 @@
 
             function renderMessageText(text) {
                 if (!text) return '';
-                const safe = escapeHtml(text);
+                const safe = decorateText(text);
                 if (text.length <= MESSAGE_COLLAPSE_LIMIT) return safe;
 
                 const cutPoint = findTruncationPoint(text, MESSAGE_COLLAPSE_LIMIT);
-                const shortSafe = escapeHtml(text.slice(0, cutPoint));
+                const shortSafe = decorateText(text.slice(0, cutPoint));
                 const uid = 'msgtxt_' + Math.random().toString(36).slice(2, 9);
 
                 return `
@@ -4852,9 +5040,6 @@
                 btn.textContent = isExpanded ? 'See more' : 'See less';
             };
 
-            // ============================================================
-            // MEDIA TIME OVERLAY
-            // ============================================================
             function mediaTimeOverlayHtml(msg, isSent) {
                 let receipt = '';
                 if (isSent && !msg.failed) {
@@ -4867,9 +5052,6 @@
                 return `<div class="media-time-overlay">${formatTime(msg.created_at)}${receipt}</div>`;
             }
 
-            // ============================================================
-            // EMOJI DETECTION
-            // ============================================================
             const SINGLE_EMOJI_ANIMATIONS = {
                 '😘': 'anim-kiss', '❤️': 'anim-heartbeat', '😂': 'anim-laugh',
                 '😭': 'anim-cry', '😍': 'anim-heart-eyes', '😡': 'anim-angry',
@@ -4904,9 +5086,6 @@
                 `;
             }
 
-            // ============================================================
-            // REACTION SLATE
-            // ============================================================
             function renderReactionSlate(reactionList, msgId, mediaIndex) {
                 if (!reactionList.length) return '';
                 const emojiCounts = {};
@@ -4957,9 +5136,6 @@
                 if (sheet) sheet.classList.remove('open');
             };
 
-            // ============================================================
-            // IMAGE GALLERY
-            // ============================================================
             function renderImageGallery(urls, msgId) {
                 const msg = messages.find(m => m.id === msgId);
                 const n = urls.length;
@@ -5004,9 +5180,6 @@
                 if (sheet) sheet.classList.remove('open');
             };
 
-            // ============================================================
-            // FULLSCREEN LIGHTBOX
-            // ============================================================
             function videoThumbUrl(url) {
                 if (!url) return '';
                 return url.replace(/\.(mp4|mov|webm|mkv|avi|m4v)(\?.*)?$/i, '.jpg$2');
@@ -5205,9 +5378,6 @@
                 openMediaLightbox([{ url, type: 'video' }], 0, msgId, authorName, msg && msg.created_at);
             };
 
-            // ============================================================
-            // BLOCK STATE
-            // ============================================================
             async function loadMyBlockList() {
                 if (!window.SettingsAPI || typeof window.SettingsAPI.listBlockedUsers !== 'function') return;
                 try {
@@ -5231,9 +5401,6 @@
                 return { iBlockedThem: iBlockedThem, theyBlockedMe: theyBlockedMe, blocked: iBlockedThem || theyBlockedMe };
             }
 
-            // ============================================================
-            // LOAD MUTUAL FOLLOWERS
-            // ============================================================
             async function loadMutualFollowers() {
                 if (!currentUserId) return;
                 try {
@@ -5264,9 +5431,6 @@
                 }
             }
 
-            // ============================================================
-            // SUPABASE - CONVERSATIONS
-            // ============================================================
             async function loadConversations() {
                 if (!currentUserId) return;
                 try {
@@ -5356,9 +5520,6 @@
                 }
             }
 
-            // ============================================================
-            // RENDER CONVERSATIONS
-            // ============================================================
             function renderConversations(filter = '') {
                 const q = filter.toLowerCase().trim();
                 let html = '';
@@ -5474,10 +5635,8 @@
 
             window.filterConversations = function(value) { renderConversations(value); };
 
-            // ============================================================
-            // SELECT CONVERSATION
-            // ============================================================
             window.selectConversation = async function(convId) {
+                if (chatSearch.open) closeChatSearch();
                 selectedConversationId = convId;
                 const conv = conversations.find(c => c.id === convId);
                 if (!conv) return;
@@ -5568,7 +5727,6 @@
                 renderConversations(convSearch.value);
             };
 
-            // ─── Helper: render partner status ───
             function renderPartnerStatus(conv) {
                 if (!conv || conv.is_group || conv.is_note) return;
                 if (selectedConversationId !== conv.id) return;
@@ -5616,9 +5774,6 @@
                 messageInputArea.innerHTML = `<span>${msg.title}</span>`;
             }
 
-            // ============================================================
-            // LOAD MESSAGES
-            // ============================================================
             async function loadMessages(convId) {
                 try {
                     const { data, error } = await sb
@@ -5634,6 +5789,7 @@
                     if (error) throw error;
                     messages = (data || []).filter(m => !(m.deleted_for || []).includes(currentUserId) &&
                         (m.expires_at === null || new Date(m.expires_at) > new Date()));
+                    await loadMyPollVotes(messages);
                     const conv = conversations.find(c => c.id === convId);
                     if (conv && conv.is_group) {
                         const senderIds = [...new Set(messages.map(m => m.sender_id))];
@@ -5648,27 +5804,6 @@
                 }
             }
 
-            // ============================================================
-            // FREEUPPER COMBINED APP BADGE
-            // ============================================================
-            //
-            // Badge = unread chat messages + unread social notifications.
-            //
-            // Primary RPC: get_unread_message_count(p_user_id)
-            // Fallback RPC: get_my_unread_message_count()
-            //
-            // Notifications table: notifications.receiver_id + read = false
-            //
-            // The existing callers (markVisibleMessagesRead, initChat,
-            // visibilitychange) continue to call syncFreeUpperUnreadBadge(),
-            // which now also updates the combined badge.
-            //
-            // Additionally, when FreeUpper is in the foreground and a social
-            // push arrives via FCM onMessage, the new async handler inside
-            // setupFreeUpperNotifications() updates the badge from
-            // payload.data.unread_count.
-            // ============================================================
-
             async function computeFreeUpperUnreadCounts() {
                 const result = {
                     unreadMessages: 0,
@@ -5677,7 +5812,6 @@
 
                 if (!currentUserId || !sb) return result;
 
-                // ---- Unread chat messages ----
                 try {
                     const { data: messageCount, error: messageError } =
                         await sb.rpc('get_unread_message_count', { p_user_id: currentUserId });
@@ -5685,7 +5819,6 @@
                     if (!messageError) {
                         result.unreadMessages = Math.max(0, Math.floor(Number(messageCount) || 0));
                     } else {
-                        // Fallback to the older RPC if the new one isn't deployed
                         const { data: fallback, error: fallbackError } =
                             await sb.rpc('get_my_unread_message_count');
                         if (!fallbackError) {
@@ -5698,7 +5831,6 @@
                     console.warn('Unread message count failed:', e);
                 }
 
-                // ---- Unread social notifications ----
                 try {
                     const { count, error: notifError } = await sb
                         .from('notifications')
@@ -5745,8 +5877,6 @@
                 }
             }
 
-            // Kept for existing call sites (markVisibleMessagesRead, initChat,
-            // visibilitychange). Now updates the combined badge.
             async function syncFreeUpperUnreadBadge() {
                 await updateFreeUpperAppBadge();
             }
@@ -5762,8 +5892,6 @@
                         )
                 );
 
-                // Even if there was nothing new to mark as read,
-                // make sure the app badge reflects the database.
                 if (!unread.length) {
                     await syncFreeUpperUnreadBadge();
                     return;
@@ -5790,7 +5918,6 @@
                         return;
                     }
 
-                    // Keep the local message state synchronized.
                     const readIds = new Set(unread.map(m => m.id));
 
                     messages.forEach(m => {
@@ -5806,31 +5933,7 @@
                     return;
                 }
 
-                // Now calculate the real remaining combined unread count.
                 await syncFreeUpperUnreadBadge();
-            }
-
-            // ============================================================
-            // LINK PREVIEW HELPERS
-            // ============================================================
-            async function fetchLinkPreview(url) {
-                try {
-                    const proxyUrl =
-                        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                    const resp = await fetch(proxyUrl);
-                    if (!resp.ok) return null;
-                    const html = await resp.text();
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const ogTitle = doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
-                        doc.querySelector('title')?.textContent || url;
-                    const ogDesc = doc.querySelector('meta[property="og:description"]')?.getAttribute('content') || '';
-                    const ogImage = doc.querySelector('meta[property="og:image"]')?.getAttribute('content') || '';
-                    const ogSite = doc.querySelector('meta[property="og:site_name"]')?.getAttribute('content') || '';
-                    let domain = url;
-                    try { domain = new URL(url).hostname.replace('www.', ''); } catch (e) {}
-                    return { title: ogTitle, description: ogDesc, image: ogImage, domain: domain, siteName: ogSite };
-                } catch (e) { return null; }
             }
 
             function renderLinkPreview(preview, isSent) {
@@ -5841,7 +5944,7 @@
 
                 if (preview.failed || (!preview.title && !preview.image)) {
                     return `
-                                <div class="link-preview link-preview-plain ${isSent ? 'sent' : ''}" onclick="window.open('${preview.url}','_blank')">
+                                <div class="link-preview link-preview-plain ${isSent ? 'sent' : ''}" data-open-url="${escapeHtml(preview.url || '').replace(/"/g, '&quot;')}">
                                     <div class="lp-plain-ico"><i class="ri-link"></i></div>
                                     <div class="lp-body">
                                         <div class="lp-title">${escapeHtml(preview.url)}</div>
@@ -5855,7 +5958,7 @@
                     `<img class="lp-image" src="${preview.image}" alt="" loading="lazy" onerror="this.parentElement.classList.add('lp-noimg');this.remove()">` :
                     '';
                 return `
-                            <div class="link-preview ${isSent ? 'sent' : ''} ${!preview.image ? 'lp-noimg' : ''}" onclick="window.open('${preview.url || '#'}','_blank')">
+                            <div class="link-preview ${isSent ? 'sent' : ''} ${!preview.image ? 'lp-noimg' : ''}" data-open-url="${escapeHtml(preview.url || '').replace(/"/g, '&quot;')}">
                                 ${img}
                                 <div class="lp-body">
                                     <div class="lp-title">${escapeHtml(preview.title || preview.url || '')}</div>
@@ -5867,7 +5970,7 @@
             }
 
             function extractUrls(text) {
-                const urlRe = /(https?:\/\/[^\s]+)/gi;
+                const urlRe = /(https?:\/\/[^\s"'<>]+)/gi;
                 const matches = text.match(urlRe);
                 if (!matches) return [];
                 return matches.filter(u => u.length > 5);
@@ -5917,9 +6020,6 @@
                 `;
             }
 
-            // ============================================================
-            // RENDER MESSAGES
-            // ============================================================
             function renderMessages() {
                 if (!messages.length) {
                     const conv = conversations.find(c => c.id === selectedConversationId);
@@ -5991,14 +6091,12 @@
                         msg._pendingUrls = urls;
                     }
 
-                    // Media
                     if (msg.message_type === 'image' && msg.media_url) {
                         const uploadSpinner = msg.uploading ?
                             `<div class="upload-spinner"><div class="ring"></div></div>` : '';
                         if (msg.media_urls && msg.media_urls.length > 1) {
                             contentHtml = renderImageGallery(msg.media_urls, msg.id) +
-                                (textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` :
-                                '');
+                                (textContent ? captionHtml(textContent) : '');
                         } else {
                             const mediaTime = mediaTimeOverlayHtml(msg, isSent);
                             contentHtml = `
@@ -6007,7 +6105,7 @@
                                             ${uploadSpinner}
                                             ${!textContent ? mediaTime : ''}
                                         </div>
-                                        ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
+                                        ${textContent ? captionHtml(textContent) : ''}
                                     `;
                         }
                     } else if (msg.message_type === 'video' && msg.media_url) {
@@ -6022,7 +6120,7 @@
                                         ${uploadSpinner}
                                         ${!textContent ? mediaTimeV : ''}
                                     </div>
-                                    ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
+                                    ${textContent ? captionHtml(textContent) : ''}
                                 `;
                     } else if (msg.message_type === 'voice' && msg.media_url) {
                         const initialDur = msg.voice_duration ? formatVoiceTime(msg.voice_duration) : '0:00';
@@ -6035,52 +6133,12 @@
                                         <div class="voice-wave" id="vwave-${msg.id}" onclick="seekVoiceWave(event, '${msg.id}')">${renderVoiceWaveformBars(msg.id)}</div>
                                         <span class="voice-duration" id="vdur-${msg.id}">${initialDur}</span>
                                     </div>
-                                    ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
+                                    ${textContent ? captionHtml(textContent) : ''}
                                 `;
                     } else if (msg.message_type === 'document' && msg.media_url) {
-                        const fileName = msg.media_url.split('/').pop() || 'Document';
-                        const ext = fileName.split('.').pop()?.toLowerCase() || '';
-                        const icons = { pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊', ppt: '📽️', pptx: '📽️',
-                            zip: '📦', txt: '📃' };
-                        const icon = icons[ext] || '📄';
-                        contentHtml = `
-                                    <div class="msg-doc" onclick="openDocument('${msg.media_url}','${msg.id}')">
-                                        <span class="doc-icon">${icon}</span>
-                                        <div class="doc-info">
-                                            <div class="doc-name">${escapeHtml(fileName)}</div>
-                                            <div class="doc-size">Tap to open</div>
-                                        </div>
-                                    </div>
-                                    ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
-                                `;
+                        contentHtml = docCardHtml(msg, textContent);
                     } else if (msg.message_type === 'poll' && msg.poll_data) {
-                        const poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
-                        const totalVotes = poll.options.reduce((sum, o) => sum + (o.votes || 0), 0);
-                        const expired = poll.expiresAt && new Date(poll.expiresAt) < new Date();
-                        contentHtml = `
-                                    <div class="poll-container">
-                                        <div class="poll-question">${escapeHtml(poll.question)}</div>
-                                        <div class="poll-hint"><svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> Select one or more</div>
-                                        ${poll.options.map((opt, idx) => {
-                                            const pct = totalVotes > 0 ? Math.round((opt.votes || 0) / totalVotes * 100) : 0;
-                                            const selected = poll.userVote === idx;
-                                            const disabled = expired || (poll.userVote !== undefined && poll.userVote !== null && poll.userVote !== idx);
-                                            return `
-                                                <div class="poll-option ${selected ? 'selected' : ''}" onclick="${!disabled ? `handlePollOptionClick('${msg.id}', ${idx})` : ''}" style="${disabled ? 'opacity:.55;cursor:default;' : ''}">
-                                                    <div class="poll-option-top">
-                                                        <div class="poll-radio">${selected ? '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</div>
-                                                        <span class="poll-label">${escapeHtml(opt.text)}</span>
-                                                        <span class="poll-pct">${totalVotes > 0 ? pct + '%' : ''}</span>
-                                                    </div>
-                                                    <div class="poll-bar-track"><div class="poll-bar" style="width:${pct}%;"></div></div>
-                                                </div>
-                                            `;
-                                        }).join('')}
-                                        <div class="poll-meta">${poll.expiresAt ? (new Date(poll.expiresAt) > new Date() ? 'Ends ' + formatDate(poll.expiresAt) : 'Poll ended') : 'Open indefinitely'}</div>
-                                        <div class="poll-view-votes" onclick="event.stopPropagation();showPollVoters('${msg.id}')">View votes</div>
-                                    </div>
-                                    ${textContent ? `<div style="margin-top:4px;">${escapeHtml(textContent)}</div>` : ''}
-                                `;
+                        contentHtml = renderPollHtml(msg, textContent);
                     } else {
                         const soloEmoji = !msg.reply_to && isSingleEmojiMessage(textContent);
                         if (soloEmoji) {
@@ -6097,7 +6155,6 @@
                     if (msg.reply_to) {
                         const replied = messages.find(m => m.id === msg.reply_to);
                         if (replied) {
-                            // FIX #2: use resolveMsgSenderName instead of hardcoded fallback
                             const replyAuthor = resolveMsgSenderName(replied.sender_id);
                             let replyThumb = '';
                             let replyLabel = escapeHtml(replied.text || '');
@@ -6172,7 +6229,7 @@
                             `;
                     } else {
                         html += `
-                                <div class="message-bubble ${msgClass}${msg.failed ? ' failed' : ''}${isMediaOnly ? ' media-only' : ''}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:20px;' : ''}">
+                                <div class="message-bubble ${msgClass}${msg.failed ? ' failed' : ''}${isMediaOnly ? ' media-only' : ''}${hasMediaBubble(msg, textContent) ? ' has-media' : ''}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:20px;' : ''}">
                                     ${senderNameHtml}
                                     ${replyHtml}
                                     ${contentHtml}
@@ -6229,18 +6286,6 @@
                 }
             }
 
-            // ─── Poll voters ───
-            window.showPollVoters = function(msgId) {
-                const msg = messages.find(m => m.id === msgId);
-                if (!msg) return;
-                const poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
-                const total = poll.options.reduce((s, o) => s + (o.votes || 0), 0);
-                showToast(`${total} vote${total !== 1 ? 's' : ''} total`, 'p');
-            };
-
-            // ============================================================
-            // VOICE PLAYER
-            // ============================================================
             const fuAudioEl = document.getElementById('fuVoicePlayer');
             let currentAudioMsgId = null;
             let currentAudioBtn = null;
@@ -6357,10 +6402,28 @@
                 fuAudioEl.onended = () => stopCurrentVoice();
             };
 
-            // ============================================================
-            // POLL HELPERS
-            // ============================================================
+            const pollVotesByMessage = new Map();
+            const pollVoteRequests = new Set();
             let pendingVoteRemoval = null;
+
+            async function loadMyPollVotes(pollMessages) {
+                pollVotesByMessage.clear();
+                const pollIds = (pollMessages || [])
+                    .filter(m => m.message_type === 'poll' && m.poll_data)
+                    .map(m => m.id);
+                if (!currentUserId || pollIds.length === 0) return;
+                const { data, error } = await sb
+                    .from('chat_poll_votes')
+                    .select('message_id, option_index')
+                    .in('message_id', pollIds);
+                if (error) {
+                    console.error('Failed to load poll votes:', error);
+                    return;
+                }
+                (data || []).forEach(vote => {
+                    pollVotesByMessage.set(vote.message_id, vote.option_index);
+                });
+            }
 
             function openRemoveVoteConfirm(messageId, optionIdx) {
                 pendingVoteRemoval = { messageId, optionIdx };
@@ -6392,49 +6455,77 @@
 
             window.confirmRemoveVote = async function() {
                 if (!pendingVoteRemoval) return;
-                const { messageId, optionIdx } = pendingVoteRemoval;
-                const msg = messages.find(m => m.id === messageId);
+                const { messageId } = pendingVoteRemoval;
                 window.closeRemoveVoteConfirm();
+                if (pollVoteRequests.has(messageId)) return;
+                const msg = messages.find(m => m.id === messageId);
                 if (!msg) return;
-                let poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
-                poll.options[optionIdx].votes = Math.max(0, (poll.options[optionIdx].votes || 0) - 1);
-                poll.userVote = null;
-                delete poll.userVote;
+                pollVoteRequests.add(messageId);
                 try {
-                    const { error } = await sb.from('messages').update({ poll_data: poll }).eq('id', messageId);
+                    const { data, error } = await sb.rpc('cast_chat_poll_vote', {
+                        p_message_id: messageId,
+                        p_option_index: null
+                    });
                     if (error) throw error;
-                    msg.poll_data = poll;
+                    const latest = messages.find(m => m.id === messageId);
+                    if (latest && data?.poll_data) {
+                        latest.poll_data = data.poll_data;
+                    }
+                    pollVotesByMessage.delete(messageId);
                     renderMessages();
-                } catch (err) { showToast('Failed to remove vote', 'r'); }
+                } catch (err) {
+                    console.error('Remove poll vote failed:', err);
+                    showToast(
+                        err?.message || 'Failed to remove vote',
+                        'r'
+                    );
+                } finally {
+                    pollVoteRequests.delete(messageId);
+                }
             };
 
             window.handlePollOptionClick = async function(messageId, optionIdx) {
                 const msg = messages.find(m => m.id === messageId);
-                if (!msg) return;
-                let poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
-
-                if (poll.userVote === optionIdx) {
+                if (!msg || pollVoteRequests.has(messageId)) return;
+                const poll = typeof msg.poll_data === 'string'
+                    ? JSON.parse(msg.poll_data)
+                    : msg.poll_data;
+                if (!poll || !Array.isArray(poll.options)) return;
+                if (
+                    pollVotesByMessage.has(messageId) &&
+                    pollVotesByMessage.get(messageId) === optionIdx
+                ) {
                     openRemoveVoteConfirm(messageId, optionIdx);
                     return;
                 }
-
-                if (poll.userVote !== undefined && poll.userVote !== null) {
-                    poll.options[poll.userVote].votes = Math.max(0, (poll.options[poll.userVote].votes || 0) - 1);
-                }
-                poll.options[optionIdx].votes = (poll.options[optionIdx].votes || 0) + 1;
-                poll.userVote = optionIdx;
-
+                pollVoteRequests.add(messageId);
                 try {
-                    const { error } = await sb.from('messages').update({ poll_data: poll }).eq('id', messageId);
+                    const { data, error } = await sb.rpc('cast_chat_poll_vote', {
+                        p_message_id: messageId,
+                        p_option_index: optionIdx
+                    });
                     if (error) throw error;
-                    msg.poll_data = poll;
+                    const latest = messages.find(m => m.id === messageId);
+                    if (latest && data?.poll_data) {
+                        latest.poll_data = data.poll_data;
+                    }
+                    if (data?.user_vote === null || data?.user_vote === undefined) {
+                        pollVotesByMessage.delete(messageId);
+                    } else {
+                        pollVotesByMessage.set(messageId, data.user_vote);
+                    }
                     renderMessages();
-                } catch (err) { showToast('Failed to vote', 'r'); }
+                } catch (err) {
+                    console.error('Poll vote failed:', err);
+                    showToast(
+                        err?.message || 'Failed to vote',
+                        'r'
+                    );
+                } finally {
+                    pollVoteRequests.delete(messageId);
+                }
             };
 
-            // ============================================================
-            // FORWARD
-            // ============================================================
             let forwardTargetMsgId = null;
             let forwardSelected = new Set();
 
@@ -6530,6 +6621,7 @@
                         message_type: msg.message_type,
                         media_url: msg.media_url || null,
                         media_urls: msg.media_urls || null,
+                        ...(msg.media_meta ? { media_meta: msg.media_meta } : {}),
                         poll_data: null,
                     }));
                     const { error } = await sb.from('messages').insert(rows);
@@ -6540,9 +6632,6 @@
                 } catch (err) { showToast('Failed to forward', 'r'); }
             };
 
-            // ============================================================
-            // ACTION SHEET (long-press)
-            // ============================================================
             let msgSheetTarget = null;
 
             function openMessageActionSheet(msgId) {
@@ -6711,9 +6800,6 @@
                 showToast('Deleted for you', 'g');
             };
 
-            // ============================================================
-            // REACTION
-            // ============================================================
             window.addReaction = async function(msgId, emoji, mediaIndex) {
                 const msg = messages.find(m => m.id === msgId);
                 if (!msg) return;
@@ -6742,9 +6828,6 @@
                 } catch (err) { showToast('Failed to react', 'r'); }
             };
 
-            // ============================================================
-            // SWIPE-TO-REPLY
-            // ============================================================
             let lpTimer = null;
             let lpTarget = null;
             let swipeBubble = null;
@@ -6809,9 +6892,6 @@
                 swipeMsgId = null;
             }
 
-            // ============================================================
-            // CONVERSATION ACTION SHEET
-            // ============================================================
             window.openConvActionSheet = function(convId) {
                 const conv = conversations.find(c => c.id === convId);
                 if (!conv) return;
@@ -6896,7 +6976,6 @@
                 showToast('Chat deleted', 'g');
             }
 
-            // ─── Pull-down archived ───
             convList.addEventListener('touchstart', function(e) {
                 if (convList.scrollTop <= 0) clPullStartY = e.touches[0].clientY;
             }, { passive: true });
@@ -6993,83 +7072,6 @@
                 showToast('Chat unarchived', 'g');
             };
 
-            // ============================================================
-            // DOCUMENT VIEWER
-            // ============================================================
-            window.openDocument = function(url, msgId) {
-                const fileName = (url.split('/').pop() || 'Document').split('?')[0];
-                const ext = fileName.split('.').pop()?.toLowerCase() || '';
-                const msg = messages.find(m => m.id === msgId);
-                const isMine = msg && msg.sender_id === currentUserId;
-                let modal = document.getElementById('fuDocViewer');
-                if (modal) modal.remove();
-                modal = document.createElement('div');
-                modal.id = 'fuDocViewer';
-                modal.className = 'fu-screen';
-                modal.innerHTML = `
-                    <div class="fu-screen-header">
-                        <button onclick="closeDocViewer()"><i class="ri-arrow-left-line"></i></button>
-                        <h3 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(fileName)}</h3>
-                        <button onclick="downloadMedia('${url}')"><i class="ri-download-2-line"></i></button>
-                        ${isMine ? `<button onclick="closeDocViewer();deleteMessage('${msgId}','everyone')"><i class="ri-delete-bin-line"></i></button>` : ''}
-                    </div>
-                    <div class="fu-body" id="fuDocViewerBody" style="padding:0;background:#111;display:flex;flex-direction:column;align-items:center;"></div>
-                `;
-                document.body.appendChild(modal);
-                lockBody();
-                requestAnimationFrame(() => modal.classList.add('open'));
-
-                const body = document.getElementById('fuDocViewerBody');
-                if (ext === 'pdf') {
-                    body.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center;">Loading document…</div>';
-                    renderPdfPreview(url, body);
-                } else {
-                    const icons = { doc: '📝', docx: '📝', xls: '📊', xlsx: '📊', ppt: '📽️', pptx: '📽️', zip: '📦', txt: '📃' };
-                    body.innerHTML = `
-                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px 24px;text-align:center;color:#fff;">
-                            <div style="font-size:4rem;margin-bottom:16px;">${icons[ext] || '📄'}</div>
-                            <div style="font-weight:700;margin-bottom:6px;word-break:break-all;">${escapeHtml(fileName)}</div>
-                            <div style="color:#999;font-size:.85rem;margin-bottom:22px;">This file type can't be previewed in-app</div>
-                            <button onclick="downloadMedia('${url}')" style="background:var(--p);color:#fff;border:none;padding:12px 24px;border-radius:100px;font-weight:700;cursor:pointer;">Download</button>
-                        </div>
-                    `;
-                }
-            };
-
-            window.closeDocViewer = function() {
-                const modal = document.getElementById('fuDocViewer');
-                if (!modal) return;
-                modal.classList.remove('open');
-                unlockBody();
-                setTimeout(() => modal.remove(), 250);
-            };
-
-            async function renderPdfPreview(url, container) {
-                try {
-                    const loadingTask = pdfjsLib.getDocument(url);
-                    const pdf = await loadingTask.promise;
-                    container.innerHTML = '';
-                    const numPages = Math.min(pdf.numPages, 30);
-                    for (let i = 1; i <= numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const viewport = page.getViewport({ scale: Math.min(1.4, (window.innerWidth - 20) / page
-                                .getViewport({ scale: 1 }).width) });
-                        const canvas = document.createElement('canvas');
-                        canvas.style.cssText = 'margin:8px auto;max-width:100%;box-shadow:0 2px 12px rgba(0,0,0,.4);';
-                        canvas.width = viewport.width;
-                        canvas.height = viewport.height;
-                        container.appendChild(canvas);
-                        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-                    }
-                } catch (err) {
-                    container.innerHTML =
-                        `<div style="color:#aaa;padding:30px;text-align:center;">Couldn't preview this PDF.<br><button onclick="downloadMedia('${url}')" style="margin-top:14px;background:var(--p);color:#fff;border:none;padding:10px 20px;border-radius:100px;font-weight:700;cursor:pointer;">Download instead</button></div>`;
-                }
-            }
-
-            // ============================================================
-            // SEND MESSAGE
-            // ============================================================
             window.sendMessage = async function() {
                 if (isBlockedConversation || !canSendMessages) return;
                 const input = document.getElementById('messageInput');
@@ -7094,6 +7096,7 @@
                 const replyTo = replyTargetMessage ? replyTargetMessage.id : null;
                 input.value = '';
                 input.style.height = 'auto';
+                collapseComposer();
                 const btn = document.getElementById('sendBtn');
                 if (btn) btn.classList.remove('visible');
                 const mic = document.getElementById('micBtn');
@@ -7109,7 +7112,7 @@
             };
 
             async function sendMessageToConv(text, type = 'text', mediaUrl = null, replyTo = null, pollData = null,
-                mediaUrls = null, voiceDurationSecs = null) {
+                mediaUrls = null, voiceDurationSecs = null, mediaMeta = null) {
                 if (!selectedConversationId || isBlockedConversation || !canSendMessages) return;
                 const payload = {
                     conversation_id: selectedConversationId,
@@ -7121,6 +7124,7 @@
                     poll_data: pollData || null,
                     media_urls: mediaUrls || null,
                     voice_duration: voiceDurationSecs || null,
+                    ...(mediaMeta ? { media_meta: mediaMeta } : {}),
                 };
                 const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
                 const tempMsg = { ...payload, id: tempId, created_at: new Date().toISOString() };
@@ -7153,12 +7157,9 @@
                 messages.splice(idx, 1);
                 renderMessages();
                 sendMessageToConv(msg.text, msg.message_type, msg.media_url, msg.reply_to, msg.poll_data, msg
-                .media_urls, msg.voice_duration);
+                .media_urls, msg.voice_duration, msg.media_meta);
             };
 
-            // ============================================================
-            // REAL-TIME SUBSCRIPTIONS
-            // ============================================================
             function subscribeToMessages() {
                 if (messageSubscription) { sb.removeChannel(messageSubscription);
                     messageSubscription = null; }
@@ -7185,7 +7186,7 @@
                         const updated = payload.new;
                         if (updated.conversation_id === selectedConversationId) {
                             const idx = messages.findIndex(m => m.id === updated.id);
-                            if (idx !== -1) { messages[idx] = updated;
+                            if (idx !== -1) { messages[idx] = { ...messages[idx], ...updated };
                                 renderMessages(); }
                         }
                     })
@@ -7236,9 +7237,6 @@
                 }, 3400);
             }
 
-            // ============================================================
-            // TYPING INDICATOR & LIVE PERMISSION UPDATES
-            // ============================================================
             function subscribeToConversations() {
                 if (conversationSubscription) { sb.removeChannel(conversationSubscription);
                     conversationSubscription = null; }
@@ -7265,7 +7263,6 @@
                     .subscribe();
             }
 
-            // ─── Presence subscription ───
             function subscribeToPartnerPresence() {
                 if (presenceSubscription) { sb.removeChannel(presenceSubscription);
                     presenceSubscription = null; }
@@ -7310,9 +7307,6 @@
                     .catch(() => {});
             }
 
-            // ============================================================
-            // UPLOADS (Cloudinary)
-            // ============================================================
             function uploadToCloudinary(file, resourceType = 'image', onProgress) {
                 return new Promise((resolve, reject) => {
                     let preset = CLOUDINARY_IMAGE_PRESET;
@@ -7353,92 +7347,6 @@
                 });
             }
 
-            async function uploadAndSend(files) {
-                const fileList = Array.isArray(files) ? files : [files];
-                const mediaFiles = fileList.filter(f => f.type.startsWith('image') || f.type.startsWith('video'));
-                if (!mediaFiles.length) return;
-
-                if (mediaFiles.length === 1) {
-                    const file = mediaFiles[0];
-                    const localUrl = URL.createObjectURL(file);
-                    const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-                    let msgType = 'document';
-                    if (file.type.startsWith('image')) msgType = 'image';
-                    else if (file.type.startsWith('video')) msgType = 'video';
-
-                    const tempMsg = {
-                        id: tempId,
-                        sender_id: currentUserId,
-                        message_type: msgType,
-                        media_url: localUrl,
-                        created_at: new Date().toISOString(),
-                        uploading: true,
-                        text: '',
-                        reply_to: null,
-                        poll_data: null,
-                        message_reactions: [],
-                        message_reads: [],
-                        failed: false,
-                        media_urls: null,
-                    };
-                    messages.push(tempMsg);
-                    renderMessages();
-                    scrollToBottom();
-
-                    try {
-                        const result = await uploadToCloudinary(file, file.type.startsWith('video') ? 'video' : 'image');
-                        messages = messages.filter(m => m.id !== tempId);
-                        await sendMessageToConv('', msgType, result.url);
-                        await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
-                            selectedConversationId);
-                        await loadConversations();
-                    } catch (err) {
-                        messages = messages.filter(m => m.id !== tempId);
-                        renderMessages();
-                        showToast('Upload failed: ' + err.message, 'r');
-                    }
-                    return;
-                }
-
-                try {
-                    const uploadPromises = mediaFiles.map(f => uploadToCloudinary(f, f.type.startsWith('video') ?
-                        'video' : 'image'));
-                    const results = await Promise.all(uploadPromises);
-                    const urls = results.map(r => r.url);
-                    const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-                    const firstLocalUrl = URL.createObjectURL(mediaFiles[0]);
-                    const tempMsg = {
-                        id: tempId,
-                        sender_id: currentUserId,
-                        message_type: 'image',
-                        media_url: firstLocalUrl,
-                        created_at: new Date().toISOString(),
-                        uploading: true,
-                        text: '',
-                        reply_to: null,
-                        poll_data: null,
-                        message_reactions: [],
-                        message_reads: [],
-                        failed: false,
-                        media_urls: urls.map(u => u),
-                    };
-                    messages.push(tempMsg);
-                    renderMessages();
-                    scrollToBottom();
-
-                    messages = messages.filter(m => m.id !== tempId);
-                    await sendMessageToConv('', 'image', urls[0], null, null, urls);
-                    await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
-                        selectedConversationId);
-                    await loadConversations();
-                } catch (err) {
-                    showToast('Upload failed: ' + err.message, 'r');
-                }
-            }
-
-            // ============================================================
-            // VOICE RECORDER
-            // ============================================================
             let mediaRecorder = null;
             let recordedChunks = [];
             let recordStartTime = null;
@@ -7551,68 +7459,6 @@
                 }
             };
 
-            // ============================================================
-            // ATTACHMENT HANDLERS
-            // ============================================================
-            window.openAttachModal = function() {
-                if (isBlockedConversation || !canSendMessages) return;
-                document.getElementById('attachModal').classList.add('open');
-            };
-
-            window.closeAttachModal = function() {
-                document.getElementById('attachModal').classList.remove('open');
-            };
-
-            window.handleAttach = function(type) {
-                closeAttachModal();
-                if (isBlockedConversation || !canSendMessages) return;
-                if (type === 'poll') { openPollModal(); return; }
-                if (type === 'voice') { startVoiceRecording(); return; }
-                if (type === 'media') {
-                    fileInput.accept = 'image/*,video/*';
-                    fileInput.multiple = true;
-                } else {
-                    fileInput.accept =
-                        'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain';
-                    fileInput.multiple = false;
-                }
-                fileInput.dataset.type = type;
-                fileInput.click();
-            };
-
-            fileInput.addEventListener('change', async function() {
-                if (isBlockedConversation || !canSendMessages) { this.value = ''; return; }
-                const files = Array.from(this.files);
-                if (!files.length) return;
-                this.value = '';
-
-                const type = this.dataset.type || 'media';
-
-                if (type === 'document') {
-                    for (const file of files) {
-                        if (file.size > MAX_FILE_SIZE) {
-                            showToast(`${file.name} is too large (max 25MB)`, 'o');
-                            continue;
-                        }
-                        try {
-                            const result = await uploadToCloudinary(file, 'raw');
-                            await sendMessageToConv('', 'document', result.url);
-                            await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
-                                selectedConversationId);
-                            await loadConversations();
-                        } catch (err) {
-                            showToast('Document upload failed: ' + err.message, 'r');
-                        }
-                    }
-                    return;
-                }
-
-                await uploadAndSend(files);
-            });
-
-            // ============================================================
-            // POLL MODAL
-            // ============================================================
             const pollQuestion = document.getElementById('pollQuestion');
             const pollOptionsList = document.getElementById('pollOptionsList');
 
@@ -7654,9 +7500,6 @@
                 });
             };
 
-            // ============================================================
-            // NEW CHAT MODAL
-            // ============================================================
             window.openNewChatModal = function() {
                 const modal = document.getElementById('newChatModal');
                 modal.classList.add('open');
@@ -7797,9 +7640,6 @@
                 }
             }
 
-            // ============================================================
-            // START CONVERSATION
-            // ============================================================
             window.startConversationWith = async function(otherUserId) {
                 if (otherUserId === currentUserId) return;
                 closeNewChatModal();
@@ -7861,9 +7701,6 @@
                 }
             };
 
-            // ============================================================
-            // GROUP CREATION
-            // ============================================================
             window.openCreateGroupModal = function() {
                 closeNewChatModal();
                 selectedGroupMembers.clear();
@@ -7919,68 +7756,65 @@
             };
 
             window.createGroup = async function() {
-    const name = document.getElementById('groupNameInput').value.trim();
-    if (!name) { showToast('Please enter a group name', 'o'); return; }
+                const name = document.getElementById('groupNameInput').value.trim();
+                if (!name) { showToast('Please enter a group name', 'o'); return; }
 
-    try {
-        const conversationId = crypto.randomUUID();
+                try {
+                    const conversationId = crypto.randomUUID();
 
-        const { error: convErr } = await sb
-            .from('conversations')
-            .insert({
-                id: conversationId,
-                is_group: true,
-                group_name: name,
-                created_by: currentUserId,
-                owner_id: currentUserId,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                typing_users: [],
-                permissions: {
-                    edit_group_info: 'admins',
-                    send_messages: 'everyone',
-                    add_members: 'admins',
-                    invite_via_link: 'admins',
-                    approve_new_members: false
+                    const { error: convErr } = await sb
+                        .from('conversations')
+                        .insert({
+                            id: conversationId,
+                            is_group: true,
+                            group_name: name,
+                            created_by: currentUserId,
+                            owner_id: currentUserId,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                            typing_users: [],
+                            permissions: {
+                                edit_group_info: 'admins',
+                                send_messages: 'everyone',
+                                add_members: 'admins',
+                                invite_via_link: 'admins',
+                                approve_new_members: false
+                            }
+                        });
+
+                    if (convErr) throw convErr;
+
+                    const memberRows = [
+                        { conversation_id: conversationId, user_id: currentUserId, role: 'owner' },
+                        ...Array.from(selectedGroupMembers).map(uid => ({
+                            conversation_id: conversationId,
+                            user_id: uid,
+                            role: 'member'
+                        })),
+                    ];
+
+                    const { error: memErr } = await sb
+                        .from('conversation_members')
+                        .insert(memberRows);
+
+                    if (memErr) throw memErr;
+
+                    closeCreateGroupModal();
+                    await loadConversations();
+                    selectConversation(conversationId);
+                    showToast('Group created', 'g');
+
+                } catch (err) {
+                    console.error('createGroup error details:', {
+                        code: err?.code,
+                        message: err?.message,
+                        details: err?.details,
+                        hint: err?.hint
+                    });
+                    showToast('Failed to create group', 'r');
                 }
-            });
+            };
 
-        if (convErr) throw convErr;
-
-        const memberRows = [
-            { conversation_id: conversationId, user_id: currentUserId, role: 'owner' },
-            ...Array.from(selectedGroupMembers).map(uid => ({
-                conversation_id: conversationId,
-                user_id: uid,
-                role: 'member'
-            })),
-        ];
-
-        const { error: memErr } = await sb
-            .from('conversation_members')
-            .insert(memberRows);
-
-        if (memErr) throw memErr;
-
-        closeCreateGroupModal();
-        await loadConversations();
-        selectConversation(conversationId);
-        showToast('Group created', 'g');
-
-       } catch (err) {
-        console.error('createGroup error details:', {
-            code: err?.code,
-            message: err?.message,
-            details: err?.details,
-            hint: err?.hint
-        });
-        showToast('Failed to create group', 'r');
-    }
-};
-
-            // ============================================================
-            // FREEUPPER NOTE
-            // ============================================================
             window.openOrCreateFreeUpperNote = async function() {
                 closeNewChatModal();
                 const existingNote = conversations.find(c => c.is_note && c.created_by === currentUserId);
@@ -8016,9 +7850,6 @@
                 }
             };
 
-            // ============================================================
-            // FREEUPPER CHAT INFO SYSTEM
-            // ============================================================
             const FU_BUBBLE_COLORS = [
                 { id: 'brand', name: 'FreeUpper', preview: '#8b5cf6' },
                 { id: 'deep', name: 'Deep Purple', preview: '#5b21b6' },
@@ -8081,7 +7912,6 @@
                 if (conversationId === selectedConversationId) loadMessages(conversationId);
             }
 
-            // ─── Chat Profile ───
             window.openChatProfile = function() {
                 document.getElementById('fuProfileScreen').classList.add('open');
                 populateChatProfileModal();
@@ -8296,7 +8126,6 @@
                 return !!data;
             }
 
-            // ─── Edit Group Info ───
             window.openEditGroupInfo = function() {
                 const conv = currentConv();
                 if (!conv || !conv.is_group || conv.is_note) return;
@@ -8349,7 +8178,6 @@
                 }
             };
 
-            // ─── Group Permissions ───
             window.openGroupPermissions = async function() {
                 const conv = currentConv();
                 if (!conv || !conv.is_group || conv.is_note) return;
@@ -8401,7 +8229,6 @@
                 }
             };
 
-            // ─── Add Members ───
             window.openAddMembersScreen = async function() {
                 const conv = currentConv();
                 if (!conv || !conv.is_group || conv.is_note) return;
@@ -8489,7 +8316,6 @@
                 btn.disabled = amSelectedIds.size === 0;
             };
 
-            // ─── All Users search ───
             window.onAmAllUsersSearchInput = function(value) {
                 clearTimeout(amAllUsersSearchDebounce);
                 const q = value.trim();
@@ -8582,7 +8408,6 @@
                 }
             };
 
-            // ─── Invite Link ───
             async function loadInviteLink() {
                 const conv = currentConv();
                 if (!conv) return;
@@ -8630,7 +8455,6 @@
                 }
             };
 
-            // ─── Report Modal ───
             const REPORT_REASONS = [
                 'Spam',
                 'Harassment or bullying',
@@ -8690,7 +8514,6 @@
                 }
             };
 
-            // ─── Disappearing Messages ───
             window.openDisappearingScreen = function() {
                 const conv = currentConv();
                 if (!conv) return;
@@ -8733,7 +8556,6 @@
                 }
             };
 
-            // ─── Members Screen ───
             window.openGroupMembersFromProfile = function() {
                 const conv = currentConv();
                 if (conv) openMembersScreen(conv.id);
@@ -8868,25 +8690,6 @@
                 } catch (err) { showToast('Failed to leave group', 'r'); }
             };
 
-            // ─── Group search ───
-            window.openGroupSearch = function() {
-                closeChatProfileModal();
-                const q = prompt('Search messages in this conversation:');
-                if (!q || !q.trim()) return;
-                const term = q.trim().toLowerCase();
-                const match = messages.find(m => (m.text || '').toLowerCase().includes(term));
-                if (!match) { showToast('No matching messages found', 'o'); return; }
-                const el = messagesArea.querySelector(`[data-msg-id="${match.id}"]`);
-                if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    el.style.outline = '2px solid var(--p)';
-                    setTimeout(() => { el.style.outline = 'none'; }, 1500);
-                }
-            };
-
-            // ============================================================
-            // THEME / BUBBLE / WALLPAPER
-            // ============================================================
             window.openChatThemeModal = function() {
                 document.getElementById('fuThemeScreen').classList.add('open');
                 renderThemePresetGrid();
@@ -8980,37 +8783,6 @@
                 showToast('Wallpaper updated', 'g');
             }
 
-            function applyChatBackground(bg) {
-                const headerEl = document.querySelector('.chat-view-header');
-                const hasWallpaper = !!bg;
-                const isSolid = bg && bg.startsWith('solid:');
-
-                if (isSolid) {
-                    messagesArea.style.backgroundImage = 'none';
-                    messagesArea.style.backgroundColor = bg.replace('solid:', '');
-                    messagesArea.style.backgroundAttachment = '';
-                } else {
-                    messagesArea.style.backgroundImage = bg ? `url(${bg})` : 'none';
-                    messagesArea.style.backgroundColor = 'transparent';
-                    messagesArea.style.backgroundSize = 'cover';
-                    messagesArea.style.backgroundPosition = 'center';
-                    messagesArea.style.backgroundAttachment = bg ? 'fixed' : '';
-                }
-
-                [headerEl, messageInputArea].forEach(el => {
-                    if (!el) return;
-                    el.classList.toggle('wp-glass', hasWallpaper);
-                    if (hasWallpaper) {
-                        el.style.setProperty('--wp-img', isSolid ? 'none' : `url(${bg})`);
-                        el.style.setProperty('--wp-color', isSolid ? bg.replace('solid:', '') : 'transparent');
-                    } else {
-                        el.style.removeProperty('--wp-img');
-                        el.style.removeProperty('--wp-color');
-                    }
-                });
-            }
-
-            // ─── Bubble Color ───
             window.openBubbleColorModal = function() {
                 document.getElementById('fuThemeScreen').classList.remove('open');
                 document.getElementById('fuBubbleScreen').classList.add('open');
@@ -9058,7 +8830,6 @@
                 messagesArea.style.setProperty('--bubble-color', c.preview);
             }
 
-            // ─── Media, Links & Docs ───
             window.openMediaLinksDocsModal = function() {
                 document.getElementById('fuMediaScreen').classList.add('open');
                 switchMediaTab('media');
@@ -9067,7 +8838,6 @@
                 document.getElementById('fuMediaScreen').classList.remove('open');
             };
 
-            // FIX #3: fallback query for links tab
             window.switchMediaTab = async function(tab) {
                 document.querySelectorAll('#fuMediaTabs .fu-tab').forEach(t => t.classList.toggle('active', t.dataset.tab ===
                     tab));
@@ -9101,7 +8871,6 @@
                                     </div>`).join('')}</div>` :
                         `<div class="fu-empty-tab">No media shared yet.</div>`;
                 } else if (tab === 'links') {
-                    // FIX #3: fallback if link_previews column doesn't exist
                     let data = null;
                     try {
                         const res = await sb.from('messages').select('id, text, link_previews, created_at')
@@ -9116,7 +8885,7 @@
                             .limit(200);
                         data = res2.data;
                     }
-                    const urlRe = /(https?:\/\/[^\s]+)/gi;
+                    const urlRe = /(https?:\/\/[^\s"'<>]+)/gi;
                     const links = [];
                     (data || []).forEach(m => {
                         const found = (m.text || '').match(urlRe);
@@ -9139,7 +8908,7 @@
                         }
                         let domain = item.url;
                         try { domain = new URL(item.url).hostname.replace('www.', ''); } catch (e) {}
-                        return `<div class="fu-link-row" onclick="window.open('${item.url}','_blank')">
+                        return `<div class="fu-link-row" data-open-url="${escapeHtml(item.url).replace(/"/g, '&quot;')}">
                                     <div class="fu-doc-ico"><i class="ri-link"></i></div>
                                     <div class="fu-link-info">
                                         <div class="fu-link-title">${escapeHtml(item.url)}</div>
@@ -9148,10 +8917,10 @@
                                 </div>`;
                     }).join('') : `<div class="fu-empty-tab">No links shared yet.</div>`;
                 } else {
-                    const { data } = await sb.from('messages').select('id, media_url').eq('conversation_id', conv.id)
+                    const { data } = await sb.from('messages').select('id, media_url, media_meta').eq('conversation_id', conv.id)
                         .eq('message_type', 'document').order('created_at', { ascending: false });
                     content.innerHTML = (data && data.length) ? data.map(m => {
-                        const name = (m.media_url || '').split('/').pop() || 'Document';
+                        const name = (m.media_meta && m.media_meta.name) || (m.media_url || '').split('/').pop() || 'Document';
                         const ext = name.split('.').pop()?.toLowerCase() || '';
                         const icons = { pdf: 'ri-file-pdf-2-line', doc: 'ri-file-word-2-line',
                             docx: 'ri-file-word-2-line',
@@ -9169,7 +8938,7 @@
                 const img = preview.image ?
                     `<img class="lp-image" src="${preview.image}" alt="" loading="lazy" onerror="this.style.display='none'">` :
                     '';
-                return `<div class="fu-link-row" onclick="window.open('${url}','_blank')">
+                return `<div class="fu-link-row" data-open-url="${escapeHtml(url).replace(/"/g, '&quot;')}">
                             ${preview.image ? `<img class="fu-link-thumb" src="${preview.image}" onerror="this.style.display='none'">` : `<div class="fu-doc-ico"><i class="ri-link"></i></div>`}
                             <div class="fu-link-info">
                                 <div class="fu-link-title">${escapeHtml(preview.title || url)}</div>
@@ -9178,9 +8947,6 @@
                         </div>`;
             }
 
-            // ============================================================
-            // PIN MESSAGE
-            // ============================================================
             window.togglePinMessage = async function(msgId) {
                 const conv = currentConv();
                 if (!conv) return;
@@ -9223,9 +8989,6 @@
                 `;
             }
 
-            // ============================================================
-            // GROUP PREVIEW SCREEN
-            // ============================================================
             window.openFuGroupPreviewScreen = async function(groupId) {
                 document.getElementById('fuGroupPreviewScreen').classList.add('open');
                 const body = document.getElementById('fuGroupPreviewBody');
@@ -9277,10 +9040,8 @@
                 }
             };
 
-            // ============================================================
-            // CLOSE CHAT VIEW
-            // ============================================================
             window.closeChatView = function() {
+                if (chatSearch.open) closeChatSearch();
                 selectedConversationId = null;
                 selectedPartnerId = null;
                 isBlockedConversation = false;
@@ -9313,42 +9074,48 @@
             };
 
             window.openPartnerProfile = function() {
-    if (selectedPartnerId) {
-        window.Router.openProfile(selectedPartnerId);
-        return;
-    }
-                
+                if (selectedPartnerId) {
+                    window.Router.openProfile(selectedPartnerId);
+                    return;
+                }
                 const conv = currentConv();
                 if (conv && conv.is_group) {
                     openChatProfile();
                 }
             };
 
-            // ============================================================
-            // EVENT LISTENERS
-            // ============================================================
             const COMPOSER_MAX_CHARS = 10000;
+            const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches;
+            const byId = (id) => document.getElementById(id);
+
+            function composerCap() {
+                return byId('messageInputArea').classList.contains('expanded') ? Math.round(window.innerHeight * 0.55) : 180;
+            }
 
             document.addEventListener('input', function(e) {
-                if (e.target && e.target.id === 'messageInput') {
-                    if (e.target.value.length > COMPOSER_MAX_CHARS) {
-                        e.target.value = e.target.value.slice(0, COMPOSER_MAX_CHARS);
-                    }
-                    e.target.style.height = 'auto';
-                    e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
-                    const hasText = e.target.value.trim().length > 0;
-                    const btn = document.getElementById('sendBtn');
-                    const mic = document.getElementById('micBtn');
-                    if (btn) btn.classList.toggle('visible', hasText);
-                    if (mic) mic.classList.toggle('visible', !hasText);
-                }
+                if (!e.target || e.target.id !== 'messageInput') return;
+                if (e.target.value.length > COMPOSER_MAX_CHARS) e.target.value = e.target.value.slice(0, COMPOSER_MAX_CHARS);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, composerCap()) + 'px';
+                const hasText = e.target.value.trim().length > 0;
+                const btn = byId('sendBtn'), mic = byId('micBtn'), eb = byId('expandBtn');
+                if (btn) btn.classList.toggle('visible', hasText);
+                if (mic) mic.classList.toggle('visible', !hasText);
+                if (eb) eb.classList.toggle('show', e.target.scrollHeight > 50 || byId('messageInputArea').classList.contains('expanded'));
             });
 
             document.addEventListener('keydown', function(e) {
                 if (e.target && e.target.id === 'messageInput') {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        window.sendMessage();
+                    const expanded = byId('messageInputArea').classList.contains('expanded');
+                    if (e.key === 'Enter') {
+                        if (IS_TOUCH) {
+                            /* phones/iPad: Enter = new line, the send button sends */
+                        } else if (expanded) {
+                            if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.sendMessage(); }
+                        } else if (!e.shiftKey) {
+                            e.preventDefault();
+                            window.sendMessage();
+                        }
                     }
                     if (typingTimeout) clearTimeout(typingTimeout);
                     sendTypingIndicator(true);
@@ -9361,9 +9128,6 @@
                 if (btn && !btn.disabled) window.sendMessage();
             });
 
-            // ============================================================
-            // GESTURE BINDING
-            // ============================================================
             let gestureListenersBound = false;
 
             function bindGestureListenersOnce() {
@@ -9376,16 +9140,10 @@
 
             document.addEventListener('DOMContentLoaded', bindGestureListenersOnce);
 
-            // ============================================================
-            // MODAL LOCK HELPERS
-            // ============================================================
             function lockBody() { document.body.classList.add('modal-lock'); }
 
             function unlockBody() { document.body.classList.remove('modal-lock'); }
 
-            // ============================================================
-            // WRAP FULL-SCREEN MODALS WITH lockBody/unlockBody
-            // ============================================================
             const modalPairs = [
                 ['openChatProfile', 'closeChatProfileModal'],
                 ['openChatThemeModal', 'closeChatThemeModal'],
@@ -9421,7 +9179,6 @@
             window.closePollModal = function() { unlockBody();
                 origPollClose(); };
 
-            // ─── iOS Add-to-Home-Screen detection ───
             function isIosDevice() {
                 return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
             }
@@ -9442,19 +9199,17 @@
                 if (banner) banner.classList.add('show');
             }
 
-            // ─── FIX #5: Firebase push notifications setup ───
             async function setupFreeUpperNotifications() {
                 try {
                     if (isIosDevice() && !isStandalonePWA()) {
                         maybeShowIosA2hsBanner();
-                        return; // Skip FCM entirely — it will fail on iOS Safari tabs anyway
+                        return;
                     }
 
                     if (!("Notification" in window) || !window.FreeUpperFCM) {
                         return;
                     }
 
-                    // ─── FreeUpper custom permission gate runs BEFORE browser prompt / getToken ───
                     const permission = await window.FreeUpperNotificationPermission.start();
 
                     if (permission !== "granted") {
@@ -9479,78 +9234,32 @@
                     window.FreeUpperFCM.onMessage(
                         window.FreeUpperFCM.messaging,
                         async (payload) => {
+                            const data = payload.data || {};
+                            const notification = payload.notification || {};
 
-                            const data =
-                                payload.data || {};
-
-                            const notification =
-                                payload.notification || {};
-
-                            // ========================================================
-                            // UPDATE APP ICON BADGE FROM FCM (foreground)
-                            // ========================================================
-
-                            const unreadCount =
-                                Number(data.unread_count);
+                            const unreadCount = Number(data.unread_count);
 
                             if (
                                 Number.isFinite(unreadCount) &&
                                 unreadCount >= 0 &&
                                 typeof navigator.setAppBadge === "function"
                             ) {
-
                                 try {
-
                                     if (unreadCount > 0) {
-
-                                        await navigator.setAppBadge(
-                                            Math.floor(unreadCount)
-                                        );
-
-                                        console.log(
-                                            "FreeUpper FCM badge:",
-                                            Math.floor(unreadCount)
-                                        );
-
-                                    } else if (
-                                        typeof navigator.clearAppBadge ===
-                                        "function"
-                                    ) {
-
+                                        await navigator.setAppBadge(Math.floor(unreadCount));
+                                        console.log("FreeUpper FCM badge:", Math.floor(unreadCount));
+                                    } else if (typeof navigator.clearAppBadge === "function") {
                                         await navigator.clearAppBadge();
-
                                     }
-
                                 } catch (error) {
-
-                                    console.error(
-                                        "FreeUpper FCM badge error:",
-                                        error
-                                    );
-
+                                    console.error("FreeUpper FCM badge error:", error);
                                 }
                             }
 
+                            const title = data.title || notification.title || "FreeUpper";
+                            const body = data.body || notification.body || "You have a new notification.";
 
-                            // ========================================================
-                            // SHOW FOREGROUND NOTIFICATION TOAST
-                            // ========================================================
-
-                            const title =
-                                data.title ||
-                                notification.title ||
-                                "FreeUpper";
-
-                            const body =
-                                data.body ||
-                                notification.body ||
-                                "You have a new notification.";
-
-                            showToast(
-                                `<b>${escapeHtml(title)}:</b>&nbsp;${escapeHtml(body)}`,
-                                "p"
-                            );
-
+                            showToast(`<b>${escapeHtml(title)}:</b>&nbsp;${escapeHtml(body)}`, "p");
                         }
                     );
                 } catch (err) {
@@ -9558,9 +9267,619 @@
                 }
             }
 
-            // ============================================================
-            // INIT
-            // ============================================================
+            // ═══════════════ UPGRADE: text decoration ═══════════════
+            const URL_RE = /\b((?:https?:\/\/|www\.)[^\s<"'`]+)/gi;
+            function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+            function decorateText(raw) {
+                let html = escapeHtml(raw);
+                html = html.replace(URL_RE, function(m) {
+                    let url = m, trail = '';
+                    const t = url.match(/[).,!?:;]+$/);
+                    if (t) { trail = t[0]; url = url.slice(0, -trail.length); }
+                    const href = /^www\./i.test(url) ? 'https://' + url : url;
+                    return '<a class="msg-link" data-url="' + href + '" href="' + href + '">' + url + '</a>' + trail;
+                });
+                const term = chatSearch.open && chatSearch.term;
+                if (term) {
+                    const re = new RegExp(escapeRegex(escapeHtml(term)), 'gi');
+                    html = html.split(/(<[^>]+>)/).map((seg, i) =>
+                        i % 2 ? seg : seg.replace(re, x => '<mark class="srch">' + x + '</mark>')).join('');
+                }
+                return html;
+            }
+            function captionHtml(t) { return '<div class="msg-caption">' + renderMessageText(t) + '</div>'; }
+            function hasMediaBubble(msg, text) {
+                return msg.message_type === 'document' ||
+                    ((msg.message_type === 'image' || msg.message_type === 'video') && !!text);
+            }
+
+            // ═══════════════ UPGRADE: link preview (Edge Function + Microlink fallback) ═══════════════
+            function fetchLinkPreview(url) {
+                if (!linkPreviewCache[url]) linkPreviewCache[url] = doFetchLinkPreview(url);
+                return linkPreviewCache[url];
+            }
+            async function doFetchLinkPreview(url) {
+                let result = null;
+                try {
+                    const { data, error } = await sb.functions.invoke('link-preview', { body: { url } });
+                    if (!error && data && (data.title || data.image)) result = data;
+                } catch (e) {}
+                if (!result) {
+                    try {
+                        const r = await fetch('https://api.microlink.io/?url=' + encodeURIComponent(url));
+                        const j = await r.json();
+                        if (j.status === 'success' && j.data) {
+                            const d = j.data;
+                            let domain = '';
+                            try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) {}
+                            result = {
+                                title: d.title || domain, description: d.description || '',
+                                image: (d.image && d.image.url) || (d.logo && d.logo.url) || '',
+                                domain, siteName: d.publisher || ''
+                            };
+                        }
+                    } catch (e) {}
+                }
+                return result;
+            }
+
+            // ═══════════════ UPGRADE: in-app browser ═══════════════
+            const NO_EMBED = /(^|\.)(facebook\.com|fb\.com|fb\.watch|instagram\.com|x\.com|twitter\.com|linkedin\.com|tiktok\.com|whatsapp\.com|wa\.me|google\.com|paypal\.com|github\.com|amazon\.[a-z.]+|netflix\.com|reddit\.com|pinterest\.com|snapchat\.com|t\.me|discord\.com|medium\.com)$/i;
+            let brCurrentUrl = '';
+
+            function toEmbedUrl(u) {
+                try {
+                    const x = new URL(u), h = x.hostname.replace(/^www\./, '');
+                    if (h === 'youtube.com' && x.pathname === '/watch' && x.searchParams.get('v'))
+                        return 'https://www.youtube.com/embed/' + x.searchParams.get('v');
+                    if (h === 'youtu.be') return 'https://www.youtube.com/embed/' + x.pathname.slice(1);
+                    if (h === 'vimeo.com' && /^\/\d+/.test(x.pathname)) return 'https://player.vimeo.com/video' + x.pathname;
+                } catch (e) {}
+                return u;
+            }
+
+            window.openInAppBrowser = function(url) {
+                let host;
+                try {
+                    const u = new URL(url);
+                    if (!/^https?:$/.test(u.protocol)) return;
+                    url = u.href; host = u.hostname.replace(/^www\./, '');
+                } catch (e) { return; }
+                brCurrentUrl = url;
+                byId('brDomain').textContent = host;
+                byId('brLock').style.display = url.startsWith('https') ? 'inline' : 'none';
+                const frame = byId('brFrame'), blocked = byId('brBlocked'), prog = byId('brProgress');
+                const embed = toEmbedUrl(url);
+                if (embed === url && NO_EMBED.test(host)) {
+                    frame.src = 'about:blank';
+                    byId('brBlockedMsg').textContent = host + " doesn't allow itself to be opened inside other apps. Open it in your phone's browser instead.";
+                    blocked.classList.remove('hidden');
+                } else {
+                    blocked.classList.add('hidden');
+                    prog.style.width = '30%';
+                    frame.onload = () => { prog.style.width = '100%'; setTimeout(() => { prog.style.width = '0'; }, 300); };
+                    frame.src = embed;
+                }
+                byId('fuBrowserScreen').classList.add('open');
+                lockBody();
+            };
+            window.closeInAppBrowser = function() {
+                byId('brFrame').src = 'about:blank';
+                byId('fuBrowserScreen').classList.remove('open');
+                unlockBody();
+            };
+            window.brReload = function() { const f = byId('brFrame'); if (f.src && f.src !== 'about:blank') f.src = f.src; };
+            window.brOpenExternal = function() { if (brCurrentUrl) window.open(brCurrentUrl, '_blank', 'noopener,noreferrer'); };
+            window.brOpenChrome = function() {
+                const u = brCurrentUrl; if (!u) return;
+                if (/iphone|ipad|ipod/i.test(navigator.userAgent))
+                    location.href = u.replace(/^https:\/\//, 'googlechromes://').replace(/^http:\/\//, 'googlechrome://');
+                else if (/android/i.test(navigator.userAgent))
+                    location.href = 'intent://' + u.replace(/^https?:\/\//, '') + '#Intent;scheme=' + (u.startsWith('https') ? 'https' : 'http') + ';package=com.android.chrome;end';
+                else window.open(u, '_blank', 'noopener,noreferrer');
+            };
+            window.brCopy = async function() {
+                try { await navigator.clipboard.writeText(brCurrentUrl); showToast('Link copied', 'g'); }
+                catch (e) { showToast('Failed to copy', 'r'); }
+            };
+            window.brShare = async function() {
+                try { if (navigator.share) await navigator.share({ url: brCurrentUrl }); else window.brCopy(); } catch (e) {}
+            };
+            messagesArea.addEventListener('click', function(e) {
+                const a = e.target.closest('a.msg-link');
+                if (a) { e.preventDefault(); e.stopPropagation(); openInAppBrowser(a.dataset.url); return; }
+                const lp = e.target.closest('[data-open-url]');
+                if (lp) { e.stopPropagation(); openInAppBrowser(lp.getAttribute('data-open-url')); }
+            });
+
+            // ═══════════════ UPGRADE: documents (PDF.js, docx-preview, SheetJS) ═══════════════
+            function fmtBytes(n) {
+                if (n === undefined || n === null) return '';
+                if (n < 1024) return n + ' B';
+                if (n < 1048576) return Math.round(n / 1024) + ' KB';
+                return (n / 1048576).toFixed(1) + ' MB';
+            }
+            function safeDecode(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
+            function docExt(name) { return ((name || '').split('?')[0].split('.').pop() || '').toLowerCase(); }
+
+            function docCardHtml(msg, textContent) {
+                const meta = msg.media_meta || {};
+                const name = meta.name || safeDecode((msg.media_url || '').split('?')[0].split('/').pop() || 'Document');
+                const ext = meta.ext || docExt(name);
+                const cls = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt'].includes(ext) ? ext : 'other';
+                const sub = [meta.pages ? meta.pages + (meta.pages > 1 ? ' pages' : ' page') : '', fmtBytes(meta.size), ext]
+                    .filter(Boolean).join(' • ');
+                const open = msg.uploading ? '' : `onclick="openDocument('${msg.media_url}','${msg.id}')"`;
+                return `
+                    <div class="wa-doc" ${open}>
+                        ${meta.thumb ? `<div class="wa-doc-thumb" style="background-image:url('${meta.thumb}')"></div>` : ''}
+                        <div class="wa-doc-row">
+                            <div class="wa-doc-ico ${cls}">${escapeHtml(ext.slice(0, 4).toUpperCase())}</div>
+                            <div class="wa-doc-info">
+                                <div class="wa-doc-name">${escapeHtml(name)}</div>
+                                <div class="wa-doc-sub">${escapeHtml(sub)}${msg.uploading ? ' • Sending…' : ''}</div>
+                            </div>
+                        </div>
+                    </div>` + (textContent ? captionHtml(textContent) : '');
+            }
+
+            async function loadDocBuffer(src) {
+                if (src instanceof Blob) return await src.arrayBuffer();
+                const r = await fetch(src);
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return await r.arrayBuffer();
+            }
+
+            async function renderDocumentInto(container, src, ext) {
+                container.innerHTML = '<div class="doc-msg">Loading…</div>';
+                const url = typeof src === 'string' ? src : '';
+                try {
+                    if (ext === 'pdf') {
+                        const pdf = await pdfjsLib.getDocument({ data: await loadDocBuffer(src) }).promise;
+                        container.innerHTML = '';
+                        const cw = (container.clientWidth || window.innerWidth) - 16;
+                        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                        for (let i = 1; i <= Math.min(pdf.numPages, 40); i++) {
+                            const page = await pdf.getPage(i);
+                            const base = page.getViewport({ scale: 1 });
+                            const vp = page.getViewport({ scale: (cw / base.width) * dpr });
+                            const c = document.createElement('canvas');
+                            c.className = 'doc-canvas'; c.width = vp.width; c.height = vp.height; c.style.width = cw + 'px';
+                            container.appendChild(c);
+                            await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+                        }
+                        return true;
+                    }
+                    if (ext === 'docx') {
+                        const buf = await loadDocBuffer(src);
+                        container.innerHTML = '';
+                        await docx.renderAsync(buf, container, null, { className: 'docx', inWrapper: true, breakPages: true });
+                        const sec = container.querySelector('section.docx'), wrap = container.querySelector('.docx-wrapper');
+                        if (sec && wrap) {
+                            const k = ((container.clientWidth || window.innerWidth) - 16) / sec.offsetWidth;
+                            if (k < 1) wrap.style.zoom = k;
+                        }
+                        return true;
+                    }
+                    if (['xlsx', 'xls', 'csv'].includes(ext)) {
+                        const wb = XLSX.read(await loadDocBuffer(src), { type: 'array' });
+                        const html = XLSX.utils.sheet_to_html(wb.Sheets[wb.SheetNames[0]]);
+                        container.innerHTML = '<div class="sheet-wrap">' + DOMPurify.sanitize(html) + '</div>';
+                        return true;
+                    }
+                    if (ext === 'txt') {
+                        const text = new TextDecoder().decode(await loadDocBuffer(src));
+                        const pre = document.createElement('pre');
+                        pre.className = 'doc-text'; pre.textContent = text.slice(0, 200000);
+                        container.innerHTML = ''; container.appendChild(pre);
+                        return true;
+                    }
+                } catch (err) { console.warn('doc render failed:', err); }
+                container.innerHTML = `<div class="doc-msg"><div style="font-size:3.5rem">📄</div>
+                    <div style="margin-top:10px;font-weight:700;color:#fff">Preview not available</div>
+                    ${url ? `<button class="doc-dl" onclick="downloadMedia('${url}')">Download</button>` : ''}</div>`;
+                return false;
+            }
+
+            async function buildDocMeta(file) {
+                const ext = docExt(file.name);
+                const meta = { name: file.name, size: file.size, ext, mime: file.type };
+                let thumbBlob = null;
+                if (ext === 'pdf') {
+                    try {
+                        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+                        meta.pages = pdf.numPages;
+                        const page = await pdf.getPage(1);
+                        const b = page.getViewport({ scale: 1 });
+                        const vp = page.getViewport({ scale: 480 / b.width });
+                        const c = document.createElement('canvas');
+                        c.width = vp.width; c.height = Math.round(vp.width * 0.62);
+                        await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+                        thumbBlob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
+                    } catch (e) { console.warn('pdf thumb failed', e); }
+                }
+                return { meta, thumbBlob };
+            }
+
+            window.openDocument = function(url, msgId) {
+                const msg = messages.find(m => m.id === msgId);
+                const meta = (msg && msg.media_meta) || {};
+                const fileName = meta.name || safeDecode((url.split('?')[0].split('/').pop()) || 'Document');
+                const ext = meta.ext || docExt(fileName);
+                const isMine = msg && msg.sender_id === currentUserId;
+                let modal = byId('fuDocViewer');
+                if (modal) modal.remove();
+                modal = document.createElement('div');
+                modal.id = 'fuDocViewer';
+                modal.className = 'fu-screen';
+                modal.innerHTML = `
+                    <div class="fu-screen-header">
+                        <button onclick="closeDocViewer()"><i class="ri-arrow-left-line"></i></button>
+                        <h3 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(fileName)}</h3>
+                        <button onclick="downloadMedia('${url}')"><i class="ri-download-2-line"></i></button>
+                        ${isMine ? `<button onclick="closeDocViewer();deleteMessage('${msgId}','everyone')"><i class="ri-delete-bin-line"></i></button>` : ''}
+                    </div>
+                    <div class="fu-body" id="fuDocViewerBody" style="padding:0;background:#1a1a1a;"></div>`;
+                document.body.appendChild(modal);
+                lockBody();
+                requestAnimationFrame(() => modal.classList.add('open'));
+                renderDocumentInto(byId('fuDocViewerBody'), url, ext);
+            };
+            window.closeDocViewer = function() {
+                const modal = byId('fuDocViewer');
+                if (!modal) return;
+                modal.classList.remove('open');
+                unlockBody();
+                setTimeout(() => modal.remove(), 250);
+            };
+
+            // ═══════════════ UPGRADE: attach + composer (preview before send) ═══════════════
+            window.handleAttach = function(type) {
+                closeAttachModal();
+                if (isBlockedConversation || !canSendMessages) return;
+                if (type === 'poll') { openPollModal(); return; }
+                if (type === 'voice') { startVoiceRecording(); return; }
+                fileInput.removeAttribute('capture');
+                if (type === 'media' || type === 'camera') {
+                    fileInput.accept = 'image/*,video/*';
+                    fileInput.multiple = type === 'media';
+                    if (type === 'camera') fileInput.setAttribute('capture', 'environment');
+                    fileInput.dataset.type = 'media';
+                } else {
+                    fileInput.accept = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,application/pdf,text/plain';
+                    fileInput.multiple = false;
+                    fileInput.dataset.type = 'document';
+                }
+                fileInput.click();
+            };
+
+            fileInput.addEventListener('change', async function() {
+                if (isBlockedConversation || !canSendMessages) { this.value = ''; return; }
+                const files = Array.from(this.files);
+                const type = this.dataset.type || 'media';
+                this.value = '';
+                this.removeAttribute('capture');
+                if (!files.length) return;
+                if (type === 'media-add') { addToComposer(files); return; }
+                await openComposer(files, type === 'document' ? 'document' : 'media');
+            });
+
+            window.openComposer = async function(files, kind) {
+                composerItems = [];
+                if (kind === 'document') {
+                    const f = files[0];
+                    if (f.size > MAX_FILE_SIZE) { showToast(f.name + ' is too large (max 25MB)', 'o'); return; }
+                    const { meta, thumbBlob } = await buildDocMeta(f);
+                    composerItems = [{ kind: 'doc', file: f, url: URL.createObjectURL(f), meta, thumbBlob }];
+                } else {
+                    addToComposerRaw(files);
+                }
+                if (!composerItems.length) return;
+                composerIdx = 0;
+                byId('cmpCaption').value = '';
+                const conv = currentConv();
+                byId('cmpTo').textContent = conv ? forwardRowName(conv) : '';
+                byId('fuComposer').classList.add('open');
+                lockBody();
+                renderComposer();
+            };
+            function addToComposerRaw(files) {
+                files.forEach(f => {
+                    const k = f.type.startsWith('image') ? 'image' : f.type.startsWith('video') ? 'video' : null;
+                    if (k) composerItems.push({ kind: k, file: f, url: URL.createObjectURL(f) });
+                });
+            }
+            function addToComposer(files) {
+                addToComposerRaw(files);
+                composerIdx = composerItems.length - 1;
+                renderComposer();
+            }
+            function renderComposer() {
+                const it = composerItems[composerIdx];
+                if (!it) return;
+                const stage = byId('cmpStage');
+                const isDoc = it.kind === 'doc';
+                stage.classList.toggle('doc', isDoc);
+                byId('cmpAddBtn').style.visibility = isDoc ? 'hidden' : 'visible';
+                byId('cmpTitle').textContent = isDoc ? it.meta.name :
+                    (composerItems.length > 1 ? (composerIdx + 1) + ' of ' + composerItems.length : '');
+                stage.innerHTML = '';
+                if (it.kind === 'image') stage.innerHTML = `<img src="${it.url}" alt="">`;
+                else if (it.kind === 'video') stage.innerHTML = `<video src="${it.url}" controls playsinline autoplay muted loop></video>`;
+                else renderDocumentInto(stage, it.file, it.meta.ext);
+                byId('cmpThumbs').innerHTML = (!isDoc && composerItems.length > 1) ? composerItems.map((x, i) => `
+                    <div class="cmp-thumb ${i === composerIdx ? 'active' : ''}" onclick="composerGo(${i})">
+                        ${x.kind === 'image' ? `<img src="${x.url}">` : `<video src="${x.url}" muted></video>`}
+                        <button class="cmp-thumb-x" onclick="event.stopPropagation();composerRemove(${i})">×</button>
+                    </div>`).join('') : '';
+            }
+            window.composerGo = function(i) { composerIdx = i; renderComposer(); };
+            window.composerRemove = function(i) {
+                composerItems.splice(i, 1);
+                if (!composerItems.length) { closeComposer(); return; }
+                composerIdx = Math.min(composerIdx, composerItems.length - 1);
+                renderComposer();
+            };
+            window.composerAddMore = function() {
+                fileInput.accept = 'image/*,video/*';
+                fileInput.multiple = true;
+                fileInput.removeAttribute('capture');
+                fileInput.dataset.type = 'media-add';
+                fileInput.click();
+            };
+            window.closeComposer = function() {
+                byId('fuComposer').classList.remove('open');
+                unlockBody();
+                composerItems = [];
+                byId('cmpStage').innerHTML = '';
+            };
+
+            window.sendComposer = async function() {
+                if (!composerItems.length) return;
+                const caption = byId('cmpCaption').value.trim();
+                const items = composerItems.slice();
+                const convId = selectedConversationId;
+                closeComposer();
+
+                if (items[0].kind === 'doc') {
+                    await sendDocumentItem(items[0], caption);
+                } else {
+                    const imgs = items.filter(i => i.kind === 'image');
+                    const vids = items.filter(i => i.kind === 'video');
+                    let capUsed = false;
+                    if (imgs.length) { await sendImageGroup(imgs, caption); capUsed = !!caption; }
+                    for (const v of vids) { await sendVideoItem(v, capUsed ? '' : caption); capUsed = capUsed || !!caption; }
+                }
+                await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId);
+                loadConversations();
+            };
+
+            function pushTemp(extra) {
+                const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+                messages.push(Object.assign({
+                    id: tempId, sender_id: currentUserId, created_at: new Date().toISOString(),
+                    uploading: true, message_reactions: [], message_reads: [], reply_to: null, poll_data: null
+                }, extra));
+                renderMessages(); scrollToBottom();
+                return tempId;
+            }
+            function dropTemp(id) { messages = messages.filter(m => m.id !== id); }
+
+            async function sendImageGroup(imgs, caption) {
+                const tempId = pushTemp({
+                    message_type: 'image', media_url: imgs[0].url, text: caption,
+                    media_urls: imgs.length > 1 ? imgs.map(i => i.url) : null
+                });
+                try {
+                    const results = await Promise.all(imgs.map(i => uploadToCloudinary(i.file, 'image')));
+                    const urls = results.map(r => r.url);
+                    dropTemp(tempId);
+                    await sendMessageToConv(caption, 'image', urls[0], null, null, urls.length > 1 ? urls : null);
+                } catch (err) {
+                    dropTemp(tempId); renderMessages();
+                    showToast('Upload failed: ' + err.message, 'r');
+                }
+            }
+            async function sendVideoItem(v, caption) {
+                const tempId = pushTemp({ message_type: 'video', media_url: v.url, text: caption });
+                try {
+                    const r = await uploadToCloudinary(v.file, 'video');
+                    dropTemp(tempId);
+                    await sendMessageToConv(caption, 'video', r.url);
+                } catch (err) {
+                    dropTemp(tempId); renderMessages();
+                    showToast('Upload failed: ' + err.message, 'r');
+                }
+            }
+            async function sendDocumentItem(it, caption) {
+                const tempId = pushTemp({ message_type: 'document', media_url: it.url, media_meta: it.meta, text: caption });
+                try {
+                    const up = await uploadToCloudinary(it.file, 'raw');
+                    let thumb = null;
+                    if (it.thumbBlob) { try { thumb = (await uploadToCloudinary(it.thumbBlob, 'image')).url; } catch (e) {} }
+                    dropTemp(tempId);
+                    await sendMessageToConv(caption, 'document', up.url, null, null, null, null,
+                        Object.assign({}, it.meta, thumb ? { thumb } : {}));
+                } catch (err) {
+                    dropTemp(tempId); renderMessages();
+                    showToast('Document upload failed: ' + err.message, 'r');
+                }
+            }
+
+            // ═══════════════ UPGRADE: expandable composer ═══════════════
+            window.toggleComposerExpand = function() {
+                byId('messageInputArea').classList.toggle('expanded');
+                const inp = byId('messageInput');
+                inp.dispatchEvent(new Event('input', { bubbles: true }));
+                inp.focus();
+            };
+            function collapseComposer() {
+                byId('messageInputArea').classList.remove('expanded');
+                const eb = byId('expandBtn');
+                if (eb) eb.classList.remove('show');
+            }
+
+            // ═══════════════ UPGRADE: WhatsApp-style in-chat search ═══════════════
+            window.openGroupSearch = function() {
+                if (!selectedConversationId) { showToast('Open a chat first', 'o'); return; }
+                if (byId('fuProfileScreen').classList.contains('open')) closeChatProfileModal();
+                chatSearch = { open: true, term: '', matchIds: [], idx: -1 };
+                byId('chatView').classList.add('searching');
+                const inp = byId('chatSearchInput');
+                inp.value = '';
+                byId('csnCount').textContent = '';
+                setTimeout(() => inp.focus(), 60);
+            };
+            window.onChatSearchInput = function(v) {
+                const term = v.trim();
+                const q = term.toLowerCase();
+                chatSearch.term = term;
+                chatSearch.matchIds = q ? messages.filter(m => !m.is_system && (m.text || '').toLowerCase().includes(q)).map(m => m.id) : [];
+                chatSearch.idx = chatSearch.matchIds.length - 1;
+                renderMessages();
+                focusSearchMatch();
+            };
+            function focusSearchMatch() {
+                const n = chatSearch.matchIds.length;
+                byId('csnCount').textContent = chatSearch.term ? (n ? (chatSearch.idx + 1) + ' of ' + n : 'No results') : '';
+                byId('csnUp').disabled = !n || chatSearch.idx <= 0;
+                byId('csnDown').disabled = !n || chatSearch.idx >= n - 1;
+                messagesArea.querySelectorAll('.search-current').forEach(e => e.classList.remove('search-current'));
+                if (!n) return;
+                const el = messagesArea.querySelector('[data-msg-id="' + chatSearch.matchIds[chatSearch.idx] + '"]');
+                if (el) { el.classList.add('search-current'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+            }
+            window.chatSearchStep = function(dir) {
+                const i = chatSearch.idx + dir;
+                if (i < 0 || i >= chatSearch.matchIds.length) return;
+                chatSearch.idx = i;
+                focusSearchMatch();
+            };
+            window.closeChatSearch = function() {
+                chatSearch = { open: false, term: '', matchIds: [], idx: -1 };
+                byId('chatView').classList.remove('searching');
+                if (!isBlockedConversation) renderMessages();
+            };
+
+            // ═══════════════ UPGRADE: chat theme never touches header / input bar ═══════════════
+            function applyChatBackground(bg) {
+                const isSolid = bg && bg.startsWith('solid:');
+                if (isSolid) {
+                    messagesArea.style.backgroundImage = 'none';
+                    messagesArea.style.backgroundColor = bg.replace('solid:', '');
+                } else {
+                    messagesArea.style.backgroundImage = bg ? `url(${bg})` : 'none';
+                    messagesArea.style.backgroundColor = '';
+                    messagesArea.style.backgroundSize = 'cover';
+                    messagesArea.style.backgroundPosition = 'center';
+                    messagesArea.style.backgroundRepeat = 'no-repeat';
+                }
+                messagesArea.style.backgroundAttachment = 'scroll';
+                document.querySelectorAll('.chat-view-header, .message-input-area').forEach(el => {
+                    el.classList.remove('wp-glass');
+                    el.style.removeProperty('--wp-img');
+                    el.style.removeProperty('--wp-color');
+                });
+            }
+
+            // ═══════════════ UPGRADE: modern poll ═══════════════
+            function pollStats(poll) {
+                const n = poll.options.length;
+                const v = poll.voters;
+                let counts;
+                if (v) {
+                    counts = Array(n).fill(0);
+                    Object.values(v).forEach(i => { if (counts[i] !== undefined) counts[i]++; });
+                } else {
+                    counts = poll.options.map(o => o.votes || 0);
+                }
+                return { counts, total: counts.reduce((a, b) => a + b, 0), mine: v ? v[currentUserId] : undefined };
+            }
+            function renderPollHtml(msg, textContent) {
+                const poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
+                const { counts, total, mine } = pollStats(poll);
+                const expired = poll.expiresAt && new Date(poll.expiresAt) < new Date();
+                const opts = poll.options.map((o, i) => {
+                    const pct = total ? Math.round(counts[i] / total * 100) : 0;
+                    return `
+                        <div class="poll2-opt ${mine === i ? 'sel' : ''}" ${expired ? 'style="cursor:default"' : `onclick="handlePollOptionClick('${msg.id}',${i})"`}>
+                            <div class="poll2-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                            <div class="poll2-main">
+                                <div class="poll2-line"><span>${escapeHtml(o.text)}</span><span class="poll2-count">${counts[i]}</span></div>
+                                <div class="poll2-bar"><i style="width:${pct}%"></i></div>
+                            </div>
+                        </div>`;
+                }).join('');
+                const foot = poll.expiresAt
+                    ? (expired ? 'Poll ended' : 'Ends ' + new Date(poll.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))
+                    : '';
+                return `
+                    <div class="poll2">
+                        <div class="poll2-q">${escapeHtml(poll.question)}</div>
+                        <div class="poll2-hint">Select one</div>
+                        ${opts}
+                        <div class="poll2-foot">${total} vote${total !== 1 ? 's' : ''}${foot ? ' · ' + foot : ''}</div>
+                        <button class="poll2-view" onclick="event.stopPropagation();showPollVoters('${msg.id}')">View votes</button>
+                    </div>` + (textContent ? captionHtml(textContent) : '');
+            }
+            window.showPollVoters = async function(msgId) {
+                const msg = messages.find(m => m.id === msgId);
+                if (!msg) return;
+                const poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
+                const voters = poll.voters || {};
+                const ids = Object.keys(voters);
+                if (!ids.length) { showToast('No votes yet', 'p'); return; }
+                const { data } = await sb.from('profiles').select('id, display_name, username, avatar_url').in('id', ids);
+                const pm = {};
+                (data || []).forEach(p => { pm[p.id] = p; });
+                let sheet = byId('fuPollVotersSheet');
+                if (!sheet) {
+                    sheet = document.createElement('div');
+                    sheet.id = 'fuPollVotersSheet';
+                    sheet.className = 'fu-action-sheet-backdrop';
+                    document.body.appendChild(sheet);
+                }
+                const body = poll.options.map((o, i) => {
+                    const who = ids.filter(id => voters[id] === i);
+                    if (!who.length) return '';
+                    return `<div style="padding:8px 12px 2px;font-weight:700;font-size:.82rem;color:var(--muted)">${escapeHtml(o.text)} · ${who.length}</div>` +
+                        who.map(id => {
+                            const p = pm[id] || {};
+                            return `<div class="u-row" style="padding:8px 12px"><img class="u-av" style="width:36px;height:36px" src="${getAvatar(p)}" ${avatarErrAttr()}>
+                                <div class="u-info"><div class="u-name">${escapeHtml(id === currentUserId ? 'You' : getDisplayName(p))}</div></div></div>`;
+                        }).join('');
+                }).join('');
+                sheet.innerHTML = `
+                    <div class="fu-action-sheet-backdrop-inner" onclick="document.getElementById('fuPollVotersSheet').classList.remove('open')"></div>
+                    <div class="fu-action-sheet" style="max-height:70vh;overflow:auto;">
+                        <div style="font-weight:800;padding:6px 12px 8px;">${escapeHtml(poll.question)}</div>${body}
+                    </div>`;
+                requestAnimationFrame(() => sheet.classList.add('open'));
+            };
+
+            // ═══════════════ UPGRADE: desktop/iPad – click outside the chat-info panel to close ═══════════════
+            const SIDE_PANELS = ['fuProfileScreen', 'fuThemeScreen', 'fuWallpaperScreen', 'fuBubbleScreen', 'disappearingScreen'];
+            function closeSidePanels() {
+                let any = false;
+                SIDE_PANELS.forEach(id => {
+                    const el = byId(id);
+                    if (el && el.classList.contains('open')) { el.classList.remove('open'); any = true; }
+                });
+                if (any) unlockBody();
+                return any;
+            }
+            document.addEventListener('click', function(e) {
+                if (window.innerWidth < 769) return;
+                if (!SIDE_PANELS.some(id => byId(id) && byId(id).classList.contains('open'))) return;
+                if (e.target.closest('.fu-screen, .poll-modal, .fu-action-sheet-backdrop, .fu-confirm-modal, .fu-lb, .mfs, #tw')) return;
+                closeSidePanels();
+            }, true);
+            document.addEventListener('keydown', function(e) {
+                if (e.key !== 'Escape') return;
+                if (!closeSidePanels() && chatSearch.open) closeChatSearch();
+            });
+
             let currentUserProfile = null;
 
             async function initChat() {
@@ -9574,7 +9893,6 @@
                 }
                 currentUserId = user.id;
 
-                // ── Combined badge: chat unread + notification unread ──
                 syncFreeUpperUnreadBadge();
 
                 messageInputArea.dataset.defaultHtml = messageInputArea.innerHTML;
@@ -9582,7 +9900,6 @@
                 const { data: profile } = await sb.from('profiles').select('*').eq('id', currentUserId).single();
                 currentUserProfile = profile || {};
 
-                // ─── FIX #1: Presence heartbeat ───
                 await sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
                 presenceHeartbeatInterval = setInterval(() => {
                     sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId).then(()=>{}).catch(()=>{});
@@ -9592,7 +9909,6 @@
                     sb.from('profiles').update({ is_online: online, last_seen_at: new Date().toISOString() }).eq('id', currentUserId).then(()=>{}).catch(()=>{});
 
                     if (online) {
-                        // Refresh combined badge when returning to the tab
                         syncFreeUpperUnreadBadge();
                     }
                 });
@@ -9600,7 +9916,6 @@
                     sb.from('profiles').update({ is_online: false, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
                 });
 
-                // ─── FIX #5: fire-and-forget notifications ───
                 setupFreeUpperNotifications();
 
                 await Promise.all([loadMutualFollowers(), loadMyBlockList()]);
@@ -9640,13 +9955,11 @@
                     const uid = params.get('uid');
 
                     if (conversationId) {
-                        // ─── Deep link from FCM push notification: chat.html?conversation=<id> ───
                         const existing = conversations.find(c => c.id === conversationId);
 
                         if (existing) {
                             await selectConversation(existing.id);
                         } else {
-                            // Not in current list (archived / hidden / stale) — refetch and retry
                             await loadConversations();
                             const loaded = conversations.find(c => c.id === conversationId);
                             if (loaded) {
