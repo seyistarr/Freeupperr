@@ -2176,7 +2176,7 @@
         } else if (m.message_type === 'voice') {
             label = label || '🎤 Voice message';
         } else if (m.message_type === 'document') {
-            label label || '📄 Document';
+            label || '📄 Document';
         }
         bar.innerHTML = `
                 ${thumb}
