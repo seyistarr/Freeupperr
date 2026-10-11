@@ -98,6 +98,8 @@
     }
 
     let archivedRowShown = false;
+    // ═══ CHANGE 1a ═══
+    let returnToArchivedAfterChat = false;
     const CL_PULL_THRESHOLD = 170;
     let clPullStartY = null;
     let clPullActive = false;
@@ -876,7 +878,11 @@
                 .from('conversations')
                 .select(`
                     *,
-                    messages:messages!messages_conversation_id_fkey( id, text, sender_id, created_at, message_type, media_url, reply_to, metadata )
+                    messages:messages!messages_conversation_id_fkey(
+                        id, text, sender_id, created_at, message_type,
+                        media_url, reply_to, metadata,
+                        message_reads ( user_id )
+                    )
                 `)
                 .order('updated_at', { ascending: false });
 
@@ -927,6 +933,13 @@
                     .created_at) ? a : b) : null;
                 const base = { ...conv, lastMessage: lastMsg, lastMessageTime: lastMsg ? lastMsg.created_at :
                         conv.updated_at };
+
+                // ═══ CHANGE 2b ═══
+                base.unreadCount = msgs.filter(m =>
+                    m.sender_id !== currentUserId &&
+                    !(m.message_reads || []).some(r => r.user_id === currentUserId)
+                ).length;
+
                 if (!conv.is_group) {
                     const otherId = conv.user1_id === currentUserId ? conv.user2_id : conv.user1_id;
                     base.otherUserId = otherId;
@@ -935,11 +948,6 @@
                 return base;
             });
 
-            // ────────────────────────────────────────────────────────────
-            // CHANGE 1: Keep archived conversations in memory so they can
-            // be opened and unarchived from the Archived Chats screen.
-            // Only hidden (deleted-for-me) conversations are removed here.
-            // ────────────────────────────────────────────────────────────
             conversations = conversations.filter(c =>
                 !(c.hidden_by || []).includes(currentUserId)
             );
@@ -955,10 +963,6 @@
         const q = filter.toLowerCase().trim();
         let html = '';
 
-        // ────────────────────────────────────────────────────────────
-        // CHANGE 2: Keep archived conversations out of the normal list,
-        // even though they remain loaded in memory.
-        // ────────────────────────────────────────────────────────────
         let matchedConvs = conversations.filter(c =>
             !(c.archived_by || []).includes(currentUserId)
         );
@@ -1029,12 +1033,18 @@
                 const pinIcon = isPinned ? '<i class="ri-pushpin-2-fill" style="font-size:.7rem;color:var(--p);"></i>' :
                     '';
                 const hasDisappearing = c.disappearing_duration > 0;
+
+                // ═══ CHANGE 2c ═══
+                const unreadDot = c.unreadCount > 0
+                    ? '<span class="conv-unread-dot" aria-label="Unread messages"></span>'
+                    : '';
+
                 return `
                             <div class="conv-swipe-wrap" data-conv-id="${c.id}">
                                 <div class="conv-item ${active}" onclick="handleConvTap('${c.id}')">
                                     <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${hasDisappearing ? '<span class="disap-badge"><i class="ri-time-line"></i></span>' : ''}</div>
                                     <div class="conv-info">
-                                        <div class="conv-name">${pinIcon} ${escapeHtml(name)} ${badge} ${muteIcon}</div>
+                                        <div class="conv-name">${pinIcon} ${escapeHtml(name)} ${badge} ${muteIcon} ${unreadDot}</div>
                                         <div class="conv-last-msg">${readTick}<span>${escapeHtml(lastMsg)}</span></div>
                                     </div>
                                     <div class="conv-time-row">
@@ -1326,12 +1336,36 @@
             const rows = unread.map(m => ({ message_id: m.id, user_id: currentUserId, read_at: now }));
             const { error } = await sb.from('message_reads').upsert(rows, { onConflict: 'message_id,user_id' });
             if (error) { console.warn('Mark messages read failed:', error); return; }
+
+            // ═══ CHANGE 2e ═══
             const readIds = new Set(unread.map(m => m.id));
             messages.forEach(m => {
                 if (readIds.has(m.id)) {
-                    m.message_reads = [...(m.message_reads || []), { user_id: currentUserId, read_at: now }];
+                    m.message_reads = [
+                        ...(m.message_reads || []).filter(r => r.user_id !== currentUserId),
+                        { user_id: currentUserId, read_at: now }
+                    ];
                 }
             });
+            const conv = conversations.find(c => c.id === convId);
+            if (conv) {
+                conv.unreadCount = Math.max(
+                    0,
+                    (conv.unreadCount || 0) - unread.length
+                );
+                (conv.messages || []).forEach(m => {
+                    if (readIds.has(m.id)) {
+                        m.message_reads = [
+                            ...(m.message_reads || []).filter(
+                                r => r.user_id !== currentUserId
+                            ),
+                            { user_id: currentUserId, read_at: now }
+                        ];
+                    }
+                });
+            }
+            renderConversations(convSearch.value);
+            // ═══ end CHANGE 2e ═══
         } catch (error) { console.warn('Mark messages read failed:', error); return; }
         await syncFreeUpperUnreadBadge();
     }
@@ -2142,7 +2176,7 @@
         } else if (m.message_type === 'voice') {
             label = label || '🎤 Voice message';
         } else if (m.message_type === 'document') {
-            label = label || '📄 Document';
+            label label || '📄 Document';
         }
         bar.innerHTML = `
                 ${thumb}
@@ -2345,11 +2379,6 @@
         showToast(nowPinned ? 'Chat pinned' : 'Chat unpinned', 'g');
     };
 
-    // ────────────────────────────────────────────────────────────
-    // CHANGE 3: Archive no longer removes the conversation from
-    // memory. It only flips the archive flag for the current user,
-    // so the same conversation remains available to open and unarchive.
-    // ────────────────────────────────────────────────────────────
     window.archiveConversation = async function(convId) {
         const conv = conversations.find(c => c.id === convId);
         if (!conv) return;
@@ -2437,12 +2466,6 @@
         convList.prepend(row);
     }
 
-    // ────────────────────────────────────────────────────────────
-    // CHANGE 4: Archived Chats screen now reads from the same
-    // in-memory `conversations` array, so it shows the correct
-    // contact/group, avatar, latest message, and timestamp — and
-    // reuses the existing chat-opening engine.
-    // ────────────────────────────────────────────────────────────
     window.openArchivedChatsScreen = async function() {
         const archived = conversations.filter(c =>
             (c.archived_by || []).includes(currentUserId)
@@ -2521,11 +2544,7 @@
         requestAnimationFrame(() => modal.classList.add('open'));
     };
 
-    // ────────────────────────────────────────────────────────────
-    // CHANGE 5: Open an archived conversation through the existing
-    // chat engine (selectConversation) instead of building a second
-    // messaging screen.
-    // ────────────────────────────────────────────────────────────
+    // ═══ CHANGE 1b ═══
     window.openArchivedConversation = async function(convId) {
         const conv = conversations.find(c =>
             c.id === convId &&
@@ -2535,8 +2554,8 @@
             showToast('Conversation not found. Refresh and try again.', 'r');
             return;
         }
+        returnToArchivedAfterChat = true;
         closeArchivedModal();
-        // Opens the original conversation using the existing chat engine.
         await selectConversation(convId);
     };
 
@@ -2546,11 +2565,6 @@
             document.body.classList.remove('modal-lock'); }
     };
 
-    // ────────────────────────────────────────────────────────────
-    // CHANGE 6: Unarchive simply removes the current user from the
-    // archived_by array on the same in-memory conversation, then
-    // re-renders. No refetch is needed and no data is lost.
-    // ────────────────────────────────────────────────────────────
     window.unarchiveConversation = async function(convId) {
         const conv = conversations.find(c => c.id === convId);
         if (!conv) {
@@ -2782,7 +2796,6 @@
             .subscribe();
     }
 
-    // ═══════════════ UPDATED: typing channel refreshes header for DMs AND groups ═══════════════
     async function setupTypingChannel(convId) {
         if (typingChannel) {
             try { await sb.removeChannel(typingChannel); } catch (e) {}
@@ -4659,7 +4672,11 @@
         }
     };
 
+    // ═══ CHANGE 1c + 1d ═══
     window.closeChatView = function() {
+        const shouldReturnToArchived = returnToArchivedAfterChat;
+        returnToArchivedAfterChat = false;
+
         if (chatSearch.open) closeChatSearch();
         if (typingChannel) {
             try { sb.removeChannel(typingChannel); } catch (e) {}
@@ -4699,6 +4716,9 @@
         applyChatBackground(null);
         const pbar = document.getElementById('pinnedMsgBar');
         if (pbar) pbar.style.display = 'none';
+        if (shouldReturnToArchived) {
+            window.openArchivedChatsScreen();
+        }
     };
 
     window.openPartnerProfile = function() {
