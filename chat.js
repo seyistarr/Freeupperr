@@ -935,8 +935,14 @@
                 return base;
             });
 
-            conversations = conversations.filter(c => !(c.hidden_by || []).includes(currentUserId) && !(c
-                .archived_by || []).includes(currentUserId));
+            // ────────────────────────────────────────────────────────────
+            // CHANGE 1: Keep archived conversations in memory so they can
+            // be opened and unarchived from the Archived Chats screen.
+            // Only hidden (deleted-for-me) conversations are removed here.
+            // ────────────────────────────────────────────────────────────
+            conversations = conversations.filter(c =>
+                !(c.hidden_by || []).includes(currentUserId)
+            );
             renderConversations(convSearch.value);
         } catch (err) {
             console.error('loadConversations error:', err);
@@ -949,7 +955,13 @@
         const q = filter.toLowerCase().trim();
         let html = '';
 
-        let matchedConvs = conversations;
+        // ────────────────────────────────────────────────────────────
+        // CHANGE 2: Keep archived conversations out of the normal list,
+        // even though they remain loaded in memory.
+        // ────────────────────────────────────────────────────────────
+        let matchedConvs = conversations.filter(c =>
+            !(c.archived_by || []).includes(currentUserId)
+        );
         if (q) {
             matchedConvs = matchedConvs.filter(c => {
                 let name = 'User';
@@ -2333,15 +2345,32 @@
         showToast(nowPinned ? 'Chat pinned' : 'Chat unpinned', 'g');
     };
 
+    // ────────────────────────────────────────────────────────────
+    // CHANGE 3: Archive no longer removes the conversation from
+    // memory. It only flips the archive flag for the current user,
+    // so the same conversation remains available to open and unarchive.
+    // ────────────────────────────────────────────────────────────
     window.archiveConversation = async function(convId) {
         const conv = conversations.find(c => c.id === convId);
         if (!conv) return;
-        const arr = Array.from(new Set([...(conv.archived_by || []), currentUserId]));
-        const { error } = await sb.from('conversations').update({ archived_by: arr }).eq('id', convId);
-        if (error) { showToast('Failed to archive', 'r'); return; }
-        conversations = conversations.filter(c => c.id !== convId);
-        if (selectedConversationId === convId) closeChatView();
+        const arr = Array.from(new Set([
+            ...(conv.archived_by || []),
+            currentUserId
+        ]));
+        const { error } = await sb
+            .from('conversations')
+            .update({ archived_by: arr })
+            .eq('id', convId);
+        if (error) {
+            showToast('Failed to archive', 'r');
+            return;
+        }
+        conv.archived_by = arr;
+        if (selectedConversationId === convId) {
+            closeChatView();
+        }
         renderConversations(convSearch.value);
+        archivedRowShown = false;
         showToast('Chat archived', 'g');
     };
 
@@ -2396,23 +2425,28 @@
     async function insertArchivedRow() {
         if (archivedRowShown) { openArchivedChatsScreen(); return; }
         archivedRowShown = true;
-        const { data } = await sb.from('conversations').select('id')
-            .contains('archived_by', [currentUserId]);
-        const count = (data || []).length;
+        const archivedCount = conversations.filter(c => (c.archived_by || []).includes(currentUserId)).length;
         const row = document.createElement('div');
         row.className = 'archived-inline-row';
         row.onclick = openArchivedChatsScreen;
         row.innerHTML = `
             <div class="archived-inline-ico"><i class="ri-archive-line"></i></div>
             <span>Archived</span>
-            <span class="archived-inline-count">${count}</span>
+            <span class="archived-inline-count">${archivedCount}</span>
         `;
         convList.prepend(row);
     }
 
+    // ────────────────────────────────────────────────────────────
+    // CHANGE 4: Archived Chats screen now reads from the same
+    // in-memory `conversations` array, so it shows the correct
+    // contact/group, avatar, latest message, and timestamp — and
+    // reuses the existing chat-opening engine.
+    // ────────────────────────────────────────────────────────────
     window.openArchivedChatsScreen = async function() {
-        const { data } = await sb.from('conversations').select('*')
-            .contains('archived_by', [currentUserId]);
+        const archived = conversations.filter(c =>
+            (c.archived_by || []).includes(currentUserId)
+        );
         let modal = document.getElementById('fuArchivedModal');
         if (!modal) {
             modal = document.createElement('div');
@@ -2420,26 +2454,90 @@
             modal.className = 'fu-screen';
             document.body.appendChild(modal);
         }
-        const listHtml = (data || []).map(c => {
-            const name = c.is_group ? (c.group_name || 'Group') : (c.otherUser?.display_name || c
-                .otherUser?.username || 'User');
-            const avatar = c.is_group ? (c.group_avatar || DEFAULT_AVATAR) : getAvatar(c.otherUser || {});
-            return `<div class="u-row" style="cursor:pointer;" onclick="unarchiveConversation('${c.id}')">
-                        <img class="u-av" src="${avatar}" ${avatarErrAttr()}>
-                        <div class="u-info"><div class="u-name">${escapeHtml(name)}</div></div>
-                    </div>`;
+        const listHtml = archived.map(c => {
+            const other = c.otherUser || {};
+            const name = c.is_note
+                ? (c.note_name || 'My Note')
+                : c.is_group
+                    ? (c.group_name || 'Group')
+                    : (other.display_name || other.username || 'User');
+            const avatar = c.is_note
+                ? (c.note_avatar || DEFAULT_AVATAR)
+                : c.is_group
+                    ? (c.group_avatar || DEFAULT_AVATAR)
+                    : getAvatar(other);
+            const last = c.lastMessage;
+            let preview = 'No messages yet';
+            if (last) {
+                const prefix = last.sender_id === currentUserId ? 'You: ' : '';
+                const viewOnce = last.metadata && last.metadata.view_once ? '🔒 ' : '';
+                preview = prefix + viewOnce +
+                    (last.text || mediaLabel(last.message_type));
+            }
+            const time = c.lastMessageTime
+                ? formatDate(c.lastMessageTime)
+                : '';
+            return `
+                <div class="conv-swipe-wrap">
+                    <div class="conv-item"
+                         style="cursor:pointer;"
+                         onclick="openArchivedConversation('${c.id}')">
+                        <div class="av">
+                            <img src="${avatar}"
+                                 alt="${escapeHtml(name)}"
+                                 ${avatarErrAttr()}>
+                        </div>
+                        <div class="conv-info">
+                            <div class="conv-name">${escapeHtml(name)}</div>
+                            <div class="conv-last-msg">
+                                <span>${escapeHtml(preview)}</span>
+                            </div>
+                        </div>
+                        <div class="conv-time-row">
+                            <div class="conv-time">${escapeHtml(time)}</div>
+                            <button type="button"
+                                    class="conv-more-btn"
+                                    title="Unarchive chat"
+                                    onclick="event.stopPropagation();unarchiveConversation('${c.id}')">
+                                <i class="ri-inbox-unarchive-line"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
         }).join('');
         modal.innerHTML = `
-                    <div class="fu-screen-header">
-                        <button onclick="closeArchivedModal()"><i class="ri-arrow-left-line"></i></button>
-                        <h3>Archived Chats</h3>
-                    </div>
-                    <div class="fu-body">
-                        ${listHtml || '<div class="fu-empty-tab">No archived chats.</div>'}
-                    </div>
-                `;
+            <div class="fu-screen-header">
+                <button onclick="closeArchivedModal()">
+                    <i class="ri-arrow-left-line"></i>
+                </button>
+                <h3>Archived Chats</h3>
+            </div>
+            <div class="fu-body">
+                ${listHtml || '<div class="fu-empty-tab">No archived chats.</div>'}
+            </div>
+        `;
         document.body.classList.add('modal-lock');
         requestAnimationFrame(() => modal.classList.add('open'));
+    };
+
+    // ────────────────────────────────────────────────────────────
+    // CHANGE 5: Open an archived conversation through the existing
+    // chat engine (selectConversation) instead of building a second
+    // messaging screen.
+    // ────────────────────────────────────────────────────────────
+    window.openArchivedConversation = async function(convId) {
+        const conv = conversations.find(c =>
+            c.id === convId &&
+            (c.archived_by || []).includes(currentUserId)
+        );
+        if (!conv) {
+            showToast('Conversation not found. Refresh and try again.', 'r');
+            return;
+        }
+        closeArchivedModal();
+        // Opens the original conversation using the existing chat engine.
+        await selectConversation(convId);
     };
 
     window.closeArchivedModal = function() {
@@ -2448,15 +2546,32 @@
             document.body.classList.remove('modal-lock'); }
     };
 
+    // ────────────────────────────────────────────────────────────
+    // CHANGE 6: Unarchive simply removes the current user from the
+    // archived_by array on the same in-memory conversation, then
+    // re-renders. No refetch is needed and no data is lost.
+    // ────────────────────────────────────────────────────────────
     window.unarchiveConversation = async function(convId) {
         const conv = conversations.find(c => c.id === convId);
-        if (!conv) return;
-        const arr = (conv.archived_by || []).filter(id => id !== currentUserId);
-        const { error } = await sb.from('conversations').update({ archived_by: arr }).eq('id', convId);
-        if (error) { showToast('Failed to unarchive', 'r'); return; }
+        if (!conv) {
+            showToast('Conversation not found. Refresh and try again.', 'r');
+            return;
+        }
+        const arr = (conv.archived_by || []).filter(
+            id => id !== currentUserId
+        );
+        const { error } = await sb
+            .from('conversations')
+            .update({ archived_by: arr })
+            .eq('id', convId);
+        if (error) {
+            showToast('Failed to unarchive', 'r');
+            return;
+        }
         conv.archived_by = arr;
         closeArchivedModal();
-        await loadConversations();
+        archivedRowShown = false;
+        renderConversations(convSearch.value);
         showToast('Chat unarchived', 'g');
     };
 
