@@ -2366,6 +2366,10 @@
             object-fit: contain;
             display: block;
         }
+        /* Portrait videos fill the phone screen; landscape and photos stay uncropped */
+        @media (max-width: 767px) {
+            .v-media-wrap video.v-fill { object-fit: cover; }
+        }
         .v-img-track {
             display: flex;
             width: 100%;
@@ -3637,6 +3641,13 @@
             document.getElementById('backdrop').classList.add('open');
         }
 
+        // ─── FIT VIDEO: portrait videos fill the phone screen ────────
+        function fitVideo(vid) {
+            if (!vid || !vid.videoWidth || !vid.videoHeight) return;
+            vid.classList.toggle('v-fill', vid.videoWidth / vid.videoHeight <= 0.7);
+        }
+        window.fitVideo = fitVideo;
+
         // ─── BUILD MEDIA HTML ─────────────────────────────────────────
 
         function buildMediaHtml(v, i) {
@@ -3667,6 +3678,7 @@
                         disablepictureinpicture
                         disableremoteplayback
                         controlslist="nodownload noplaybackrate noremoteplayback"
+                        onloadedmetadata="fitVideo(this)"
                     ></video>
                     ${hintHtml}
                     <div class="v-upload-badge" id="uploadBadge-${i}" onclick="event.stopPropagation(); openStudio()">
@@ -3877,7 +3889,6 @@
 
         // ─── BUILD FEED ──────────────────────────────────────────────
 
-        // ─── FIX #1: buildEligibleFeed ───
         function buildEligibleFeed(mode) {
             const isEligible = (v) => {
                 if (mode === 'following') {
@@ -3912,7 +3923,6 @@
             requestAnimationFrame(frame);
         }
 
-        // ─── FIX #2: buildFeed (no nested .v-card) ───
         function buildFeed(list) {
             const posts = list || buildEligibleFeed(feedMode);
             const track = document.getElementById('feedTrack');
@@ -4092,7 +4102,6 @@
             const playPromise = vid.play();
             if (playPromise && typeof playPromise.catch === 'function') {
                 playPromise.catch(() => {
-                    // Browser blocked sound autoplay: play muted, unmute on first touch
                     vid.muted = true;
                     _soundBlocked = true;
                     vid.play().catch(() => {});
@@ -4120,7 +4129,6 @@
             document.querySelectorAll('.v-unmute-hint').forEach(function(el) { el.classList.remove('show'); });
         }
 
-        // ─── FIX #6: unmuteCurrentVideo ───
         function unmuteCurrentVideo(idx) {
             setMutePreference(false);
             hideAllUnmuteHints();
@@ -4168,7 +4176,6 @@
             updateMuteButtons(next);
         }
 
-        // First touch after a blocked autoplay: turn sound on
         document.addEventListener('pointerdown', function(e) {
             if (!_soundBlocked || userMutePreference) return;
             if (e.target.closest && e.target.closest('.v-mute-btn')) return;
@@ -4721,9 +4728,7 @@
                 '<div class="comment-side-actions">' +
                 '<button class="comment-like-btn ' + (isLiked ? 'liked' : '') +
                 '" onclick="toggleCommentLikeUI(this, \'' + comment.id + '\')">' +
-                '<svg class="like-heart" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06       -1.06a5.5 5.5 }
-
- 0 0 0-7.78 7.78       l1.06 1.06L12 21.23l7 function.78-7.78 1.06-1.06a5.5 5.5 0 0 getAll 0 0-7.78Descz"/></svg>' +
+                '<svg class="like-heart" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>' +
                 '<span class="like-count">' + (likeCount > 0 ? likeCount : '') + '</span>' +
                 '</button>' +
                 (showMenu ? '<button class="comment-menu-btn" onclick="openCommentActionsMenu(event, \'' + comment.id +
@@ -4783,7 +4788,9 @@
                 '</div>' +
                 '</div>' +
                 '</div>';
-endants(pid, comments) {
+        }
+
+        function getAllDescendants(pid, comments) {
             const result = [];
             const direct = comments.filter(c => c.parentId === pid);
             for (const c of direct) {
@@ -5814,7 +5821,7 @@ endants(pid, comments) {
                 pullOffset = 0;
             }, { passive: true });
 
-            console.log('Freeupper Video Feed · feed renders immediately · sound owner hydrated async ✓');
+            console.log('Freeupper Video Feed · portrait videos fill screen · sound owner hydrated async ✓');
         }
 
         if (document.readyState === 'loading') {
@@ -5882,6 +5889,7 @@ endants(pid, comments) {
         window.updateCivCount = updateCivCount;
         window.positionImgDots = positionImgDots;
         window.populateComments = populateComments;
+        window.fitVideo = fitVideo;
     </script>
 </body>
 </html>
