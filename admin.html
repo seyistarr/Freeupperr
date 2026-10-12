@@ -1077,19 +1077,16 @@
             height: 1px;
             background: var(--border);
         }
-        .auth-switch {
+        .auth-notice {
             text-align: center;
-            font-size: 13px;
-            color: var(--text-secondary);
+            font-size: 12px;
+            color: var(--text-tertiary);
             margin-top: 16px;
+            line-height: 1.5;
         }
-        .auth-switch button {
-            background: none;
-            border: none;
-            color: var(--primary);
-            font-weight: 700;
-            cursor: pointer;
-            font-size: 13px;
+        .auth-notice strong {
+            color: var(--text-secondary);
+            font-weight: 600;
         }
 
         /* ─── PAGE HEADER ──────────────────────────────────────────── */
@@ -1492,21 +1489,25 @@
         </div>
     </div>
 
-    <!-- ─── AUTH OVERLAY ────────────────────────── -->
+    <!-- ─── AUTH OVERLAY ─────────────────────────────
+         SECURITY PATCH 1B
+         The admin page is now SIGN-IN ONLY.
+         Public self-promotion to admin has been removed.
+         The only way to become an admin is via
+         out-of-band provisioning (SQL / dashboard) with
+         profiles.is_admin = true.
+    ─────────────────────────────────────────────── -->
     <div class="auth-overlay" id="authOverlay">
         <div class="auth-card">
             <div class="logo">◈ FreeUpper</div>
             <div class="title" id="authTitle">Admin Access</div>
-            <div class="sub" id="authSub">Sign in to manage the platform.</div>
+            <div class="sub" id="authSub">Sign in with an existing administrator account.</div>
             <div class="error" id="authError"></div>
-            <div class="field" id="adminNameField">
-                <input type="text" id="adminName" placeholder="Full name" />
+            <div class="field">
+                <input type="email" id="adminEmail" placeholder="Email address" autocomplete="email" />
             </div>
             <div class="field">
-                <input type="email" id="adminEmail" placeholder="Email address" />
-            </div>
-            <div class="field">
-                <input type="password" id="adminPassword" placeholder="Password" />
+                <input type="password" id="adminPassword" placeholder="Password" autocomplete="current-password" />
             </div>
             <button class="btn" id="authSubmitBtn">Sign In</button>
             <div class="auth-divider">OR</div>
@@ -1514,8 +1515,9 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" style="display:inline;margin-right:8px;"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3 14.6 2 12 2 6.9 2 2.7 6.1 2.7 11.8S6.9 21.6 12 21.6c6.9 0 9.3-4.8 9.3-7.3 0-.5-.1-.9-.1-1.3H12z"/></svg>
                 Continue with Google
             </button>
-            <div class="auth-switch" id="authSwitch">
-                Already have an account? <button id="authSwitchBtn">Sign In</button>
+            <div class="auth-notice">
+                Admin accounts are <strong>provisioned by an existing administrator</strong>.<br />
+                Public sign-up is disabled.
             </div>
         </div>
     </div>
@@ -1562,7 +1564,6 @@
             let currentTab = 'dashboard';
             let currentFilter = 'all';
             let pendingRequestId = null;
-            let authMode = 'signin';
             let userSearchTerm = '';
 
             // Data stores
@@ -1716,73 +1717,45 @@
                 }
             }
 
-            // ─── AUTH ──────────────────────────────────────────────────────────
+            // ─── AUTH (SIGN-IN ONLY — SECURITY PATCH 1B) ──────────────────────
+            // The admin page no longer offers self-signup. Admin accounts must
+            // be provisioned out-of-band (SQL / Supabase dashboard) with
+            // profiles.is_admin = true. This prevents any authenticated user
+            // from escalating themselves via the public admin screen.
             function renderAuth() {
-                const title = document.getElementById('authTitle');
-                const sub = document.getElementById('authSub');
-                const nameField = document.getElementById('adminNameField');
-                const submitBtn = document.getElementById('authSubmitBtn');
-                const switchText = document.getElementById('authSwitch');
-                if (authMode === 'signup') {
-                    title.textContent = 'Create Admin Account';
-                    sub.textContent = 'Sign up as an admin to manage the platform.';
-                    nameField.style.display = 'block';
-                    submitBtn.textContent = 'Create Account';
-                    switchText.innerHTML = 'Already have an account? <button id="authSwitchBtn">Sign In</button>';
-                } else {
-                    title.textContent = 'Admin Access';
-                    sub.textContent = 'Sign in to manage the platform.';
-                    nameField.style.display = 'none';
-                    submitBtn.textContent = 'Sign In';
-                    switchText.innerHTML =
-                        'Don\'t have an account? <button id="authSwitchBtn">Sign Up</button>';
-                }
-                document.getElementById('authSwitchBtn').addEventListener('click', function() {
-                    authMode = authMode === 'signin' ? 'signup' : 'signin';
-                    renderAuth();
-                });
+                // Static markup already reflects sign-in-only mode. This
+                // function only ensures the error region is cleared.
+                const errorEl = document.getElementById('authError');
+                if (errorEl) errorEl.textContent = '';
             }
 
             async function handleAuth() {
                 const email = document.getElementById('adminEmail').value.trim();
                 const password = document.getElementById('adminPassword').value;
-                const name = document.getElementById('adminName').value.trim();
                 const errorEl = document.getElementById('authError');
                 const btn = document.getElementById('authSubmitBtn');
+
                 errorEl.textContent = '';
-                if (!email || !password) { errorEl.textContent = 'Please fill in email and password.'; return; }
-                if (authMode === 'signup' && !name) { errorEl.textContent = 'Please enter your full name.'; return; }
+
+                if (!email || !password) {
+                    errorEl.textContent = 'Please fill in email and password.';
+                    return;
+                }
+
                 btn.disabled = true;
                 btn.textContent = 'Please wait…';
+
                 try {
-                    let result;
-                    if (authMode === 'signup') {
-                        result = await sb.auth.signUp({
-                            email,
-                            password,
-                            options: {
-                                data: {
-                                    display_name: name,
-                                    username: name.toLowerCase().replace(/\s+/g, ''),
-                                    is_admin: true
-                                }
-                            }
-                        });
-                        if (result.error) throw result.error;
-                        if (result.data.session) {
-                            await new Promise(r => setTimeout(r, 1000));
-                            await sb.from('profiles').update({ is_admin: true }).eq('id', result.data.session.user.id);
-                        }
-                    } else {
-                        result = await sb.auth.signInWithPassword({ email, password });
-                        if (result.error) throw result.error;
-                    }
+                    const result = await sb.auth.signInWithPassword({ email, password });
+                    if (result.error) throw result.error;
+                    // checkAdminStatus() will still verify profiles.is_admin
+                    // before any admin UI is shown.
                     document.getElementById('authOverlay').classList.add('hidden');
                     await loadData();
                 } catch (e) {
                     errorEl.textContent = e.message || 'Something went wrong.';
                     btn.disabled = false;
-                    btn.textContent = authMode === 'signup' ? 'Create Account' : 'Sign In';
+                    btn.textContent = 'Sign In';
                 }
             }
 
@@ -1808,6 +1781,9 @@
             };
 
             // ─── CHECK ADMIN STATUS ──────────────────────────────────────────
+            // Authoritative gate: even if a user signs in, they must have
+            // profiles.is_admin = true. Patch 1A (DB trigger) ensures this
+            // column cannot be set by non-admins via insert or update.
             async function checkAdminStatus() {
                 const user = getCurrentUser();
                 if (!user.isLoggedIn && user.id.startsWith('GUEST-')) {
@@ -2221,7 +2197,7 @@
                 renderRequests();
             };
 
-            // ─── OPEN REQUEST DETAIL (reverted to pre-Step-4) ──────────────────
+            // ─── OPEN REQUEST DETAIL ──────────────────────────────────────────
             window.openRequestDetail = function(requestId) {
                 const req = requests.find(r => r.id === requestId);
                 if (!req) return;
@@ -3263,7 +3239,7 @@
                         `;
             }
 
-            // ─── VERIFICATION FUNCTIONS (reverted to pre-Step-4) ────────────
+            // ─── VERIFICATION FUNCTIONS ────────────────────────────────────────
             window.approveRequest = async function(requestId) {
                 if (!confirm('Approve this verification request?')) return;
                 try {
