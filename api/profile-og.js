@@ -8,7 +8,7 @@ const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY;
 
 const SITE_URL =
-  'https://freeupper.com';
+  'https://www.freeupper.com';
 
 const FALLBACK_IMAGE =
   `${SITE_URL}/freeupper.png`;
