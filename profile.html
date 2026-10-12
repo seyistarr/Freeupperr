@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000" id="themeColorMeta">
     <title>Profile · Freeupper</title>
     <meta name="description" content="View profiles and connect with people on FreeUpper.">
@@ -295,19 +297,9 @@
             content: ''; position: absolute; top: 0; left: 0; right: 0; height: 90px;
             background: linear-gradient(rgba(0,0,0,.35), transparent); pointer-events: none;
         }
-        /* OWNER VIEW: inset rounded card on purple backdrop */
-        .is-owner .profile-col::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0;
-            height: calc(env(safe-area-inset-top, 0px) + 232px);
-            background: linear-gradient(160deg, #3b1d8f, #6d28d9 65%, #8b5cf6);
-        }
-        .is-owner .profile-cover {
-            width: calc(100% + 16px);
-            margin: calc(env(safe-area-inset-top, 0px) + 52px) 0 0 -8px;
-            height: 142px;
-            border-radius: 26px;
-        }
-        .is-owner .profile-cover::after { display: none; }
+        /* OWNER VIEW: full-bleed cover, white sheet overlaps its bottom edge */
+        .is-owner .profile-cover { border-radius: 0; }
+        .is-owner .cover-edit-btn { bottom: 38px; }
 
         .profile-cover .cover-img {
             width: 100%;
@@ -355,9 +347,10 @@
             background: var(--bg);
             border-radius: 28px 28px 0 0;
             z-index: 1;
-            margin: 0 -16px;
+            margin: -28px -16px 0;
             padding: 0 16px 10px;
         }
+        .is-owner .profile-hero .avatar-wrap { margin-top: -26px; }
 
         .avatar-wrap {
             position: relative;
@@ -439,7 +432,6 @@
             letter-spacing: -.4px;
         }
         .hero-handle { font-size: 14px; font-weight: 500; color: var(--muted); margin-bottom: 14px; }
-        .is-owner .hero-handle { margin-bottom: 38px; }
 
         .edit-pen {
             width: 28px; height: 28px; padding: 0; background: none; border: none;
@@ -620,10 +612,15 @@
         /* ─── GRID ─── */
         .grid-3 {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 4px;
-            padding: 12px 0;
-            width: 100%;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            padding: 2px 0 12px;
+            width: calc(100% + 32px);
+            margin-left: -16px;
+            margin-right: -16px;
+        }
+        @media (min-width: 768px) {
+            .grid-3 { grid-template-columns: repeat(4, 1fr); }
         }
         .grid-2 {
             display: grid;
@@ -633,11 +630,11 @@
         }
         .grid-card {
             position: relative;
-            border-radius: 10px;
+            border-radius: 0;
             overflow: hidden;
             background: var(--bg4);
             cursor: pointer;
-            aspect-ratio: 11 / 8;
+            aspect-ratio: 3 / 4;
             transition: transform .18s ease;
             border: none;
         }
@@ -2390,7 +2387,7 @@
         </div>
         <div style="overflow-y:auto;flex:1;padding:12px clamp(14px,5vw,24px) 40px;display:flex;flex-direction:column;gap:16px;max-width:600px;width:100%;margin:0 auto">
             <div class="form-group" style="align-items:center">
-                <div class="avatar-wrap" style="cursor:pointer;margin-bottom:0" onclick="openFS('avatarModal')">
+                <div class="avatar-wrap" style="cursor:pointer;margin:6px 0 0" onclick="openFS('avatarModal')">
                     <div class="avatar-ring"></div><div class="avatar-ring-gap"></div>
                     <img class="avatar-img" id="editAv" src="" alt="" onerror="this.style.background='linear-gradient(135deg,#1a1035,#3b1a6b)';this.removeAttribute('src');" style="pointer-events:none">
                 </div>
@@ -2909,7 +2906,7 @@
 
             function buildGridSkeleton() {
                 var sq = '';
-                for (var i = 0; i < 9; i++) sq += '<div class="grid-card skl-block" style="aspect-ratio:1/1;"></div>';
+                for (var i = 0; i < 9; i++) sq += '<div class="grid-card skl-block"></div>';
                 return '<div class="grid-3">' + sq + '</div>';
             }
 
@@ -4433,6 +4430,48 @@
                 document.getElementById('postsModal').classList.remove('open');
                 document.body.style.overflow = '';
             };
+
+            // Posts modal: tap outside or drag to dismiss
+            (function setupPostsModalDismiss() {
+                var overlay = document.getElementById('postsModal');
+                var box = document.getElementById('postsBox');
+                if (!overlay || !box) return;
+
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) window.closeCenter();
+                });
+
+                var startY = 0, dy = 0, dragging = false;
+
+                box.addEventListener('pointerdown', function(e) {
+                    if (e.target.closest('button')) return;
+                    dragging = true;
+                    startY = e.clientY;
+                    dy = 0;
+                    box.style.transition = 'none';
+                    box.setPointerCapture(e.pointerId);
+                });
+                box.addEventListener('pointermove', function(e) {
+                    if (!dragging) return;
+                    dy = e.clientY - startY;
+                    box.style.transform = 'translateY(' + dy + 'px)';
+                    overlay.style.opacity = String(Math.max(0.2, 1 - Math.abs(dy) / 400));
+                });
+
+                function endDrag() {
+                    if (!dragging) return;
+                    dragging = false;
+                    box.style.transition = '';
+                    var shouldClose = Math.abs(dy) > 90;
+                    if (shouldClose) window.closeCenter();
+                    setTimeout(function() {
+                        box.style.transform = '';
+                        overlay.style.opacity = '';
+                    }, shouldClose ? 300 : 0);
+                }
+                box.addEventListener('pointerup', endDrag);
+                box.addEventListener('pointercancel', endDrag);
+            })();
 
             // ─── POSTS MODAL ──────────────────────────────────────────
             window.openPostsModal = function() {
