@@ -4046,7 +4046,7 @@
         try {
             const { data: code, error } = await sb.rpc('get_or_create_invite_code', { p_conversation_id: conv.id });
             if (error) throw error;
-            currentInviteLink = `https://freeupper.vercel.app/join/${code}`;
+            currentInviteLink = `https://freeupper.com/join/${code}`;
             document.getElementById('amInviteLinkText').textContent = currentInviteLink;
             document.getElementById('amQrImg').src =
                 `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentInviteLink)}`;
