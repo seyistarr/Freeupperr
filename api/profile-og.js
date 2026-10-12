@@ -8,7 +8,7 @@ const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY;
 
 const SITE_URL =
-  'https://freeupper.vercel.app';
+  'https://freeupper.com';
 
 const FALLBACK_IMAGE =
   `${SITE_URL}/freeupper.png`;
@@ -113,7 +113,7 @@ export default async function handler(req, res) {
   try {
     const requestUrl = new URL(
       req.url,
-      `https://${req.headers.host || 'freeupper.vercel.app'}`
+      `https://${req.headers.host || 'freeupper.com'}`
     );
 
     /*
