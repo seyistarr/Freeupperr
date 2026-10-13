@@ -3,6 +3,8 @@
    with Safari autofix, unique usernames, and bulletproof errors
    + strict comment-media MIME allowlist (GIFs excluded)
    + consent notice (Terms of Service + Privacy Policy) in modal
+   + fixed fu-name input, cleaned consent CSS,
+     and 3-second first-visit prompt with auth recheck
    ============================================================ */
 (function () {
   'use strict';
@@ -450,10 +452,24 @@
       color:var(--muted2,rgba(255,255,255,.4));font-size:12.5px;font-weight:600;cursor:pointer;
       margin-top:12px;padding:4px;text-decoration:underline;text-underline-offset:2px}
     #fu-auth-maybe-later:hover{color:var(--text,#fff)}
-    .fu-auth-consent{margin-top:16px;padding-top: id14px;border-top:1px solid var(--brd2,rgba(255,255,255,.08));
-      text-align:center;font-size:11.5px;line-height:1.6;color:var(--muted2,r="gfuba(255-name,255,255,."55))}
- type    .fu-auth-consent a{color:#a78bfa;font-weight:600;text-decoration:none}
-    .fu-auth-consent a:hover{text-decoration:underline;text-underline-offset:2px}
+    .fu-auth-consent {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--brd2, rgba(255,255,255,.08));
+      text-align: center;
+      font-size: 11.5px;
+      line-height: 1.6;
+      color: var(--muted2, rgba(255,255,255,.55));
+    }
+    .fu-auth-consent a {
+      color: #a78bfa;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .fu-auth-consent a:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
     `;
 
     if (!document.getElementById('fu-auth-styles')) {
@@ -473,7 +489,9 @@
         <div id="fu-auth-title">Join FreeUpper</div>
         <div id="fu-auth-sub">Create an account to post, comment, and save favorites.</div>
         <div id="fu-auth-error"></div>
-        <div id="fu-name-field" class="fu-field"><input="text" placeholder="Full name" /></div>
+        <div id="fu-name-field" class="fu-field">
+          <input id="fu-name" type="text" placeholder="Full name" autocomplete="name" />
+        </div>
         <div class="fu-field"><input id="fu-email" type="email" placeholder="Email address" /></div>
         <div class="fu-field fu-password-wrapper">
           <input id="fu-password" type="password" placeholder="Password" />
@@ -803,15 +821,28 @@
     document.dispatchEvent(new CustomEvent('profileUpdated', { detail: { user: guest } }));
   }
 
-  // ─── FIRST-VISIT PROMPT (auto-show once) ──────────────────
+  // ─── FIRST-VISIT PROMPT (show after 3 seconds) ────────────
   const FIRST_VISIT_KEY = 'freeupper_seen_signup_prompt';
   function maybeShowFirstVisitPrompt() {
     try {
       const user = getCurrentUser();
+      // Never show the signup prompt to an authenticated user.
       if (user && user.isLoggedIn) return;
+      // Show the automatic prompt only once per browser.
       if (localStorage.getItem(FIRST_VISIT_KEY)) return;
+      // Mark the prompt as scheduled.
       localStorage.setItem(FIRST_VISIT_KEY, '1');
-      setTimeout(function () { openModal('signup', null); }, 600);
+      setTimeout(function () {
+        // Recheck authentication in case the user signed in meanwhile.
+        const currentUser = getCurrentUser();
+        if (currentUser && currentUser.isLoggedIn) return;
+        // Do not interrupt another open modal.
+        const existingOverlay = document.getElementById('fu-auth-overlay');
+        if (existingOverlay && existingOverlay.classList.contains('open')) {
+          return;
+        }
+        openModal('signup', null);
+      }, 3000);
     } catch (e) {
       console.warn('maybeShowFirstVisitPrompt failed:', e);
     }
