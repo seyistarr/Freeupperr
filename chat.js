@@ -4046,7 +4046,7 @@
         try {
             const { data: code, error } = await sb.rpc('get_or_create_invite_code', { p_conversation_id: conv.id });
             if (error) throw error;
-            currentInviteLink = `https://www.freeupper.com/join/${code}`;
+            currentInviteLink = `${window.FreeUpperConfig.appOrigin}/join/${code}`;
             document.getElementById('amInviteLinkText').textContent = currentInviteLink;
             document.getElementById('amQrImg').src =
                 `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentInviteLink)}`;
@@ -4836,90 +4836,19 @@
         }
     };
 
-    function isIosDevice() {
-        return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
-    }
-    function isStandalonePWA() {
-        return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-    }
-    window.dismissIosA2hsBanner = function() {
-        const banner = document.getElementById('iosA2hsBanner');
-        if (banner) banner.classList.remove('show');
-        try { localStorage.setItem('fu_a2hs_dismissed', '1'); } catch (e) {}
-    };
-    function maybeShowIosA2hsBanner() {
-        if (!isIosDevice() || isStandalonePWA()) return;
-        let dismissed = false;
-        try { dismissed = localStorage.getItem('fu_a2hs_dismissed') === '1'; } catch (e) {}
-        if (dismissed) return;
-        const banner = document.getElementById('iosA2hsBanner');
-        if (banner) banner.classList.add('show');
-    }
-
     async function setupFreeUpperNotifications() {
         try {
-            if (isIosDevice() && !isStandalonePWA()) {
-                maybeShowIosA2hsBanner();
-                return;
-            }
-
-            if (!("Notification" in window) || !window.FreeUpperFCM) {
-                return;
-            }
-
-            const permission = await window.FreeUpperNotificationPermission.start();
-
-            if (permission !== "granted") {
-                return;
-            }
-
-            const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-            await navigator.serviceWorker.ready;
-            console.log('Service worker active:', registration.active);
-
-            const token = await window.FreeUpperFCM.getToken(window.FreeUpperFCM.messaging, {
-                vapidKey: "BHmk5m_sPqAlX_JlLtLfHS0oPQgQFLtuANDGZhtBNEeamb760XLZxfYGdatnjrWUmDU7zfwTIRaUM8IRsa7rYUw",
-                serviceWorkerRegistration: registration
-            });
-            if (!token) return;
-
-            await sb.from('push_tokens').upsert(
-                { user_id: currentUserId, token, platform: 'web', updated_at: new Date().toISOString() },
-                { onConflict: 'token' }
-            );
-
-            window.FreeUpperFCM.onMessage(
-                window.FreeUpperFCM.messaging,
-                async (payload) => {
+            await window.FreeUpperPushNotifications.start({
+                onMessage: (payload) => {
                     const data = payload.data || {};
                     const notification = payload.notification || {};
-
-                    const unreadCount = Number(data.unread_count);
-
-                    if (
-                        Number.isFinite(unreadCount) &&
-                        unreadCount >= 0 &&
-                        typeof navigator.setAppBadge === "function"
-                    ) {
-                        try {
-                            if (unreadCount > 0) {
-                                await navigator.setAppBadge(Math.floor(unreadCount));
-                            } else if (typeof navigator.clearAppBadge === "function") {
-                                await navigator.clearAppBadge();
-                            }
-                        } catch (error) {
-                            console.error("FreeUpper FCM badge error:", error);
-                        }
-                    }
-
                     const title = data.title || notification.title || "FreeUpper";
                     const body = data.body || notification.body || "You have a new notification.";
-
                     showToast(`<b>${escapeHtml(title)}:</b>&nbsp;${escapeHtml(body)}`, "p");
                 }
-            );
+            });
         } catch (err) {
-            console.error('FreeUpper notification setup failed:', err);
+            console.warn('FreeUpper notification setup unavailable:', err.message);
         }
     }
 

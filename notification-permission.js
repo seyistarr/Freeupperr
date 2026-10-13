@@ -32,7 +32,7 @@
         const modal = document.getElementById('fuNotificationPermissionModal');
         if (modal) modal.remove();
 
-        document.body.classList.remove('modal-lock');
+        document.body.classList.remove('fu-notification-lock');
     }
 
     function createModal() {
@@ -102,115 +102,81 @@
 
                 <div class="fu-notification-note">
                     You can change notification permissions later
-                    from your browser settings.
+                    from FreeUpper Settings or your browser settings.
                 </div>
             </div>
         `;
 
         document.body.appendChild(modal);
-        document.body.classList.add('modal-lock');
+        document.body.classList.add('fu-notification-lock');
     }
 
-    async function requestBrowserPermission() {
-        if (!('Notification' in window)) {
-            console.warn(
-                '[FreeUpper Notifications] Browser notifications are not supported.'
-            );
-            return 'unsupported';
-        }
 
-        if (Notification.permission === 'granted') {
-            return 'granted';
-        }
+    let pending = null;
+    let finishPending = null;
+    let previousFocus = null;
 
-        if (Notification.permission === 'denied') {
-            return 'denied';
-        }
-
-        return await Notification.requestPermission();
+    function requestBrowserPermission() {
+        const status = window.FreeUpperPushNotifications?.deviceStatus() ||
+            (!('Notification' in window) ? 'unsupported' : Notification.permission);
+        if (status === 'granted' || status === 'denied') markHandled();
+        if (status !== 'default') return Promise.resolve(status);
+        markHandled();
+        try { return Promise.resolve(Notification.requestPermission()); }
+        catch (error) { return Promise.reject(error); }
     }
 
-    async function start() {
-        if (!window.FreeUpperFCM) {
-            console.warn(
-                '[FreeUpper Notifications] Firebase Messaging is not ready.'
-            );
-            return;
-        }
+    function cancel() {
+        if (finishPending) finishPending('cancelled');
+    }
 
-        if (!('Notification' in window)) {
-            return;
-        }
-
-        /*
-         * Permission already granted.
-         * No need to show the custom modal again.
-         */
-        if (Notification.permission === 'granted') {
+    function start() {
+        if (pending) return pending;
+        const status = window.FreeUpperPushNotifications?.deviceStatus() ||
+            (!('Notification' in window) ? 'unsupported' : Notification.permission);
+        if (status === 'granted' || status === 'denied') {
             markHandled();
-            return 'granted';
+            return Promise.resolve(status);
         }
-
-        /*
-         * Browser permission already denied.
-         * Don't repeatedly annoy the user.
-         */
-        if (Notification.permission === 'denied') {
-            markHandled();
-            return 'denied';
-        }
-
-        /*
-         * User has already made a FreeUpper choice.
-         */
-        if (alreadyHandled()) {
-            return 'handled';
-        }
-
+        if (status !== 'default') return Promise.resolve(status);
+        if (alreadyHandled()) return Promise.resolve('handled');
+        previousFocus = document.activeElement;
         createModal();
-
-        return new Promise(resolve => {
-            const allowBtn =
-                document.getElementById('fuNotificationAllow');
-
-            const laterBtn =
-                document.getElementById('fuNotificationLater');
-
-            if (!allowBtn || !laterBtn) {
+        pending = new Promise(resolve => {
+            const allowBtn = document.getElementById('fuNotificationAllow');
+            const laterBtn = document.getElementById('fuNotificationLater');
+            const modal = document.getElementById('fuNotificationPermissionModal');
+            const finish = result => {
                 removeModal();
-                resolve('error');
-                return;
-            }
-
-            allowBtn.addEventListener('click', async () => {
+                pending = null;
+                finishPending = null;
+                previousFocus?.focus?.();
+                resolve(result);
+            };
+            finishPending = finish;
+            if (!allowBtn || !laterBtn) { finish('error'); return; }
+            allowBtn.addEventListener('click', () => {
                 allowBtn.disabled = true;
                 allowBtn.textContent = 'Enabling…';
-
-                const permission =
-                    await requestBrowserPermission();
-
-                markHandled();
-                removeModal();
-
-                resolve(permission);
+                // This call remains in the browser's original user gesture.
+                requestBrowserPermission().then(finish, () => finish('error'));
+            }, { once: true });
+            const dismiss = () => { markHandled(); finish('dismissed'); };
+            laterBtn.addEventListener('click', dismiss, { once: true });
+            modal.addEventListener('keydown', event => {
+                if (event.key === 'Escape') { event.preventDefault(); dismiss(); }
+                if (event.key === 'Tab') {
+                    event.preventDefault();
+                    (document.activeElement === allowBtn ? laterBtn : allowBtn).focus();
+                }
             });
-
-            laterBtn.addEventListener('click', () => {
-                markHandled();
-                removeModal();
-
-                resolve('dismissed');
-            });
+            allowBtn.focus();
         });
+        return pending;
     }
 
     window.FreeUpperNotificationPermission = {
-        start,
-        reset: () => {
-            try {
-                localStorage.removeItem(STORAGE_KEY);
-            } catch {}
-        }
+        start, cancel, requestBrowserPermission,
+        reset: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} }
     };
-
 })();

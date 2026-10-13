@@ -1,7 +1,8 @@
-const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+import { serverConfig, apiPublicKey } from '../config/server-config.js';
+const SUPABASE_URL = serverConfig.supabase.url;
+const SUPABASE_ANON_KEY = apiPublicKey;
 
-const SITE_URL = 'https://www.freeupper.com';
+const SITE_URL = serverConfig.appOrigin;
 const FALLBACK_IMAGE = `${SITE_URL}/freeupper.png`;
 
 function escapeHtml(value = '') {

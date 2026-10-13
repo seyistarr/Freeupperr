@@ -410,7 +410,7 @@
 
   // ─── SIGN OUT ─────────────────────────────────────────────
   async function signOut() {
-    await sb.auth.signOut();
+    await window.AuthUser.signOut();
   }
 
   // ─── EXPOSE ───────────────────────────────────────────────

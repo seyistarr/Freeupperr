@@ -1,4 +1,5 @@
-const CACHE_NAME = 'freeupper-pwa-v3';
+importScripts('/runtime-config.js');
+const CACHE_NAME = 'freeupper-pwa-v4-' + self.FreeUpperConfig.environment;
 
 const URLS_TO_CACHE = [
   './',
@@ -34,6 +35,10 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  if (new URL(event.request.url).pathname === '/runtime-config.js') {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }));
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then(cached => {
