@@ -127,3 +127,8 @@ session/push recovery also encounters a network failure, recovery is retried on 
 Preference lookup errors intentionally stop that send. Existing webhook authentication
 (`verify_jwt = false` with unauthenticated database-trigger calls) is unchanged and warrants a
 separate review before treating this work as endpoint authentication hardening.
+
+
+## Stage 1 isolated staging preparation
+
+The feature branch now includes shared public configuration, fail-closed Preview guards, staging-only sender authentication/navigation, and a catalog-derived schema-only package. See [isolated staging instructions](isolated-staging.md). The sender scope audit reconstructs both the pre-staging prepared sender and the exact original v23 source after reversing only the approved changes. Production defaults and its existing webhook authentication model remain preserved. `npm test` passes 47 isolated tests; live staging SQL, authenticated RLS and native delivery remain unverified. Feature-branch Git deployments are disabled until deployment approval.

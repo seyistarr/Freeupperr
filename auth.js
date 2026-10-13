@@ -11,8 +11,9 @@
   'use strict';
 
   // ─── CONFIG ────────────────────────────────────────────────
-  const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptanRxaWRpcnBtbmVnenZtaWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4ODk0OTAsImV4cCI6MjA5OTQ2NTQ5MH0.Lfxtyexew35L3uzy3bxPcBHogsnlMcAVOE-Ho50FZpk';
+  if (!window.FreeUpperConfig) throw new Error('FreeUpper configuration is unavailable.');
+  const SUPABASE_URL = window.FreeUpperConfig.supabase.url;
+  const SUPABASE_ANON_KEY = window.FreeUpperConfig.supabase.publicKey;
 
   const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
   const CLOUDINARY_AVATAR_PRESET = 'image_upload';
@@ -20,8 +21,8 @@
   const USER_KEY = 'freeupper_user_profile';
 
   // Legal page URLs (used by the consent notice in the auth modal)
-  const TERMS_URL = 'https://www.freeupper.com/policy.html';
-  const PRIVACY_URL = 'https://www.freeupper.com/privacy.html';
+  const TERMS_URL = window.FreeUpperConfig.appOrigin + '/policy.html';
+  const PRIVACY_URL = window.FreeUpperConfig.appOrigin + '/privacy.html';
 
   // Current legal document versions. Update these when the documents change.
   const LEGAL_VERSIONS = {

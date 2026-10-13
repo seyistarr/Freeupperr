@@ -1,8 +1,9 @@
+import { senderEnvironment, isolatePayload, stagingRequestAllowed } from './environment.js';
 import { getPushEnabledRecipients } from './push-preference.js';
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { GoogleAuth } from "npm:google-auth-library@9";
 
-const FIREBASE_PROJECT_ID = "freeupper-notifications";
+// Selected after service-account parsing below.
 
 const SUPABASE_URL =
   Deno.env.get("SUPABASE_URL")!;
@@ -14,6 +15,10 @@ const FIREBASE_SERVICE_ACCOUNT =
   JSON.parse(
     Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON")!
   );
+
+const SENDER_CONFIG = senderEnvironment(Deno.env, FIREBASE_SERVICE_ACCOUNT);
+const FIREBASE_PROJECT_ID = SENDER_CONFIG.firebaseProjectId;
+const APP_ORIGIN = SENDER_CONFIG.appOrigin;
 
 const supabase = createClient(
   SUPABASE_URL,
@@ -249,9 +254,9 @@ async function sendToTokens(
             user_id
           ) ?? null;
 
-        const payload = {
+        const payload = isolatePayload({
           ...dataPayload
-        };
+        }, SENDER_CONFIG);
 
 
         // ----------------------------------------------------
@@ -303,7 +308,7 @@ async function sendToTokens(
 
                         link:
                           payload.destination_url ||
-                          "https://www.freeupper.com/index.html"
+                          `${APP_ORIGIN}/index.html`
 
                       }
 
@@ -573,7 +578,7 @@ async function handleMessageNotification(
 
   const senderAvatar =
     sender?.avatar_url ||
-    "https://www.freeupper.com/freeupper.png";
+    `${APP_ORIGIN}/freeupper.png`;
 
 
   // ----------------------------------------------------------
@@ -648,7 +653,7 @@ async function handleMessageNotification(
         "message",
 
       destination_url:
-        `https://www.freeupper.com/chat.html?conversation=${encodeURIComponent(
+        `${APP_ORIGIN}/chat.html?conversation=${encodeURIComponent(
           message.conversation_id
         )}`
 
@@ -752,7 +757,7 @@ async function handleSocialNotification(
 
   const actorAvatar =
     actor?.avatar_url ||
-    "https://www.freeupper.com/freeupper.png";
+    `${APP_ORIGIN}/freeupper.png`;
 
 
   // ----------------------------------------------------------
@@ -847,7 +852,7 @@ async function handleSocialNotification(
   // ----------------------------------------------------------
 
   let destinationUrl =
-    "https://www.freeupper.com/index.html";
+    `${APP_ORIGIN}/index.html`;
 
 
   if (
@@ -856,7 +861,7 @@ async function handleSocialNotification(
   ) {
 
     destinationUrl =
-      `https://www.freeupper.com/profile.html?uid=${encodeURIComponent(
+      `${APP_ORIGIN}/profile.html?uid=${encodeURIComponent(
         actorId
       )}`;
 
@@ -867,7 +872,7 @@ async function handleSocialNotification(
   ) {
 
     destinationUrl =
-      `https://www.freeupper.com/index.html?post=${encodeURIComponent(
+      `${APP_ORIGIN}/index.html?post=${encodeURIComponent(
         notification.post_id
       )}`;
 
@@ -876,7 +881,7 @@ async function handleSocialNotification(
   else {
 
     destinationUrl =
-      `https://www.freeupper.com/profile.html?uid=${encodeURIComponent(
+      `${APP_ORIGIN}/profile.html?uid=${encodeURIComponent(
         actorId
       )}`;
 
@@ -944,6 +949,8 @@ async function handleSocialNotification(
 
 Deno.serve(
   async (req) => {
+
+    if (!(await stagingRequestAllowed(req, Deno.env, SENDER_CONFIG))) return new Response("Unauthorized", { status: 401 });
 
     try {
 

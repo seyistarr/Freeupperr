@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
 import { createHash } from 'node:crypto';
+import { senderEnvironment, isolatePayload, stagingRequestAllowed } from '../supabase/functions/send-push-notification/environment.js';
 import { getPushEnabledRecipients } from '../supabase/functions/send-push-notification/push-preference.js';
 
 test('global preference keeps missing/null keys enabled and excludes every opted-out device', async () => {
@@ -24,8 +25,10 @@ test('preference lookup errors stop delivery rather than opting users in', async
 });
 
 async function sender({ muted = [], settings = {}, failure = false, changeBeforeDispatch = false,
-    table = 'messages', record = { id: 'm', conversation_id: 'c', sender_id: 'author', text: 'Hello' } } = {}) {
+    environment = 'production', webhookSecret = 'x'.repeat(32), table = 'messages', record = { id: 'm', conversation_id: 'c', sender_id: 'author', text: 'Hello' } } = {}) {
     const sends = [];
+    const endpoints = [];
+    const environmentValues = environment === 'staging' ? { APP_ENV: 'staging', APP_ORIGIN: 'https://freeupper-stage.example.test', FIREBASE_PROJECT_ID: 'freeupper-staging-test', SUPABASE_URL: 'https://abcdefghijklmnopqrst.supabase.co', STAGING_WEBHOOK_SECRET: 'x'.repeat(32), FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: 'freeupper-staging-test' }) } : { SUPABASE_URL: 'https://jmjtqidirpmnegzvmiaq.supabase.co', FIREBASE_SERVICE_ACCOUNT_JSON: '{}' };
     const payloads = [];
     let preferenceReads = 0;
     const sb = {
@@ -61,21 +64,30 @@ async function sender({ muted = [], settings = {}, failure = false, changeBefore
     const source = await fs.readFile(new URL('../supabase/functions/send-push-notification/index.ts', import.meta.url), 'utf8');
     const executable = stripTypeScriptTypes(source.replace(/^import .*;\r?\n/gm, ''), { mode: 'strip' });
     const context = vm.createContext({
-        getPushEnabledRecipients, createClient: () => sb,
+        getPushEnabledRecipients, senderEnvironment, isolatePayload, stagingRequestAllowed, createClient: () => sb,
         GoogleAuth: class { async getClient() { return { getAccessToken: async () => ({ token: 'test-only' }) }; } },
-        Deno: { env: { get: key => key === 'FIREBASE_SERVICE_ACCOUNT_JSON' ? '{}' : 'test-only' }, serve: fn => { handle = fn; } },
-        fetch: async (_url, options) => { const message = JSON.parse(options.body).message; sends.push(message.token); payloads.push(message); return { ok: true, status: 200, text: async () => '{}' }; },
-        Response, console: { log() {}, error() {} }, Map, Set
+        Deno: { env: { get: key => environmentValues[key] }, serve: fn => { handle = fn; } },
+        fetch: async (_url, options) => { endpoints.push(_url); const message = JSON.parse(options.body).message; sends.push(message.token); payloads.push(message); return { ok: true, status: 200, text: async () => '{}' }; },
+        Response, URL, TextEncoder, crypto: globalThis.crypto, console: { log() {}, error() {} }, Map, Set
     });
     new vm.Script(executable).runInContext(context);
-    const response = await handle({ json: async () => ({ table, record }) });
-    return { sends, response, payloads };
+    const response = await handle({ headers: new Headers(webhookSecret ? { 'x-freeupper-staging-secret': webhookSecret } : {}), json: async () => ({ table, record }) });
+    return { sends, response, payloads, endpoints };
 }
 
 test('sender scope audit matches the original deployed source after removing only approved changes', async () => {
     const prepared = await fs.readFile(new URL('../supabase/functions/send-push-notification/index.ts', import.meta.url), 'utf8');
     assert.doesNotMatch(prepared, /freeupper\.vercel\.app/);
-    const baseline = prepared
+    const stage1Baseline = prepared
+        .replace("import { senderEnvironment, isolatePayload, stagingRequestAllowed } from './environment.js';\n", '')
+        .replace('// Selected after service-account parsing below.', 'const FIREBASE_PROJECT_ID = "freeupper-notifications";')
+        .replace('const SENDER_CONFIG = senderEnvironment(Deno.env, FIREBASE_SERVICE_ACCOUNT);\nconst FIREBASE_PROJECT_ID = SENDER_CONFIG.firebaseProjectId;\nconst APP_ORIGIN = SENDER_CONFIG.appOrigin;\n\n', '')
+        .replace('const payload = isolatePayload({\n          ...dataPayload\n        }, SENDER_CONFIG);', 'const payload = {\n          ...dataPayload\n        };')
+        .replace('    if (!(await stagingRequestAllowed(req, Deno.env, SENDER_CONFIG))) return new Response("Unauthorized", { status: 401 });\n\n', '')
+        .replaceAll('${APP_ORIGIN}', 'https://www.freeupper.com')
+        .replace(/`https:\/\/www\.freeupper\.com\/(index\.html|freeupper\.png)`/g, '"https://www.freeupper.com/$1"');
+    assert.equal(createHash('sha256').update(stage1Baseline).digest('hex'), '47080fe9851d83ddcc0ac112a87704e18d25b8fb6d65162a707b1630e3ffe3ec');
+    const baseline = stage1Baseline
         .replace("import { getPushEnabledRecipients } from './push-preference.js';\n", '')
         .replace('  recipientIds = await getPushEnabledRecipients(supabase, recipientIds);\n  if (!recipientIds.length) return;\n\n', '')
         .replace('  // Recheck after badge/token work so a recent opt-out also suppresses queued work.\n  const enabledRecipients = new Set(await getPushEnabledRecipients(supabase, recipientIds));\n\n', '')
@@ -142,4 +154,18 @@ test('page integration has one shared initializer and no chat permission modal o
     const chat = await fs.readFile(new URL('../chat.js', import.meta.url), 'utf8');
     assert.doesNotMatch(chat, /FreeUpperNotificationPermission\.start|\.from\('push_tokens'\)/);
     assert.match(chat, /toggleMuteChat/);
+});
+
+test('actual staging sender authenticates and sends only through staging Firebase with staging links', async () => {
+    const rejected = await sender({ environment: 'staging', webhookSecret: '' });
+    assert.equal(rejected.response.status, 401);
+    assert.equal(rejected.sends.length, 0);
+    const accepted = await sender({ environment: 'staging', muted: ['off', 'muted'] });
+    assert.equal(accepted.response.status, 200);
+    assert.ok(accepted.payloads.length);
+    for (const endpoint of accepted.endpoints) assert.equal(endpoint, 'https://fcm.googleapis.com/v1/projects/freeupper-staging-test/messages:send');
+    for (const message of accepted.payloads) {
+        assert.equal(message.webpush.fcm_options.link, 'https://freeupper-stage.example.test/chat.html?conversation=c');
+        assert.equal(message.data.actor_avatar_url, 'https://freeupper-stage.example.test/freeupper.png');
+    }
 });

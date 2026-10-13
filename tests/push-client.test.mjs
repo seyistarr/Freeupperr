@@ -5,13 +5,14 @@ import fs from 'node:fs/promises';
 
 const clientSource = await fs.readFile(new URL('../push-notifications.js', import.meta.url), 'utf8');
 const permissionSource = await fs.readFile(new URL('../notification-permission.js', import.meta.url), 'utf8');
+const publicConfig = JSON.parse(await fs.readFile(new URL('../config/production-public.json', import.meta.url), 'utf8'));
 const authSource = await fs.readFile(new URL('../auth.js', import.meta.url), 'utf8');
 const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
 
 // The real client scripts run unchanged except remote SDK imports, which are replaced by local mocks.
 async function device({ db = { settings: new Map(), tokens: [] }, user = 'u', permission = 'granted',
-    page = 'settings', storage = new Map(), ios = false, standalone = false, tablet = false, token = 'device-A', preferencePause = null } = {}) {
+    page = 'settings', runtimeConfig = publicConfig, storage = new Map(), ios = false, standalone = false, tablet = false, token = 'device-A', preferencePause = null } = {}) {
     const state = { user, permission, result: 'granted', requests: 0, inGesture: false, imports: 0,
         initialized: 0, getTokens: 0, workerRegistrations: 0, listenerAdds: 0, handlers: new Set(),
         failure: false, concurrentChange: false, pauseToken: null, toasts: [], signOutMode: null, tokenDeleteFailure: false };
@@ -114,9 +115,9 @@ async function device({ db = { settings: new Map(), tokens: [] }, user = 'u', pe
         onMessage(_messaging, fn) { state.listenerAdds++; state.handlers.add(fn); return () => state.handlers.delete(fn); }
     };
     const app = { getApps: () => state.initialized ? [{}] : [], getApp: () => ({}),
-        initializeApp() { state.initialized++; return {}; } };
+        initializeApp(config) { state.firebaseConfig = config; state.initialized++; return { options: config }; } };
     const windowListeners = new Map();
-    const window = { document, sb, isSecureContext: true, PushManager: class {}, matchMedia: () => ({ matches: standalone }),
+    const window = { FreeUpperConfig: runtimeConfig, document, sb, isSecureContext: true, PushManager: class {}, matchMedia: () => ({ matches: standalone }),
         showToast: msg => state.toasts.push(msg),
         addEventListener(name, fn) { const list = windowListeners.get(name) || []; list.push(fn); windowListeners.set(name, list); }
     };
@@ -321,4 +322,12 @@ test('preference read failures do not register tokens or silently enable the acc
     await d.click('pushNotificationsToggle', true);
     assert.equal(db.settings.get('u').push_enabled, false);
     assert.equal(d.state.getTokens, 0);
+});
+
+test('staging client passes only staging configuration into Firebase initialization', async () => {
+    const runtimeConfig = { firebase: { projectId: 'freeupper-staging-test', messagingSenderId: '123456789' }, vapidKey: 'staging-only-vapid' };
+    const d = await device({ runtimeConfig });
+    assert.equal(d.state.firebaseConfig.projectId, 'freeupper-staging-test');
+    assert.equal(d.state.initialized, 1);
+    assert.equal(d.db.tokens.length, 1);
 });

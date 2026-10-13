@@ -3,15 +3,9 @@
     'use strict';
     if (window.FreeUpperPushNotifications) return;
 
-    const config = {
-        apiKey: 'AIzaSyCmAuJE-nvJunX-vXQH2l_zjjrcDt2DiA8',
-        authDomain: 'freeupper-notifications.firebaseapp.com',
-        projectId: 'freeupper-notifications',
-        storageBucket: 'freeupper-notifications.firebasestorage.app',
-        messagingSenderId: '37328138260',
-        appId: '1:37328138260:web:f362538c37f279fccf7701'
-    };
-    const vapidKey = 'BHmk5m_sPqAlX_JlLtLfHS0oPQgQFLtuANDGZhtBNEeamb760XLZxfYGdatnjrWUmDU7zfwTIRaUM8IRsa7rYUw';
+    if (!window.FreeUpperConfig) throw new Error('FreeUpper configuration is unavailable.');
+    const config = window.FreeUpperConfig.firebase;
+    const vapidKey = window.FreeUpperConfig.vapidKey;
     let userId = null;
     let epoch = 0;
     let enabled = true;
@@ -111,6 +105,7 @@
                 ]);
                 if (!(await fcm.isSupported())) throw new Error('Push notifications are unavailable on this device.');
                 const instance = app.getApps().length ? app.getApp() : app.initializeApp(config);
+                if (instance.options?.projectId && instance.options.projectId !== config.projectId) throw new Error('Firebase project mismatch.');
                 const result = { ...fcm, messaging: fcm.getMessaging(instance) };
                 window.FreeUpperFCM = result;
                 return result;

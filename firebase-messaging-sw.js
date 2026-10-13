@@ -1,3 +1,5 @@
+importScripts('/runtime-config.js');
+if (!self.FreeUpperConfig) throw new Error('Missing worker configuration');
 importScripts(
   "https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"
 );
@@ -11,14 +13,7 @@ importScripts(
 // FIREBASE INITIALIZATION
 // ============================================================
 
-firebase.initializeApp({
-  apiKey: "AIzaSyCmAuJE-nvJunX-vXQH2l_zjjrcDt2DiA8",
-  authDomain: "freeupper-notifications.firebaseapp.com",
-  projectId: "freeupper-notifications",
-  storageBucket: "freeupper-notifications.firebasestorage.app",
-  messagingSenderId: "37328138260",
-  appId: "1:37328138260:web:f362538c37f279fccf7701"
-});
+firebase.initializeApp(self.FreeUpperConfig.firebase);
 
 const messaging = firebase.messaging();
 
@@ -93,6 +88,12 @@ messaging.onBackgroundMessage(async (payload) => {
 
   const data =
     payload.data || {};
+
+  if (self.FreeUpperConfig.environment === 'staging') {
+    for (const key of ['actor_avatar_url', 'media_url', 'thumbnail_url']) {
+      if (data[key] && new URL(data[key], self.location.origin).origin !== self.FreeUpperConfig.appOrigin) data[key] = '';
+    }
+  }
 
 
   // ==========================================================
@@ -352,11 +353,7 @@ async function openFreeUpperUrl(path) {
   const baseUrl =
     self.location.origin;
 
-  const targetUrl =
-    new URL(
-      path,
-      baseUrl
-    ).href;
+  const targetUrl = self.FreeUpperNotificationUrl(path);
 
 
   const windowClients =
@@ -375,7 +372,7 @@ async function openFreeUpperUrl(path) {
   ) {
 
     if (
-      client.url.startsWith(baseUrl) &&
+      new URL(client.url).origin === baseUrl &&
       "navigate" in client
     ) {
 
