@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
+import { createHash } from 'node:crypto';
 import { getPushEnabledRecipients } from '../supabase/functions/send-push-notification/push-preference.js';
 
 test('global preference keeps missing/null keys enabled and excludes every opted-out device', async () => {
@@ -22,8 +23,10 @@ test('preference lookup errors stop delivery rather than opting users in', async
     assert.deepEqual(await getPushEnabledRecipients(supabase, []), []);
 });
 
-async function sender({ muted = [], settings = {}, failure = false, changeBeforeDispatch = false } = {}) {
+async function sender({ muted = [], settings = {}, failure = false, changeBeforeDispatch = false,
+    table = 'messages', record = { id: 'm', conversation_id: 'c', sender_id: 'author', text: 'Hello' } } = {}) {
     const sends = [];
+    const payloads = [];
     let preferenceReads = 0;
     const sb = {
         rpc: async () => ({ data: 0, error: null }),
@@ -61,15 +64,56 @@ async function sender({ muted = [], settings = {}, failure = false, changeBefore
         getPushEnabledRecipients, createClient: () => sb,
         GoogleAuth: class { async getClient() { return { getAccessToken: async () => ({ token: 'test-only' }) }; } },
         Deno: { env: { get: key => key === 'FIREBASE_SERVICE_ACCOUNT_JSON' ? '{}' : 'test-only' }, serve: fn => { handle = fn; } },
-        fetch: async (_url, options) => { sends.push(JSON.parse(options.body).message.token); return { ok: true, status: 200, text: async () => '{}' }; },
+        fetch: async (_url, options) => { const message = JSON.parse(options.body).message; sends.push(message.token); payloads.push(message); return { ok: true, status: 200, text: async () => '{}' }; },
         Response, console: { log() {}, error() {} }, Map, Set
     });
     new vm.Script(executable).runInContext(context);
-    const response = await handle({ json: async () => ({ table: 'messages', record: {
-        id: 'm', conversation_id: 'c', sender_id: 'author', text: 'Hello'
-    } }) });
-    return { sends, response };
+    const response = await handle({ json: async () => ({ table, record }) });
+    return { sends, response, payloads };
 }
+
+test('sender scope audit matches the original deployed source after removing only approved changes', async () => {
+    const prepared = await fs.readFile(new URL('../supabase/functions/send-push-notification/index.ts', import.meta.url), 'utf8');
+    assert.doesNotMatch(prepared, /freeupper\.vercel\.app/);
+    const baseline = prepared
+        .replace("import { getPushEnabledRecipients } from './push-preference.js';\n", '')
+        .replace('  recipientIds = await getPushEnabledRecipients(supabase, recipientIds);\n  if (!recipientIds.length) return;\n\n', '')
+        .replace('  // Recheck after badge/token work so a recent opt-out also suppresses queued work.\n  const enabledRecipients = new Set(await getPushEnabledRecipients(supabase, recipientIds));\n\n', '')
+        .replace('tokens.filter(({ user_id }) => enabledRecipients.has(user_id)).map(', 'tokens.map(')
+        .replaceAll('https://www.freeupper.com', 'https://freeupper.vercel.app');
+    assert.equal(createHash('sha256').update(baseline).digest('hex'),
+        '4932109b15865447900d1f7f1aa6208e12c8337c1cd966f8caca8dc27893be4b');
+});
+
+test('chat destination keeps its path and encoded conversation query on the canonical domain', async () => {
+    const conversation = 'conversation /?#&';
+    const result = await sender({ muted: ['off', 'muted'], record: {
+        id: 'm', conversation_id: conversation, sender_id: 'author', text: 'Hello'
+    } });
+    const expected = 'https://www.freeupper.com/chat.html?conversation=' + encodeURIComponent(conversation);
+    for (const message of result.payloads) {
+        assert.equal(message.data.destination_url, expected);
+        assert.equal(message.webpush.fcm_options.link, expected);
+        assert.equal(message.data.actor_avatar_url, 'https://www.freeupper.com/freeupper.png');
+    }
+    assert.ok(result.payloads.length);
+});
+
+test('social destinations preserve encoded post and profile query parameters', async () => {
+    for (const type of ['comment', 'follow', 'mention']) {
+        const record = { id: 'n', receiver_id: 'on', actor_id: 'actor /?#&', type };
+        if (type === 'comment') record.post_id = 'post /?#&';
+        const result = await sender({ table: 'notifications', record });
+        const expected = record.post_id ? 'https://www.freeupper.com/index.html?post=' + encodeURIComponent(record.post_id) :
+            'https://www.freeupper.com/profile.html?uid=' + encodeURIComponent(record.actor_id);
+        assert.ok(result.payloads.length);
+        for (const message of result.payloads) {
+            assert.equal(message.data.destination_url, expected);
+            assert.equal(message.webpush.fcm_options.link, expected);
+            assert.equal(message.data.actor_avatar_url, 'https://www.freeupper.com/freeupper.png');
+        }
+    }
+});
 
 test('actual sender preserves per-chat mutes while skipping all old opted-out tokens', async () => {
     const result = await sender({ muted: ['muted'], settings: { off: { push_enabled: false } } });

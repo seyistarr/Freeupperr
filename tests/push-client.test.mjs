@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 
 const clientSource = await fs.readFile(new URL('../push-notifications.js', import.meta.url), 'utf8');
 const permissionSource = await fs.readFile(new URL('../notification-permission.js', import.meta.url), 'utf8');
+const authSource = await fs.readFile(new URL('../auth.js', import.meta.url), 'utf8');
 const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
 
@@ -13,7 +14,7 @@ async function device({ db = { settings: new Map(), tokens: [] }, user = 'u', pe
     page = 'settings', storage = new Map(), ios = false, standalone = false, tablet = false, token = 'device-A', preferencePause = null } = {}) {
     const state = { user, permission, result: 'granted', requests: 0, inGesture: false, imports: 0,
         initialized: 0, getTokens: 0, workerRegistrations: 0, listenerAdds: 0, handlers: new Set(),
-        failure: false, concurrentChange: false, pauseToken: null, toasts: [] };
+        failure: false, concurrentChange: false, pauseToken: null, toasts: [], signOutMode: null, tokenDeleteFailure: false };
     const elements = new Map();
     const listeners = new Map();
     class Element {
@@ -89,13 +90,23 @@ async function device({ db = { settings: new Map(), tokens: [] }, user = 'u', pe
                 db.tokens = db.tokens.filter(row => row.token !== payload.token);
                 db.tokens.push(clone(payload));
             }
-            if (operation === 'delete') db.tokens = db.tokens.filter(row => !filters.every(([key, value]) => row[key] === value));
+            if (operation === 'delete') {
+                if (state.tokenDeleteFailure) return { error: new Error('token cleanup failed') };
+                db.tokens = db.tokens.filter(row => !filters.every(([key, value]) => row[key] === value));
+            }
             return { data: null };
         }
         return q;
     }
     const sb = { from: query, auth: {
         getSession: async () => ({ data: { session: state.user ? { user: { id: state.user } } : null } }),
+        async signOut() {
+            if (state.signOutMode === 'throw') throw new Error('sign-out threw');
+            if (state.signOutMode === 'error') return { error: new Error('sign-out returned error') };
+            state.user = null;
+            for (const fn of authListeners) fn('SIGNED_OUT', null);
+            return { error: null };
+        },
         onAuthStateChange: fn => { authListeners.push(fn); }
     } };
     const fcm = { isSupported: async () => true, getMessaging: () => ({}),
@@ -127,7 +138,7 @@ async function device({ db = { settings: new Map(), tokens: [] }, user = 'u', pe
     vm.runInContext(executable, context);
     for (const fn of listeners.get('DOMContentLoaded') || []) fn();
     await settle();
-    return { db, state, elements, storage, api: window.FreeUpperPushNotifications,
+    return { db, state, elements, storage, window, sb, api: window.FreeUpperPushNotifications,
         repeatScript: () => vm.runInContext(executable, context),
         async mutate() { for (const fn of observers) fn(); await settle(); },
         async click(id, checked) {
@@ -153,6 +164,56 @@ test('homepage opt-in starts only after authentication and requests permission i
     assert.equal(d.state.requests, 1);
     assert.equal(d.db.tokens.length, 1);
     assert.equal(d.storage.get('freeupper_notification_prompt'), 'handled');
+});
+
+function authSignOut(device) {
+    const start = authSource.indexOf('  async function signOut() {');
+    const end = authSource.indexOf('\n  // ─── LEGAL UPDATE MODAL', start);
+    assert.ok(start >= 0 && end > start);
+    const effects = { guestWrites: 0, avatarUpdates: 0, events: 0 };
+    const context = vm.createContext({ window: device.window, sb: device.sb,
+        defaultGuest: () => ({ isLoggedIn: false }), USER_KEY: 'test-auth-cache',
+        localStorage: { setItem() { effects.guestWrites++; } },
+        updateAvatarEls() { effects.avatarUpdates++; },
+        document: { dispatchEvent() { effects.events++; } },
+        CustomEvent: class {}, console: { warn() {} }
+    });
+    vm.runInContext(authSource.slice(start, end) + '\nthis.runSignOut = signOut;', context);
+    return { run: context.runSignOut, effects };
+}
+
+test('returned sign-out error preserves the signed-in UI and restores one push listener', async () => {
+    const d = await device(); const auth = authSignOut(d); d.state.signOutMode = 'error';
+    await assert.rejects(auth.run(), /sign-out returned error/); await settle();
+    assert.deepEqual(auth.effects, { guestWrites: 0, avatarUpdates: 0, events: 0 });
+    assert.equal(d.state.user, 'u'); assert.equal(d.state.handlers.size, 1);
+    assert.equal(d.db.tokens.some(row => row.token === 'device-A'), true);
+    await d.click('pushNotificationsToggle', false);
+    assert.equal(d.db.settings.get('u').push_enabled, false, 'failed logout must not leave controls suspended');
+});
+
+test('thrown sign-out error also recovers without writing a guest cache', async () => {
+    const d = await device(); const auth = authSignOut(d); d.state.signOutMode = 'throw';
+    await assert.rejects(auth.run(), /sign-out threw/); await settle();
+    assert.equal(auth.effects.guestWrites, 0); assert.equal(d.state.handlers.size, 1);
+});
+
+test('sign-out failure recovery still honors a global opt-out', async () => {
+    const d = await device(); const auth = authSignOut(d);
+    d.db.settings.set('u', { push_enabled: false, likes: false }); d.state.signOutMode = 'error';
+    await assert.rejects(auth.run(), /sign-out returned error/); await settle();
+    assert.equal(d.state.handlers.size, 0); assert.equal(d.db.tokens.length, 0);
+    assert.equal(d.db.settings.get('u').push_enabled, false);
+});
+
+test('token cleanup failure does not block a successful sign-out or delete another device', async () => {
+    const db = { settings: new Map(), tokens: [{ user_id: 'u', token: 'other-device' }] };
+    const d = await device({ db }); const auth = authSignOut(d); d.state.tokenDeleteFailure = true;
+    await auth.run(); await settle();
+    assert.deepEqual(auth.effects, { guestWrites: 1, avatarUpdates: 1, events: 1 });
+    assert.equal(d.state.user, null); assert.equal(d.state.handlers.size, 0);
+    assert.equal(db.tokens.some(row => row.token === 'other-device'), true);
+    assert.equal(db.tokens.some(row => row.token === 'device-A'), true, 'failed cleanup leaves a server token; it must be reported as a residual risk');
 });
 
 test('homepage DOM changes cannot show a prompt before the saved global preference loads', async () => {

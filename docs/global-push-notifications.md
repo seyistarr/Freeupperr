@@ -29,6 +29,9 @@ policy change, existing-user backfill or production data modification is needed 
   or account change. Foreground messages also read the global preference before display.
   Normal sign-out attempts to remove this device's token while the authenticated session
   still exists; cleanup failure does not prevent sign-out. It does not remove other devices.
+  A returned or thrown Supabase sign-out error is surfaced to the caller before writing a
+  guest cache. Push handling resumes from the SDK's actual session and global preference,
+  so a failed logout does not leave push controls suspended or silently enable an opted-out account.
 - Conversation mute controls still write `conversations.muted_by`. The sender's existing mute
   filter runs before the global preference filter. Chat/realtime messages and in-app
   notification records continue independently of push.
@@ -47,7 +50,23 @@ The prepared function in `supabase/functions/send-push-notification/` adds a pre
 and two calls to it: before token lookup and after badge calculation, immediately before
 dispatch. Lookup errors stop the send rather than treating opted-out accounts as enabled.
 It keeps the sender's chat mute checks, token cleanup, social payloads, badges and links.
+All eight obsolete `https://freeupper.vercel.app` sender URLs now use `https://www.freeupper.com`;
+destination paths, encoded IDs and query parameter names are preserved, including fallback links
+and default avatar URLs. A checksum audit reconstructs the original version 23 source by reversing
+only the host replacement and preference additions; it must match the original backup SHA-256.
 Messages already accepted by FCM can still arrive after a user opts out; they cannot be recalled.
+
+## Securely retain the original backup
+
+Keep the original deployment-review archive as an immutable snapshot, separate from the updated
+prepared function. It includes version 23 source, deployment metadata, configuration and a
+manifest with source SHA-256 `4932109b15865447900d1f7f1aa6208e12c8337c1cd966f8caca8dc27893be4b`.
+The separately provided archive checksum lets you verify the copied ZIP before relying on it.
+An ordinary ZIP is not encrypted: copy it and its checksum to private encrypted storage with
+access restricted to you, and retain the encryption recovery key separately. Keep any actual
+server credentials in your secret manager; this backup contains references, not their values.
+The original backup is not included in the public pull request and must not be posted in a public
+issue or repository. The prepared sender can be compared with that private snapshot during review.
 
 ## Required release order — separate production approval required
 
@@ -102,3 +121,9 @@ registration/logout races, multiple devices, old tokens, server errors and exist
 It performs no production writes. Native browser execution was unavailable because this
 environment blocked child-process/browser launch. Real OS permission dialogs, actual APNs/FCM
 delivery and live authenticated RLS writes remain staging checks before production rollout.
+If token cleanup fails during an otherwise successful sign-out, the registered device can remain
+eligible for background push while the account is enabled; logout itself still completes. If
+session/push recovery also encounters a network failure, recovery is retried on focus/reload.
+Preference lookup errors intentionally stop that send. Existing webhook authentication
+(`verify_jwt = false` with unauthenticated database-trigger calls) is unchanged and warrants a
+separate review before treating this work as endpoint authentication hardening.

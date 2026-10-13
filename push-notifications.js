@@ -284,7 +284,13 @@
         await applyUser(data.session?.user);
     }
 
-    window.FreeUpperPushNotifications = { start, refresh, setEnabled, beforeSignOut, deviceStatus };
+    async function resumeAfterSignOutFailure() {
+        signingOut = false;
+        // The SDK may retain or clear its session on failure; use the actual session.
+        await start();
+    }
+
+    window.FreeUpperPushNotifications = { start, refresh, setEnabled, beforeSignOut, resumeAfterSignOutFailure, deviceStatus };
     function boot() {
         if (!window.sb) return;
         const toggle = document.getElementById('pushNotificationsToggle');

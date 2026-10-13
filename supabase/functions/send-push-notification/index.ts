@@ -303,7 +303,7 @@ async function sendToTokens(
 
                         link:
                           payload.destination_url ||
-                          "https://freeupper.vercel.app/index.html"
+                          "https://www.freeupper.com/index.html"
 
                       }
 
@@ -573,7 +573,7 @@ async function handleMessageNotification(
 
   const senderAvatar =
     sender?.avatar_url ||
-    "https://freeupper.vercel.app/freeupper.png";
+    "https://www.freeupper.com/freeupper.png";
 
 
   // ----------------------------------------------------------
@@ -648,7 +648,7 @@ async function handleMessageNotification(
         "message",
 
       destination_url:
-        `https://freeupper.vercel.app/chat.html?conversation=${encodeURIComponent(
+        `https://www.freeupper.com/chat.html?conversation=${encodeURIComponent(
           message.conversation_id
         )}`
 
@@ -752,7 +752,7 @@ async function handleSocialNotification(
 
   const actorAvatar =
     actor?.avatar_url ||
-    "https://freeupper.vercel.app/freeupper.png";
+    "https://www.freeupper.com/freeupper.png";
 
 
   // ----------------------------------------------------------
@@ -847,7 +847,7 @@ async function handleSocialNotification(
   // ----------------------------------------------------------
 
   let destinationUrl =
-    "https://freeupper.vercel.app/index.html";
+    "https://www.freeupper.com/index.html";
 
 
   if (
@@ -856,7 +856,7 @@ async function handleSocialNotification(
   ) {
 
     destinationUrl =
-      `https://freeupper.vercel.app/profile.html?uid=${encodeURIComponent(
+      `https://www.freeupper.com/profile.html?uid=${encodeURIComponent(
         actorId
       )}`;
 
@@ -867,7 +867,7 @@ async function handleSocialNotification(
   ) {
 
     destinationUrl =
-      `https://freeupper.vercel.app/index.html?post=${encodeURIComponent(
+      `https://www.freeupper.com/index.html?post=${encodeURIComponent(
         notification.post_id
       )}`;
 
@@ -876,7 +876,7 @@ async function handleSocialNotification(
   else {
 
     destinationUrl =
-      `https://freeupper.vercel.app/profile.html?uid=${encodeURIComponent(
+      `https://www.freeupper.com/profile.html?uid=${encodeURIComponent(
         actorId
       )}`;
 

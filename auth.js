@@ -827,7 +827,16 @@
       try { await window.FreeUpperPushNotifications.beforeSignOut(); }
       catch (error) { console.warn('Could not unregister this device before sign-out:', error.message); }
     }
-    await sb.auth.signOut();
+    try {
+      const { error } = await sb.auth.signOut();
+      if (error) throw error;
+    } catch (error) {
+      if (window.FreeUpperPushNotifications) {
+        try { await window.FreeUpperPushNotifications.resumeAfterSignOutFailure(); }
+        catch (resumeError) { console.warn('Could not resume push notifications:', resumeError.message); }
+      }
+      throw error;
+    }
     const guest = defaultGuest();
     localStorage.setItem(USER_KEY, JSON.stringify(guest));
     updateAvatarEls(guest.avatar);
