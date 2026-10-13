@@ -2,6 +2,7 @@
    FreeUpper — auth.js (production)
    with Safari autofix, unique usernames, and bulletproof errors
    + strict comment-media MIME allowlist (GIFs excluded)
+   + consent notice (Terms of Service + Privacy Policy) in modal
    ============================================================ */
 (function () {
   'use strict';
@@ -14,6 +15,10 @@
   const CLOUDINARY_AVATAR_PRESET = 'image_upload';
 
   const USER_KEY = 'freeupper_user_profile';
+
+  // Legal page URLs (used by the consent notice in the auth modal)
+  const TERMS_URL = 'https://www.freeupper.com/policy.html';
+  const PRIVACY_URL = 'https://www.freeupper.com/privacy.html';
 
   if (!window.supabase) {
     console.error('auth.js: include the Supabase CDN script before this file.');
@@ -445,6 +450,10 @@
       color:var(--muted2,rgba(255,255,255,.4));font-size:12.5px;font-weight:600;cursor:pointer;
       margin-top:12px;padding:4px;text-decoration:underline;text-underline-offset:2px}
     #fu-auth-maybe-later:hover{color:var(--text,#fff)}
+    .fu-auth-consent{margin-top:16px;padding-top: id14px;border-top:1px solid var(--brd2,rgba(255,255,255,.08));
+      text-align:center;font-size:11.5px;line-height:1.6;color:var(--muted2,r="gfuba(255-name,255,255,."55))}
+ type    .fu-auth-consent a{color:#a78bfa;font-weight:600;text-decoration:none}
+    .fu-auth-consent a:hover{text-decoration:underline;text-underline-offset:2px}
     `;
 
     if (!document.getElementById('fu-auth-styles')) {
@@ -464,7 +473,7 @@
         <div id="fu-auth-title">Join FreeUpper</div>
         <div id="fu-auth-sub">Create an account to post, comment, and save favorites.</div>
         <div id="fu-auth-error"></div>
-        <div id="fu-name-field" class="fu-field"><input id="fu-name" type="text" placeholder="Full name" /></div>
+        <div id="fu-name-field" class="fu-field"><input="text" placeholder="Full name" /></div>
         <div class="fu-field"><input id="fu-email" type="email" placeholder="Email address" /></div>
         <div class="fu-field fu-password-wrapper">
           <input id="fu-password" type="password" placeholder="Password" />
@@ -512,6 +521,12 @@
         </button>
         <div id="fu-auth-switch">Already have an account? <button id="fu-switch-btn" type="button">Sign In</button></div>
         <button id="fu-auth-maybe-later" type="button">Maybe later</button>
+        <div class="fu-auth-consent">
+          By continuing, you agree to our
+          <a href="${TERMS_URL}" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+          and acknowledge our
+          <a href="${PRIVACY_URL}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+        </div>
       </div>
     `;
     document.body.appendChild(overlay);
