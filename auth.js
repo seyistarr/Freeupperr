@@ -823,6 +823,10 @@
 
   // ─── SIGN OUT ──────────────────────────────────────────────
   async function signOut() {
+    if (window.FreeUpperPushNotifications) {
+      try { await window.FreeUpperPushNotifications.beforeSignOut(); }
+      catch (error) { console.warn('Could not unregister this device before sign-out:', error.message); }
+    }
     await sb.auth.signOut();
     const guest = defaultGuest();
     localStorage.setItem(USER_KEY, JSON.stringify(guest));
