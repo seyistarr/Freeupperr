@@ -2,12 +2,13 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Studio · Freeupper</title>
 <link rel="icon" type="image/png" sizes="32x32" href="freeupper.png" />
 <link rel="manifest" href="manifest.webmanifest" />
 <meta name="theme-color" content="#000000" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
@@ -48,9 +49,14 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .cap-denied-btn{padding:12px 26px;border-radius:100px;background:var(--red);color:#fff;
   font-family:var(--font-head);font-weight:700;font-size:.85rem;box-shadow:0 4px 18px rgba(254,44,85,.35)}
 
+/* TOP BAR — transparent so camera + status bar overlay */
 .cap-top{position:absolute;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;
   justify-content:space-between;padding:max(env(safe-area-inset-top),14px) 16px 10px;
-  background:#000}
+  background:transparent}
+.cap-top::after{content:'';position:absolute;top:0;left:0;right:0;height:100px;
+  background:linear-gradient(to bottom,rgba(0,0,0,.5) 0%,transparent 100%);
+  pointer-events:none;z-index:-1}
+
 .cap-icon-btn{width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.45);
   border:1.5px solid rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;
   color:#fff;flex-shrink:0;transition:background .15s}
@@ -139,9 +145,14 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
 .pv-carousel-dots .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);transition:background .2s,transform .2s;}
 .pv-carousel-dots .dot.active{background:#fff;transform:scale(1.2);}
 
+/* TOP BAR — transparent so preview media + status bar overlay */
 .pv-top{position:absolute;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;
   justify-content:space-between;padding:max(env(safe-area-inset-top),14px) 16px 10px;
-  background:#000}
+  background:transparent}
+.pv-top::after{content:'';position:absolute;top:0;left:0;right:0;height:100px;
+  background:linear-gradient(to bottom,rgba(0,0,0,.5) 0%,transparent 100%);
+  pointer-events:none;z-index:-1}
+
 .pv-text-layer{position:absolute;inset:0;z-index:15;pointer-events:none;transition:opacity .18s}
 .pv-text-layer .pv-text-item{pointer-events:auto}
 .pv-text-item{position:absolute;cursor:move;font-family:var(--font-head);font-weight:800;
@@ -1143,7 +1154,6 @@ function loadCarouselText(index) {
   });
 }
 
-/* ─── PATCH 1 APPLIED: text-editor lock on carousel navigation ─── */
 function isPvTextEditorOpen() {
   const wrap = document.getElementById('pvTxtInputWrap');
   const bar = document.getElementById('pvTxtBar');
@@ -1156,7 +1166,6 @@ function pvCarouselGoTo(idx) {
   if (!_pvCarouselState) return;
   const state = _pvCarouselState;
   idx = Math.max(0, Math.min(state.count - 1, idx));
-  // Never change photos while text is being edited.
   if (isPvTextEditorOpen() && idx !== state.idx) return;
   saveCurrentCarouselText();
   state.idx = idx;
@@ -1180,15 +1189,12 @@ function _pvDragUnbind() {
   window.removeEventListener('pointercancel', pvCarouselDragEnd);
 }
 
-/* ─── PATCH 2 APPLIED: block swipe while editing text or dragging a text layer ─── */
 function pvCarouselDragStart(e) {
   if (!_pvCarouselState || _pvCarouselState.count <= 1) return;
-  // The user must finish or cancel text editing before swiping.
   if (isPvTextEditorOpen()) {
     e.preventDefault();
     return;
   }
-  // Do not start a carousel swipe while dragging a text layer.
   if (_pvTextDragging) {
     e.preventDefault();
     return;
