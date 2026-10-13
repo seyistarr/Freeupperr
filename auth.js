@@ -5,6 +5,7 @@
    + consent notice (Terms of Service + Privacy Policy) in modal
    + fixed fu-name input, cleaned consent CSS,
      and 3-second first-visit prompt with auth recheck
+   + legal update modal (Terms & Privacy re-acceptance)
    ============================================================ */
 (function () {
   'use strict';
@@ -21,6 +22,12 @@
   // Legal page URLs (used by the consent notice in the auth modal)
   const TERMS_URL = 'https://www.freeupper.com/policy.html';
   const PRIVACY_URL = 'https://www.freeupper.com/privacy.html';
+
+  // Current legal document versions. Update these when the documents change.
+  const LEGAL_VERSIONS = {
+    terms: '2026-10',
+    privacy: '2026-10'
+  };
 
   if (!window.supabase) {
     console.error('auth.js: include the Supabase CDN script before this file.');
@@ -275,7 +282,9 @@
   // ─── SUPABASE AUTH STATE ──────────────────────────────────
   sb.auth.onAuthStateChange((_event, session) => {
     if (session) {
-      syncSessionToLocal(session);
+      syncSessionToLocal(session).then(() => {
+        checkLegalUpdate(session);
+      });
       if (_event === 'SIGNED_IN') {
         registerSessionLocation();
       }
@@ -821,6 +830,136 @@
     document.dispatchEvent(new CustomEvent('profileUpdated', { detail: { user: guest } }));
   }
 
+  // ─── LEGAL UPDATE MODAL ──────────────────────────────────
+  let legalModalChecking = false;
+  async function checkLegalUpdate(session) {
+    if (!session?.user || legalModalChecking) return;
+    const user = session.user;
+    const overlayId = 'fu-legal-update-overlay';
+    if (document.getElementById(overlayId)) return;
+    legalModalChecking = true;
+    try {
+      const { data: rows, error } = await sb
+        .from('legal_acceptances')
+        .select('document_type, document_version')
+        .eq('user_id', user.id);
+      if (error) throw error;
+      const acceptedTerms = rows.some(row =>
+        row.document_type === 'terms' &&
+        row.document_version === LEGAL_VERSIONS.terms
+      );
+      const acceptedPrivacy = rows.some(row =>
+        row.document_type === 'privacy' &&
+        row.document_version === LEGAL_VERSIONS.privacy
+      );
+      if (acceptedTerms && acceptedPrivacy) return;
+      // Wait if the sign-in modal is still open.
+      const authOverlay = document.getElementById('fu-auth-overlay');
+      if (authOverlay?.classList.contains('open')) {
+        setTimeout(() => checkLegalUpdate(session), 800);
+        return;
+      }
+      const overlay = document.createElement('div');
+      overlay.id = overlayId;
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.style.cssText = `
+        position:fixed;inset:0;z-index:22000;
+        background:rgba(0,0,0,.75);display:flex;
+        align-items:center;justify-content:center;padding:20px;
+      `;
+      overlay.innerHTML = `
+        <section style="
+          width:100%;max-width:420px;max-height:90vh;overflow:auto;
+          padding:26px 22px;border-radius:20px;
+          background:var(--bg3,#fff);color:var(--text,#171717);
+          text-align:center;font-family:inherit;
+          box-shadow:0 20px 60px rgba(0,0,0,.3);
+        ">
+          <div style="font-size:22px;font-weight:900;margin-bottom:16px">
+            Free<span style="color:#8b5cf6">Upper</span>
+          </div>
+          <h2 style="font-size:21px;margin-bottom:12px">
+            We've updated our Terms &amp; Privacy Policy
+          </h2>
+          <p style="font-size:14px;line-height:1.7;margin-bottom:18px">
+            Please review our updated documents. Continue when you agree
+            to the Terms of Service and acknowledge the Privacy Policy.
+          </p>
+          <a href="${TERMS_URL}" target="_blank" rel="noopener noreferrer"
+            style="display:block;padding:13px;margin-bottom:10px;
+            border:1px solid #8b5cf6;border-radius:12px;
+            color:#8b5cf6;text-decoration:none;font-weight:700">
+            Read Terms of Service ↗
+          </a>
+          <a href="${PRIVACY_URL}" target="_blank" rel="noopener noreferrer"
+            style="display:block;padding:13px;margin-bottom:18px;
+            border:1px solid #8b5cf6;border-radius:12px;
+            color:#8b5cf6;text-decoration:none;font-weight:700">
+            Read Privacy Policy ↗
+          </a>
+          <button id="fu-legal-accept" type="button"
+            style="width:100%;padding:14px;border:0;border-radius:12px;
+            background:#8b5cf6;color:white;font-weight:800;font-size:14px">
+            I Agree &amp; Continue
+          </button>
+          <p id="fu-legal-error" role="status"
+            style="color:#dc2626;font-size:12px;margin-top:12px"></p>
+        </section>
+      `;
+      document.body.appendChild(overlay);
+      document.body.style.overflow = 'hidden';
+      document.getElementById('fu-legal-accept')
+        .addEventListener('click', async function () {
+          const button = this;
+          const errorBox = document.getElementById('fu-legal-error');
+          button.disabled = true;
+          button.textContent = 'Saving…';
+          errorBox.textContent = '';
+          try {
+            const { data: currentRows, error: readError } = await sb
+              .from('legal_acceptances')
+              .select('document_type, document_version')
+              .eq('user_id', user.id);
+            if (readError) throw readError;
+            const newAcceptances = [];
+            for (const type of ['terms', 'privacy']) {
+              const version = LEGAL_VERSIONS[type];
+              const exists = currentRows.some(row =>
+                row.document_type === type &&
+                row.document_version === version
+              );
+              if (!exists) {
+                newAcceptances.push({
+                  user_id: user.id,
+                  document_type: type,
+                  document_version: version
+                });
+              }
+            }
+            if (newAcceptances.length) {
+              const { error: saveError } = await sb
+                .from('legal_acceptances')
+                .insert(newAcceptances);
+              if (saveError) throw saveError;
+            }
+            overlay.remove();
+            document.body.style.overflow = '';
+          } catch (err) {
+            console.error('Legal acknowledgement failed:', err);
+            errorBox.textContent =
+              'Could not save your acknowledgement. Please try again.';
+            button.disabled = false;
+            button.textContent = 'I Agree & Continue';
+          }
+        });
+    } catch (err) {
+      console.error('Legal update check failed:', err);
+    } finally {
+      legalModalChecking = false;
+    }
+  }
+
   // ─── FIRST-VISIT PROMPT (show after 3 seconds) ────────────
   const FIRST_VISIT_KEY = 'freeupper_seen_signup_prompt';
   function maybeShowFirstVisitPrompt() {
@@ -879,7 +1018,9 @@
   // ─── SESSION CHECK & FIRST-VISIT TRIGGER ──────────────────
   sb.auth.getSession().then(({ data }) => {
     if (data.session) {
-      syncSessionToLocal(data.session).then(maybeShowFirstVisitPrompt);
+      syncSessionToLocal(data.session).then(() => {
+        checkLegalUpdate(data.session);
+      });
       registerSessionLocation();
     } else {
       maybeShowFirstVisitPrompt();
