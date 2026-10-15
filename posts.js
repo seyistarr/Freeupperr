@@ -1155,6 +1155,9 @@
   // ===================================================================
   async function updatePostVisibility(postId, visibility) {
     const user = await requireUser();
+    if (visibility !== 'public') {
+      throw new Error('Restricted audiences are not available until protected media delivery is enabled.');
+    }
     if (!['public', 'followers', 'friends', 'only_me'].includes(visibility)) {
       throw new Error('Invalid post audience.');
     }
@@ -1321,6 +1324,12 @@
       text_template_id: fields.textTemplateId || null,
       image_embedding: fields.imageEmbedding || null
     };
+
+    // Legacy Cloudinary uploads are publicly addressable. Do not accept
+    // restricted visibility until server-enforced protected publishing exists.
+    if (payload.visibility !== 'public') {
+      throw new Error('Restricted audiences are not available until protected media delivery is enabled.');
+    }
 
     const { data, error } = await sb
       .from('posts')
