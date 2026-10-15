@@ -45,3 +45,10 @@ Do not delete or rename existing Cloudinary assets without backups and a tested 
 - For reliable FreeUpper revocation, use a server-side authorized streaming proxy with no-store responses or verified Cloudinary time-limited token access, with careful caching and video range/HLS testing. Already-downloaded media cannot be recalled.
 - Keep /api/post-media disabled until an enforceable expiry strategy is implemented and tested against the real Cloudinary account.
 - Cloudinary docs: https://cloudinary.com/documentation/control_access_to_media and https://cloudinary.com/documentation/delivery_url_signatures
+
+## Proxy transport guardrails (review branch)
+- Proxy now rejects ignored byte-range requests and declared payloads above 50 MiB; this is an initial conservative bound, **not** production video support.
+- Content-Length checks do not protect against streaming bodies that omit or misstate length; enforce a byte-counting stream limit and abort upstream before enabling.
+- Vercel/serverless response duration and buffering limits, video seeking, HLS manifests/segments, cost and user concurrency must be tested. Do not route large video through this scaffold as-is.
+- A proxy response is not a revocation guarantee after bytes have been delivered; in-flight playback must be treated separately.
+- Tests for these changes are committed but not yet verified in CI.
