@@ -1,3 +1,15 @@
+-- REVIEW ONLY: security design, not approved for deployment.
+-- RLS policy evaluation is permissive/OR; all unrestricted SELECT policies must be removed atomically.
+-- SECURITY DEFINER functions need explicit EXECUTE grants, search_path restrictions, and access testing.
+-- Public media URLs may remain directly accessible after database access is restricted;
+-- protected media requires signed delivery/private storage and cache invalidation.
+-- Audit SECURITY DEFINER RPCs, views, search indexes, realtime, and storage access before rollout.
+-- Existing posts: public visibility is the current default, but private author overrides it.
+-- Hide/deletion and suspended-author exclusions belong in the policy predicate.
+-- Follow requests with status other than 'active' do not grant access.
+-- Author account privacy cannot be bypassed by public post visibility.
+-- Admin moderation access must be designed separately, not via unrestricted SELECT.
+
 -- REVIEW ONLY. Do not run on production until tested against the real schema and existing RPCs.
 -- Audience visibility: public, followers, friends, only_me.
 -- Existing public posts remain public unless their creator is private.
