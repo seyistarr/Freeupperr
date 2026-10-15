@@ -1,0 +1,22 @@
+# FreeUpper post visibility rollout gate
+
+Status: **BLOCKED — do not deploy audience selectors or RLS yet.**
+
+## Verified production findings
+- posts RLS is enabled but multiple SELECT policies have USING (true).
+- posts.visibility currently defaults to 'public'; Create/Studio previously did not send visibility.
+- follows.status uses 'active' for existing relationships.
+- public.search_posts is SECURITY DEFINER and filters is_deleted=false and visibility='public', but **does not filter private/suspended authors or hidden posts**. It can leak posts even after RLS is corrected.
+- Public Cloudinary delivery URLs may bypass post-row access checks.
+
+## Release requirements
+1. Inventory and update all SECURITY DEFINER RPCs and public views that expose post content, especially search_posts.
+2. Audit Cloudinary delivery, transformation, CDN caches, and signed/private assets. Don't claim Only me privacy for public media URLs.
+3. Verify follow approval transitions and existing private accounts.
+4. Create one transaction-safe migration replacing *all* permissive read policies; preserve owner writes and moderation rules.
+5. Enforce both post visibility and author privacy. Deny deleted/hidden/suspended content to ordinary viewers.
+6. Test anon, owner, unrelated user, pending follower, active follower, mutual follower, private author, suspended author, and changed audience.
+7. Verify Home, Video, Profile, Create, Studio, share previews, search, SEO, and media URLs before merging.
+8. Consider disabling or hiding new audience selectors until the database and media protections ship atomically.
+
+No production SQL changes are authorized by this document.
