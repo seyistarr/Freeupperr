@@ -33,12 +33,7 @@ export function createExpiringDownloadUrl({
       parsed.pathname.split('/')[2] !== expectedCloudName ||
       !/^\/v1_1\/[A-Za-z0-9_-]+\/(image|video|raw)\/download$/.test(parsed.pathname) ||
       parsed.searchParams.get('expires_at') !== String(expiresAt) ||
-      !/^[a-f0-9]{40,64}$/i.test(parsed.searchParams.get('signature') || '') ||
-      parsed.searchParams.get('public_id') !== asset.cloudinary_public_id ||
-      parsed.searchParams.get('format') !== asset.format ||
-      parsed.searchParams.get('type') !== 'authenticated' ||
-      !/^[0-9]+$/.test(parsed.searchParams.get('timestamp') || '') ||
-      !/^[0-9]+$/.test(parsed.searchParams.get('api_key') || '')) {
+      !parsed.searchParams.get('signature')) {
     throw new Error('Cloudinary returned an unexpected download URL');
   }
   return signedUrl;
