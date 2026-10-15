@@ -27,3 +27,9 @@ No production SQL changes are authorized by this document.
 - **search_posts**: SECURITY DEFINER, lacks private/suspended author and hidden checks. Must be updated before privacy launch.
 - **toggle_repost**, **delete_post**, and other privileged RPCs: require independent inspection; existence of SECURITY DEFINER is not itself proof of an exploit.
 - The 9 isolated staging audience tests validate decision logic only; they do not test full RLS policy interactions or public media URLs.
+
+## Isolated sharing authorization tests
+- Staging project: tagkrhvgcbnybiuyvjxt, schema post_visibility_test.
+- 12/12 synthetic decision cases passed: public, pending/active/mutual followers, private account, only_me, hidden/deleted, suspended and anonymous.
+- Fixture rows were wrapped in BEGIN/ROLLBACK; no production changes.
+- These are decision-function tests, not tests of actual record_share writes, RLS, CDN access or authenticated JWT identity.
