@@ -39,3 +39,12 @@ No production SQL changes are authorized by this document.
 - Isolated staging PostgreSQL RLS tests passed: approved follower allowed; pending follower, stranger and anon denied.
 - Tests used transaction-scoped synthetic fixtures; no production mutation.
 - Remaining: full production-compatible migration tests, SECURITY DEFINER RPC audits, share-table RLS, Cloudinary protected delivery, UI integration and end-to-end tests.
+
+## Cloudinary sampled media audit (2026-10-15)
+- Cloudinary list_images returned recent FreeUpper post images with type=upload and access_control=[{access_type:anonymous}].
+- Cloudinary list_videos sampled 10 recent videos; all 10 reported anonymous delivery access.
+- Create and Studio use unsigned upload presets and persist Cloudinary secure_url; URL-based access can bypass post RLS.
+- Block production rollout of private media visibility until protected delivery architecture is implemented and verified.
+- Recommended: server-issued short-lived signed delivery URLs for authorized viewers, authenticated/private assets, secure upload flow, and revoke/cache strategy when changing audience.
+- Migration must account for already-public URLs: merely changing database visibility or moving media to a protected URL does not automatically invalidate previously shared or cached public URLs.
+- Avoid changing live Cloudinary asset access controls before a tested migration plan; doing so can break existing posts.
