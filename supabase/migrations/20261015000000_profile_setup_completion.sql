@@ -25,7 +25,7 @@ AS $$
     SELECT 1 FROM public.profiles p
     WHERE p.freeupper_id = p_freeupper_id
       AND p.is_private IS FALSE
-      AND COALESCE(p.suspended, false) IS FALSE
+      AND p.suspended IS FALSE
       AND p.profile_setup_completed_at IS NOT NULL
   );
 $$;
