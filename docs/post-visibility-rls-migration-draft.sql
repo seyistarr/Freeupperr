@@ -8,7 +8,12 @@ AS $$
  WHEN auth.uid()=p_author_id THEN true
  WHEN NOT EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=p_author_id AND p.suspended IS FALSE AND p.is_private IS NOT NULL) THEN false
  WHEN p_visibility='only_me' THEN false
- WHEN p_visibility='public' THEN EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=p_author_id AND p.is_private IS FALSE)
+ WHEN p_visibility='public' THEN EXISTS (
+   SELECT 1 FROM public.profiles p WHERE p.id=p_author_id AND p.is_private IS FALSE
+ ) OR EXISTS (
+   SELECT 1 FROM public.follows f
+   WHERE f.follower_id=auth.uid() AND f.following_id=p_author_id AND f.status='active'
+ )
  WHEN p_visibility IN ('followers','friends') THEN
  EXISTS(SELECT 1 FROM public.follows f WHERE f.follower_id=auth.uid() AND f.following_id=p_author_id AND f.status='active')
  AND (p_visibility='followers' OR EXISTS(SELECT 1 FROM public.follows f WHERE f.follower_id=p_author_id AND f.following_id=auth.uid() AND f.status='active'))
@@ -30,7 +35,4 @@ FOR SELECT TO anon,authenticated USING (
 );
 COMMIT;
 
--- PRODUCT DECISION REQUIRED: For a private author, should legacy Everyone posts
--- be visible to approved followers? Current draft denies them, while the
--- previously agreed private-account model suggests approved followers should see them.
--- Resolve this before deploying or adding final regression tests.
+-- AGREED: Existing Everyone posts on private accounts are visible only to approved followers and owner.\n-- They remain excluded from public search, anonymous access and SEO.\n
