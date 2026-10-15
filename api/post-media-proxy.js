@@ -14,6 +14,15 @@ export async function proxyProtectedMedia({ req, res, upstreamUrl, fetchImpl = f
       res.setHeader('Content-Range', 'bytes */*');
       return res.status(416).end();
     }
+    const requestedRange = /^bytes=(\d+)-(\d*)$/.exec(range);
+    const start = Number(requestedRange[1]);
+    const end = requestedRange[2] === '' ? null : Number(requestedRange[2]);
+    if (!Number.isSafeInteger(start) ||
+        (end !== null && (!Number.isSafeInteger(end) || end < start ||
+        end - start + 1 > 50 * 1024 * 1024))) {
+      res.setHeader('Content-Range', 'bytes */*');
+      return res.status(416).end();
+    }
     headers.Range = range;
   }
   let upstream;
