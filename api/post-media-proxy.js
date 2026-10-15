@@ -36,6 +36,19 @@ export async function proxyProtectedMedia({ req, res, upstreamUrl, fetchImpl = f
     try { await upstream.body.cancel(); } catch {}
     return res.status(503).end();
   }
+  if (upstream.status === 206) {
+    const contentRange = upstream.headers.get('content-range') || '';
+    const match = /^bytes (\\d+)-(\\d+)\\/(\\d+|\\*)$/.exec(contentRange);
+    const requested = range && /^bytes=(\\d+)-(\\d*)$/.exec(range);
+    if (!requested || !match ||
+        Number(match[1]) !== Number(requested[1]) ||
+        Number(match[2]) < Number(match[1]) ||
+        (requested[2] !== '' && Number(match[2]) > Number(requested[2])) ||
+        (match[3] !== '*' && Number(match[2]) >= Number(match[3]))) {
+      try { await upstream.body.cancel(); } catch {}
+      return res.status(503).end();
+    }
+  }
   const contentLength = upstream.headers.get('content-length');
   if (contentLength !== null && (!/^[0-9]+$/.test(contentLength) ||
       Number(contentLength) > 50 * 1024 * 1024)) {
