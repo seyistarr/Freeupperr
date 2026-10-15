@@ -29,3 +29,8 @@ FOR SELECT TO anon,authenticated USING (
   AND public.can_view_freeupper_post(user_id,visibility)
 );
 COMMIT;
+
+-- PRODUCT DECISION REQUIRED: For a private author, should legacy Everyone posts
+-- be visible to approved followers? Current draft denies them, while the
+-- previously agreed private-account model suggests approved followers should see them.
+-- Resolve this before deploying or adding final regression tests.
