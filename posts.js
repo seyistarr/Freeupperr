@@ -1297,6 +1297,12 @@
       image_embedding: fields.imageEmbedding || null
     };
 
+        // Fail closed: legacy public uploads cannot be published as restricted posts.
+    if (payload.visibility !== 'public') {
+      throw new Error('Restricted audiences are unavailable until protected media delivery is enabled.');
+    }
+
+
     const { data, error } = await sb
       .from('posts')
       .insert(payload)
