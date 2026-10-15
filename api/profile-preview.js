@@ -32,10 +32,13 @@ export default async function handler(req, res) {
   );
 
   if (!freeupperId) {
-    return res.redirect(302, '/profile.html');
+    res.setHeader('X-Robots-Tag', 'noindex');
+    return res.status(404).send('Profile not found');
   }
+  if (!SUPABASE_ANON_KEY) return res.status(503).send('Temporarily unavailable');
 
   let profile = null;
+  let lookupFailed = false;
 
   try {
     const response = await fetch(
@@ -53,19 +56,23 @@ export default async function handler(req, res) {
       }
     );
 
-    if (response.ok) {
-      const data = await response.json();
-      profile = Array.isArray(data) ? data[0] : data;
-    }
+    if (!response.ok) throw new Error('Profile lookup failed: ' + response.status);
+    const data = await response.json();
+    profile = Array.isArray(data) ? data[0] : data;
   } catch (error) {
     console.error('Profile preview lookup failed:', error);
+    lookupFailed = true;
   }
 
-  if (!profile) {
-    return res.redirect(
-      302,
-      `/profile.html?freeupper_id=${encodeURIComponent(freeupperId)}`
-    );
+  if (lookupFailed) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(503).send('Temporarily unavailable');
+  }
+
+  if (!profile || profile.is_private !== false || profile.freeupper_id !== freeupperId) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    return res.status(404).send('Profile unavailable');
   }
 
   const displayName =
@@ -198,31 +205,20 @@ export default async function handler(req, res) {
     href="${FALLBACK_IMAGE}"
   >
 
-  <meta
-    http-equiv="refresh"
-    content="0;url=${escapeHtml(profilePage)}"
-  >
 </head>
-
-<body>
-  <p>
-    Opening
-    <a href="${escapeHtml(profilePage)}">
-      ${safeTitle}
-    </a>
-  </p>
-
-  <script>
-    window.location.replace(
-      ${JSON.stringify(profilePage)}
-    );
-  </script>
+<body style="font-family:system-ui,sans-serif;max-width:680px;margin:8vh auto;padding:24px;line-height:1.6">
+  <main>
+    <h1>${escapeHtml(displayName)}</h1>
+    ${username ? `<p>@${escapeHtml(username)}</p>` : ''}
+    <p>${safeDescription}</p>
+    <p><a href="${escapeHtml(profilePage)}">Open in FreeUpper</a></p>
+  </main>
 </body>
 </html>`;
 
   res.setHeader(
     'Cache-Control',
-    'public, s-maxage=300, stale-while-revalidate=3600'
+    'public, s-maxage=60'
   );
 
   res.setHeader(
