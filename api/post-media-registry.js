@@ -10,7 +10,7 @@ export async function resolveProtectedMediaRequest({ authorization, assetId, env
   if (authError || !authData?.user?.id) return null;
   const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   const { data: asset, error: assetError } = await db.from('post_media_assets')
-    .select('id,post_id,owner_id,cloudinary_asset_id,cloudinary_public_id,resource_type,delivery_type,status')
+    .select('id,post_id,owner_id,cloudinary_asset_id,cloudinary_public_id,resource_type,format,delivery_type,status')
     .eq('id', assetId).eq('status', 'ready').maybeSingle();
   if (assetError || !asset || !asset.post_id || !asset.owner_id) return null;
   return { viewerId: authData.user.id, asset, db };
