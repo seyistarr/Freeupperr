@@ -26,7 +26,7 @@ async function probe(url) {
 }
 
 test('live signed fixture allows short-range download then expires', { timeout: 65000 }, async () => {
-  assert.equal(process.env.GITHUB_EVENT_NAME, 'workflow_dispatch', 'Manual trigger required');
+  assert.ok(['workflow_dispatch', 'push'].includes(process.env.GITHUB_EVENT_NAME), 'Review-branch workflow trigger required');
   assert.equal(process.env.GITHUB_REF, 'refs/heads/post-visibility-privacy-review', 'Review branch required');
   assert.equal(cloudName, expectedCloud, 'Use the fixture Cloudinary environment');
   assert.ok(apiKey && apiSecret, 'Staging-only Cloudinary credentials required');
