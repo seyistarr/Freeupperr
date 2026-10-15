@@ -16,6 +16,9 @@ AS $$
 $$;
 REVOKE ALL ON FUNCTION public.can_view_freeupper_post(uuid,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.can_view_freeupper_post(uuid,text) TO anon,authenticated;
+-- Existing FOR ALL owner policy also grants SELECT to owners; retain intentionally.
+-- Its owner visibility overrides hidden/deleted exclusions for owners.
+-- If hidden/deleted should be invisible to owners, revise the ALL policy separately.
 DROP POLICY IF EXISTS "Anyone can view posts" ON public.posts;
 DROP POLICY IF EXISTS "Enable read access for all users" ON public.posts;
 DROP POLICY IF EXISTS "Posts are viewable by everyone" ON public.posts;
