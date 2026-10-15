@@ -20,7 +20,7 @@ function mockDb({post,author,follow=null,reverse=null,errorTable=null}) {
     return query;
   }};
 }
-const asset={post_id:'post',owner_id:'author',status:'ready'};
+const asset={post_id:'post',owner_id:'author',status:'ready',delivery_type:'authenticated'};
 const post={id:'post',user_id:'author',visibility:'followers',is_deleted:false,is_hidden:false};
 const author={id:'author',is_private:false,suspended:false};
 const check=(options={})=>authorizeProtectedMedia({db:mockDb({post:{...post,...options.post},author:{...author,...options.author},follow:options.follow??null,reverse:options.reverse??null,errorTable:options.errorTable}),asset:{...asset,...options.asset},viewerId:options.viewerId??'viewer'});
@@ -33,3 +33,4 @@ test('mismatched asset owner denied',async()=>assert.equal(await check({asset:{o
 test('database lookup error denied',async()=>assert.equal(await check({errorTable:'posts'}),false));
 test('hidden post denied',async()=>assert.equal(await check({post:{is_hidden:true},follow:{follower_id:'viewer'}}),false));
 test('null deletion status denied',async()=>assert.equal(await check({post:{is_deleted:null},follow:{follower_id:'viewer'}}),false));
+test('public Cloudinary delivery rejected',async()=>assert.equal(await check({asset:{delivery_type:'upload'},follow:{follower_id:'viewer'}}),false));
