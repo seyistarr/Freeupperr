@@ -1,0 +1,39 @@
+name: Staging database authorization (opt-in)
+on:
+  workflow_dispatch:
+  push:
+    branches: [post-visibility-privacy-review]
+    paths:
+      - 'tests/staging/post-media-db-integration.test.js'
+      - '.github/workflows/post-media-staging-db.yml'
+permissions:
+  contents: read
+jobs:
+  staging-database:
+    if: github.repository == 'seyistarr/Freeupperr' && github.ref == 'refs/heads/post-visibility-privacy-review' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      STAGING_SUPABASE_DB_URL: ${{ secrets.STAGING_SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check opt-in credential
+        id: credential
+        shell: bash
+        run: |
+          if [ -z "$STAGING_SUPABASE_DB_URL" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Staging DB integration is not configured; no database connection attempted."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.credential.outputs.configured == 'true'
+        with:
+          node-version: '22'
+      - name: Install test-only PostgreSQL driver
+        if: steps.credential.outputs.configured == 'true'
+        run: npm install --no-save --package-lock=false --ignore-scripts pg@8
+      - name: Verify staging authorization and rollback
+        if: steps.credential.outputs.configured == 'true'
+        run: node --test tests/staging/post-media-db-integration.test.js
