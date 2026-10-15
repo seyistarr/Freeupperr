@@ -156,6 +156,14 @@ export default async function handler(req, res) {
       );
     }
 
+    if (profile.is_private !== false) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      return res.end('Profile unavailable');
+    }
+
     /*
      * Profile information.
      */
