@@ -20,3 +20,18 @@ test('rejects unexpected SDK host',()=>assert.throws(()=>createExpiringDownloadU
 test('rejects SDK URL without signature',()=>assert.throws(()=>createExpiringDownloadUrl({asset,cloudinaryUtils:{private_download_url:()=> 'https://api.cloudinary.com/v1_1/x/image/download?expires_at=1060'},nowSeconds:1000})));
 
 test('rejects different Cloudinary tenant',()=>assert.throws(()=>createExpiringDownloadUrl({asset,cloudinaryUtils:{private_download_url:()=> 'https://api.cloudinary.com/v1_1/other-cloud/image/download?expires_at=1060&signature=synthetic'},nowSeconds:1000})));
+
+test('accepts minimum 10-second TTL and maximum 120-second TTL',()=>{
+  for (const ttlSeconds of [10,120]) {
+    const url=createExpiringDownloadUrl({asset,cloudinaryUtils:sdk(),nowSeconds:1000,ttlSeconds});
+    assert.equal(new URL(url).searchParams.get('expires_at'),String(1000+ttlSeconds));
+  }
+});
+test('rejects TTL shorter than 10 seconds',()=>assert.throws(()=>createExpiringDownloadUrl({asset,cloudinaryUtils:sdk(),ttlSeconds:9})));
+test('rejects TTL longer than 120 seconds',()=>assert.throws(()=>createExpiringDownloadUrl({asset,cloudinaryUtils:sdk(),ttlSeconds:121})));
+test('rejects wrong Cloudinary asset delivery type for a video',()=>{
+  assert.throws(()=>createExpiringDownloadUrl({
+    asset:{...asset,resource_type:'video',format:'mp4',delivery_type:'upload'},
+    cloudinaryUtils:sdk()
+  }));
+});
