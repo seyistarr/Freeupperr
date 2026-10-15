@@ -52,3 +52,10 @@ Do not delete or rename existing Cloudinary assets without backups and a tested 
 - Vercel/serverless response duration and buffering limits, video seeking, HLS manifests/segments, cost and user concurrency must be tested. Do not route large video through this scaffold as-is.
 - A proxy response is not a revocation guarantee after bytes have been delivered; in-flight playback must be treated separately.
 - Tests for these changes are committed but not yet verified in CI.
+
+## Cloudinary expiring-download adapter integration status
+- Registry lookup now selects `format`, matching the draft registry migration.
+- Expiring URL adapter now requires `expectedCloudName` and rejects URLs for a different Cloudinary tenant.
+- The official Cloudinary Node SDK has not yet been installed/configured or exercised against a synthetic authenticated asset. Do not enable the endpoint based solely on mocked SDK tests.
+- Before deployment, check actual SDK output shape and supported download resource types, configure CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET as server-only environment values, and verify the account supports protected delivery.
+- Confirm expiration and direct URL denial with real HTTP requests after expiry, plus range requests and large-video playback; tests are not yet confirmed passing in CI.
