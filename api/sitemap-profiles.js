@@ -23,6 +23,7 @@ export default async function handler(req, res) {
         select: 'freeupper_id',
         is_private: 'eq.false',
         suspended: 'eq.false',
+        profile_setup_completed_at: 'not.is.null',
         order: 'freeupper_id.asc',
         limit: String(PAGE_SIZE),
         offset: String(offset)
