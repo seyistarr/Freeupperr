@@ -61,3 +61,27 @@ test('rejects oversized declared upstream payloads',async()=>{
   assert.equal(res.statusCode,413);
   assert.equal(cancelled,true);
 });
+
+test('accepts numeric declared length and streams small media',async()=>{
+  const { Writable } = await import('node:stream');
+  const { ReadableStream } = await import('node:stream/web');
+  const chunks=[];
+  const res=new Writable({write(chunk,_enc,cb){chunks.push(chunk);cb();}});
+  res.headers={};
+  res.statusCode=200;
+  res.setHeader=(k,v)=>{res.headers[k]=v;};
+  res.status=(n)=>{res.statusCode=n;return res;};
+  const body=new ReadableStream({start(controller){controller.enqueue(new Uint8Array([1,2,3]));controller.close();}});
+  await proxyProtectedMedia({req:{headers:{}},res,upstreamUrl:'https://api.cloudinary.com/a',
+    fetchImpl:async()=>({status:200,body,headers:new Headers({'content-type':'image/png','content-length':'3'})})});
+  assert.equal(res.statusCode,200);
+  assert.equal(Buffer.concat(chunks).length,3);
+});
+test('rejects invalid declared content length',async()=>{
+  const res=response();
+  let cancelled=false;
+  await proxyProtectedMedia({req:{headers:{}},res,upstreamUrl:'https://api.cloudinary.com/a',
+    fetchImpl:async()=>({status:200,body:{cancel:async()=>{cancelled=true}},headers:new Headers({'content-type':'image/png','content-length':'invalid'})})});
+  assert.equal(res.statusCode,413);
+  assert.equal(cancelled,true);
+});
