@@ -150,3 +150,13 @@ test('accepts valid partial video response and streams requested bytes',async()=
   assert.equal(res.headers['content-range'],'bytes 4-7/100');
   assert.equal(Buffer.concat(chunks).length,4);
 });
+
+test('rejects a partial response whose end exceeds the requested end',async()=>{
+  const res=response();
+  await proxyProtectedMedia({req:{headers:{range:'bytes=4-7'}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:async()=>({
+      status:206,body:{cancel:async()=>{}},
+      headers:new Headers({'content-type':'video/mp4','content-range':'bytes 4-9/100'})
+    })});
+  assert.equal(res.statusCode,503);
+});
