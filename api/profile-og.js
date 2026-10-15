@@ -1,3 +1,4 @@
+import { publicName, publicHandle, redactEmails } from './profile-seo-privacy.js';
 import React from 'react';
 import { ImageResponse } from '@vercel/og';
 
@@ -167,30 +168,12 @@ export default async function handler(req, res) {
     /*
      * Profile information.
      */
-    const displayName =
-      cleanText(
-        profile.display_name,
-        80
-      ) ||
-      cleanText(
-        profile.username,
-        80
-      ) ||
-      'FreeUpper User';
+    const displayName = cleanText(publicName(profile.display_name || profile.username), 80);
 
-    const username =
-      cleanText(
-        profile.username ||
-        profile.display_username ||
-        '',
-        80
-      );
+    const username = cleanText(publicHandle(profile.username || profile.display_username || ''), 80);
 
     const bio =
-      cleanText(
-        profile.bio,
-        180
-      ) ||
+      cleanText(redactEmails(profile.bio), 180) ||
       `Connect with ${displayName} on FreeUpper.`;
 
     /*
