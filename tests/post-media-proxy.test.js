@@ -38,3 +38,26 @@ test('rejects unexpected content type',async()=>{
   assert.equal(res.statusCode,503);
   assert.equal(cancelled,true);
 });
+
+test('rejects ignored range requests',async()=>{
+  const res=response();
+  let cancelled=false;
+  await proxyProtectedMedia({req:{headers:{range:'bytes=0-1023'}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:async()=>({
+      status:200,body:{cancel:async()=>{cancelled=true}},
+      headers:new Headers({'content-type':'video/mp4'})
+    })});
+  assert.equal(res.statusCode,503);
+  assert.equal(cancelled,true);
+});
+test('rejects oversized declared upstream payloads',async()=>{
+  const res=response();
+  let cancelled=false;
+  await proxyProtectedMedia({req:{headers:{}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:async()=>({
+      status:200,body:{cancel:async()=>{cancelled=true}},
+      headers:new Headers({'content-type':'video/mp4','content-length':String(51*1024*1024)})
+    })});
+  assert.equal(res.statusCode,413);
+  assert.equal(cancelled,true);
+});
