@@ -48,3 +48,10 @@ No production SQL changes are authorized by this document.
 - Recommended: server-issued short-lived signed delivery URLs for authorized viewers, authenticated/private assets, secure upload flow, and revoke/cache strategy when changing audience.
 - Migration must account for already-public URLs: merely changing database visibility or moving media to a protected URL does not automatically invalidate previously shared or cached public URLs.
 - Avoid changing live Cloudinary asset access controls before a tested migration plan; doing so can break existing posts.
+
+## Cloudinary asset inventory (2026-10-15)
+- Connected Cloudinary image inventory: sampled post images have type=upload and access_control=[{access_type:anonymous}], with direct res.cloudinary.com delivery URLs. These are not protected assets.
+- Video inventory query did not yield verifiable records; do not infer video access settings.
+- The Create and Studio client-side unsigned upload flow receives and stores secure_url. HTTPS does not imply authorization.
+- Release blocker: design authenticated media delivery and secure thumbnails/derived transformations; protect or replace legacy public URLs, invalidate caches and consider already copied links. Access revocation must be tested.
+- Do not switch Cloudinary assets to authenticated/private delivery without a tested migration and working signed playback path, or existing media may break.
