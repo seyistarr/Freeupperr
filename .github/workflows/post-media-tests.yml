@@ -9,13 +9,23 @@ on:
       - 'tests/post-media*.test.js'
       - '.github/workflows/post-media-tests.yml'
 jobs:
-  protected-media:
+  authorization-and-proxy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install Cloudinary SDK for isolated compatibility check
+      - name: Run offline authorization, proxy and adapter tests
+        run: node --test tests/post-media-authorization.test.js tests/post-media-access.test.js tests/post-media-proxy.test.js tests/post-media-download-url.test.js tests/post-media-cloudinary.test.js
+  cloudinary-sdk-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install official SDK for compatibility test only
         run: npm install --no-save --package-lock=false --ignore-scripts cloudinary@2
-      - run: node --test tests/post-media-authorization.test.js tests/post-media-access.test.js tests/post-media-proxy.test.js tests/post-media-download-url.test.js tests/post-media-cloudinary.test.js tests/post-media-sdk-smoke.test.js
+      - name: Check SDK URL shape against protected adapter
+        run: node --test tests/post-media-sdk-smoke.test.js
