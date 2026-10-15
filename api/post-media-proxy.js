@@ -36,25 +36,37 @@ export async function proxyProtectedMedia({ req, res, upstreamUrl, fetchImpl = f
     try { await upstream.body.cancel(); } catch {}
     return res.status(503).end();
   }
+  const contentLength = upstream.headers.get('content-length');
+  const maxBytes = 50 * 1024 * 1024;
+  if (contentLength !== null && (!/^[0-9]+$/.test(contentLength) ||
+      !Number.isSafeInteger(Number(contentLength)) ||
+      Number(contentLength) > maxBytes)) {
+    try { await upstream.body.cancel(); } catch {}
+    return res.status(413).end();
+  }
   if (upstream.status === 206) {
     const contentRange = upstream.headers.get('content-range') || '';
-    const match = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(contentRange);
+    const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(contentRange);
     const requested = range && /^bytes=(\d+)-(\d*)$/.exec(range);
-    if (!requested || !match ||
-        Number(match[1]) !== Number(requested[1]) ||
-        Number(match[2]) < Number(match[1]) ||
-        (requested[2] !== '' && Number(match[2]) > Number(requested[2])) ||
-        (match[3] !== '*' && Number(match[2]) >= Number(match[3]))) {
+    if (!requested || !match) {
+      try { await upstream.body.cancel(); } catch {}
+      return res.status(503).end();
+    }
+    const [start, end, total, requestedStart] =
+      [match[1], match[2], match[3], requested[1]].map(Number);
+    const requestedEnd = requested[2] === '' ? null : Number(requested[2]);
+    const expectedLength = end - start + 1;
+    if (![start, end, total, requestedStart].every(Number.isSafeInteger) ||
+        (requestedEnd !== null && !Number.isSafeInteger(requestedEnd)) ||
+        start !== requestedStart || end < start || total <= end ||
+        (requestedEnd !== null && (requestedEnd < start || end > requestedEnd)) ||
+        expectedLength > maxBytes ||
+        (contentLength !== null && Number(contentLength) !== expectedLength)) {
       try { await upstream.body.cancel(); } catch {}
       return res.status(503).end();
     }
   }
-  const contentLength = upstream.headers.get('content-length');
-  if (contentLength !== null && (!/^[0-9]+$/.test(contentLength) ||
-      Number(contentLength) > 50 * 1024 * 1024)) {
-    try { await upstream.body.cancel(); } catch {}
-    return res.status(413).end();
-  }
+
   res.status(upstream.status);
   res.setHeader('Content-Type', type);
   res.setHeader('Cache-Control', 'private, no-store');
