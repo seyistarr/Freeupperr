@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createExpiringDownloadUrl } from '../api/post-media-download-url.js';
+import { createExpiringDownloadUrl as makeUrl } from '../api/post-media-download-url.js';
+const createExpiringDownloadUrl = (opts) => makeUrl({expectedCloudName:'test-cloud',...opts});
 const asset={status:'ready',delivery_type:'authenticated',resource_type:'image',cloudinary_public_id:'freeupper/posts/example',format:'jpg'};
 function sdk() {
   return {private_download_url(publicId,format,opts) {
@@ -17,3 +18,5 @@ test('rejects missing format',()=>assert.throws(()=>createExpiringDownloadUrl({a
 test('rejects invalid ttl',()=>assert.throws(()=>createExpiringDownloadUrl({asset,cloudinaryUtils:sdk(),ttlSeconds:3600})));
 test('rejects unexpected SDK host',()=>assert.throws(()=>createExpiringDownloadUrl({asset,cloudinaryUtils:{private_download_url:()=> 'https://evil.example/v1_1/x/image/download?expires_at=1060&signature=foo'},nowSeconds:1000})));
 test('rejects SDK URL without signature',()=>assert.throws(()=>createExpiringDownloadUrl({asset,cloudinaryUtils:{private_download_url:()=> 'https://api.cloudinary.com/v1_1/x/image/download?expires_at=1060'},nowSeconds:1000})));
+
+test('rejects different Cloudinary tenant',()=>assert.throws(()=>createExpiringDownloadUrl({asset,cloudinaryUtils:{private_download_url:()=> 'https://api.cloudinary.com/v1_1/other-cloud/image/download?expires_at=1060&signature=synthetic'},nowSeconds:1000})));
