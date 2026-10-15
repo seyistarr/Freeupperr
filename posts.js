@@ -462,6 +462,7 @@
       .from('posts')
       .select(POST_SELECT)
       .eq('is_hidden', false)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -501,6 +502,7 @@
       .select(POST_SELECT)
       .eq('user_id', userId)
       .eq('is_hidden', false)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -656,7 +658,8 @@
         .from('posts')
         .select(POST_SELECT)
         .in('id', missingIds)
-        .eq('is_hidden', false);
+        .eq('is_hidden', false)
+        .eq('is_deleted', false);
 
       if (source) {
         query = query.eq('source', source);
@@ -1360,7 +1363,8 @@
       .from('posts')
       .select(POST_SELECT)
       .in('id', ids)
-      .eq('is_hidden', false);
+      .eq('is_hidden', false)
+      .eq('is_deleted', false);
 
     if (postsError) {
       console.error('findSimilarPosts postgres error:', postsError);
