@@ -76,7 +76,27 @@ export default async function handler(req, res) {
     return res.status(404).send('Profile unavailable');
   }
 
-  const isUnverified = !profile.profile_setup_completed_at;
+  let isSetupComplete = false;
+  try {
+    const eligibilityResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/rpc/get_public_profile_seo_status`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ p_freeupper_id: freeupperId })
+      }
+    );
+    if (eligibilityResponse.ok) {
+      isSetupComplete = (await eligibilityResponse.json()) === true;
+    }
+  } catch (error) {
+    console.error('Profile SEO eligibility lookup failed:', error);
+  }
+  const isUnverified = !isSetupComplete;
   const displayName = isUnverified ? 'FreeUpper Member' : cleanText(publicName(profile.display_name || profile.username), 80);
 
   const username = isUnverified ? '' : cleanText(publicHandle(profile.username || profile.display_username || ''), 80);
@@ -87,10 +107,6 @@ export default async function handler(req, res) {
     ? `${displayName} (@${username}) • FreeUpper`
     : `${displayName} • FreeUpper`;
 
-  // The current public RPC does not return profile_setup_completed_at.
-  // Until a reviewed RPC update is deployed, fail closed: noindex all profiles.
-  const isSetupComplete = profile.profile_setup_completed_at === true ||
-    (typeof profile.profile_setup_completed_at === 'string' && Boolean(profile.profile_setup_completed_at));
   if (!isSetupComplete) res.setHeader('X-Robots-Tag', 'noindex, follow');
 
   const profileUrl =
