@@ -37,3 +37,11 @@ Do not delete or rename existing Cloudinary assets without backups and a tested 
 - Ensure public SEO previews never include restricted media.
 - Review Cloudinary plan and capabilities for authenticated delivery and signed URLs.
 - Deploy media protection, RPC fixes, RLS and audience UI in a coordinated rollout; do not merge a partial implementation.
+
+## Critical Cloudinary URL expiry correction (2026-10-15)
+- A standard Cloudinary `sign_url: true` URL is signed but NOT inherently time-limited. It must not be described as short-lived or revocable.
+- Cloudinary `private_download_url` supports `expires_at` and authenticated downloads, but Cloudinary documents higher bandwidth cost and advises against embedding these URLs directly in a site. Evaluate suitability for large videos and streaming before adoption.
+- Cloudinary token-based/cookie-based delivery can enforce expiration but requires eligible Cloudinary plan/environment configuration; do not assume it is enabled.
+- For reliable FreeUpper revocation, use a server-side authorized streaming proxy with no-store responses or verified Cloudinary time-limited token access, with careful caching and video range/HLS testing. Already-downloaded media cannot be recalled.
+- Keep /api/post-media disabled until an enforceable expiry strategy is implemented and tested against the real Cloudinary account.
+- Cloudinary docs: https://cloudinary.com/documentation/control_access_to_media and https://cloudinary.com/documentation/delivery_url_signatures
