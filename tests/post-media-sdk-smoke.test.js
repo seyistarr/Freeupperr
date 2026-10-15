@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCloudinarySdk } from '../api/post-media-cloudinary.js';
+import { createExpiringDownloadUrl } from '../api/post-media-download-url.js';
 
 // Integration smoke test against the installed official SDK. Uses fake credentials;
 // generates URLs locally and never uploads or accesses customer assets.
@@ -20,4 +21,7 @@ test('official Cloudinary SDK exposes private download generation', async () => 
   assert.equal(parsed.hostname, 'api.cloudinary.com');
   assert.match(parsed.pathname, /freeupper-test/);
   assert.ok(parsed.searchParams.has('expires_at'));
+  const asset = {status:'ready',delivery_type:'authenticated',resource_type:'image',cloudinary_public_id:'synthetic-media',format:'jpg'};
+  const adapted = createExpiringDownloadUrl({asset,cloudinaryUtils:utils,expectedCloudName:'freeupper-test'});
+  assert.equal(new URL(adapted).hostname, 'api.cloudinary.com');
 });
