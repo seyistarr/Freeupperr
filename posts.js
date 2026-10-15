@@ -1290,6 +1290,9 @@
         firstMedia?.thumbnail_url ||
         null,
       mentions: safeArray(fields.mentions),
+      // Audience chosen in Create/Studio. Default preserves legacy public posts.
+      visibility: ['public', 'followers', 'friends', 'only_me'].includes(fields.visibility)
+        ? fields.visibility : 'public',
       comments_hidden: !!fields.commentsHidden,
       sound_id: fields.sound_id || null,
       source: fields.source || CONFIG.DEFAULT_SOURCE,
