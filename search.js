@@ -10,7 +10,7 @@
 //             window.Mentions (optional),
 //             window.getAuthorFromProfile / getVerifiedBadgeHTML.
 //
-// SOFT-DELETE: all `.from('posts')` queries filter `.is('deleted_at', null)`.
+// SOFT-DELETE: all `.from('posts')` queries filter `.is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false)`.
 // RACE: `_searchReqToken` guards against stale async responses.
 // ============================================================
 (function () {
@@ -389,7 +389,7 @@
     if (window.Hashtags && typeof window.Hashtags.fetchTrendingHashtags === 'function') {
       return window.Hashtags.fetchTrendingHashtags(limit);
     }
-    const { data, error } = await window.sb.from('posts').select('tags').is('deleted_at', null).not('tags', 'is', null).limit(500);
+    const { data, error } = await window.sb.from('posts').select('tags').is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).not('tags', 'is', null).limit(500);
     if (error || !data) return [];
     const counts = {};
     data.forEach(p => (p.tags || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; }));
@@ -402,7 +402,7 @@
   async function fetchTrendingPosts(limit = 3) {
     const { data, error } = await window.sb.from('posts')
       .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-      .is('deleted_at', null).order('views', { ascending: false }).limit(limit);
+      .is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).order('views', { ascending: false }).limit(limit);
     const rows = error ? [] : (data || []);
     rows.forEach(_rememberPost);
     return rows;
@@ -410,7 +410,7 @@
   async function fetchTrendingVideos(limit = 10) {
     const { data, error } = await window.sb.from('posts')
       .select('id,title,media_url,media_type,views')
-      .is('deleted_at', null).eq('media_type', 'video').order('views', { ascending: false }).limit(limit);
+      .is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).eq('media_type', 'video').order('views', { ascending: false }).limit(limit);
     const rows = error ? [] : (data || []);
     rows.forEach(_rememberPost);
     return rows;
@@ -418,7 +418,7 @@
   async function fetchTrendingPhotos(limit = 9) {
     const { data, error } = await window.sb.from('posts')
       .select('id,title,media_url,media_type,views')
-      .is('deleted_at', null).eq('media_type', 'image').order('views', { ascending: false }).limit(limit);
+      .is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).eq('media_type', 'image').order('views', { ascending: false }).limit(limit);
     const rows = error ? [] : (data || []);
     rows.forEach(_rememberPost);
     return rows;
@@ -434,7 +434,7 @@
     try {
       const { data } = await window.sb.from('posts')
         .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-        .eq('id', id).is('deleted_at', null).single();
+        .eq('id', id).is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).single();
       if (data) _rememberPost(data);
       return data;
     } catch (e) { return null; }
@@ -444,7 +444,7 @@
     const like = `%${q}%`;
     const [postsRes, usersRes, marketRes] = await Promise.all([
       window.sb.from('posts').select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-        .is('deleted_at', null)
+        .is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false)
         .or(`title.ilike.${like},content.ilike.${like}`)
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1),
@@ -467,7 +467,7 @@
   async function searchVideos(q, offset = 0) {
     const like = `%${q}%`;
     const { data, error } = await window.sb.from('posts').select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-      .is('deleted_at', null).eq('media_type', 'video')
+      .is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).eq('media_type', 'video')
       .or(`title.ilike.${like},content.ilike.${like}`)
       .order('created_at', { ascending: false }).range(offset, offset + PAGE_SIZE - 1);
     const rows = error ? [] : (data || []); rows.forEach(_rememberPost); return rows;
@@ -475,7 +475,7 @@
   async function searchPhotos(q, offset = 0) {
     const like = `%${q}%`;
     const { data, error } = await window.sb.from('posts').select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-      .is('deleted_at', null).eq('media_type', 'image')
+      .is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).eq('media_type', 'image')
       .or(`title.ilike.${like},content.ilike.${like}`)
       .order('created_at', { ascending: false }).range(offset, offset + PAGE_SIZE - 1);
     const rows = error ? [] : (data || []); rows.forEach(_rememberPost); return rows;
@@ -490,7 +490,7 @@
       return results.slice(offset, offset + PAGE_SIZE).map(r => r.tag);
     }
     const { data, error } = await window.sb.from('posts').select('tags')
-      .is('deleted_at', null).contains('tags', [q]).range(offset, offset + PAGE_SIZE - 1);
+      .is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).contains('tags', [q]).range(offset, offset + PAGE_SIZE - 1);
     if (error || !data) return [];
     const allTags = data.flatMap(p => p.tags || []).filter(t => t.toLowerCase().includes(q.toLowerCase()));
     return [...new Set(allTags)];
@@ -501,14 +501,14 @@
       if (!postIds.length) return [];
       const { data, error } = await window.sb.from('posts')
         .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-        .is('deleted_at', null).in('id', postIds)
+        .is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).in('id', postIds)
         .order(sort === 'latest' ? 'created_at' : 'views', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
       const rows = error ? [] : (data || []); rows.forEach(_rememberPost); return rows;
     }
     const { data, error } = await window.sb.from('posts')
       .select('*, profiles:user_id(id,display_name,username,avatar_url,verified_status)')
-      .is('deleted_at', null).contains('tags', [tag])
+      .is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).contains('tags', [tag])
       .order(sort === 'latest' ? 'created_at' : 'views', { ascending: false })
       .range(offset, offset + PAGE_SIZE - 1);
     const rows = error ? [] : (data || []); rows.forEach(_rememberPost); return rows;
@@ -519,7 +519,7 @@
       return postIds.length;
     }
     const { count, error } = await window.sb.from('posts')
-      .select('id', { count: 'exact', head: true }).is('deleted_at', null).contains('tags', [tag]);
+      .select('id', { count: 'exact', head: true }).is('deleted_at', null).eq('is_deleted', false).eq('is_hidden', false).contains('tags', [tag]);
     return error ? 0 : (count || 0);
   }
 
