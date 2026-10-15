@@ -1148,6 +1148,25 @@
   }
 
   // ===================================================================
+  // UPDATE POST AUDIENCE (owner only; RLS enforcement required)
+  // ===================================================================
+  async function updatePostVisibility(postId, visibility) {
+    const user = await requireUser();
+    if (!['public', 'followers', 'friends', 'only_me'].includes(visibility)) {
+      throw new Error('Invalid post audience.');
+    }
+    const { data, error } = await sb.from('posts')
+      .update({ visibility })
+      .eq('id', postId)
+      .eq('user_id', user.id)
+      .select('id, visibility')
+      .single();
+    if (error) throw error;
+    clearFeedContext();
+    return data;
+  }
+
+  // ===================================================================
   // COMMENTS ON / OFF (for a post)
   // ===================================================================
   async function toggleCommentsHidden(postId, hidden) {
@@ -1531,6 +1550,7 @@
 
     // Moderation
     toggleHidePost,
+    updatePostVisibility,
     toggleCommentsHidden,
     reportPost,
 
