@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/profile-preview.js';
+process.env.SUPABASE_ANON_KEY = 'test-anon-key';
+const { default: handler } = await import('../api/profile-preview.js');
 
 const profile = {
   freeupper_id: 'FU_TEST',
