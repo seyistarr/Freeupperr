@@ -165,15 +165,35 @@ export default async function handler(req, res) {
       return res.end('Profile unavailable');
     }
 
+    // Fail closed: do not render personal OG information without verified completion.
+    let eligible = false;
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/rpc/get_public_profile_seo_status`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({ p_freeupper_id: freeupperId })
+        }
+      );
+      if (response.ok) eligible = (await response.json()) === true;
+    } catch (error) {
+      console.error('OG eligibility lookup failed:', error);
+    }
+
     /*
      * Profile information.
      */
-    const displayName = cleanText(publicName(profile.display_name || profile.username), 80);
+    const displayName = eligible ? cleanText(publicName(profile.display_name || profile.username), 80) : 'FreeUpper Member';
 
-    const username = cleanText(publicHandle(profile.username || profile.display_username || ''), 80);
+    const username = eligible ? cleanText(publicHandle(profile.username || profile.display_username || ''), 80) : '';
 
     const bio =
-      cleanText(redactEmails(profile.bio), 180) ||
+      (eligible ? cleanText(redactEmails(profile.bio), 180) : 'View this profile on FreeUpper.') ||
       `Connect with ${displayName} on FreeUpper.`;
 
     /*
@@ -182,9 +202,7 @@ export default async function handler(req, res) {
      * Just pass the URL to ImageResponse.
      */
     const avatar =
-      cleanImageUrl(
-        profile.avatar_url
-      );
+      eligible ? cleanImageUrl(profile.avatar_url) : null;
 
     const logo =
       cleanImageUrl(
