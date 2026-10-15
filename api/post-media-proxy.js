@@ -37,7 +37,7 @@ export async function proxyProtectedMedia({ req, res, upstreamUrl, fetchImpl = f
     return res.status(503).end();
   }
   const contentLength = upstream.headers.get('content-length');
-  if (contentLength !== null && (!/^\\d+$/.test(contentLength) ||
+  if (contentLength !== null && (!/^[0-9]+$/.test(contentLength) ||
       Number(contentLength) > 50 * 1024 * 1024)) {
     try { await upstream.body.cancel(); } catch {}
     return res.status(413).end();
@@ -53,8 +53,23 @@ export async function proxyProtectedMedia({ req, res, upstreamUrl, fetchImpl = f
     if (v) res.setHeader(h, v);
   }
   // Stream with backpressure and abort on client disconnect.
-  const { Readable } = await import('node:stream');
+  const { Readable, Transform } = await import('node:stream');
   const { pipeline } = await import('node:stream/promises');
-  try { await pipeline(Readable.fromWeb(upstream.body), res); }
-  catch { if (!res.destroyed) res.destroy(); }
+  const limitBytes = 50 * 1024 * 1024;
+  let transferred = 0;
+  const limiter = new Transform({
+    transform(chunk, encoding, callback) {
+      transferred += chunk.length;
+      if (transferred > limitBytes) {
+        callback(new Error('Protected media stream exceeded limit'));
+      } else {
+        callback(null, chunk);
+      }
+    }
+  });
+  try { await pipeline(Readable.fromWeb(upstream.body), limiter, res); }
+  catch {
+    try { await upstream.body.cancel(); } catch {}
+    if (!res.destroyed) res.destroy();
+  }
 }
