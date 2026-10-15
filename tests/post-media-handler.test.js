@@ -1,27 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 
-// This test validates the fail-closed handler contract without invoking Supabase,
-// requiring credentials, or making any outbound requests.
-const handlerSource = readFileSync(new URL('../api/post-media.js', import.meta.url), 'utf8');
-test('protected endpoint restricts to GET', () => {
-  assert.match(handlerSource, /req\.method !== 'GET'/);
-  assert.match(handlerSource, /status\(405\)/);
+const source = readFileSync(new URL('../api/post-media.js', import.meta.url), 'utf8');
+
+test('protected endpoint accepts GET only', () => {
+  assert.match(source, /req\.method !== 'GET'/);
+  assert.match(source, /status\(405\)/);
 });
 test('protected endpoint disables caches and indexing', () => {
-  assert.match(handlerSource, /private, no-store/);
-  assert.match(handlerSource, /noindex, nofollow/);
-  assert.match(handlerSource, /Vary', 'Authorization'/);
+  assert.match(source, /private, no-store/);
+  assert.match(source, /noindex, nofollow/);
+  assert.match(source, /Vary', 'Authorization'/);
 });
-test('protected endpoint has no enabled delivery path', () => {
-  assert.match(handlerSource, /status\(503\)/);
-  assert.doesNotMatch(handlerSource, /proxyProtectedMedia\(/);
-  assert.doesNotMatch(handlerSource, /createExpiringDownloadUrl\(/);
+test('protected delivery is disabled unless explicitly gated in isolated staging', () => {
+  assert.match(source, /FREEUPPER_PROTECTED_MEDIA_DELIVERY !== 'enabled-in-isolated-staging'/);
+  assert.match(source, /FREEUPPER_MEDIA_TEST_ENV !== 'isolated-freeupper-staging'/);
+  assert.match(source, /VERCEL_ENV === 'production'/);
+  assert.match(source, /cloudName !== 'sxdcqs5x'/);
+  assert.match(source, /status\(503\)/);
 });
-test('protected endpoint performs authorization before the delivery lock', () => {
-  const auth = handlerSource.indexOf('await authorizeProtectedMedia(context)');
-  const lock = handlerSource.indexOf("return res.status(503).json({ error: 'Protected media delivery is not enabled' })");
-  assert.ok(auth > 0 && lock > auth);
+test('protected endpoint authorizes before generating a signed URL or streaming', () => {
+  const auth = source.indexOf('await authorizeProtectedMedia(context)');
+  const sign = source.indexOf('createExpiringDownloadUrl({');
+  const proxy = source.indexOf('proxyProtectedMedia({ req, res, upstreamUrl })');
+  assert.ok(auth > 0 && sign > auth && proxy > sign);
 });
