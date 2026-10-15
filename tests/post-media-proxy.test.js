@@ -170,12 +170,12 @@ test('rejects partial response with inconsistent Content-Length',async()=>{
     })});
   assert.equal(res.statusCode,503);
 });
-test('rejects unsafe integer Content-Range values',async()=>{
+test('rejects unsafe integer Content-Range values from upstream',async()=>{
   const res=response();
-  await proxyProtectedMedia({req:{headers:{range:'bytes=9007199254740993-'}},res,
+  await proxyProtectedMedia({req:{headers:{range:'bytes=0-3'}},res,
     upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:async()=>({
       status:206,body:{cancel:async()=>{}},
-      headers:new Headers({'content-type':'video/mp4','content-range':'bytes 9007199254740993-9007199254740994/9007199254740995'})
+      headers:new Headers({'content-type':'video/mp4','content-range':'bytes 0-9007199254740994/9007199254740995'})
     })});
   assert.equal(res.statusCode,503);
 });
