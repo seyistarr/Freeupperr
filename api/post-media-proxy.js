@@ -31,6 +31,17 @@ export async function proxyProtectedMedia({ req, res, upstreamUrl, fetchImpl = f
     try { await upstream.body.cancel(); } catch {}
     return res.status(503).end();
   }
+  // Reject unexpected partial responses and excessive declared payload sizes.
+  if (range && upstream.status !== 206) {
+    try { await upstream.body.cancel(); } catch {}
+    return res.status(503).end();
+  }
+  const contentLength = upstream.headers.get('content-length');
+  if (contentLength !== null && (!/^\\d+$/.test(contentLength) ||
+      Number(contentLength) > 50 * 1024 * 1024)) {
+    try { await upstream.body.cancel(); } catch {}
+    return res.status(413).end();
+  }
   res.status(upstream.status);
   res.setHeader('Content-Type', type);
   res.setHeader('Cache-Control', 'private, no-store');
