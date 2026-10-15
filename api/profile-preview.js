@@ -113,6 +113,11 @@ export default async function handler(req, res) {
 
   <title>${safeTitle}</title>
 
+  <link
+    rel="canonical"
+    href="${safeUrl}"
+  >
+
   <meta
     name="description"
     content="${safeDescription}"
