@@ -55,3 +55,8 @@ No production SQL changes are authorized by this document.
 - The Create and Studio client-side unsigned upload flow receives and stores secure_url. HTTPS does not imply authorization.
 - Release blocker: design authenticated media delivery and secure thumbnails/derived transformations; protect or replace legacy public URLs, invalidate caches and consider already copied links. Access revocation must be tested.
 - Do not switch Cloudinary assets to authenticated/private delivery without a tested migration and working signed playback path, or existing media may break.
+
+## Protected media JavaScript tests (2026-10-15)
+- 25 protected-media tests passed under Node.js 22 in an isolated local runner (15 audience decision tests, 10 mocked database-access tests), 0 failures.
+- GitHub Actions run for the branch has not been confirmed; local execution is not CI confirmation.
+- No Cloudinary signed delivery, authenticated live endpoint, public-URL revocation, or end-to-end browser testing has passed yet.
