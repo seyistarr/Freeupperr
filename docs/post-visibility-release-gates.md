@@ -33,3 +33,9 @@ No production SQL changes are authorized by this document.
 - 12/12 synthetic decision cases passed: public, pending/active/mutual followers, private account, only_me, hidden/deleted, suspended and anonymous.
 - Fixture rows were wrapped in BEGIN/ROLLBACK; no production changes.
 - These are decision-function tests, not tests of actual record_share writes, RLS, CDN access or authenticated JWT identity.
+
+## Private account legacy Everyone regression
+- Product decision: existing Everyone posts on a private account are accessible to approved active followers and the owner, not the general public.
+- Isolated staging PostgreSQL RLS tests passed: approved follower allowed; pending follower, stranger and anon denied.
+- Tests used transaction-scoped synthetic fixtures; no production mutation.
+- Remaining: full production-compatible migration tests, SECURITY DEFINER RPC audits, share-table RLS, Cloudinary protected delivery, UI integration and end-to-end tests.
