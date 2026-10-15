@@ -1,3 +1,4 @@
+import { publicName, publicHandle, redactEmails } from './profile-seo-privacy.js';
 const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
@@ -75,30 +76,43 @@ export default async function handler(req, res) {
     return res.status(404).send('Profile unavailable');
   }
 
-  const displayName =
-    cleanText(profile.display_name, 80) ||
-    cleanText(profile.username, 80) ||
-    'FreeUpper User';
+  let isSetupComplete = false;
+  try {
+    const eligibilityResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/rpc/get_public_profile_seo_status`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ p_freeupper_id: freeupperId })
+      }
+    );
+    if (eligibilityResponse.ok) {
+      isSetupComplete = (await eligibilityResponse.json()) === true;
+    }
+  } catch (error) {
+    console.error('Profile SEO eligibility lookup failed:', error);
+  }
+  const isUnverified = !isSetupComplete;
+  const displayName = isUnverified ? 'FreeUpper Member' : cleanText(publicName(profile.display_name || profile.username), 80);
 
-  const username = cleanText(
-    profile.username || profile.display_username || '',
-    80
-  );
+  const username = isUnverified ? '' : cleanText(publicHandle(profile.username || profile.display_username || ''), 80);
 
-  const bio = cleanText(
-    profile.bio ||
-      `Connect with ${displayName} on FreeUpper.`,
-    180
-  );
+  const bio = isUnverified ? 'View this profile on FreeUpper.' : cleanText(redactEmails(profile.bio || `Connect with ${displayName} on FreeUpper.`), 180);
 
   const title = username
     ? `${displayName} (@${username}) • FreeUpper`
     : `${displayName} • FreeUpper`;
 
+  if (!isSetupComplete) res.setHeader('X-Robots-Tag', 'noindex, follow');
+
   const profileUrl =
     `${SITE_URL}/u/${encodeURIComponent(profile.freeupper_id)}`;
 
-  const imageUrl =
+  const imageUrl = isUnverified ? FALLBACK_IMAGE :
   `${SITE_URL}/api/profile-og?freeupper_id=${encodeURIComponent(
     profile.freeupper_id
   )}&v=2`;
@@ -117,6 +131,7 @@ export default async function handler(req, res) {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  ${isSetupComplete ? '' : '<meta name="robots" content="noindex, follow">'}
 
   <title>${safeTitle}</title>
 

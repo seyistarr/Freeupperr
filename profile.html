@@ -4556,6 +4556,15 @@
                     return;
                 }
 
+                if (!dn || dn.length < 2 || /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(dn)) {
+                    showToast('Choose a display name of at least 2 characters without an email address', 'r');
+                    return;
+                }
+                if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(rawUn)) {
+                    showToast('Your username cannot contain an email address', 'r');
+                    return;
+                }
+
                 var isUnchanged = targetUser && canonical === (targetUser.username || '').toLowerCase();
                 if (!isUnchanged) {
                     if (usernameCheckState.checking) {
@@ -4573,8 +4582,10 @@
                 }
 
                 var updates = {
-                    display_name: dn || 'Guest',
+                    display_name: dn,
                     username: canonical,
+                    // Completion is recorded on an explicit, validated profile save.
+                    profile_setup_completed_at: new Date().toISOString(),
                     display_username: rawUn || canonical,
                     bio: bio,
                     tags: pendingPills.slice(),
