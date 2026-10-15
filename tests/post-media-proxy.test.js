@@ -107,3 +107,24 @@ test('aborts streams exceeding 50 MiB even without Content-Length',async()=>{
   assert.equal(res.destroyed,true);
   assert.ok(cancelled || sent>=51);
 });
+
+test('rejects a mismatched upstream Content-Range',async()=>{
+  const res=response();
+  let cancelled=false;
+  await proxyProtectedMedia({req:{headers:{range:'bytes=0-1023'}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:async()=>({
+      status:206,body:{cancel:async()=>{cancelled=true}},
+      headers:new Headers({'content-type':'video/mp4','content-range':'bytes 2048-3071/10000'})
+    })});
+  assert.equal(res.statusCode,503);
+  assert.equal(cancelled,true);
+});
+test('rejects partial response without Content-Range',async()=>{
+  const res=response();
+  await proxyProtectedMedia({req:{headers:{range:'bytes=0-1023'}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:async()=>({
+      status:206,body:{cancel:async()=>{}},
+      headers:new Headers({'content-type':'video/mp4'})
+    })});
+  assert.equal(res.statusCode,503);
+});
