@@ -1297,8 +1297,8 @@
       image_embedding: fields.imageEmbedding || null
     };
 
-        // Fail closed: legacy public uploads cannot be published as restricted posts.
-    if (payload.visibility !== 'public') {
+    // Fail closed: legacy public uploads cannot be published as restricted posts.
+    if (fields.visibility != null && fields.visibility !== 'public') {
       throw new Error('Restricted audiences are unavailable until protected media delivery is enabled.');
     }
 
