@@ -85,3 +85,25 @@ test('rejects invalid declared content length',async()=>{
   assert.equal(res.statusCode,413);
   assert.equal(cancelled,true);
 });
+
+test('aborts streams exceeding 50 MiB even without Content-Length',async()=>{
+  const { Writable } = await import('node:stream');
+  const { ReadableStream } = await import('node:stream/web');
+  const res=new Writable({write(_chunk,_enc,cb){cb();}});
+  res.setHeader=()=>{};
+  res.status=function(n){this.statusCode=n;return this;};
+  let cancelled=false;
+  const chunk=new Uint8Array(1024*1024);
+  let sent=0;
+  const body=new ReadableStream({
+    pull(controller) {
+      if(sent++ < 51) controller.enqueue(chunk);
+      else controller.close();
+    },
+    cancel(){cancelled=true;}
+  });
+  await proxyProtectedMedia({req:{headers:{}},res,upstreamUrl:'https://api.cloudinary.com/a',
+    fetchImpl:async()=>({status:200,body,headers:new Headers({'content-type':'video/mp4'})})});
+  assert.equal(res.destroyed,true);
+  assert.ok(cancelled || sent>=51);
+});
