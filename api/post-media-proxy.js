@@ -38,7 +38,7 @@ export async function proxyProtectedMedia({ req, res, upstreamUrl, fetchImpl = f
   }
   if (upstream.status === 206) {
     const contentRange = upstream.headers.get('content-range') || '';
-    const match = /^bytes (\\d+)-(\\d+)\\/(\\d+|\\*)$/.exec(contentRange);
+    const match = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(contentRange);
     const requested = range && /^bytes=(\\d+)-(\\d*)$/.exec(range);
     if (!requested || !match ||
         Number(match[1]) !== Number(requested[1]) ||
