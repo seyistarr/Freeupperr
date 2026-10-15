@@ -3,7 +3,7 @@
 // not install/configure the SDK or enable delivery by itself.
 export function createExpiringDownloadUrl({
   asset, cloudinaryUtils, nowSeconds = Math.floor(Date.now() / 1000),
-  ttlSeconds = 60
+  ttlSeconds = 60, expectedCloudName
 }) {
   if (!asset || asset.status !== 'ready' ||
       asset.delivery_type !== 'authenticated' ||
@@ -14,6 +14,7 @@ export function createExpiringDownloadUrl({
       !/^[a-z0-9]{2,8}$/.test(asset.format) ||
       !Number.isInteger(nowSeconds) || !Number.isInteger(ttlSeconds) ||
       ttlSeconds < 10 || ttlSeconds > 120 ||
+      !/^[A-Za-z0-9_-]+$/.test(expectedCloudName || '') ||
       typeof cloudinaryUtils?.private_download_url !== 'function') {
     throw new Error('Protected media URL unavailable');
   }
@@ -29,6 +30,7 @@ export function createExpiringDownloadUrl({
   const parsed = new URL(signedUrl);
   if (parsed.protocol !== 'https:' || parsed.hostname !== 'api.cloudinary.com' ||
       parsed.port || parsed.username || parsed.password ||
+      parsed.pathname.split('/')[2] !== expectedCloudName ||
       !/^\/v1_1\/[A-Za-z0-9_-]+\/(image|video|raw)\/download$/.test(parsed.pathname) ||
       parsed.searchParams.get('expires_at') !== String(expiresAt) ||
       !parsed.searchParams.get('signature')) {
