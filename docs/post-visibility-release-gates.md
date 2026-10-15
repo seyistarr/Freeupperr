@@ -20,3 +20,10 @@ Status: **BLOCKED — do not deploy audience selectors or RLS yet.**
 8. Consider disabling or hiding new audience selectors until the database and media protections ship atomically.
 
 No production SQL changes are authorized by this document.
+
+## Privileged RPC audit (2026-10-15)
+- **edit_post**: SECURITY DEFINER, ownership check exists; p_visibility text DEFAULT 'public'. A content-only edit can reset a restricted post to public. Fix by preserving visibility unless explicitly changed and validating the allowed audience.
+- **record_share**: SECURITY DEFINER, accepts caller-supplied p_user_id, no auth.uid() equality check and no post visibility check. Requires authorization and audience check before sharing.
+- **search_posts**: SECURITY DEFINER, lacks private/suspended author and hidden checks. Must be updated before privacy launch.
+- **toggle_repost**, **delete_post**, and other privileged RPCs: require independent inspection; existence of SECURITY DEFINER is not itself proof of an exploit.
+- The 9 isolated staging audience tests validate decision logic only; they do not test full RLS policy interactions or public media URLs.
