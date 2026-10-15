@@ -3,7 +3,7 @@ import { canViewProtectedMedia } from './post-media-authorization.js';
 // Called only after verified JWT + server-side asset lookup.
 // All queries use the server's database client. Any lookup error denies access.
 export async function authorizeProtectedMedia({ db, asset, viewerId }) {
-  if (!db || !asset || !viewerId || asset.status !== 'ready' || !asset.post_id) return false;
+  if (!db || !asset || !viewerId || asset.status !== 'ready' || asset.delivery_type !== 'authenticated' || !asset.post_id) return false;
   const { data: post, error: postError } = await db.from('posts')
     .select('id,user_id,visibility,is_deleted,is_hidden')
     .eq('id', asset.post_id).maybeSingle();
