@@ -76,23 +76,27 @@ export default async function handler(req, res) {
     return res.status(404).send('Profile unavailable');
   }
 
-  const displayName = cleanText(publicName(profile.display_name || profile.username), 80);
+  const isUnverified = !profile.profile_setup_completed_at;
+  const displayName = isUnverified ? 'FreeUpper Member' : cleanText(publicName(profile.display_name || profile.username), 80);
 
-  const username = cleanText(publicHandle(profile.username || profile.display_username || ''), 80);
+  const username = isUnverified ? '' : cleanText(publicHandle(profile.username || profile.display_username || ''), 80);
 
-  const bio = cleanText(redactEmails(profile.bio || `Connect with ${displayName} on FreeUpper.`), 180);
+  const bio = isUnverified ? 'View this profile on FreeUpper.' : cleanText(redactEmails(profile.bio || `Connect with ${displayName} on FreeUpper.`), 180);
 
   const title = username
     ? `${displayName} (@${username}) • FreeUpper`
     : `${displayName} • FreeUpper`;
 
-  const isSetupComplete = Boolean(profile.profile_setup_completed_at);
+  // The current public RPC does not return profile_setup_completed_at.
+  // Until a reviewed RPC update is deployed, fail closed: noindex all profiles.
+  const isSetupComplete = profile.profile_setup_completed_at === true ||
+    (typeof profile.profile_setup_completed_at === 'string' && Boolean(profile.profile_setup_completed_at));
   if (!isSetupComplete) res.setHeader('X-Robots-Tag', 'noindex, follow');
 
   const profileUrl =
     `${SITE_URL}/u/${encodeURIComponent(profile.freeupper_id)}`;
 
-  const imageUrl =
+  const imageUrl = isUnverified ? FALLBACK_IMAGE :
   `${SITE_URL}/api/profile-og?freeupper_id=${encodeURIComponent(
     profile.freeupper_id
   )}&v=2`;
