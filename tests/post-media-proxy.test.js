@@ -128,3 +128,25 @@ test('rejects partial response without Content-Range',async()=>{
     })});
   assert.equal(res.statusCode,503);
 });
+
+test('accepts valid partial video response and streams requested bytes',async()=>{
+  const { Writable } = await import('node:stream');
+  const { ReadableStream } = await import('node:stream/web');
+  const chunks=[];
+  const res=new Writable({write(chunk,_enc,cb){chunks.push(chunk);cb();}});
+  res.statusCode=200;
+  res.headers={};
+  res.setHeader=(k,v)=>{res.headers[k]=v;};
+  res.status=(n)=>{res.statusCode=n;return res;};
+  const body=new ReadableStream({start(controller){
+    controller.enqueue(new Uint8Array([1,2,3,4]));controller.close();
+  }});
+  await proxyProtectedMedia({req:{headers:{range:'bytes=4-7'}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:async()=>({
+      status:206,body,
+      headers:new Headers({'content-type':'video/mp4','content-range':'bytes 4-7/100','content-length':'4'})
+    })});
+  assert.equal(res.statusCode,206);
+  assert.equal(res.headers['content-range'],'bytes 4-7/100');
+  assert.equal(Buffer.concat(chunks).length,4);
+});
