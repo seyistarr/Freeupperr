@@ -53,6 +53,11 @@ export async function proxyProtectedMedia({ req, res, upstreamUrl, fetchImpl = f
     try { await upstream.body.cancel(); } catch {}
     return res.status(413).end();
   }
+  // Unsolicited partial responses are not valid for an unrestricted request.
+  if (!range && upstream.status === 206) {
+    try { await upstream.body.cancel(); } catch {}
+    return res.status(503).end();
+  }
   if (upstream.status === 206) {
     const contentRange = upstream.headers.get('content-range') || '';
     const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(contentRange);
