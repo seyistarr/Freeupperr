@@ -8,8 +8,8 @@ import { createExpiringDownloadUrl } from '../api/post-media-download-url.js';
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 const apiKey = process.env.CLOUDINARY_API_KEY;
 const apiSecret = process.env.CLOUDINARY_API_SECRET;
-const expectedCloud = 'duzyf1kda';
-const fixture = 'privacy_fixture_cloudinary_demo_20261015';
+const expectedCloud = 'sxdcqs5x';
+const fixture = 'freeupper_privacy_staging_fixture';
 
 async function probe(url) {
   // Download only one byte; never follow redirects or print signed URLs.
