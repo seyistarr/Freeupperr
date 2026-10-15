@@ -38,3 +38,20 @@ jobs:
           node-version: '22'
       - name: Verify synthetic authenticated video blocks unsigned delivery
         run: node --test tests/post-media-live-unsigned.test.js
+  cloudinary-staging-signed-expiration:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/post-visibility-privacy-review'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install official Cloudinary SDK without changing lockfile
+        run: npm install --no-save --package-lock=false --ignore-scripts cloudinary@2
+      - name: Verify authorized byte-range access and signed URL expiration
+        env:
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: node --test tests/post-media-live-signed.test.js
