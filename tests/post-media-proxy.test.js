@@ -179,3 +179,22 @@ test('rejects unsafe integer Content-Range values',async()=>{
     })});
   assert.equal(res.statusCode,503);
 });
+
+test('rejects unsafe byte range before contacting Cloudinary',async()=>{
+  const res=response();
+  await proxyProtectedMedia({req:{headers:{range:'bytes=9007199254740993-'}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:()=>{throw Error('must not fetch');}});
+  assert.equal(res.statusCode,416);
+});
+test('rejects reversed byte range before contacting Cloudinary',async()=>{
+  const res=response();
+  await proxyProtectedMedia({req:{headers:{range:'bytes=100-10'}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:()=>{throw Error('must not fetch');}});
+  assert.equal(res.statusCode,416);
+});
+test('rejects oversized requested byte range before contacting Cloudinary',async()=>{
+  const res=response();
+  await proxyProtectedMedia({req:{headers:{range:'bytes=0-52428800'}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:()=>{throw Error('must not fetch');}});
+  assert.equal(res.statusCode,416);
+});
