@@ -24,4 +24,9 @@ test('official Cloudinary SDK exposes private download generation', async () => 
   const asset = {status:'ready',delivery_type:'authenticated',resource_type:'image',cloudinary_public_id:'synthetic-media',format:'jpg'};
   const adapted = createExpiringDownloadUrl({asset,cloudinaryUtils:utils,expectedCloudName:'freeupper-test'});
   assert.equal(new URL(adapted).hostname, 'api.cloudinary.com');
+  const expiry = Number(new URL(adapted).searchParams.get('expires_at'));
+  assert.ok(Number.isInteger(expiry) && expiry > Math.floor(Date.now()/1000));
+  assert.ok(expiry <= Math.floor(Date.now()/1000) + 60);
+  // Never print the generated signed URL: it contains access credentials.
+  assert.equal(new URL(adapted).pathname.includes('freeupper-test'), true);
 });
