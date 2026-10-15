@@ -4,8 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 test('authenticated Cloudinary fixture denies unsigned video download', async () => {
-  const cloud = 'duzyf1kda';
-  const publicId = 'privacy_fixture_cloudinary_demo_20261015';
+  const cloud = 'sxdcqs5x';
+  const publicId = 'freeupper_privacy_staging_fixture';
   const url = `https://res.cloudinary.com/${cloud}/video/authenticated/${publicId}.mp4`;
   const response = await fetch(url, {
     method: 'GET', redirect: 'manual',
