@@ -198,3 +198,15 @@ test('rejects oversized requested byte range before contacting Cloudinary',async
     upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:()=>{throw Error('must not fetch');}});
   assert.equal(res.statusCode,416);
 });
+
+test('rejects unsolicited HTTP 206 when viewer did not request a range',async()=>{
+  const res=response();
+  let cancelled=false;
+  await proxyProtectedMedia({req:{headers:{}},res,
+    upstreamUrl:'https://api.cloudinary.com/a',fetchImpl:async()=>({
+      status:206,body:{cancel:async()=>{cancelled=true}},
+      headers:new Headers({'content-type':'video/mp4','content-range':'bytes 0-3/100','content-length':'4'})
+    })});
+  assert.equal(res.statusCode,503);
+  assert.equal(cancelled,true);
+});
