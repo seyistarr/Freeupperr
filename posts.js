@@ -1361,6 +1361,22 @@
       .sort((a, b) => b.similarityScore - a.similarityScore);
   }
 
+  // Edit a post through the owner-checked Supabase RPC. Never change visibility here.
+  async function editPost(postId, content) {
+    const user = await requireUser();
+    const text = String(content ?? '').trim();
+    if (!postId || !text) throw new Error('Post text cannot be empty');
+    const { data: original, error: readError } = await sb.from('posts')
+      .select('id,user_id,visibility,is_deleted').eq('id',postId).single();
+    if (readError) throw readError;
+    if (!original || original.user_id !== user.id || original.is_deleted) throw new Error('You can only edit your own posts');
+    if (original.visibility !== 'public') throw new Error('Restricted posts cannot be edited here');
+    const { data, error } = await sb.rpc('edit_post', { p_post_id: postId, p_content: text, p_visibility: 'public' });
+    if (error) throw error;
+    clearFeedContext();
+    return data;
+  }
+
   // ===================================================================
   // DELETE POST
   // ===================================================================
@@ -1510,6 +1526,7 @@
     loadPostPreview,
     createPost,
     deletePost,
+    editPost,
 
     // Hashtags (relational, post_hashtags-backed)
     findOrCreateHashtagIds,
