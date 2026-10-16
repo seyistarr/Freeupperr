@@ -4684,6 +4684,10 @@
                     <span>Share via device</span>
                 </button>
             </div>
+            <button class="share-lock-btn" id="share-edit-btn" style="display:none;">
+                <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>
+                <span>Edit post</span>
+            </button>
             <button class="share-delete-btn" id="share-delete-btn" style="display:none;">
                 <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 Delete post
@@ -7012,6 +7016,51 @@
                 };
             }
 
+            // ─── EDIT POST ──────────────────────────────────────────────────
+            function editPostFromShare(postId) {
+                const post = allPosts.find(p => p.id === postId);
+                const cu = getCurrentUser();
+                if (!post || !cu?.isLoggedIn || post.user_id !== cu.id) {
+                    showToast('You can only edit your own post', 'r'); return;
+                }
+                if (!window.PostsAPI?.editPost) { showToast('Editing unavailable', 'r'); return; }
+                closeShareModal();
+                const overlay = document.createElement('div');
+                overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:16px';
+                const panel = document.createElement('div');
+                panel.style.cssText = 'background:var(--card-bg,#fff);color:var(--text-color,#111);border-radius:16px;padding:20px;width:min(100%,480px);box-shadow:0 12px 35px #0003';
+                const heading = document.createElement('h3'); heading.textContent = 'Edit post';
+                const field = document.createElement('textarea');
+                field.value = post.content || '';
+                field.rows = 6; field.maxLength = 10000;
+                field.setAttribute('aria-label','Post text');
+                field.style.cssText = 'width:100%;box-sizing:border-box;padding:12px;border:1px solid #999;border-radius:10px;background:transparent;color:inherit;font:inherit;resize:vertical';
+                const actions = document.createElement('div');
+                actions.style.cssText = 'display:flex;justify-content:flex-end;gap:12px;margin-top:16px';
+                const cancel = document.createElement('button'); cancel.type='button'; cancel.textContent='Cancel';
+                const save = document.createElement('button'); save.type='button'; save.textContent='Save changes';
+                for (const btn of [cancel,save]) btn.style.cssText='padding:10px 16px;border-radius:9px;cursor:pointer';
+                const close = () => overlay.remove();
+                cancel.addEventListener('click',close);
+                overlay.addEventListener('click',ev => { if(ev.target===overlay) close(); });
+                save.addEventListener('click',async () => {
+                    const text=field.value.trim();
+                    if (!text) { showToast('Post text cannot be empty','r'); return; }
+                    save.disabled=true; save.textContent='Saving…';
+                    try {
+                        const updated=await window.PostsAPI.editPost(postId,text);
+                        post.content=updated?.content || text;
+                        const cached=appData.posts.find(p=>p.id===postId);
+                        if(cached) cached.content=post.content;
+                        close(); showToast('Post updated');
+                        if (typeof reloadData==='function') await reloadData();
+                    } catch(err) { showToast(err.message || 'Could not edit post','r'); }
+                    finally { save.disabled=false; save.textContent='Save changes'; }
+                });
+                actions.append(cancel,save); panel.append(heading,field,actions); overlay.append(panel);
+                document.body.append(overlay); field.focus();
+            }
+
             // ─── DELETE ───────────────────────────────────────────────────────
             function deletePostFromShare(postId) {
                 if (!postId) { showToast('No post selected'); return; }
@@ -7242,6 +7291,7 @@
                 const post = allPosts.find(p => p.id === postId);
                 const cu = getCurrentUser();
                 const isOwner = post && cu && cu.isLoggedIn && post.user_id === cu.id;
+                const editBtn = document.getElementById('share-edit-btn');
                 const deleteBtn = document.getElementById('share-delete-btn');
                 const reportBtn = document.getElementById('share-report-btn');
                 const lockBtn = document.getElementById('share-lock-btn');
@@ -7249,6 +7299,7 @@
                 const commentsBtn = document.getElementById('share-comments-btn');
                 const commentsLbl = document.getElementById('share-comments-lbl');
 
+                if (editBtn) editBtn.style.display = isOwner && typeof post.content === 'string' && post.content.trim() ? 'flex' : 'none';
                 if (deleteBtn) deleteBtn.style.display = isOwner ? 'flex' : 'none';
                 if (reportBtn) reportBtn.style.display = isOwner ? 'none' : 'flex';
                 if (lockBtn) {
@@ -9112,6 +9163,10 @@
                     } else {
                         showToast('No post selected to report');
                     }
+                });
+
+                document.getElementById('share-edit-btn').addEventListener('click', () => {
+                    editPostFromShare(sharePostId);
                 });
 
                 document.getElementById('share-delete-btn').addEventListener('click', () => {
