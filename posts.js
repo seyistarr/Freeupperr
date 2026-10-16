@@ -269,6 +269,8 @@
     return {
       // Identity
       id: row.id,
+      short_code: row.short_code || null,
+      shortCode: row.short_code || null,
       user_id: row.user_id,
 
       // Author
