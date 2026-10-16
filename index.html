@@ -7320,11 +7320,12 @@
                 sharePostId = null;
             }
 
-            function handleShareAction(action) {
+            async function handleShareAction(action) {
                 if (!sharePostId) return;
                 const post = allPosts.find(p => p.id === sharePostId);
                 if (!post) { showToast('Post not found'); return; }
-                const url = `${window.location.origin}${window.location.pathname}?post=${sharePostId}`;
+                const originalPostId = sharePostId;
+                let url = `${window.location.origin}/index.html?post=${encodeURIComponent(originalPostId)}`;
                 const title = post.title || 'FreeUpper post';
 
                 if (action === 'notinterested') {
@@ -7346,6 +7347,17 @@
                             document.querySelectorAll(`#single-share-btn .share-count`)
                                 .forEach(el => el.textContent = formatCount(count));
                         }).catch(err => console.warn('recordShare failed:', err));
+                    }
+                }
+
+                if (action === 'copy' || action === 'native') {
+                    try {
+                        const { data: code, error } = await window.sb.rpc('ensure_post_short_link', { p_post_id: originalPostId });
+                        if (!error && typeof code === 'string' && /^[a-zA-Z0-9_-]{6,16}$/.test(code)) {
+                            url = `${window.location.origin}/p/${code}`;
+                        }
+                    } catch (error) {
+                        console.warn('Short link unavailable; using existing post link', error);
                     }
                 }
 
