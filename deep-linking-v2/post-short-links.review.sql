@@ -11,21 +11,21 @@ revoke all on public.post_short_links from public, anon, authenticated;
 create or replace function public.get_public_post_by_short_code(p_code text)
 returns table (
   id uuid, media_type text, title text, description text, content text,
-  media_url text, thumbnail_url text, text_template_id text
+  media_url text, thumbnail_url text, text_template_id text, short_code text
 )
 language sql stable security definer
 set search_path = ''
 as $$
   select p.id, p.media_type, p.title, p.description, p.content,
-         p.media_url, p.thumbnail_url, p.text_template_id
+         p.media_url, p.thumbnail_url, p.text_template_id, l.code
   from public.post_short_links l
   join public.posts p on p.id = l.post_id
   join public.profiles u on u.id = p.user_id
   where l.code = p_code
     and p.visibility = 'public'
-    and p.is_deleted is false
+    and coalesce(p.is_deleted, false) = false
     and coalesce(p.is_hidden, false) = false
-    and u.is_private is false
+    and coalesce(u.is_private, true) = false
   limit 1
 $$;
 revoke all on function public.get_public_post_by_short_code(text) from public;
