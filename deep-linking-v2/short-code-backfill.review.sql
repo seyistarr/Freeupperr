@@ -1,9 +1,9 @@
 -- Deep Linking V2: REVIEW ONLY. Do not run on production without schema/security review.
--- Generate a random 9-character base64url code with 54 bits of entropy.
--- Requires pgcrypto's gen_random_bytes, which must be available in the database.
+-- Generate a random 10-character base64url code with 56 bits of entropy.
+-- Requires pgcrypto installed in the extensions schema; verify before applying.
 create or replace function public.generate_post_short_code()
 returns text language sql volatile set search_path = '' as $$
-  select translate(rtrim(encode(gen_random_bytes(7), 'base64'), '='), '+/', '-_')
+  select translate(rtrim(encode(extensions.gen_random_bytes(7), 'base64'), '='), '+/', '-_')
 $$;
 -- A 7-byte input produces 10 base64url characters (56 bits).
 -- The unique primary key on post_short_links handles collisions.
