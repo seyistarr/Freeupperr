@@ -52,6 +52,6 @@ export default async function handler(req, res) {
 </head><body><p>Opening this FreeUpper post… <a href="${esc(destination)}">Continue</a></p>
 <script>location.replace(${JSON.stringify(destination)})</script></body></html>`;
   res.setHeader('Content-Type','text/html; charset=utf-8');
-  res.setHeader('Cache-Control','public, max-age=60, s-maxage=60');
+  res.setHeader('Cache-Control','no-store');
   return res.status(200).send(html);
 }
