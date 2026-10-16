@@ -207,7 +207,7 @@
     // If we're already on index.html, just update the URL
     if (isOnPage('index.html')) {
       const currentParams = new URLSearchParams(window.location.search);
-      ifSound (currentParams.get('product') === String(listingId)) return;
+      if (currentParams.get('product') === String(listingId)) return;
       history.pushState({}, '', 'index.html?product=' + listingId);
       window.dispatchEvent(new CustomEvent('router:navigate', {
         detail: { type: 'listing', id: listingId, page: 'index.html' }
@@ -268,7 +268,7 @@
    */
   function openSound(soundId) {
     if (!soundId) {
-      console.warn('Router.open: No sound ID provided');
+      console.warn('Router.openSound: No sound ID provided');
       return;
     }
 
@@ -408,36 +408,31 @@
   // ─── SHARE URL HELPERS ──────────────────────────────────
 
   /**
-   * Build the canonical public share URL for a post.
-   *
-   * Deep Linking V2:
-   *   - Video posts → https://www.freeupper.com/v/<short_code>
-   *   - Image/text posts → https://www.freeupper.com/p/<short_code>
-   *
-   * Falls back to the legacy UUID link until the backend provides
-   * a valid `short_code` on the post object:
-   *   - Video → https://www.freeupper.com/video.html?post=<uuid>
-   *   - Other → https://www.freeupper.com/index.html?post=<uuid>
-   *
-   * The short-code format is validated defensively (6–16 chars,
-   * URL-safe alphabet) so a malformed value can never leak into
-   * a share link or an Open Graph preview.
-   *
-   * @param {Object} post — a post-like object (must have an ID)
-   * @returns {string|null} return absolute URL, or null if no ID is available
-   null */
+   * Generate a shareable link for a FreeUpper post.
+   * Videos use /v/ and image/text posts use /p/.
+   * Falls back to legacy URLs when no short code exists.
+   */
   function getPostShareUrl(post) {
-;
+    if (!post) return null;
 
     const id = getPostId(post);
-    if (!   id) const code = post.short_code || post.shortCode;
-    if (code && /^[A-Za-z0-9_-]{6,16}$/.test(code)) {
+    if (!id) return null;
+
+    const code = post.short_code || post.shortCode;
+
+    if (
+      typeof code === 'string' &&
+      /^[A-Za-z0-9_-]{6,16}$/.test(code)
+    ) {
       const prefix = isVideo(post) ? 'v' : 'p';
+
       return `https://www.freeupper.com/${prefix}/${code}`;
     }
 
-    // Backward-compatible fallback — existing UUID links keep working.
-    const page = isVideo(post) ? 'video.html' : 'index.html';
+    const page = isVideo(post)
+      ? 'video.html'
+      : 'index.html';
+
     return `https://www.freeupper.com/${page}?post=${encodeURIComponent(id)}`;
   }
 
