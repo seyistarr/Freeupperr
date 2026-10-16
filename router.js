@@ -437,6 +437,32 @@
   }
 
 
+  /**
+   * Resolve a public post's short share URL without changing navigation.
+   * Falls back to the legacy UUID URL when the migration is not installed,
+   * the post is private, or the network is unavailable.
+   */
+  async function resolvePostShareUrl(post) {
+    const fallback = getPostShareUrl(post);
+    if (!fallback) return null;
+    if (post.short_code || post.shortCode) return fallback;
+    const id = getPostId(post);
+    if (!id) return fallback;
+    try {
+      const response = await fetch('/api/post-short-link?id=' + encodeURIComponent(id), {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      if (!response.ok) return fallback;
+      const result = await response.json();
+      if (!result || typeof result.short_code !== 'string' ||
+          !/^[A-Za-z0-9_-]{6,16}$/.test(result.short_code)) return fallback;
+      return getPostShareUrl({ ...post, short_code: result.short_code });
+    } catch (error) {
+      return fallback;
+    }
+  }
+
   // ─── INITIALIZATION ──────────────────────────────────────
 
   /**
@@ -501,6 +527,7 @@
     isVideo,
     getPostId,
     getPostShareUrl,
+    resolvePostShareUrl,
     getCurrentUser,
     getCurrentPage,
     isOnPage,
