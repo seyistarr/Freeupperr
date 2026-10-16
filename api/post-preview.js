@@ -21,8 +21,8 @@ function imageFrom(post) {
   if(valid(raw)) return valid(raw);
   if(post.media_type==='video' && valid(post.media_url)) {
     const u=new URL(post.media_url);
-    const m=u.pathname.match(/^\/([^/]+)\/upload\/(?:.*\/)?(v\d+\/)?([^/]+)\.[^.\/]+$/);
-    if(m) return u.origin+'/'+m[1]+'/upload/so_1,f_jpg/'+(m[2]||'')+m[3]+'.jpg';
+    const m=u.pathname.match(/^\/([^/]+)\/video\/upload\/(?:.*\/)?(v\d+\/)?([^/]+)\.[^.\/]+$/);
+    if(m) return u.origin+'/'+m[1]+'/video/upload/so_1,f_jpg/'+(m[2]||'')+m[3]+'.jpg';
   }
   return BASE+'/freeupper.png';
 }
