@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { authorizeProtectedMedia } from '../api/post-media-access.js';
+import { authorizeProtectedMedia } from '../lib/protected-media/post-media-access.js';
 function mockDb({post,author,follow=null,reverse=null,errorTable=null}) {
   return { from(table) {
     const values={posts:post,profiles:author,follows:null};
