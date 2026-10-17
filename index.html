@@ -9280,9 +9280,29 @@
                 const fromProfile = urlParams.get('from') === 'profile';
                 window._openedFromProfile = fromProfile;
 
-                if (postIdParam && allPosts.some(p => p.id === postIdParam)) {
-                    openExplorePost(postIdParam, 'home');
-                    history.replaceState({}, '', window.location.pathname);
+                if (postIdParam) {
+                    // Shared posts may not be in the first feed page; fetch the exact post.
+                    let sharedPost = allPosts.find(p => String(p.id) === postIdParam);
+                    if (!sharedPost && window.PostsAPI?.loadPostById) {
+                        try {
+                            sharedPost = await window.PostsAPI.loadPostById(postIdParam);
+                            if (sharedPost && !allPosts.some(p => String(p.id) === postIdParam)) allPosts.unshift(sharedPost);
+                        } catch (error) {
+                            console.warn('Shared post lookup failed:', error);
+                        }
+                    }
+                    if (sharedPost && !(sharedPost.is_hidden || sharedPost.is_deleted) &&
+                        (sharedPost.mediaType || sharedPost.media_type) === 'video') {
+                        window.location.replace('/video.html?post=' + encodeURIComponent(postIdParam));
+                        return;
+                    }
+                    if (sharedPost && !(sharedPost.is_hidden || sharedPost.is_deleted)) {
+                        renderUI();
+                        openExplorePost(postIdParam, 'home');
+                    } else {
+                        renderUI();
+                        showToast('This post is unavailable or private');
+                    }
                 } else if (productIdParam) {
                     uiPage = 'market';
                     renderUI();
