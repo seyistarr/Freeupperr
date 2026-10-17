@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canViewProtectedMedia } from '../api/post-media-authorization.js';
+import { canViewProtectedMedia } from '../lib/protected-media/post-media-authorization.js';
 
 const base = { viewerId: 'stranger', authorId: 'author', visibility: 'public', authorPrivate: false, authorSuspended: false, isDeleted: false, isHidden: false, followsAuthor: false, authorFollowsViewer: false };
 const cases = [
