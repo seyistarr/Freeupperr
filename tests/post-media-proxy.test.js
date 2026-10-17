@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { proxyProtectedMedia } from '../api/post-media-proxy.js';
+import { proxyProtectedMedia } from '../lib/protected-media/post-media-proxy.js';
 function response() {
   return { statusCode:200, headers:{},setHeader(k,v){this.headers[k]=v;},
     status(n){this.statusCode=n;return this;},end(){this.ended=true;return this;} };
