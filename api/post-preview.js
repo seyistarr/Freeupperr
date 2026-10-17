@@ -6,7 +6,7 @@ const clean = (s, max = 180) => String(s || '').replace(/\s+/g,' ').trim().slice
 function safeImage(value) {
   try {
     const u = new URL(value);
-    return u.protocol === 'https:' && (u.hostname === 'res.cloudinary.com' || u.hostname.endsWith('.supabase.co')) ? u.href : null;
+    return u.protocol === 'https:' && (u.hostname === 'res.cloudinary.com' || u.hostname === 'jmjtqidirpmnegzvmiaq.supabase.co') ? u.href : null;
   } catch { return null; }
 }
 export default async function handler(req, res) {
@@ -30,7 +30,8 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control','no-store');
     return res.status(503).send('Temporarily unavailable');
   }
-  if (!post || (type === 'video') !== (post.media_type === 'video')) {
+  // /v/ and /p/ describe the page where the link was shared, not media type.
+  if (!post) {
     res.setHeader('Cache-Control','no-store');
     res.setHeader('X-Robots-Tag','noindex, nofollow');
     return res.status(404).send('Post unavailable');
