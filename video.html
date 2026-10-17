@@ -3539,6 +3539,22 @@
                     };
                 };
 
+                // A shared post may be absent from the first 20 feed results.
+                // Fetch it explicitly, then pass it through the same card mapper.
+                const sharedId = new URLSearchParams(window.location.search).get('post');
+                if (sharedId && !feedItems.some(entry => String(entry.post?.id) === sharedId) &&
+                    window.PostsAPI?.loadPostById) {
+                    try {
+                        const sharedPost = await window.PostsAPI.loadPostById(sharedId);
+                        if (sharedPost && !sharedPost.is_hidden && !sharedPost.is_deleted) {
+                            if (sharedPost.mediaType === 'video' || sharedPost.mediaType === 'image' || sharedPost.mediaType === 'text') {
+                                feedItems.unshift({ post: sharedPost });
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('Unable to load shared post', error);
+                    }
+                }
                 const videoEntries = feedItems.map(mapEntryToVideoPost).filter(Boolean);
                 const seen = new Set();
                 const deduped = [];
@@ -5665,8 +5681,17 @@
             if (!postId) return;
             const idx = videoPosts.findIndex(v => String(v.id) === postId);
             if (idx > -1) {
-                const card = document.getElementById('card-' + idx);
+                // Build the same ordered list used by the share link so card indices match.
+                const eligible = buildEligibleFeed(feedMode);
+                const cardIndex = eligible.findIndex(v => String(v.id) === postId);
+                if (cardIndex === -1) {
+                    buildFeed([videoPosts[idx], ...eligible.filter(v => String(v.id) !== postId)]);
+                }
+                const targetIndex = cardIndex === -1 ? 0 : cardIndex;
+                const card = document.getElementById('card-' + targetIndex);
                 if (card) card.scrollIntoView({ block: 'start' });
+            } else {
+                showToast('This post is unavailable or private');
             }
         }
 
