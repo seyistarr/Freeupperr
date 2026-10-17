@@ -18,8 +18,8 @@
   /** Determine if a post is a video based on media_type */
   function isVideo(post) {
     if (!post) return false;
-    const mediaType = post.media_type || post.mediaType || '';
-    return mediaType === 'video';
+    const mediaType = post.media_type || post.mediaType || post.postData?.media_type || post.postData?.mediaType || '';
+    return String(mediaType).toLowerCase() === 'video';
   }
 
   /** Extract post ID from various post-like objects */
