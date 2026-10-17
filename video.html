@@ -3133,6 +3133,7 @@
         let replyTarget = null;
         let currentPostId = null;
         let _shareIdx = 0;
+        const preparedVideoShareUrls = new Map();
         let videoPosts = [];
 
         let ytState = {};
@@ -5379,6 +5380,13 @@
         function openShare(idx) {
             _shareIdx = idx;
             const v = videoPosts[idx];
+            if (v?.id) {
+                const id = v.id;
+                preparedVideoShareUrls.set(id, getPostUrl(idx));
+                Promise.resolve(window.Router?.resolvePostShareUrl?.(v)).then(resolved => {
+                    if (resolved) preparedVideoShareUrls.set(id, resolved);
+                }).catch(() => {});
+            }
             const nativeBtn = document.getElementById('nativeShareBtn');
             if (nativeBtn) nativeBtn.style.display = navigator.share ? 'flex' : 'none';
             const thumb = document.getElementById('sharePreviewThumb');
@@ -5424,8 +5432,20 @@
                     const btn = document.getElementById('copyLinkBtn');
                     const lbl = document.getElementById('copyLbl');
                     try {
-                        const resolved = await (window.Router?.resolvePostShareUrl?.(videoPosts[idx]) || Promise.resolve(url));
-                        await navigator.clipboard.writeText(resolved || url);
+                        const shareUrl = preparedVideoShareUrls.get(videoPosts[idx]?.id) || url;
+                        // Copy immediately in the tap handler; avoid losing iOS user activation.
+                        if (navigator.clipboard?.writeText && window.isSecureContext) {
+                            await navigator.clipboard.writeText(shareUrl);
+                        } else {
+                            const field = document.createElement('textarea');
+                            field.value = shareUrl;
+                            field.style.cssText = 'position:fixed;left:-9999px;top:0';
+                            document.body.appendChild(field);
+                            field.focus(); field.select();
+                            const copied = document.execCommand('copy');
+                            field.remove();
+                            if (!copied) throw new Error('Clipboard unavailable');
+                        }
                         if (btn) btn.classList.add('copied');
                         if (lbl) lbl.textContent = 'Copied ✓';
                         showToast('Link copied 🔗');
@@ -5434,7 +5454,7 @@
                             if (lbl) lbl.textContent = 'Copy link';
                         }, 2000);
                     } catch (e) {
-                        showToast('Could not copy link');
+                        window.prompt('Copy this post link:', preparedVideoShareUrls.get(videoPosts[idx]?.id) || url);
                     }
                     return;
                 }
