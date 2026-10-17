@@ -63,7 +63,7 @@ export default async function handler(req, res) {
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(img)}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${esc(img)}">
-<meta http-equiv="refresh" content="0;url=${esc(destination)}">
+<link rel="manifest" href="/manifest.webmanifest">\n<meta name="theme-color" content="#2e1065">\n<meta http-equiv="refresh" content="0;url=${esc(destination)}">
 </head><body><p>Opening this FreeUpper post… <a href="${esc(destination)}">Continue</a></p>
 <script>location.replace(${JSON.stringify(destination)})</script></body></html>`;
   res.setHeader('Content-Type','text/html; charset=utf-8');
