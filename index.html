@@ -7354,7 +7354,7 @@
                 if (!sharePostId) return;
                 const post = allPosts.find(p => p.id === sharePostId);
                 if (!post) { showToast('Post not found'); return; }
-                const url = window.Router?.getPostShareUrl(post, 'index.html') || `https://www.freeupper.com/index.html?post=${encodeURIComponent(sharePostId)}`;
+                const url = preparedShareUrls.get(post.id) || window.Router?.getPostShareUrl(post, 'index.html') || `https://www.freeupper.com/index.html?post=${encodeURIComponent(sharePostId)}`;
                 const title = post.title || 'FreeUpper post';
 
                 if (action === 'notinterested') {
@@ -7382,7 +7382,23 @@
                 if (action === 'copy') {
                     recordShareForPost();
                     const shareUrl = preparedShareUrls.get(post.id) || url;
-                    // Start the clipboard write directly from the user's tap; no await/fetch first.
+                    // Avoid copying a legacy UUID while the short-link request is still pending.
+                    // For iOS, keep clipboard writes in the original tap when the URL is ready.
+                    if (shareUrl.includes('?post=')) {
+                        window.Router?.resolvePostShareUrl?.(post, 'index.html').then(resolved => {
+                            if (resolved && !resolved.includes('?post=')) {
+                                preparedShareUrls.set(post.id, resolved);
+                                window.prompt('Copy this short post link:', resolved);
+                            } else {
+                                window.prompt('Copy this post link:', shareUrl);
+                            }
+                            closeShareModal();
+                        }).catch(() => {
+                            window.prompt('Copy this post link:', shareUrl);
+                            closeShareModal();
+                        });
+                        return;
+                    }
                     copyTextToClipboard(shareUrl).then(() => {
                         showToast('Link copied to clipboard 📋');
                         closeShareModal();
