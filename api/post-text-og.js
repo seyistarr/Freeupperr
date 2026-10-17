@@ -31,7 +31,21 @@ export default async function handler(req, res) {
 
   const message = String(post.content || post.title || 'A post on FreeUpper').trim().slice(0, 220);
   const h = React.createElement;
-  const layout = h('div', {
+  const videoStyle = req.query.style === 'video';
+  // A static OG image matching video.html's paper-style text card.
+  // The feed's animated canvas is intentionally not used by social crawlers.
+  const paperLines = videoStyle
+    ? h('div', { style: {
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        background: 'repeating-linear-gradient(to bottom, #fbf8ee 0px, #fbf8ee 42px, #dfe5f1 44px, #fbf8ee 46px)',
+      } },
+      h('div', { style: { position: 'absolute', left: 88, top: 0, bottom: 0, width: 3, background: '#e9b8b8' } }),
+      h('div', { style: { display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', padding: '72px 115px 72px 145px' } },
+        h('div', { style: { display: 'flex', fontSize: message.length > 120 ? 43 : message.length > 70 ? 51 : 61, fontWeight: 700, lineHeight: 1.28, color: '#20283a', textAlign: 'center', overflow: 'hidden' } }, message))
+    ) : null;
+  const layout = videoStyle ? h('div', {
+    style: { width: '100%', height: '100%', display: 'flex', position: 'relative' }
+  }, paperLines) : h('div', {
     style: {
       width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
       justifyContent: 'space-between', padding: '70px', color: 'white',
