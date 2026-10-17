@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadCloudinarySdk } from '../api/post-media-cloudinary.js';
+import { loadCloudinarySdk } from '../lib/protected-media/post-media-cloudinary.js';
 const config={cloudName:'example-cloud',apiKey:'test-key',apiSecret:'test-secret'};
 test('rejects missing configuration before importing SDK',async()=>{
   let imported=false;
