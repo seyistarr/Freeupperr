@@ -54,7 +54,7 @@ export default async function handler(req, res) {
   const destination = origin + '/' + (type === 'video' ? 'video.html' : 'index.html') + '?post=' + encodeURIComponent(post.id);
   const title = clean(post.title || post.content || post.description || 'FreeUpper post', 100);
   const description = clean(post.description || post.content || 'Discover this post on FreeUpper.');
-  const img = (post.media_type === 'text' || (!post.media_url && !post.thumbnail_url)) ? origin + '/api/post-text-og?code=' + encodeURIComponent(code) : (safeImage(post.thumbnail_url) || (post.media_type === 'video' ? cloudinaryVideoPoster(post.media_url) : safeImage(post.media_url)) || SITE + '/freeupper.png');
+  const img = (post.media_type === 'text' || (!post.media_url && !post.thumbnail_url)) ? origin + '/api/post-text-og?code=' + encodeURIComponent(code) + (type === 'video' ? '&style=video' : '') : (safeImage(post.thumbnail_url) || (post.media_type === 'video' ? cloudinaryVideoPoster(post.media_url) : safeImage(post.media_url)) || SITE + '/freeupper.png');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} • FreeUpper</title><link rel="canonical" href="${esc(url)}">
 <meta name="description" content="${esc(description)}">
