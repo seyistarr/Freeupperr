@@ -412,7 +412,7 @@
    * Videos use /v/ and image/text posts use /p/.
    * Falls back to legacy URLs when no short code exists.
    */
-  function getPostShareUrl(post) {
+  function getPostShareUrl(post, sharePage) {
     if (!post) return null;
 
     const id = getPostId(post);
@@ -424,14 +424,13 @@
       typeof code === 'string' &&
       /^[A-Za-z0-9_-]{6,16}$/.test(code)
     ) {
-      const prefix = isVideo(post) ? 'v' : 'p';
+      const prefix = sharePage === 'video.html' ? 'v' : sharePage === 'index.html' ? 'p' : (isVideo(post) ? 'v' : 'p');
 
       return `https://www.freeupper.com/${prefix}/${code}`;
     }
 
-    const page = isVideo(post)
-      ? 'video.html'
-      : 'index.html';
+    const page = sharePage === 'video.html' || sharePage === 'index.html'
+      ? sharePage : (isVideo(post) ? 'video.html' : 'index.html');
 
     return `https://www.freeupper.com/${page}?post=${encodeURIComponent(id)}`;
   }
@@ -442,8 +441,8 @@
    * Falls back to the legacy UUID URL when the migration is not installed,
    * the post is private, or the network is unavailable.
    */
-  async function resolvePostShareUrl(post) {
-    const fallback = getPostShareUrl(post);
+  async function resolvePostShareUrl(post, sharePage) {
+    const fallback = getPostShareUrl(post, sharePage);
     if (!fallback) return null;
     if (post.short_code || post.shortCode) return fallback;
     const id = getPostId(post);
@@ -457,7 +456,7 @@
       const result = await response.json();
       if (!result || typeof result.short_code !== 'string' ||
           !/^[A-Za-z0-9_-]{6,16}$/.test(result.short_code)) return fallback;
-      return getPostShareUrl({ ...post, short_code: result.short_code });
+      return getPostShareUrl({ ...post, short_code: result.short_code }, sharePage);
     } catch (error) {
       return fallback;
     }
