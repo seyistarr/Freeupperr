@@ -1,8 +1,8 @@
-import { resolveProtectedMediaRequest } from './post-media-registry.js';
-import { authorizeProtectedMedia } from './post-media-access.js';
-import { loadCloudinarySdk } from './post-media-cloudinary.js';
-import { createExpiringDownloadUrl } from './post-media-download-url.js';
-import { proxyProtectedMedia } from './post-media-proxy.js';
+import { resolveProtectedMediaRequest } from '../lib/protected-media/post-media-registry.js';
+import { authorizeProtectedMedia } from '../lib/protected-media/post-media-access.js';
+import { loadCloudinarySdk } from '../lib/protected-media/post-media-cloudinary.js';
+import { createExpiringDownloadUrl } from '../lib/protected-media/post-media-download-url.js';
+import { proxyProtectedMedia } from '../lib/protected-media/post-media-proxy.js';
 
 // Delivery is disabled by default. Enabling requires a separately reviewed,
 // isolated test deployment with authenticated Cloudinary assets and credentials.
