@@ -36,11 +36,13 @@ export default async function handler(req, res) {
     res.setHeader('X-Robots-Tag','noindex, nofollow');
     return res.status(404).send('Post unavailable');
   }
-  const url = SITE + '/' + (type === 'video' ? 'v' : 'p') + '/' + encodeURIComponent(code);
-  const destination = SITE + '/' + (type === 'video' ? 'video.html' : 'index.html') + '?post=' + encodeURIComponent(post.id);
+  const requestHost = String(req.headers.host || '').toLowerCase().split(':')[0];
+  const origin = requestHost.endsWith('.vercel.app') ? 'https://' + requestHost : SITE;
+  const url = origin + '/' + (type === 'video' ? 'v' : 'p') + '/' + encodeURIComponent(code);
+  const destination = origin + '/' + (type === 'video' ? 'video.html' : 'index.html') + '?post=' + encodeURIComponent(post.id);
   const title = clean(post.title || post.content || post.description || 'FreeUpper post', 100);
   const description = clean(post.description || post.content || 'Discover this post on FreeUpper.');
-  const img = post.media_type === 'text' ? SITE + '/api/post-text-og?code=' + encodeURIComponent(code) : (safeImage(post.media_type === 'video' ? post.thumbnail_url : (post.thumbnail_url || post.media_url)) || SITE + '/freeupper.png');
+  const img = post.media_type === 'text' ? origin + '/api/post-text-og?code=' + encodeURIComponent(code) : (safeImage(post.media_type === 'video' ? post.thumbnail_url : (post.thumbnail_url || post.media_url)) || SITE + '/freeupper.png');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} • FreeUpper</title><link rel="canonical" href="${esc(url)}">
 <meta name="description" content="${esc(description)}">
