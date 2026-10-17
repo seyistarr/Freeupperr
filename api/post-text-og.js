@@ -34,6 +34,7 @@ export default async function handler(req, res) {
   // notebook background to every /v/ link.
   const rawMessage = String(post.content || post.title || 'A post on FreeUpper').trim();
   const message = rawMessage.length > 195 ? rawMessage.slice(0, 192).trimEnd() + '…' : rawMessage;
+  const previewMessage = message.replace(/\r/g, '').replace(/[\t ]+/g, ' ').trim();
   const h = React.createElement;
   const videoStyle = req.query.style === 'video';
   const templates = {
@@ -58,7 +59,8 @@ export default async function handler(req, res) {
   };
   const templateId = String(post.text_template_id || '').toLowerCase();
   const theme = templates[templateId] || templates.neon;
-  const fontSize = message.length > 165 ? 37 : message.length > 110 ? 43 : message.length > 70 ? 49 : 57;
+  const lines = previewMessage.split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const fontSize = lines.length >= 7 ? 35 : previewMessage.length > 165 ? 37 : previewMessage.length > 110 ? 43 : previewMessage.length > 70 ? 49 : 57;
   const textCard = h('div', {
     style: {
       display: 'flex', width: '100%', height: '100%', position: 'relative',
@@ -75,8 +77,8 @@ export default async function handler(req, res) {
     h('div', { style: {
       display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'center',
       textAlign: 'center', fontSize, lineHeight: 1.24, fontWeight: 800,
-      color: theme[1], overflowWrap: 'break-word', whiteSpace: 'pre-wrap'
-    } }, message)
+      color: theme[1], flexDirection: 'column'
+    } }, ...lines.slice(0, 10).map(line => h('div', { style: { display: 'flex', justifyContent: 'center', width: '100%', textAlign: 'center' } }, line)))
   );
   const layout = videoStyle ? textCard : h('div', {
     style: {
@@ -92,8 +94,17 @@ export default async function handler(req, res) {
   );
 
   try {
-    const rendered = new ImageResponse(layout, { width: 1200, height: 630 });
-    const png = Buffer.from(await rendered.arrayBuffer());
+    let png;
+    try {
+      const rendered = new ImageResponse(layout, { width: 1200, height: 630 });
+      png = Buffer.from(await rendered.arrayBuffer());
+    } catch (primaryError) {
+      // Never leave WhatsApp with a title-only card because a particular
+      // template or long multiline caption cannot be rendered by Satori.
+      console.error('Template OG render failed; using safe fallback', templateId, primaryError);
+      const fallback = h('div', { style: { display: 'flex', width: '100%', height: '100%', backgroundColor: theme[0], color: theme[1], alignItems: 'center', justifyContent: 'center', padding: 65, fontSize: 40, fontWeight: 700, textAlign: 'center', fontFamily: 'sans-serif' } }, previewMessage.replace(/\s+/g, ' ').slice(0, 160));
+      png = Buffer.from(await new ImageResponse(fallback, { width: 1200, height: 630 }).arrayBuffer());
+    }
     res.setHeader('Content-Type', 'image/png');
     return res.status(200).end(png);
   } catch (error) {
