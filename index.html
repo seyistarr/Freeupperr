@@ -6707,6 +6707,7 @@
             function openRepostQuoteSheet(postId) {
                 repostQuoteTargetId = postId;
                 const post = allPosts.find(p => p.id === postId);
+                if (post) prepareShareUrl(post);
                 const cu = getCurrentUser();
                 const ctx = getFeedContext(postId);
                 const mine = ctx && ctx.repost ? ctx.repost.items.find(r => r.user.id === cu.id) : null;
@@ -7285,6 +7286,16 @@
             // ─── SHARE MODAL ──────────────────────────────────────────────────
             let sharePostId = null;
 
+            const preparedShareUrls = new Map();
+            function prepareShareUrl(post) {
+                if (!post?.id) return;
+                const id = post.id;
+                preparedShareUrls.set(id, window.Router?.getPostShareUrl(post) || 'https://www.freeupper.com/index.html?post=' + encodeURIComponent(id));
+                Promise.resolve(window.Router?.resolvePostShareUrl?.(post)).then(resolved => {
+                    if (resolved) preparedShareUrls.set(id, resolved);
+                }).catch(() => {});
+            }
+
             function openShareModal(postId) {
                 sharePostId = postId;
                 const modal = document.getElementById('share-modal');
@@ -7351,11 +7362,13 @@
 
                 if (action === 'copy') {
                     recordShareForPost();
-                    (window.Router?.resolvePostShareUrl?.(post) || Promise.resolve(url)).then(shareUrl => copyTextToClipboard(shareUrl)).then(() => {
+                    const shareUrl = preparedShareUrls.get(post.id) || url;
+                    // Start the clipboard write directly from the user's tap; no await/fetch first.
+                    copyTextToClipboard(shareUrl).then(() => {
                         showToast('Link copied to clipboard 📋');
                         closeShareModal();
                     }).catch(() => {
-                        showToast('Could not copy link — long-press the URL bar instead');
+                        window.prompt('Copy this post link:', shareUrl);
                         closeShareModal();
                     });
                     return;
