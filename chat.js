@@ -2884,12 +2884,10 @@
         const avatarsHtml = users.slice(0, 3).map(u => `
             <img src="${getAvatar(u)}" alt="" ${avatarErrAttr()}>
         `).join('');
-        const label = count === 1 ? 'typing…' : `${count} people typing`;
         const inner = `
             <div class="typing-avatars">${avatarsHtml}</div>
             <div class="typing-bubble">
                 <div class="dots"><span></span><span></span><span></span></div>
-                <span class="typing-label">${label}</span>
             </div>`;
         if (!el) {
             el = document.createElement('div');
