@@ -4483,6 +4483,22 @@
             background: #0f0f0f;
         }
     </style>
+<style>
+        /* Keep the home feed concealed while an incoming post link resolves. */
+        html.fu-post-deep-link-pending body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 79;
+            background: var(--bg, #fff);
+            pointer-events: none;
+        }
+    </style>
+    <script>
+        if (new URLSearchParams(window.location.search).has('post')) {
+            document.documentElement.classList.add('fu-post-deep-link-pending');
+        }
+    </script>
 </head>
 <body>
 
@@ -9295,9 +9311,11 @@
                     }
                     if (sharedPost && !(sharedPost.is_hidden || sharedPost.is_deleted)) {
                         renderUI();
-                        openExplorePost(postIdParam, 'home');
+                        await openExplorePost(postIdParam, 'home');
+                        document.documentElement.classList.remove('fu-post-deep-link-pending');
                     } else {
                         renderUI();
+                        document.documentElement.classList.remove('fu-post-deep-link-pending');
                         showToast('This post is unavailable or private');
                     }
                 } else if (productIdParam) {
