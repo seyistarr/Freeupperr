@@ -412,6 +412,13 @@
    * Videos use /v/ and image/text posts use /p/.
    * Falls back to legacy URLs when no short code exists.
    */
+  function shareOrigin() {
+    const host = window.location.hostname.toLowerCase();
+    return host === 'www.freeupper.com' || host === 'freeupper.com'
+      ? 'https://www.freeupper.com'
+      : (host.endsWith('.vercel.app') ? window.location.origin : 'https://www.freeupper.com');
+  }
+
   function getPostShareUrl(post, sharePage) {
     if (!post) return null;
 
@@ -426,13 +433,13 @@
     ) {
       const prefix = sharePage === 'video.html' ? 'v' : sharePage === 'index.html' ? 'p' : (isVideo(post) ? 'v' : 'p');
 
-      return `https://www.freeupper.com/${prefix}/${code}`;
+      return `${shareOrigin()}/${prefix}/${code}`;
     }
 
     const page = sharePage === 'video.html' || sharePage === 'index.html'
       ? sharePage : (isVideo(post) ? 'video.html' : 'index.html');
 
-    return `https://www.freeupper.com/${page}?post=${encodeURIComponent(id)}`;
+    return `${shareOrigin()}/${page}?post=${encodeURIComponent(id)}`;
   }
 
 
