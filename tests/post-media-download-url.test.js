@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createExpiringDownloadUrl as makeUrl } from '../api/post-media-download-url.js';
+import { createExpiringDownloadUrl as makeUrl } from '../lib/protected-media/post-media-download-url.js';
 const createExpiringDownloadUrl = (opts) => makeUrl({expectedCloudName:'test-cloud',...opts});
 const asset={status:'ready',delivery_type:'authenticated',resource_type:'image',cloudinary_public_id:'freeupper/posts/example',format:'jpg'};
 function sdk() {
