@@ -18,8 +18,8 @@
   /** Determine if a post is a video based on media_type */
   function isVideo(post) {
     if (!post) return false;
-    const mediaType = post.media_type || post.mediaType || '';
-    return mediaType === 'video';
+    const mediaType = post.media_type || post.mediaType || post.postData?.media_type || post.postData?.mediaType || '';
+    return String(mediaType).toLowerCase() === 'video';
   }
 
   /** Extract post ID from various post-like objects */
@@ -412,7 +412,14 @@
    * Videos use /v/ and image/text posts use /p/.
    * Falls back to legacy URLs when no short code exists.
    */
-  function getPostShareUrl(post) {
+  function shareOrigin() {
+    const host = window.location.hostname.toLowerCase();
+    return host === 'www.freeupper.com' || host === 'freeupper.com'
+      ? 'https://www.freeupper.com'
+      : (host.endsWith('.vercel.app') ? window.location.origin : 'https://www.freeupper.com');
+  }
+
+  function getPostShareUrl(post, sharePage) {
     if (!post) return null;
 
     const id = getPostId(post);
@@ -424,18 +431,43 @@
       typeof code === 'string' &&
       /^[A-Za-z0-9_-]{6,16}$/.test(code)
     ) {
-      const prefix = isVideo(post) ? 'v' : 'p';
+      const prefix = sharePage === 'video.html' ? 'v' : sharePage === 'index.html' ? 'p' : (isVideo(post) ? 'v' : 'p');
 
-      return `https://www.freeupper.com/${prefix}/${code}`;
+      return `${shareOrigin()}/${prefix}/${code}`;
     }
 
-    const page = isVideo(post)
-      ? 'video.html'
-      : 'index.html';
+    const page = sharePage === 'video.html' || sharePage === 'index.html'
+      ? sharePage : (isVideo(post) ? 'video.html' : 'index.html');
 
-    return `https://www.freeupper.com/${page}?post=${encodeURIComponent(id)}`;
+    return `${shareOrigin()}/${page}?post=${encodeURIComponent(id)}`;
   }
 
+
+  /**
+   * Resolve a public post's short share URL without changing navigation.
+   * Falls back to the legacy UUID URL when the migration is not installed,
+   * the post is private, or the network is unavailable.
+   */
+  async function resolvePostShareUrl(post, sharePage) {
+    const fallback = getPostShareUrl(post, sharePage);
+    if (!fallback) return null;
+    if (post.short_code || post.shortCode) return fallback;
+    const id = getPostId(post);
+    if (!id) return fallback;
+    try {
+      const response = await fetch('/api/post-short-link?id=' + encodeURIComponent(id), {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      if (!response.ok) return fallback;
+      const result = await response.json();
+      if (!result || typeof result.short_code !== 'string' ||
+          !/^[A-Za-z0-9_-]{6,16}$/.test(result.short_code)) return fallback;
+      return getPostShareUrl({ ...post, short_code: result.short_code }, sharePage);
+    } catch (error) {
+      return fallback;
+    }
+  }
 
   // ─── INITIALIZATION ──────────────────────────────────────
 
@@ -501,6 +533,7 @@
     isVideo,
     getPostId,
     getPostShareUrl,
+    resolvePostShareUrl,
     getCurrentUser,
     getCurrentPage,
     isOnPage,

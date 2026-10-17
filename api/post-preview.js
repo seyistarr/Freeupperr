@@ -1,0 +1,72 @@
+const SITE = 'https://www.freeupper.com';
+const API = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
+const KEY = process.env.SUPABASE_ANON_KEY;
+const esc = (s = '') => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clean = (s, max = 180) => String(s || '').replace(/\s+/g,' ').trim().slice(0,max);
+function safeImage(value) {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' && (u.hostname === 'res.cloudinary.com' || u.hostname === 'jmjtqidirpmnegzvmiaq.supabase.co') ? u.href : null;
+  } catch { return null; }
+}
+function cloudinaryVideoPoster(value) {
+  try {
+    const u = new URL(value);
+    if (u.protocol !== 'https:' || u.hostname !== 'res.cloudinary.com') return null;
+    // Strip delivery transformations before the version; use a still image
+    // from the existing video asset, without storing or modifying anything.
+    const match = u.pathname.match(/^\/(.+?)\/video\/upload\/(?:.*\/)?(v\d+\/[^?#]+)$/);
+    if (!match) return null;
+    const asset = match[2].replace(/\.[^/.]+$/, '.jpg');
+    return u.origin + '/' + match[1] + '/video/upload/so_1,w_800,h_800,c_fill/' + asset;
+  } catch { return null; }
+}
+export default async function handler(req, res) {
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const type = req.query.type === 'video' ? 'video' : 'post';
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  if (!/^[A-Za-z0-9_-]{6,16}$/.test(code)) return res.status(404).send('Not found');
+  if (!KEY) return res.status(503).send('Temporarily unavailable');
+  let post;
+  try {
+    const response = await fetch(API + '/rest/v1/rpc/get_public_post_by_short_code', {
+      method:'POST',
+      headers:{'Content-Type':'application/json',apikey:KEY,Authorization:'Bearer '+KEY},
+      body:JSON.stringify({p_code:code})
+    });
+    if (!response.ok) throw new Error('Public post lookup failed: ' + response.status);
+    const data = await response.json();
+    post = Array.isArray(data) ? data[0] : data;
+  } catch (error) {
+    console.error('Post preview lookup failed', error);
+    res.setHeader('Cache-Control','no-store');
+    return res.status(503).send('Temporarily unavailable');
+  }
+  // /v/ and /p/ describe the page where the link was shared, not media type.
+  if (!post) {
+    res.setHeader('Cache-Control','no-store');
+    res.setHeader('X-Robots-Tag','noindex, nofollow');
+    return res.status(404).send('Post unavailable');
+  }
+  const requestHost = String(req.headers.host || '').toLowerCase().split(':')[0];
+  const origin = requestHost.endsWith('.vercel.app') ? 'https://' + requestHost : SITE;
+  const url = origin + '/' + (type === 'video' ? 'v' : 'p') + '/' + encodeURIComponent(code);
+  const destination = origin + '/' + (type === 'video' ? 'video.html' : 'index.html') + '?post=' + encodeURIComponent(post.id);
+  const title = clean(post.title || post.content || post.description || 'FreeUpper post', 100);
+  const description = clean(post.description || post.content || 'Discover this post on FreeUpper.');
+  const img = (post.media_type === 'text' || (!post.media_url && !post.thumbnail_url)) ? origin + '/api/post-text-og?code=' + encodeURIComponent(code) + (type === 'video' ? '&style=video' : '') : (safeImage(post.thumbnail_url) || (post.media_type === 'video' ? cloudinaryVideoPoster(post.media_url) : safeImage(post.media_url)) || SITE + '/freeupper.png');
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)} • FreeUpper</title><link rel="canonical" href="${esc(url)}">
+<meta name="description" content="${esc(description)}">
+<meta property="og:type" content="article"><meta property="og:site_name" content="FreeUpper">
+<meta property="og:title" content="${esc(title)} • FreeUpper">
+<meta property="og:description" content="${esc(description)}">
+<meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(img)}">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${esc(img)}">
+<meta http-equiv="refresh" content="0;url=${esc(destination)}">
+</head><body><p>Opening this FreeUpper post… <a href="${esc(destination)}">Continue</a></p>
+<script>location.replace(${JSON.stringify(destination)})</script></body></html>`;
+  res.setHeader('Content-Type','text/html; charset=utf-8');
+  res.setHeader('Cache-Control','no-store');
+  return res.status(200).send(html);
+}

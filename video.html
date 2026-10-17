@@ -3133,6 +3133,7 @@
         let replyTarget = null;
         let currentPostId = null;
         let _shareIdx = 0;
+        const preparedVideoShareUrls = new Map();
         let videoPosts = [];
 
         let ytState = {};
@@ -3500,7 +3501,7 @@
                     return {
                         id: post.id,
                         src: mediaUrl,
-                        poster: mediaUrl,
+                        poster: post.thumbnailUrl || (mediaType === 'image' ? mediaUrl : '') || '',
                         creator: author.name,
                         handle: isOwn ? '@' + (currentUser.username || 'me') : '@' + (profile.username || author.name
                             .toLowerCase()),
@@ -3525,6 +3526,7 @@
                         isYouTube: isYouTube,
                         ytId: ytId,
                         mediaType: mediaType,
+                        short_code: post.short_code || post.shortCode || null,
                         images: images,
                         textTemplateId: post.textTemplateId || null,
                         timestamp: post.timestamp || post.date || new Date().toISOString(),
@@ -3537,6 +3539,22 @@
                     };
                 };
 
+                // A shared post may be absent from the first 20 feed results.
+                // Fetch it explicitly, then pass it through the same card mapper.
+                const sharedId = new URLSearchParams(window.location.search).get('post');
+                if (sharedId && !feedItems.some(entry => String(entry.post?.id) === sharedId) &&
+                    window.PostsAPI?.loadPostById) {
+                    try {
+                        const sharedPost = await window.PostsAPI.loadPostById(sharedId);
+                        if (sharedPost && !sharedPost.is_hidden && !sharedPost.is_deleted) {
+                            if (sharedPost.mediaType === 'video' || sharedPost.mediaType === 'image' || sharedPost.mediaType === 'text') {
+                                feedItems.unshift({ post: sharedPost });
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('Unable to load shared post', error);
+                    }
+                }
                 const videoEntries = feedItems.map(mapEntryToVideoPost).filter(Boolean);
                 const seen = new Set();
                 const deduped = [];
@@ -5378,12 +5396,20 @@
         function openShare(idx) {
             _shareIdx = idx;
             const v = videoPosts[idx];
+            if (v?.id) {
+                const id = v.id;
+                preparedVideoShareUrls.set(id, getPostUrl(idx));
+                const sharePost = { ...v, media_type: v.mediaType || v.media_type || 'text' };
+                Promise.resolve(window.Router?.resolvePostShareUrl?.(sharePost, 'video.html')).then(resolved => {
+                    if (resolved) preparedVideoShareUrls.set(id, resolved);
+                }).catch(() => {});
+            }
             const nativeBtn = document.getElementById('nativeShareBtn');
             if (nativeBtn) nativeBtn.style.display = navigator.share ? 'flex' : 'none';
             const thumb = document.getElementById('sharePreviewThumb');
             const cap = document.getElementById('sharePreviewCaption');
             const handle = document.getElementById('sharePreviewHandle');
-            if (thumb) thumb.src = v.poster || v.src || '';
+            if (thumb) thumb.src = v.poster || v.thumbnailUrl || v.thumbnail_url || (v.mediaType === 'image' ? v.src : '') || '/freeupper.png';
             if (cap) cap.textContent = (v.caption || v.textBody || '').split('\n')[0].slice(0, 60);
             if (handle) handle.textContent = v.handle || '';
             const delRow = document.getElementById('deletePostRow');
@@ -5394,7 +5420,7 @@
         function getPostUrl(idx) {
             const post = videoPosts && videoPosts[idx];
             const id = post && post.id;
-            return SITE_URL + '/video.html?post=' + encodeURIComponent(id || '');
+            return window.Router?.getPostShareUrl({ ...post, media_type: post?.mediaType || post?.media_type || 'video' }, 'video.html') || SITE_URL + '/video.html?post=' + encodeURIComponent(id || '');
         }
 
         function getPostTitle(idx) {
@@ -5423,7 +5449,20 @@
                     const btn = document.getElementById('copyLinkBtn');
                     const lbl = document.getElementById('copyLbl');
                     try {
-                        await navigator.clipboard.writeText(url);
+                        const shareUrl = preparedVideoShareUrls.get(videoPosts[idx]?.id) || url;
+                        // Copy immediately in the tap handler; avoid losing iOS user activation.
+                        if (navigator.clipboard?.writeText && window.isSecureContext) {
+                            await navigator.clipboard.writeText(shareUrl);
+                        } else {
+                            const field = document.createElement('textarea');
+                            field.value = shareUrl;
+                            field.style.cssText = 'position:fixed;left:-9999px;top:0';
+                            document.body.appendChild(field);
+                            field.focus(); field.select();
+                            const copied = document.execCommand('copy');
+                            field.remove();
+                            if (!copied) throw new Error('Clipboard unavailable');
+                        }
                         if (btn) btn.classList.add('copied');
                         if (lbl) lbl.textContent = 'Copied ✓';
                         showToast('Link copied 🔗');
@@ -5432,7 +5471,7 @@
                             if (lbl) lbl.textContent = 'Copy link';
                         }, 2000);
                     } catch (e) {
-                        showToast('Could not copy link');
+                        window.prompt('Copy this post link:', preparedVideoShareUrls.get(videoPosts[idx]?.id) || url);
                     }
                     return;
                 }
@@ -5642,8 +5681,17 @@
             if (!postId) return;
             const idx = videoPosts.findIndex(v => String(v.id) === postId);
             if (idx > -1) {
-                const card = document.getElementById('card-' + idx);
+                // Build the same ordered list used by the share link so card indices match.
+                const eligible = buildEligibleFeed(feedMode);
+                const cardIndex = eligible.findIndex(v => String(v.id) === postId);
+                if (cardIndex === -1) {
+                    buildFeed([videoPosts[idx], ...eligible.filter(v => String(v.id) !== postId)]);
+                }
+                const targetIndex = cardIndex === -1 ? 0 : cardIndex;
+                const card = document.getElementById('card-' + targetIndex);
                 if (card) card.scrollIntoView({ block: 'start' });
+            } else {
+                showToast('This post is unavailable or private');
             }
         }
 
