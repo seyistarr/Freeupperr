@@ -133,7 +133,7 @@ export default async function handler(req, res) {
   <meta charset="UTF-8">
   ${isSetupComplete ? '' : '<meta name="robots" content="noindex, follow">'}
 
-  <title>${safeTitle}</title>
+  <title>${safeTitle}</title>\n  <link rel="manifest" href="/manifest.webmanifest">\n  <meta name="theme-color" content="#2e1065">
 
   <link
     rel="canonical"
