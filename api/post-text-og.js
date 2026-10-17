@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   } catch {
     return res.status(503).end();
   }
-  if (!post || post.media_type !== 'text') return res.status(404).end();
+  if (!post || (post.media_type !== 'text' && (post.media_url || post.thumbnail_url))) return res.status(404).end();
 
   const message = String(post.content || post.title || 'A post on FreeUpper').trim().slice(0, 220);
   const h = React.createElement;
