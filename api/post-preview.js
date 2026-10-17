@@ -9,6 +9,18 @@ function safeImage(value) {
     return u.protocol === 'https:' && (u.hostname === 'res.cloudinary.com' || u.hostname === 'jmjtqidirpmnegzvmiaq.supabase.co') ? u.href : null;
   } catch { return null; }
 }
+function cloudinaryVideoPoster(value) {
+  try {
+    const u = new URL(value);
+    if (u.protocol !== 'https:' || u.hostname !== 'res.cloudinary.com') return null;
+    // Strip delivery transformations before the version; use a still image
+    // from the existing video asset, without storing or modifying anything.
+    const match = u.pathname.match(/^\/(.+?)\/video\/upload\/(?:.*\/)?(v\d+\/[^?#]+)$/);
+    if (!match) return null;
+    const asset = match[2].replace(/\.[^/.]+$/, '.jpg');
+    return u.origin + '/' + match[1] + '/video/upload/so_1,w_800,h_800,c_fill/' + asset;
+  } catch { return null; }
+}
 export default async function handler(req, res) {
   const code = typeof req.query.code === 'string' ? req.query.code : '';
   const type = req.query.type === 'video' ? 'video' : 'post';
@@ -42,7 +54,7 @@ export default async function handler(req, res) {
   const destination = origin + '/' + (type === 'video' ? 'video.html' : 'index.html') + '?post=' + encodeURIComponent(post.id);
   const title = clean(post.title || post.content || post.description || 'FreeUpper post', 100);
   const description = clean(post.description || post.content || 'Discover this post on FreeUpper.');
-  const img = post.media_type === 'text' ? origin + '/api/post-text-og?code=' + encodeURIComponent(code) : (safeImage(post.media_type === 'video' ? post.thumbnail_url : (post.thumbnail_url || post.media_url)) || SITE + '/freeupper.png');
+  const img = post.media_type === 'text' ? origin + '/api/post-text-og?code=' + encodeURIComponent(code) : (safeImage(post.thumbnail_url) || (post.media_type === 'video' ? cloudinaryVideoPoster(post.media_url) : safeImage(post.media_url)) || SITE + '/freeupper.png');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} • FreeUpper</title><link rel="canonical" href="${esc(url)}">
 <meta name="description" content="${esc(description)}">
