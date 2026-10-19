@@ -14,7 +14,24 @@ export default function handler(req, res) {
     process.env.VERCEL_GIT_COMMIT_REF === 'feature/post-privacy-v2-integration' &&
     process.env.SUPABASE_URL === 'https://tagkrhvgcbnybiuyvjxt.supabase.co' &&
     process.env.FREEUPPER_MEDIA_TEST_ENV === 'isolated-freeupper-staging';
-  if (!staging) return res.status(404).end();
+  if (!staging) {
+    // Diagnostic output is available only on this isolated preview branch.
+    // Never reveal variable values or credentials, and never diagnose production.
+    const previewBranch = process.env.VERCEL_ENV === 'preview' &&
+      process.env.VERCEL_GIT_COMMIT_REF === 'feature/post-privacy-v2-integration';
+    if (!previewBranch) return res.status(404).end();
+    const checks = {
+      'Preview environment': process.env.VERCEL_ENV === 'preview',
+      'Feature branch': previewBranch,
+      'Staging Supabase URL': process.env.SUPABASE_URL === 'https://tagkrhvgcbnybiuyvjxt.supabase.co',
+      'Isolated staging marker': process.env.FREEUPPER_MEDIA_TEST_ENV === 'isolated-freeupper-staging'
+    };
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    const rows = Object.entries(checks).map(([name, ok]) =>
+      '<li>' + name + ': <strong>' + (ok ? 'PASS' : 'FAIL') + '</strong></li>'
+    ).join('');
+    return res.status(404).send('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Staging configuration check</title></head><body><h1>Privacy V2 preview diagnostic</h1><p>The test page remains locked. Only pass/fail checks are shown.</p><ul>' + rows + '</ul></body></html>');
+  }
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).end();
