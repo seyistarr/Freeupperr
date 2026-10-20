@@ -16,8 +16,10 @@ test('protected endpoint disables caches and indexing', () => {
 test('protected delivery is disabled unless explicitly gated in isolated staging', () => {
   assert.match(source, /FREEUPPER_PROTECTED_MEDIA_DELIVERY !== 'enabled-in-isolated-staging'/);
   assert.match(source, /FREEUPPER_MEDIA_TEST_ENV !== 'isolated-freeupper-staging'/);
-  assert.match(source, /VERCEL_ENV === 'production'/);
-  assert.match(source, /cloudName !== 'sxdcqs5x'/);
+  assert.match(source, /!\['preview', 'development'\]\.includes\(process\.env\.VERCEL_ENV\)/);
+  assert.match(source, /VERCEL_GIT_COMMIT_REF !== 'feature\/post-privacy-v2-integration'/);
+  assert.match(source, /SUPABASE_URL !== 'https:\/\/tagkrhvgcbnybiuyvjxt\.supabase\.co'/);
+  assert.match(source, /CLOUDINARY_CLOUD_NAME !== 'sxdcqs5x'/);
   assert.match(source, /status\(503\)/);
 });
 test('protected endpoint authorizes before generating a signed URL or streaming', () => {
