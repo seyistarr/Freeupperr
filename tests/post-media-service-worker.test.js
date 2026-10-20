@@ -12,7 +12,7 @@ function worker({ cached, offline = false } = {}) {
     caches: {
       match: async request => { calls.push(['match', request]); return cached; },
       open: async () => cache,
-      keys: async () => ['freeupper-pwa-v5', 'freeupper-pwa-v6'],
+      keys: async () => ['freeupper-pwa-v6', 'freeupper-pwa-v7'],
       delete: async name => calls.push(['delete', name])
     },
     fetch: async request => { calls.push(['fetch', request]); if (offline) throw Error('offline'); return response; },
@@ -61,5 +61,5 @@ test('activation removes prior caches that could contain API responses', async (
   const w = worker(); let done;
   w.events.activate({ waitUntil(promise) { done = promise; } }); await done;
   assert.equal(w.calls.filter(([action]) => action === 'delete').length, 1);
-  assert.equal(w.calls.find(([action]) => action === 'delete')[1], 'freeupper-pwa-v5');
+  assert.equal(w.calls.find(([action]) => action === 'delete')[1], 'freeupper-pwa-v6');
 });

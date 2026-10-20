@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { v2 as cloudinary } from 'cloudinary';
-import { stagingPublishingDb, requirePublishingSchema } from '../lib/protected-media/staging-publishing-server.js';
+import { stagingPublishingDb, requirePublishingSchema, stagingPublishingEnabled } from '../lib/protected-media/staging-publishing-server.js';
 
 // Staging-only authorization; this does not register assets or publish posts.
 export default async function handler(req, res) {
@@ -30,6 +30,9 @@ export default async function handler(req, res) {
     const { data, error } = await auth.auth.getUser(token);
     if (error || !data?.user?.id) return res.status(401).json({ error: 'Authentication required' });
 
+    if (stagingPublishingEnabled(env) && (req.body?.post_id == null || req.body?.slot == null)) {
+      return res.status(400).json({ error: 'An owned draft and media slot are required' });
+    }
     const timestamp = Math.floor(Date.now() / 1000);
     const folder = 'freeupper-privacy-v2-staging/' + data.user.id;
     const public_id = 'asset_' + randomUUID().replace(/-/g, '');

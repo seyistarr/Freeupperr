@@ -27,6 +27,9 @@ export default async function handler(req, res) {
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body)) return res.status(400).json({ error: 'Invalid request' });
+  if (stagingPublishingEnabled(env) && body.slot == null) {
+    return res.status(400).json({ error: 'An owned draft and media slot are required' });
+  }
   const { post_id, public_id, asset_id, resource_type } = body;
   if (typeof post_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(post_id) ||
       typeof public_id !== 'string' || public_id.length > 200 ||

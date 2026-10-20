@@ -1,5 +1,6 @@
 import test from 'node:test';
 import vm from 'node:vm';
+import { cleanupStagingDraft } from '../lib/protected-media/staging-cleanup-server.js';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { uploadProtectedStagingMediaSet, validateProtectedStagingMediaSet } from '../lib/protected-media/staging-upload-client.js';
@@ -135,10 +136,14 @@ async function endpoint(action, { production = false, schemaMissing = false } = 
         then(resolve) { resolve({ data: [{ id: registryId, cloudinary_public_id: 'trusted-intent', resource_type: 'image', created_at: new Date().toISOString() }] }); }
       };
     },
-    async rpc(name, args) { transitions.push(args); return { data: { status: args.p_action === 'publish' ? 'published' : 'failed', id: postId } }; }
+    async rpc(name, args) {
+      transitions.push({ name, ...args });
+      if (name === 'claim_protected_cleanup') return { data: { claimed: true, intents: [{ id: registryId, cloudinary_public_id: 'freeupper-privacy-v2-staging/owner/asset_' + 'a'.repeat(32) }] } };
+      if (name === 'record_protected_cleanup') return { data: { status: 'failed', cleanupPending: true } };
+      return { data: { status: args.p_action === 'publish' ? 'published' : 'failed', id: postId } }; }
   };
   const context = { process: { env }, console: { error() {} },
-    stagingPublishingEnabled, protectedMediaPlan, protectedDraftFields,
+    stagingPublishingEnabled, protectedMediaPlan, protectedDraftFields, cleanupStagingDraft,
     stagingPublishingDb() { return db; },
     async requirePublishingSchema() { if (schemaMissing) throw Error('migration missing'); },
     randomUUID: () => postId,
@@ -173,10 +178,10 @@ test('publishing endpoint creates hidden owned drafts and does not enable missin
 
 test('cancellation fails the draft before deleting authenticated assets and retains replay-window cleanup', async () => {
   const cancelled = await endpoint('cancel');
-  assert.equal(cancelled.transitions[0].p_action, 'cancel');
+  assert.equal(cancelled.transitions[0].name, 'claim_protected_cleanup');
   assert.equal(cancelled.res.body.status, 'failed');
   assert.equal(cancelled.res.body.cleanupPending, true);
-  assert.equal(cancelled.deletions[0].id, 'trusted-intent');
+  assert.equal(cancelled.deletions[0].id, 'freeupper-privacy-v2-staging/owner/asset_' + 'a'.repeat(32));
   assert.equal(cancelled.deletions[0].params.type, 'authenticated');
   assert.equal(cancelled.deletions[0].params.invalidate, true);
 });

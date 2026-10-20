@@ -1,4 +1,4 @@
-import { publicName, publicHandle, redactEmails } from './profile-seo-privacy.js';
+import { publicName, publicHandle, redactEmails } from '../lib/profile-seo-privacy.js';
 const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 

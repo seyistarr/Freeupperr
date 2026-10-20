@@ -23,7 +23,7 @@ async function call(endpoint, options = {}) {
   const db = { async rpc(name, args) {
     calls.push(['rpc', name, args]);
     if (options.rpcError && name === 'protected_publish_transition') return { error: { code: 'draft-unavailable' } };
-    return { data: name === 'protected_publishing_capabilities' ? { version: 1 } :
+    return { data: name === 'protected_publishing_capabilities' ? { version: 2 } :
       args.p_action === 'register' ? { asset_id: postId, status: 'ready' } : { status: 'reserved' } };
   }, from(table) {
     calls.push(['table', table]);

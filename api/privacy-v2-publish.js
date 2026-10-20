@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import { readStagingPosts } from '../lib/protected-media/staging-reader-server.js';
+import { cleanupStagingDraft, sweepStagingDrafts, validCleanupWorker } from '../lib/protected-media/staging-cleanup-server.js';
 import { randomUUID } from 'node:crypto';
 import { v2 as cloudinary } from 'cloudinary';
 import { stagingPublishingEnabled, stagingPublishingDb, requirePublishingSchema,
-  protectedMediaPlan, protectedDraftFields } from '../lib/protected-media/staging-publishing-server.js';
+  protectedMediaPlan, protectedDraftFields, isolatedStagingEnvironment } from '../lib/protected-media/staging-publishing-server.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function handler(req, res) {
@@ -14,20 +16,52 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   const env = process.env;
+  // Read-only readiness checks work before enabling the feature. Values and
+  // upstream errors are never returned; all requests target the exact staging services.
+  if (req.method === 'GET' && req.query?.readiness === '1') {
+    if (!isolatedStagingEnvironment(env)) return res.status(503).json({ ready: false });
+    let database = false, cloud = false;
+    try {
+      const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false }, db: { schema: 'privacy_test' }
+      });
+      await requirePublishingSchema(db); database = true;
+    } catch (_) {}
+    try {
+      cloudinary.config({ cloud_name: 'sxdcqs5x', api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
+      const result = await cloudinary.api.ping(); cloud = result?.status === 'ok';
+    } catch (_) {}
+    const configuration = stagingPublishingEnabled({ ...env, FREEUPPER_PROTECTED_MEDIA_DELIVERY: 'enabled-in-isolated-staging',
+      FREEUPPER_PROTECTED_PUBLISHING: 'enabled-in-isolated-staging' });
+    const ready = database && cloud && configuration;
+    return res.status(ready ? 200 : 503).json({ ready, database, cloud, configuration });
+  }
   if (!stagingPublishingEnabled(env)) return res.status(503).json({ error: 'Protected publishing unavailable' });
   try {
     const db = stagingPublishingDb(env);
     await requirePublishingSchema(db);
-    if (req.method === 'GET') {
+    if (req.method === 'GET' && !req.query?.reader) {
       // Public configuration only; never return a service-role key or Cloudinary secret.
       return res.status(200).json({ enabled: true, supabaseUrl: env.SUPABASE_URL, anonKey: env.SUPABASE_ANON_KEY });
     }
     const token = /^Bearer ([^\s]+)$/i.exec(req.headers?.authorization || '')?.[1];
     if (!token) return res.status(401).json({ error: 'Authentication required' });
+    if (req.method === 'POST' && req.query?.worker === 'cleanup') {
+      if (!validCleanupWorker(req.headers?.authorization, env.FREEUPPER_CLEANUP_TOKEN)) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      cloudinary.config({ cloud_name: 'sxdcqs5x', api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
+      return res.status(200).json(await sweepStagingDrafts({ db, cloudinary }));
+    }
     const auth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: identity, error: identityError } = await auth.auth.getUser(token);
     const owner = identity?.user?.id;
     if (identityError || !owner) return res.status(401).json({ error: 'Authentication required' });
+    if (req.method === 'GET') {
+      if (req.query.reader !== 'posts') return res.status(400).json({ error: 'Invalid reader' });
+      try { return res.status(200).json({ posts: await readStagingPosts({ token, query: req.query, env }) }); }
+      catch (_) { return res.status(400).json({ error: 'Staging reader unavailable' }); }
+    }
     const body = req.body;
     if (!body || typeof body !== 'object' || Array.isArray(body)) return res.status(400).json({ error: 'Invalid request' });
     if (body.action === 'create') {
@@ -52,32 +86,16 @@ export default async function handler(req, res) {
         ...(data.publishing_state === 'published' ? { media: data.media, visibility: data.visibility } : {}) });
     }
     if (!['publish', 'cancel'].includes(body.action)) return res.status(400).json({ error: 'Invalid transition' });
+    if (body.action === 'cancel') {
+      cloudinary.config({ cloud_name: 'sxdcqs5x', api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
+      const result = await cleanupStagingDraft({ db, cloudinary, ownerId: owner, postId: body.post_id });
+      return res.status(result.status === 'published' ? 409 : 200).json(result);
+    }
     const { data, error } = await db.rpc('protected_publish_transition', {
-      p_owner: owner, p_post: body.post_id, p_action: body.action, p_data: {}
+      p_owner: owner, p_post: body.post_id, p_action: 'publish', p_data: {}
     });
     if (error) return res.status(409).json({ error: 'Draft transition unavailable' });
-    if (body.action === 'publish') return res.status(200).json(data);
-    // Cancellation first hides/fails the draft and registry under a database lock.
-    // Cleanup failures cannot make its bytes accessible; intents remain retryable.
-    const { data: intents, error: intentsError } = await db.from('post_upload_intents')
-      .select('id,cloudinary_public_id,resource_type,created_at').eq('post_id', body.post_id).eq('owner_id', owner);
-    if (intentsError) return res.status(503).json({ error: 'Draft hidden; cleanup pending' });
-    cloudinary.config({ cloud_name: env.CLOUDINARY_CLOUD_NAME, api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
-    let cleanupPending = false;
-    for (const intent of intents || []) {
-      try {
-        const result = await cloudinary.uploader.destroy(intent.cloudinary_public_id, {
-          resource_type: intent.resource_type, type: 'authenticated', invalidate: true
-        });
-        if (!['ok', 'not found'].includes(result.result)) { cleanupPending = true; continue; }
-        // An upload signature may still be replayed for about an hour. Retain the
-        // cleanup marker until that window has closed, even after a successful delete.
-        if (Date.now() - Date.parse(intent.created_at) < 65 * 60 * 1000) { cleanupPending = true; continue; }
-        const { error: cleanupError } = await db.from('post_upload_intents').update({ cleanup_pending: false }).eq('id', intent.id);
-        if (cleanupError) cleanupPending = true;
-      } catch (_) { cleanupPending = true; }
-    }
-    return res.status(200).json({ id: body.post_id, status: 'failed', cleanupPending });
+    return res.status(200).json(data);
   } catch (error) {
     console.error('Staging protected publishing unavailable', error?.name || 'Error');
     return res.status(503).json({ error: 'Protected publishing unavailable' });

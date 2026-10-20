@@ -1,4 +1,4 @@
-import { publicName, publicHandle, redactEmails } from './profile-seo-privacy.js';
+import { publicName, publicHandle, redactEmails } from '../lib/profile-seo-privacy.js';
 import React from 'react';
 import { ImageResponse } from '@vercel/og';
 

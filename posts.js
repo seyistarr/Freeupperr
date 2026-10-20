@@ -85,6 +85,22 @@
     return;
   }
   const sb = window.sb;
+  function isStagingReaderMode() {
+    return /(?:^|[?&])privacy_staging=1(?:&|$)/.test(window.location?.search || '');
+  }
+  async function mountStagingReader(view) {
+    const { mountStagingReader: mount } = await import('./lib/protected-media/staging-reader-ui.js');
+    return mount(view);
+  }
+  async function loadStagingPosts(options = {}) {
+    if (!isStagingReaderMode()) throw new Error('Staging reader mode required');
+    const { loadStagingRows } = await import('./lib/protected-media/staging-reader-client.js');
+    const rows = await loadStagingRows(options);
+    const posts = [];
+    for (const row of rows) posts.push({ ...mapPost(await preparePostMedia(row)), visibility: row.visibility, staging: true });
+    return posts;
+  }
+
 
   // ===================================================================
   // CONFIG
@@ -123,6 +139,7 @@
   }
 
   async function requireUser() {
+    if (isStagingReaderMode()) throw new Error('Staging readers do not write production engagements');
     const user = await getCurrentUser();
     if (!user) {
       throw new Error('You must be logged in to perform this action.');
@@ -246,6 +263,7 @@
     protectedObjectUrls.clear();
   }
   window.addEventListener('pagehide', releaseProtectedMedia);
+  window.addEventListener('privacy-staging-session', releaseProtectedMedia);
   // Callbacks stay synchronous: awaiting Supabase auth methods here can deadlock.
   sb.auth.onAuthStateChange?.((event, session) => {
     const viewer = session?.user?.id || null;
@@ -287,8 +305,13 @@
     const generation = mediaGeneration;
     let session;
     try {
-      const result = await sb.auth.getSession();
-      if (!result.error) session = result.data?.session;
+      if (row.__staging) {
+        const { stagingSession } = await import('./lib/protected-media/staging-session.js');
+        session = await stagingSession.getSession();
+      } else {
+        const result = await sb.auth.getSession();
+        if (!result.error) session = result.data?.session;
+      }
     } catch (_) { /* Fail closed below. Server validates the token and audience. */ }
     const token = session?.access_token;
     const viewer = session?.user?.id;
@@ -310,7 +333,7 @@
           if (!response.ok || response.status !== 200) return '';
           const blob = await response.blob();
           if (!blob.size || !blob.type.startsWith(type + '/') || generation !== mediaGeneration ||
-              (mediaViewer !== undefined && mediaViewer !== viewer)) return '';
+              (row.__staging ? window.PrivacyStaging?.userId !== viewer : (mediaViewer !== undefined && mediaViewer !== viewer))) return '';
           const url = URL.createObjectURL(blob);
           protectedObjectUrls.add(url);
           createdUrls.add(url);
@@ -589,6 +612,7 @@
   // LOAD ALL POSTS / FEED CANDIDATES
   // ===================================================================
   async function loadAllPosts(offset = 0, limit = CONFIG.DEFAULT_LIMIT, source = null) {
+    if (isStagingReaderMode()) return loadStagingPosts({ offset, limit: Math.min(limit, 50), source });
     offset = normalizeOffset(offset);
     limit = normalizeLimit(limit);
 
@@ -625,6 +649,7 @@
   // LOAD POSTS BY USER
   // ===================================================================
   async function loadPostsByUserId(userId, offset = 0, limit = 200) {
+    if (isStagingReaderMode()) return loadStagingPosts({ author_id: userId, offset, limit: Math.min(limit, 50) });
     if (!userId) return [];
 
     offset = normalizeOffset(offset);
@@ -650,6 +675,7 @@
   // LOAD SINGLE POST
   // ===================================================================
   async function loadPostById(postId) {
+    if (isStagingReaderMode()) return (await loadStagingPosts({ post_id: postId, limit: 1 }))[0] || null;
     if (!postId) return null;
 
     const { data, error } = await sb
@@ -673,6 +699,7 @@
   // Resolve protected references before exposing preview media to renderers.
   // ===================================================================
   async function loadPostPreview(postId) {
+    if (isStagingReaderMode()) return loadPostById(postId);
     if (!postId) return null;
 
     const { data: rawData, error } = await sb
@@ -716,6 +743,7 @@
   // REPOST FEED ITEMS
   // ===================================================================
   async function loadRepostFeedItems(offset = 0, limit = CONFIG.DEFAULT_LIMIT) {
+    if (isStagingReaderMode()) return [];
     offset = normalizeOffset(offset);
     limit = normalizeLimit(limit);
 
@@ -770,6 +798,7 @@
   // to build its rawPosts pool. Do not change this return shape.
   // ===================================================================
   async function loadFeedWithReposts(offset = 0, limit = CONFIG.DEFAULT_LIMIT, source = null) {
+    if (isStagingReaderMode()) return (await loadAllPosts(offset, limit, source)).map(post => ({ feedType: 'post', sortTime: post.timestamp, context: null, post }));
     const [posts, repostItems] = await Promise.all([
       loadAllPosts(offset, limit, source),
       loadRepostFeedItems(offset, limit)
@@ -1472,6 +1501,7 @@
   // NEW: find visually similar posts to a given post
   // ===================================================================
   async function findSimilarPosts(postId, limit = 10) {
+    if (isStagingReaderMode()) return []; // No production similarity or repost fallback.
     const { data, error } = await sb.rpc('find_similar_posts', {
       p_post_id: postId,
       p_limit: limit
@@ -1662,6 +1692,9 @@
   // PUBLIC API
   // ===================================================================
   window.PostsAPI = {
+    isStagingReaderMode,
+    mountStagingReader,
+    loadStagingPosts,
     // Feed data
     loadAllPosts,
     loadFeedCandidates,

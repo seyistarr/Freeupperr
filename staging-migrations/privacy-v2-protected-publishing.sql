@@ -1,4 +1,4 @@
--- PREPARED ONLY. Run only on tagkrhvgcbnybiuyvjxt after explicitly setting:
+-- STAGING ONLY. Run only on tagkrhvgcbnybiuyvjxt after explicitly setting:
 -- SET freeupper.privacy_v2_project_ref = 'tagkrhvgcbnybiuyvjxt';
 -- No public schema changes. Existing staging fixtures retain published state.
 BEGIN;
@@ -15,8 +15,11 @@ ALTER TABLE privacy_test.posts
   ADD COLUMN IF NOT EXISTS media jsonb NOT NULL DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS draft_expires_at timestamptz;
 
-CREATE UNIQUE INDEX IF NOT EXISTS privacy_v2_cloudinary_asset_unique
-  ON privacy_test.post_media_assets(cloudinary_asset_id) WHERE cloudinary_asset_id IS NOT NULL;
+-- Legacy audience test fixtures deliberately reuse IDs outside the upload namespace.
+-- Preserve those fixtures; every upload that this workflow accepts is namespace-scoped.
+CREATE UNIQUE INDEX IF NOT EXISTS post_media_assets_staging_unique_asset
+  ON privacy_test.post_media_assets(cloudinary_asset_id)
+  WHERE cloudinary_asset_id IS NOT NULL AND cloudinary_public_id LIKE 'freeupper-privacy-v2-staging/%';
 CREATE TABLE IF NOT EXISTS privacy_test.post_upload_intents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id uuid NOT NULL REFERENCES privacy_test.posts(id),
@@ -90,6 +93,8 @@ BEGIN
     END IF;
     IF ticket.state<>'reserved' OR p_data->>'cloudinary_asset_id' !~ '^[a-f0-9]{32}$' OR
       p_data->>'format' !~ '^[a-z0-9]{2,8}$' THEN RAISE EXCEPTION 'Invalid registration'; END IF;
+    IF EXISTS (SELECT 1 FROM privacy_test.post_media_assets WHERE cloudinary_asset_id=p_data->>'cloudinary_asset_id') THEN
+      RAISE EXCEPTION 'Asset already registered'; END IF;
     registry_id=gen_random_uuid();
     INSERT INTO privacy_test.post_media_assets(id,post_id,owner_id,status,delivery_type,cloudinary_public_id,
       cloudinary_asset_id,resource_type,format) VALUES(registry_id,p_post,p_owner,'ready','authenticated',

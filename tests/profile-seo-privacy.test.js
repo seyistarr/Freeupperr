@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { publicName, publicHandle, redactEmails } from '../api/profile-seo-privacy.js';
+import { publicName, publicHandle, redactEmails } from '../lib/profile-seo-privacy.js';
 
 test('email addresses never become profile names or handles', () => {
   assert.equal(publicName('person@example.com'), 'FreeUpper Member');
