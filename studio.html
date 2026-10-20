@@ -16,6 +16,7 @@
 <script src="global.js"></script>
 <script src="auth.js"></script>
 <script src="posts.js"></script>
+<script type="module" src="lib/protected-media/staging-publishing-ui.js"></script>
 <script src="mentions.js"></script>
 <script src="sounds.js"></script>
 <script src="video-render.js"></script>
@@ -2540,7 +2541,8 @@ async function resolveCarouselFrameDims(result, item) {
 
 async function publishPost() {
   const user = getCurrentUser();
-  if (!user || !user.isLoggedIn) {
+  const audience = document.getElementById('studioAudience').value;
+  if (audience === 'public' && (!user || !user.isLoggedIn)) {
     showToast('Please sign in to post');
     if (window.AuthUser?.openModal) window.AuthUser.openModal('signup');
     return;
@@ -2550,8 +2552,27 @@ async function publishPost() {
 
   const caption = document.getElementById('detCaption').value.trim();
   const hideComments = document.getElementById('hideComments').checked;
-  const audience = document.getElementById('studioAudience').value;
-  if (audience !== 'public') { showToast('Restricted audiences are not enabled yet'); return; }
+  if (audience !== 'public') {
+    const button = document.getElementById('publishBtn');
+    button.disabled = true;
+    try {
+      if (!window.ProtectedPublishing?.enabled) throw new Error('Protected staging publishing unavailable');
+      if (!S.media || S.textPost) throw new Error('Protected staging publishing currently requires images or one video');
+      saveCurrentCarouselText();
+      const items = S.mediaFiles?.length ? S.mediaFiles : [S.media];
+      if (S.attachedSound || S.textOverlays?.length || items.some(item => item.textOverlays?.length)) {
+        throw new Error('Remove music and text overlays before protected staging publishing; public transformations are unavailable');
+      }
+      await PostsAPI.createProtectedStagingPost({
+        fields: { title: caption.slice(0, 100), content: caption, tags: S.tags.slice(), source: 'studio',
+          commentsHidden: hideComments, visibility: audience },
+        files: items.map(item => item.blob)
+      });
+      showToast('Protected post published in isolated staging');
+    } catch (error) { showToast(error.message || 'Protected publishing failed'); }
+    finally { button.disabled = false; }
+    return;
+  }
 
   document.getElementById('publishBtn').disabled = true;
   if (typeof pauseWaveform === 'function') pauseWaveform();

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { v2 as cloudinary } from 'cloudinary';
+import { stagingPublishingDb, requirePublishingSchema } from '../lib/protected-media/staging-publishing-server.js';
 
 // Staging-only authorization; this does not register assets or publish posts.
 export default async function handler(req, res) {
@@ -32,6 +33,20 @@ export default async function handler(req, res) {
     const timestamp = Math.floor(Date.now() / 1000);
     const folder = 'freeupper-privacy-v2-staging/' + data.user.id;
     const public_id = 'asset_' + randomUUID().replace(/-/g, '');
+    if (req.body?.post_id != null || req.body?.slot != null) {
+      if (typeof req.body.post_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.body.post_id) ||
+          !Number.isInteger(req.body.slot) || req.body.slot < 0 || req.body.slot > 20) {
+        return res.status(400).json({ error: 'Invalid draft upload' });
+      }
+      const db = stagingPublishingDb(env);
+      await requirePublishingSchema(db);
+      // Persist the owner/post/slot/public ID before issuing any reusable signature.
+      const { error: intentError } = await db.rpc('protected_publish_transition', {
+        p_owner: data.user.id, p_post: req.body.post_id, p_action: 'reserve',
+        p_data: { slot: req.body.slot, public_id: folder + '/' + public_id }
+      });
+      if (intentError) return res.status(409).json({ error: 'Draft upload unavailable' });
+    }
     // All upload parameters that influence asset identity or delivery are signed.
     const params = { timestamp, folder, public_id, type: 'authenticated', overwrite: false };
     const signature = cloudinary.utils.api_sign_request(params, env.CLOUDINARY_API_SECRET);

@@ -46,6 +46,7 @@
     </script>
     <script src="auth.js">
     </script>
+    <script type="module" src="lib/protected-media/staging-publishing-ui.js"></script>
     <script src="posts.js">
     </script>
     <script src="listings.js">
@@ -3059,6 +3060,10 @@
         // ──────────────────────────────────────────────────────────────
 
         function previewPostMedia() {
+            if (document.getElementById('postAudience').value !== 'public') {
+                showToast('Protected posts require local files; external media links are unavailable', 'o');
+                return;
+            }
             const input = document.getElementById('postMediaUrlInput');
             const url = input.value.trim();
             if (!url) {
@@ -3129,6 +3134,23 @@
             const files = Array.from(event.target.files);
             if (!files.length) return;
 
+            if (document.getElementById('postAudience').value !== 'public') {
+                try {
+                    if (!window.ProtectedPublishing?.enabled) throw new Error('Protected staging publishing unavailable');
+                    if (state.postMedia.some(m => !m.protectedFile)) throw new Error('Remove publicly uploaded media and select new local files for this protected post');
+                    const allFiles = [...state.postMedia.map(m => m.protectedFile), ...files];
+                    window.ProtectedPublishing.validateFiles(allFiles);
+                    for (const file of files) state.postMedia.push({ protectedFile: file, url: URL.createObjectURL(file),
+                        type: file.type.startsWith('video/') ? 'video' : 'image', uploading: false });
+                    renderPostImageGrid();
+                } catch (error) { showToast(error.message, 'r'); }
+                event.target.value = '';
+                return;
+            }
+            if (state.postMedia.some(m => m.protectedFile)) {
+                showToast('Remove protected local files before switching to a Public upload', 'o');
+                event.target.value = ''; return;
+            }
             const hasVideo = files.some(f => f.type.startsWith('video'));
             const hasMultiple = files.length > 1;
 
@@ -3741,8 +3763,9 @@
                 return;
             }
 
-            const user = requireAuth(true);
-            if (!user) return;
+            const restricted = document.getElementById('postAudience').value !== 'public';
+            const user = restricted ? null : requireAuth(true);
+            if (!restricted && !user) return;
 
             const titleEl = document.getElementById('postTitle');
             const contentEl = document.getElementById('postContent');
@@ -3802,6 +3825,23 @@
                 null;
 
             try {
+                if (restricted) {
+                    if (!state.postMedia.length || state.postMedia.some(m => !m.protectedFile)) {
+                        throw new Error('Remove public media and select local files while a restricted audience is selected');
+                    }
+                    await PostsAPI.createProtectedStagingPost({
+                        fields: { title, content, tags: hashtags, source: 'composer', commentsHidden: hideComments,
+                            visibility: document.getElementById('postAudience').value },
+                        files: state.postMedia.map(m => m.protectedFile)
+                    });
+                    state.postMedia.forEach(m => URL.revokeObjectURL(m.url));
+                    state.postMedia = []; state.postEmbeddings = []; renderPostImageGrid();
+                    titleEl.value = ''; contentEl.value = '';
+                    showToast('Protected post published in isolated staging', 'g');
+                    btn.classList.remove('loading'); btn.disabled = false;
+                    return;
+                }
+                if (state.postMedia.some(m => m.protectedFile)) throw new Error('Remove protected local files before publishing Public media');
                 const result = await PostsAPI.createPost({
                     title,
                     content: content || '',

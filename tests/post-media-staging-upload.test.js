@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
+import { stagingPublishingEnabled, requirePublishingSchema } from '../lib/protected-media/staging-publishing-server.js';
 import { verifyStagingRegistration } from '../lib/protected-media/verify-staging-registration.js';
 const owner = 'b27b41f5-744a-475b-b538-4699ad4fa1d4';
 const other = '8022bdf2-1e05-49e6-87e3-99bb2342007d';
@@ -19,7 +20,12 @@ async function call(endpoint, options = {}) {
   const calls = [], inserted = [], signed = [];
   const post = { id: postId, user_id: owner, visibility: 'followers', is_deleted: false, is_hidden: false, ...options.post };
   const asset = { public_id: publicId, asset_id: assetId, type: 'authenticated', resource_type: 'image', bytes: 1234, format: 'jpg', ...options.asset };
-  const db = { from(table) {
+  const db = { async rpc(name, args) {
+    calls.push(['rpc', name, args]);
+    if (options.rpcError && name === 'protected_publish_transition') return { error: { code: 'draft-unavailable' } };
+    return { data: name === 'protected_publishing_capabilities' ? { version: 1 } :
+      args.p_action === 'register' ? { asset_id: postId, status: 'ready' } : { status: 'reserved' } };
+  }, from(table) {
     calls.push(['table', table]);
     return {
       select() { return this; }, eq() { return this; },
@@ -30,7 +36,8 @@ async function call(endpoint, options = {}) {
   } };
   const context = {
     process: { env: { ...staging, ...options.env } },
-    console: { error() {} }, verifyStagingRegistration,
+    console: { error() {} }, verifyStagingRegistration, stagingPublishingEnabled, requirePublishingSchema,
+    stagingPublishingDb(env) { if (!stagingPublishingEnabled(env)) throw Error('disabled'); return db; },
     randomUUID: () => '30000000-0000-4000-8000-000000000003',
     createClient(url, key, config) {
       calls.push(['client', url, key, config]);
@@ -52,7 +59,7 @@ async function call(endpoint, options = {}) {
     status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
   await context.handler({ method: options.method || 'POST',
     headers: options.guest ? {} : { authorization: 'Bearer viewer-token' },
-    body: { post_id: postId, public_id: publicId, asset_id: assetId, resource_type: 'image', ...options.body }
+    body: { ...(endpoint === 'privacy-v2-register-asset' ? { post_id: postId, public_id: publicId, asset_id: assetId, resource_type: 'image' } : {}), ...options.body }
   }, res);
   return { res, calls, inserted, signed };
 }
@@ -121,4 +128,27 @@ test('registration refuses public, placeholder, mismatched, and oversized Cloudi
     const r = await call('privacy-v2-register-asset', { asset });
     assert.equal(r.res.statusCode, 404); assert.equal(r.inserted.length, 0);
   }
+});
+
+const publishing = { SUPABASE_ANON_KEY: 'sb_publishable_test', FREEUPPER_PROTECTED_PUBLISHING: 'enabled-in-isolated-staging',
+  FREEUPPER_PROTECTED_MEDIA_DELIVERY: 'enabled-in-isolated-staging' };
+test('draft upload records its owner/post intent before signing and fails closed on reservation failure', async () => {
+  for (const rpcError of [false, true]) {
+    const r = await call('privacy-v2-upload-signature', { env: publishing, body: { post_id: postId, slot: 0 }, rpcError });
+    assert.equal(r.res.statusCode, rpcError ? 409 : 200);
+    assert.equal(r.signed.length, rpcError ? 0 : 1);
+    if (!rpcError) {
+      const reserve = r.calls.find(([name, , args]) => name === 'rpc' && args?.p_action === 'reserve');
+      assert.equal(reserve[2].p_owner, owner); assert.equal(reserve[2].p_post, postId);
+      assert.ok(reserve[2].p_data.public_id.startsWith('freeupper-privacy-v2-staging/' + owner + '/'));
+    }
+  }
+});
+test('draft registration uses the locked transition and never the legacy direct insert', async () => {
+  const r = await call('privacy-v2-register-asset', { env: publishing,
+    post: { publishing_state: 'draft', is_hidden: true }, body: { slot: 0 } });
+  assert.equal(r.res.statusCode, 201); assert.equal(r.inserted.length, 0);
+  const register = r.calls.find(([name, , args]) => name === 'rpc' && args?.p_action === 'register');
+  assert.equal(register[2].p_owner, owner); assert.equal(register[2].p_post, postId);
+  assert.equal(register[2].p_data.cloudinary_asset_id, assetId);
 });

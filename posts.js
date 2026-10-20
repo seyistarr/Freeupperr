@@ -1393,6 +1393,14 @@
   //   That guard lives in the fallback chain above — an MP4 URL in
   //   media[0].url is not copied into the thumbnail column.
   // ===================================================================
+  // Separate explicit staging API: the legacy createPost public-only guard stays intact.
+  async function createProtectedStagingPost({ fields, files, thumbnailFile, signal } = {}) {
+    if (!window.ProtectedPublishing?.enabled) throw new Error('Protected staging publishing unavailable');
+    const accessToken = await window.ProtectedPublishing.accessToken();
+    const { publishProtectedStagingPost } = await import('./lib/protected-media/staging-publishing-client.js');
+    return publishProtectedStagingPost({ fields, files, thumbnailFile, accessToken, signal });
+  }
+
   async function createPost(fields = {}) {
     const user = await requireUser();
 
@@ -1669,6 +1677,7 @@
     loadPostById,
     loadPostPreview,
     createPost,
+    createProtectedStagingPost,
     deletePost,
     editPost,
 
