@@ -46,7 +46,7 @@ Do not enable the two feature flags until this returns `ready: true`. Redeploy t
 
 Reader entry points: `index.html?privacy_staging=1`, `video.html?privacy_staging=1`, `profile.html?privacy_staging=1&user=<staging-owner-UUID>`. They require a separate in-memory staging sign-in. Shared post links retain `privacy_staging=1` and return no crawler-visible restricted metadata. Create/Studio expose their staging sign-in only when the capability gate succeeds.
 
-Staging cleanup is scheduled every five minutes by `pg_cron`/`pg_net` in the isolated Supabase project. `privacy-v2-cleanup-schedule.sql` provisions the named job after a random token has been stored in Supabase Vault (`freeupper_privacy_v2_cleanup_token`) and the branch-scoped Vercel `FREEUPPER_CLEANUP_TOKEN`. The token is never committed or placed in cron command text; database/browser roles cannot read Vault or the request queue. Apply that third migration only with the same staging target acknowledgement and secret already provisioned.
+Staging cleanup is scheduled every five minutes by `pg_cron` with synchronous `http` in the isolated Supabase project. `privacy-v2-cleanup-schedule.sql` provisions the named job after a random token has been stored in Supabase Vault (`freeupper_privacy_v2_cleanup_token`) and the branch-scoped Vercel `FREEUPPER_CLEANUP_TOKEN`. The token is never committed or placed in cron command text; browser roles cannot read Vault or execute the private scheduler function. Synchronous HTTP avoids storing authorization headers in the shared `pg_net` request queue. Apply that third migration only with the same staging target acknowledgement and secret already provisioned.
 
 For an additional manual cleanup call, inject the same secret into the job environment:
 
