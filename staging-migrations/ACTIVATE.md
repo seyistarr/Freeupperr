@@ -46,10 +46,12 @@ Do not enable the two feature flags until this returns `ready: true`. Redeploy t
 
 Reader entry points: `index.html?privacy_staging=1`, `video.html?privacy_staging=1`, `profile.html?privacy_staging=1&user=<staging-owner-UUID>`. They require a separate in-memory staging sign-in. Shared post links retain `privacy_staging=1` and return no crawler-visible restricted metadata. Create/Studio expose their staging sign-in only when the capability gate succeeds.
 
-Run cleanup from a trusted external staging scheduler every five minutes with the same `FREEUPPER_CLEANUP_TOKEN` injected as a secret:
+Staging cleanup is scheduled every five minutes by `pg_cron`/`pg_net` in the isolated Supabase project. `privacy-v2-cleanup-schedule.sql` provisions the named job after a random token has been stored in Supabase Vault (`freeupper_privacy_v2_cleanup_token`) and the branch-scoped Vercel `FREEUPPER_CLEANUP_TOKEN`. The token is never committed or placed in cron command text; database/browser roles cannot read Vault or the request queue. Apply that third migration only with the same staging target acknowledgement and secret already provisioned.
+
+For an additional manual cleanup call, inject the same secret into the job environment:
 
 ```sh
 node scripts/privacy-v2-staging.mjs cleanup
 ```
 
-Do not configure Vercel Cron for this: it would run on production rather than the feature preview. Each call processes at most three expired/failed drafts; repeat calls drain a backlog safely. Failures back off and successful deletes remain pending until upload signatures can no longer be replayed (65 minutes). Active drafts and published posts are never reclaimed. For immediate user cancellation, POST `{ "action": "cancel", "post_id": "<UUID>" }` to `/api/privacy-v2-publish` with that owner's staging session JWT, never a supplied Cloudinary public ID.
+Do not configure Vercel Cron for this: it would run on production rather than the feature preview. The database job targets only the pinned feature-branch preview alias. Each call processes at most three expired/failed drafts; repeat calls drain a backlog safely. Failures back off and successful deletes remain pending until upload signatures can no longer be replayed (65 minutes). Active drafts and published posts are never reclaimed. For immediate user cancellation, POST `{ "action": "cancel", "post_id": "<UUID>" }` to `/api/privacy-v2-publish` with that owner's staging session JWT, never a supplied Cloudinary public ID.
