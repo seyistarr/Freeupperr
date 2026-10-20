@@ -1,7 +1,9 @@
+import { blockIsolatedStagingSeo } from '../lib/profile-seo-privacy.js';
 const API = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
 const KEY = process.env.SUPABASE_ANON_KEY;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export default async function handler(req, res) {
+  if (blockIsolatedStagingSeo(res)) return;
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') return res.status(405).json({error:'Method not allowed'});
   const id = typeof req.query.id === 'string' ? req.query.id : '';

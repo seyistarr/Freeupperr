@@ -1,3 +1,4 @@
+import { blockIsolatedStagingSeo } from '../lib/profile-seo-privacy.js';
 const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
 const SITE_URL = 'https://www.freeupper.com';
 const PAGE_SIZE = 1000;
@@ -9,6 +10,7 @@ function escapeXml(value) {
 }
 
 export default async function handler(req, res) {
+  if (blockIsolatedStagingSeo(res)) return;
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).end();

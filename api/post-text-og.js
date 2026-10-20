@@ -1,3 +1,4 @@
+import { blockIsolatedStagingSeo } from '../lib/profile-seo-privacy.js';
 import React from 'react';
 import { ImageResponse } from '@vercel/og';
 
@@ -6,6 +7,7 @@ const KEY = process.env.SUPABASE_ANON_KEY;
 const CODE = /^[A-Za-z0-9_-]{6,16}$/;
 
 export default async function handler(req, res) {
+  if (blockIsolatedStagingSeo(res)) return;
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   if (req.method !== 'GET') return res.status(405).end();

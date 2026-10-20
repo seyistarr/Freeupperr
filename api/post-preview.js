@@ -1,3 +1,4 @@
+import { blockIsolatedStagingSeo } from '../lib/profile-seo-privacy.js';
 const SITE = 'https://www.freeupper.com';
 const API = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
 const KEY = process.env.SUPABASE_ANON_KEY;
@@ -22,6 +23,7 @@ function cloudinaryVideoPoster(value) {
   } catch { return null; }
 }
 export default async function handler(req, res) {
+  if (blockIsolatedStagingSeo(res)) return;
   const code = typeof req.query.code === 'string' ? req.query.code : '';
   const type = req.query.type === 'video' ? 'video' : 'post';
   res.setHeader('X-Content-Type-Options', 'nosniff');

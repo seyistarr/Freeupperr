@@ -1,3 +1,4 @@
+import { blockIsolatedStagingSeo } from '../lib/profile-seo-privacy.js';
 import { publicName, publicHandle, redactEmails } from '../lib/profile-seo-privacy.js';
 const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
@@ -28,6 +29,7 @@ function normalizeId(value = '') {
 }
 
 export default async function handler(req, res) {
+  if (blockIsolatedStagingSeo(res)) return;
   const freeupperId = normalizeId(
     req.query?.freeupper_id || ''
   );

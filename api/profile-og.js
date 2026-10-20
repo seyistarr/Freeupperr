@@ -1,3 +1,4 @@
+import { blockIsolatedStagingSeo } from '../lib/profile-seo-privacy.js';
 import { publicName, publicHandle, redactEmails } from '../lib/profile-seo-privacy.js';
 import React from 'react';
 import { ImageResponse } from '@vercel/og';
@@ -111,6 +112,7 @@ function cleanImageUrl(value) {
  * Main Vercel function.
  */
 export default async function handler(req, res) {
+  if (blockIsolatedStagingSeo(res)) return;
   try {
     const requestUrl = new URL(
       req.url,

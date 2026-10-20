@@ -46,6 +46,18 @@ export default async function handler(req, res) {
     }
     const token = /^Bearer ([^\s]+)$/i.exec(req.headers?.authorization || '')?.[1];
     if (!token) return res.status(401).json({ error: 'Authentication required' });
+    if (req.method === 'POST' && req.query?.worker === 'acceptance') {
+      if (!validCleanupWorker(req.headers?.authorization, env.FREEUPPER_CLEANUP_TOKEN)) return res.status(401).json({ error: 'Authentication required' });
+      if (env.FREEUPPER_STAGING_ACCEPTANCE !== 'synthetic-fixtures-only') return res.status(404).json({ error: 'Acceptance disabled' });
+      const { runStagingAcceptance, AcceptanceFailure } = await import('../lib/protected-media/staging-live-acceptance.js');
+      cloudinary.config({ cloud_name: 'sxdcqs5x', api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
+      try { return res.status(200).json(await runStagingAcceptance({ phase: req.body?.phase, env, db, cloudinary })); }
+      catch (error) {
+        return res.status(503).json({ error: 'Synthetic staging acceptance incomplete',
+          failedCheck: error instanceof AcceptanceFailure ? error.check : 'provider_operation',
+          providerStatus: Number(error?.http_code ?? error?.error?.http_code) || null });
+      }
+    }
     if (req.method === 'POST' && req.query?.worker === 'cleanup') {
       if (!validCleanupWorker(req.headers?.authorization, env.FREEUPPER_CLEANUP_TOKEN)) {
         return res.status(401).json({ error: 'Authentication required' });
