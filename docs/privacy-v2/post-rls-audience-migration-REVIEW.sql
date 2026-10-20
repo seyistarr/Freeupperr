@@ -16,6 +16,17 @@ BEGIN
      'Posts are viewable by everyone','Public read posts'))
  THEN RAISE EXCEPTION 'Unexpected posts read policy'; END IF;
 END $;
+-- Replace the owner ALL policy as well: PostgreSQL OR-combines permissive
+-- policies, so leaving owner ALL would bypass the read restrictions below.
+DROP POLICY "Users can manage own posts" ON public.posts;
+CREATE POLICY "Privacy V2 owner insert" ON public.posts
+FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Privacy V2 owner update" ON public.posts
+FOR UPDATE TO authenticated USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Privacy V2 owner delete" ON public.posts
+FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
 DROP POLICY "Anyone can view posts" ON public.posts;
 DROP POLICY "Enable read access for all users" ON public.posts;
 DROP POLICY "Posts are viewable by everyone" ON public.posts;
@@ -46,8 +57,7 @@ FOR SELECT TO PUBLIC USING (
   )
 );
 COMMIT;
--- Known limitations: the existing permissive owner ALL policy can still
--- grant owner SELECT access to hidden/deleted posts regardless of this read
--- policy. Split owner write privileges from owner read privileges before
--- applying if hidden/deleted must also be denied to owners. Review blocked-user
--- semantics, profile/follows RLS, SECURITY DEFINER RPCs, media URLs and video.
+-- Known limitations: the owner can still UPDATE/DELETE their own rows;
+-- verify the application's soft-delete and moderation expectations before use.
+-- Review blocked-user semantics, profile/follows RLS, SECURITY DEFINER RPCs,
+-- media URLs, video and role grants before any production deployment.
