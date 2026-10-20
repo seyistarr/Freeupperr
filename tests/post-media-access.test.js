@@ -49,3 +49,15 @@ test('anonymous viewer denied by protected endpoint',async()=>assert.equal(await
 test('missing asset status denied',async()=>assert.equal(await check({asset:{status:'pending'},follow:{follower_id:'viewer',following_id:'author',status:'active'}}),false));
 test('profile lookup error denied',async()=>assert.equal(await check({errorTable:'profiles'}),false));
 test('follower lookup error denied',async()=>assert.equal(await check({errorTable:'follows'}),false));
+
+
+test('publishing mode denies detached legacy copies and permits only referenced media/posters',async()=>{
+  const before=process.env.FREEUPPER_PROTECTED_PUBLISHING;
+  process.env.FREEUPPER_PROTECTED_PUBLISHING='enabled-in-isolated-staging';
+  try {
+    for(const media of [[],[{asset_id:'other'}]]) assert.equal(await check({viewerId:'author',asset:{id:'copy'},post:{publishing_state:'published',media}}),false);
+    for(const media of [[{asset_id:'copy'}],[{asset_id:'video',thumbnail_asset_id:'copy'}]])
+      assert.equal(await check({viewerId:'author',asset:{id:'copy'},post:{publishing_state:'published',media}}),true);
+    assert.equal(await check({viewerId:'author',asset:{id:'copy'},post:{publishing_state:'draft',media:[{asset_id:'copy'}]}}),false);
+  } finally { if(before===undefined)delete process.env.FREEUPPER_PROTECTED_PUBLISHING;else process.env.FREEUPPER_PROTECTED_PUBLISHING=before; }
+});

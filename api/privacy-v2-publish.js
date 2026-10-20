@@ -79,6 +79,14 @@ export default async function handler(req, res) {
       return res.status(201).json({ id, status: 'draft' });
     }
     if (typeof body.post_id !== 'string' || !UUID.test(body.post_id)) return res.status(400).json({ error: 'Invalid draft' });
+    if (body.action === 'visibility') {
+      if (!['followers', 'friends', 'only_me'].includes(body.visibility)) return res.status(400).json({ error: 'Explicit restricted audience required' });
+      const { data, error } = await db.rpc('set_protected_visibility', {
+        p_owner: owner, p_post: body.post_id, p_visibility: body.visibility
+      });
+      if (error) return res.status(409).json({ error: 'Protected references and verified legacy revocation required' });
+      return res.status(200).json(data);
+    }
     if (body.action === 'status') {
       const { data, error } = await db.from('posts').select('id,publishing_state,visibility,media').eq('id', body.post_id).eq('user_id', owner).maybeSingle();
       if (error || !data) return res.status(404).json({ error: 'Draft unavailable' });

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'freeupper-pwa-v7';
+const CACHE_NAME = 'freeupper-pwa-v8';
 
 const URLS_TO_CACHE = [
   './',
@@ -38,6 +38,14 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if ((url.origin === self.location.origin && (url.pathname === '/api' || url.pathname.startsWith('/api/'))) ||
       event.request.headers.has('Authorization')) return;
+  // Cache only the static shell/modules. Old media/download URLs must never be
+  // served from CacheStorage after a visibility change or CDN revocation.
+  const shell = URLS_TO_CACHE.some(path => new URL(path, self.location.origin + '/').pathname === url.pathname);
+  const module = /\.(?:js|css|woff2?)$/.test(url.pathname);
+  if (url.origin !== self.location.origin || (!shell && !module) ||
+      url.searchParams.has('privacy_staging') || url.searchParams.has('post') ||
+      url.searchParams.has('post_id') || url.searchParams.has('code')) return;
+
 
   event.respondWith(
     caches.match(event.request).then(cached => {

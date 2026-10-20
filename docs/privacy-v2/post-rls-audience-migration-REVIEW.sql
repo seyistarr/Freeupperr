@@ -15,7 +15,7 @@ BEGIN
      'Anyone can view posts','Enable read access for all users',
      'Posts are viewable by everyone','Public read posts'))
  THEN RAISE EXCEPTION 'Unexpected posts read policy'; END IF;
-END $;
+END $$;
 -- Replace the owner ALL policy as well: PostgreSQL OR-combines permissive
 -- policies, so leaving owner ALL would bypass the read restrictions below.
 DROP POLICY "Users can manage own posts" ON public.posts;

@@ -9,6 +9,8 @@ Database migrations, in order (already applied through the staging Supabase conn
 # The session setting is an explicit target acknowledgement, not a replacement for checking the connection URL.
 PGOPTIONS='-c freeupper.privacy_v2_project_ref=tagkrhvgcbnybiuyvjxt' psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f staging-migrations/privacy-v2-protected-publishing.sql
 PGOPTIONS='-c freeupper.privacy_v2_project_ref=tagkrhvgcbnybiuyvjxt' psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f staging-migrations/privacy-v2-readers-cleanup.sql
+PGOPTIONS='-c freeupper.privacy_v2_project_ref=tagkrhvgcbnybiuyvjxt' psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f staging-migrations/privacy-v2-legacy-media.sql
+PGOPTIONS='-c freeupper.privacy_v2_project_ref=tagkrhvgcbnybiuyvjxt' psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f staging-migrations/privacy-v2-legacy-dependency-scope.sql
 ```
 
 Vercel project: `prj_ZdmEklbr8BOkJeOzBqSFPSXwLJoB` / `freeupper`; team: `team_V6feGIkHBGzO4k0xBbcjnvMj`. **Every setting below must target Preview and this Git branch only.** Do not replace project-wide or production variables.
@@ -55,3 +57,5 @@ node scripts/privacy-v2-staging.mjs cleanup
 ```
 
 Do not configure Vercel Cron for this: it would run on production rather than the feature preview. The database job targets only the pinned feature-branch preview alias. Each call processes at most three expired/failed drafts; repeat calls drain a backlog safely. Failures back off and successful deletes remain pending until upload signatures can no longer be replayed (65 minutes). Active drafts and published posts are never reclaimed. For immediate user cancellation, POST `{ "action": "cancel", "post_id": "<UUID>" }` to `/api/privacy-v2-publish` with that owner's staging session JWT, never a supplied Cloudinary public ID.
+
+Legacy migration remains an operator-only staging workflow, dry-run by default. Its private provenance, source claims, audit ledger, reference guards and dependency inventory are applied in staging; no legacy asset was migrated or revoked. See [legacy-media-rollout.md](../docs/privacy-v2/legacy-media-rollout.md) for commands, revocation waiting/verification, production order and rollback. Keep `FREEUPPER_LEGACY_MIGRATION` out of browser configuration; the runner rejects production even in dry-run mode.
