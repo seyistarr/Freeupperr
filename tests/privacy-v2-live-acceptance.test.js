@@ -27,7 +27,7 @@ test('isolated preview SEO denies before legacy production queries while product
 
 test('Cloudinary inventory follows every derived cursor and fails on loops or identity changes',async()=>{
   const {readCompleteCloudinaryAsset}=await import('../lib/protected-media/cloudinary-asset-inventory.js');
-  const first={asset_id:'a'.repeat(32),public_id:'fixture',type:'upload',resource_type:'image',version:1,derived:[{id:'one'}],next_cursor:'page2'};
+  const first={asset_id:'a'.repeat(32),public_id:'fixture',type:'upload',resource_type:'image',version:1,derived:Array.from({length:100},(_,i)=>({id:'one-'+i})),next_cursor:'page2'};
   let calls=0;
   const cloudinary={config:()=>({cloud_name:'sxdcqs5x',api_key:'fake-key',api_secret:'fake-secret'}),api:{async resource(id,options){calls++;if(!options.derived_next_cursor)return first;
     assert.equal(options.derived_next_cursor,'page2');return {...first,derived:[{id:'two'}],next_cursor:null};},
@@ -35,7 +35,7 @@ test('Cloudinary inventory follows every derived cursor and fails on loops or id
   const fetchImpl=async(url,options)=>{calls++;assert.equal(url.searchParams.get('next_cursor'),'page2');
     assert.ok(options.headers.Authorization.startsWith('Basic '));return {ok:true,async json(){return {...first,derived:[{id:'two'}],next_cursor:null};}};};
   const result=await readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image',fetchImpl});
-  assert.equal(result.derived.length,2);assert.equal(result.next_cursor,undefined);assert.equal(calls,2);
+  assert.equal(result.derived.length,101);assert.equal(result.next_cursor,undefined);assert.equal(calls,2);
   cloudinary.api.resource=async()=>first;
   await assert.rejects(readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image',fetchImpl:async()=>({ok:true,json:async()=>first})}),/Incomplete/);
   cloudinary.api.resource=async(id,options)=>options.derived_next_cursor?{...first,version:2}:first;
@@ -49,4 +49,13 @@ test('authenticated type tolerates obsolete access_mode but anonymous grants and
   assert.equal(verifyStagingAsset(args),true);
   assert.equal(verifyStagingAsset({...args,asset:{...asset,type:'upload'}}),false);
   assert.equal(verifyStagingAsset({...args,asset:{...asset,access_control:[{access_type:'anonymous'}]}}),false);
+});
+
+
+test('an explicit short derivative page is complete despite an unrelated generic metadata cursor',async()=>{
+  const {readCompleteCloudinaryAsset}=await import('../lib/protected-media/cloudinary-asset-inventory.js');
+  const asset={asset_id:'a'.repeat(32),public_id:'fixture',type:'upload',resource_type:'image',version:1,derived:[],next_cursor:'unrelated'};
+  const cloudinary={api:{async resource(){return asset;}}};
+  const result=await readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image',fetchImpl:()=>{throw Error('not a derivative page');}});
+  assert.equal(result.derived_inventory_complete,true);assert.equal(result.derived.length,0);assert.equal(result.next_cursor,undefined);
 });
