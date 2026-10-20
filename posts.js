@@ -333,7 +333,9 @@
       const thumbnailId = assetReference(item, true) || assetReference(row, true);
       const thumbnailUrl = url ? (thumbnailId ? await fetchAsset(thumbnailId, 'image') :
         (type === 'image' ? url : '')) : '';
-      if (!url) unavailable = true;
+      // A registered poster is part of the protected media contract.
+      // Never silently render a video with a missing or denied protected poster.
+      if (!url || (thumbnailId && !thumbnailUrl)) unavailable = true;
       return { type, url, thumbnailUrl };
     }));
     if (!items.length && (row.media_type === 'image' || row.media_type === 'video')) unavailable = true;
