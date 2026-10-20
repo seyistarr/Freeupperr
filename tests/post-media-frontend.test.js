@@ -139,7 +139,7 @@ test('navigation releases URLs and a restored page reloads rather than using rev
 test('service worker bypasses protected requests before consulting cache storage', () => {
   const events = {}; let touched = false;
   vm.runInNewContext(readFileSync(new URL('../service-worker.js', import.meta.url), 'utf8'), {
-    self: { addEventListener: (name, cb) => { events[name] = cb; } }, URL,
+    self: { location: { origin: 'https://freeupper.test' }, addEventListener: (name, cb) => { events[name] = cb; } }, URL,
     caches: { match() { touched = true; } }
   });
   for (const [url, auth] of [['https://freeupper.test/api/post-media?asset_id=' + id, false], ['https://freeupper.test/other', true]]) {

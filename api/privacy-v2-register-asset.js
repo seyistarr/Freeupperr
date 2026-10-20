@@ -8,7 +8,10 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   res.setHeader('Vary', 'Authorization');
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
   const env = process.env;
   if (env.VERCEL_ENV !== 'preview' ||
       env.VERCEL_GIT_COMMIT_REF !== 'feature/post-privacy-v2-integration' ||
@@ -24,7 +27,7 @@ export default async function handler(req, res) {
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body)) return res.status(400).json({ error: 'Invalid request' });
   const { post_id, public_id, asset_id, resource_type } = body;
-  if (typeof post_id !== 'string' || !/^[0-9a-f-]{36}$/i.test(post_id) ||
+  if (typeof post_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(post_id) ||
       typeof public_id !== 'string' || public_id.length > 200 ||
       typeof asset_id !== 'string' || !/^[a-f0-9]{32}$/i.test(asset_id) ||
       !['image', 'video'].includes(resource_type)) return res.status(400).json({ error: 'Invalid asset' });
@@ -41,14 +44,17 @@ export default async function handler(req, res) {
     });
     const { data: post, error: postError } = await db.from('posts')
       .select('id,user_id,visibility,is_deleted,is_hidden').eq('id', post_id).maybeSingle();
-    if (postError || !post || post.user_id !== viewerId) return res.status(404).json({ error: 'Asset unavailable' });
+    if (postError || !post || post.user_id !== viewerId ||
+        post.is_deleted !== false || post.is_hidden !== false ||
+        !['followers', 'friends', 'only_me'].includes(post.visibility)) return res.status(404).json({ error: 'Asset unavailable' });
     cloudinary.config({ cloud_name: env.CLOUDINARY_CLOUD_NAME, api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
     const asset = await cloudinary.api.resource(public_id, { resource_type, type: 'authenticated' });
     if (!verifyStagingRegistration({ viewerId, post, cloudinaryAsset: asset,
       expectedPublicId: public_id, expectedAssetId: asset_id, resourceType: resource_type })) {
       return res.status(404).json({ error: 'Asset unavailable' });
     }
-    // Refuse to claim a Cloudinary asset already registered to another post.
+    // Reject repeat registrations, including repeats for the same owner/post.
+    // The registry must retain UNIQUE(cloudinary_asset_id) to reject concurrent inserts.
     const { data: existing, error: existingError } = await db.from('post_media_assets')
       .select('id,post_id,owner_id').eq('cloudinary_asset_id', asset_id).limit(1);
     if (existingError || (existing?.length)) return res.status(409).json({ error: 'Asset already registered or unavailable' });

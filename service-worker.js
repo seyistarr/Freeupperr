@@ -1,4 +1,4 @@
-const CACHE_NAME = 'freeupper-pwa-v4';
+const CACHE_NAME = 'freeupper-pwa-v5';
 
 const URLS_TO_CACHE = [
   './',
@@ -34,9 +34,10 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
-  // Protected bytes and bearer requests must bypass CacheStorage, including old entries.
+  // Same-origin APIs and bearer requests bypass all CacheStorage reads and writes.
   const url = new URL(event.request.url);
-  if (url.pathname === '/api/post-media' || event.request.headers.has('Authorization')) return;
+  if ((url.origin === self.location.origin && (url.pathname === '/api' || url.pathname.startsWith('/api/'))) ||
+      event.request.headers.has('Authorization')) return;
 
   event.respondWith(
     caches.match(event.request).then(cached => {
