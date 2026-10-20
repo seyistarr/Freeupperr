@@ -54,7 +54,11 @@ export default async function handler(req, res) {
       try { return res.status(200).json(await runStagingAcceptance({ phase: req.body?.phase, env, db, cloudinary })); }
       catch (error) {
         return res.status(503).json({ error: 'Synthetic staging acceptance incomplete',
-          failedCheck: error instanceof AcceptanceFailure ? error.check : 'provider_operation',
+          failedCheck: error instanceof AcceptanceFailure ? error.check :
+            ['Incomplete Cloudinary derivative inventory','Source changed during inventory','Source identity mismatch',
+             'Source identity, provenance, size or derivative inventory not verified','Provenance lookup unavailable',
+             'Provenance registration unavailable','Shared references or dependency inventory require review',
+             'Migration transition unavailable: begin','Migration transition unavailable: inspect'].includes(error?.message) ? error.message : 'provider_operation',
           providerStatus: Number(error?.http_code ?? error?.error?.http_code) || null });
       }
     }
