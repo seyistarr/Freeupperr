@@ -193,16 +193,16 @@
   // ===================================================================
   // MEDIA NORMALIZATION
   // -------------------------------------------------------------
-  // Untouched in v4.2.0. The read path already surfaces thumbnailUrl
-  // from either the media JSON item or the legacy row.thumbnail_url
-  // single-media fallback.
+  // Keep registry references even when a protected item has no URL.
+  // Legacy public media and thumbnail fields remain supported.
   // ===================================================================
   function normalizeMedia(row) {
     let media = safeArray(row.media);
 
-    if (!media.length && row.media_url) {
+    if (!media.length && (row.media_url || row.media_asset_id || row.mediaAssetId || row.asset_id || row.assetId)) {
       media = [{
-        url: row.media_url,
+        url: row.media_url || '',
+        asset_id: row.media_asset_id || row.mediaAssetId || row.asset_id || row.assetId || '',
         type: row.media_type || 'image',
         thumbnailUrl: row.thumbnail_url || ''
       }];
@@ -220,8 +220,132 @@
           type: item.type || item.media_type || 'image',
           thumbnailUrl: item.thumbnailUrl || item.thumbnail_url || ''
         };
-      })
-      .filter(item => !!item.url);
+      });
+  }
+
+  // Registry IDs are opaque references, never Cloudinary IDs or delivery URLs.
+  // Fetch bytes through the authorizing same-origin proxy before any renderer sees them.
+  const protectedObjectUrls = new Set();
+  const mediaRequests = new Set();
+  let mediaGeneration = 0;
+  let mediaViewer;
+
+  function releaseProtectedMedia() {
+    mediaGeneration++;
+    mediaRequests.forEach(controller => controller.abort());
+    mediaRequests.clear();
+    document.querySelectorAll('img[src], video[src], video[poster], source[src]').forEach(el => {
+      for (const attr of ['src', 'poster']) {
+        if (!protectedObjectUrls.has((el.getAttribute(attr) || '').split('#')[0])) continue;
+        if (el.tagName === 'VIDEO') el.pause();
+        el.removeAttribute(attr);
+        if (el.tagName === 'VIDEO') el.load();
+      }
+    });
+    protectedObjectUrls.forEach(url => URL.revokeObjectURL(url));
+    protectedObjectUrls.clear();
+  }
+  window.addEventListener('pagehide', releaseProtectedMedia);
+  // Callbacks stay synchronous: awaiting Supabase auth methods here can deadlock.
+  sb.auth.onAuthStateChange?.((event, session) => {
+    const viewer = session?.user?.id || null;
+    if (event === 'SIGNED_OUT' || (mediaViewer !== undefined && viewer !== mediaViewer)) {
+      releaseProtectedMedia();
+    }
+    mediaViewer = viewer;
+  });
+  window.addEventListener('pageshow', event => {
+    if (event.persisted) window.location.reload();
+  });
+
+  function assetReference(item, thumbnail = false) {
+    return thumbnail
+      ? item.thumbnail_asset_id || item.thumbnailAssetId || ''
+      : item.asset_id || item.assetId || item.media_asset_id || item.mediaAssetId || '';
+  }
+
+  function protectedUrl(value) {
+    // Also catch the proxy path: it must never be assigned directly to <img>/<video>.
+    return typeof value === 'string' &&
+      (/\/(?:image|video|raw)\/(?:authenticated|private)\//i.test(value) ||
+       /(?:^|\/)api\/post-media(?:[?#]|$)/i.test(value) ||
+       /\/v1_1\/[^/]+\/(?:image|video|raw)\/download(?:[?#]|$)/i.test(value));
+  }
+
+  async function preparePostMedia(row) {
+    const restricted = (row.visibility != null && row.visibility !== 'public') ||
+      row.profiles?.is_private === true;
+    const items = normalizeMedia(row);
+    const needsProtection = restricted || row.protected === true ||
+      ['authenticated', 'private'].includes(row.delivery_type) || !!assetReference(row) || !!assetReference(row, true) ||
+      protectedUrl(row.media_url) || protectedUrl(row.thumbnail_url) ||
+      items.some(item => assetReference(item) || assetReference(item, true) ||
+        item.protected === true || ['authenticated', 'private'].includes(item.delivery_type) ||
+        protectedUrl(item.url) || protectedUrl(item.thumbnailUrl));
+    if (!needsProtection) return row;
+
+    const generation = mediaGeneration;
+    let session;
+    try {
+      const result = await sb.auth.getSession();
+      if (!result.error) session = result.data?.session;
+    } catch (_) { /* Fail closed below. Server validates the token and audience. */ }
+    const token = session?.access_token;
+    const viewer = session?.user?.id;
+    const blobs = new Map();
+    const createdUrls = new Set();
+    async function fetchAsset(id, type) {
+      if (!token || !viewer || generation !== mediaGeneration ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return '';
+      const key = type + ':' + id;
+      if (!blobs.has(key)) blobs.set(key, (async () => {
+        const controller = new AbortController();
+        mediaRequests.add(controller);
+        const timeout = setTimeout(() => controller.abort(), 60000);
+        try {
+          const response = await fetch('/api/post-media?asset_id=' + encodeURIComponent(id), {
+            headers: { Authorization: 'Bearer ' + token },
+            cache: 'no-store', credentials: 'same-origin', redirect: 'error', signal: controller.signal
+          });
+          if (!response.ok || response.status !== 200) return '';
+          const blob = await response.blob();
+          if (!blob.size || !blob.type.startsWith(type + '/') || generation !== mediaGeneration ||
+              (mediaViewer !== undefined && mediaViewer !== viewer)) return '';
+          const url = URL.createObjectURL(blob);
+          protectedObjectUrls.add(url);
+          createdUrls.add(url);
+          return url;
+        } catch (_) {
+          return '';
+        } finally {
+          clearTimeout(timeout);
+          mediaRequests.delete(controller);
+        }
+      })());
+      return blobs.get(key);
+    }
+
+    // A protected post never uses legacy media/poster fields, even on delivery failure.
+    let unavailable = false;
+    const media = await Promise.all(items.map(async item => {
+      const type = item.type === 'video' ? 'video' : 'image';
+      const url = await fetchAsset(assetReference(item) || assetReference(row), type);
+      const thumbnailId = assetReference(item, true) || assetReference(row, true);
+      const thumbnailUrl = url ? (thumbnailId ? await fetchAsset(thumbnailId, 'image') :
+        (type === 'image' ? url : '')) : '';
+      if (!url) unavailable = true;
+      return { type, url, thumbnailUrl };
+    }));
+    if (!items.length && (row.media_type === 'image' || row.media_type === 'video')) unavailable = true;
+    // Do not show a partial carousel that could change slide indices or hide failures.
+    if (unavailable || generation !== mediaGeneration) {
+      createdUrls.forEach(url => {
+        if (protectedObjectUrls.delete(url)) URL.revokeObjectURL(url);
+      });
+      return { ...row, media: [], media_url: '', thumbnail_url: '', __mediaUnavailable: true };
+    }
+    return { ...row, media, media_url: media[0]?.url || '',
+      thumbnail_url: media[0]?.thumbnailUrl || '', __mediaUnavailable: false };
   }
 
   // ===================================================================
@@ -263,7 +387,7 @@
   function mapPost(row, interactionState = {}) {
     if (!row) return null;
 
-    const media = normalizeMedia(row);
+    const media = normalizeMedia(row).filter(item => !!item.url);
     const profile = normalizeProfile(row.profiles);
 
     return {
@@ -285,6 +409,7 @@
       mentions: safeArray(row.mentions),
 
       // Media
+      mediaUnavailable: !!row.__mediaUnavailable,
       media,
       mediaUrl: row.media_url || media[0]?.url || '',
       mediaType: row.media_type || media[0]?.type || null,
@@ -441,7 +566,12 @@
     const postIds = rows.map(row => row.id);
     const interaction = await loadInteractionState(postIds, user?.id || null);
 
-    return rows
+    // Prepare at most four posts at a time when loading a feed page.
+    const prepared = [];
+    for (let offset = 0; offset < rows.length; offset += 4) {
+      prepared.push(...await Promise.all(rows.slice(offset, offset + 4).map(preparePostMedia)));
+    }
+    return prepared
       .map(row => {
         const myRepost = interaction.repostMap.get(row.id) || null;
         return mapPost(row, {
@@ -538,39 +668,35 @@
   // ===================================================================
   // LOAD POST PREVIEW (lightweight, for share cards / link previews)
   // -------------------------------------------------------------
-  // Unchanged from v4.1.4. Its inline thumbnailUrl chain still
-  // OR's through data.media_url, but that is safe here because
-  // loadPostPreview() is not used by the profile grid renderers —
-  // only by share-card / link-preview surfaces, which handle videos
-  // via their own thumbnail logic (and never render an <img> pointing
-  // at an MP4). If you later wire loadPostPreview() into a grid,
-  // apply the same image-only guard that mapPost() now uses.
+  // Resolve protected references before exposing preview media to renderers.
   // ===================================================================
   async function loadPostPreview(postId) {
     if (!postId) return null;
 
-    const { data, error } = await sb
+    const { data: rawData, error } = await sb
       .from('posts')
       .select(`
-        id, title, description, content, media, media_type, thumbnail_url,
-        media_url, sound_id, source, text_template_id, created_at,
-        profiles:user_id ( username, display_username, display_name, avatar_url, verified, verified_status )
+        *,
+        profiles:user_id ( username, display_username, display_name, avatar_url, verified, verified_status, is_private )
       `)
       .eq('id', postId)
       .single();
 
-    if (error || !data) return null;
+    if (error || !rawData) return null;
 
-    const media = normalizeMedia(data);
+    const data = await preparePostMedia(rawData);
+    const media = normalizeMedia(data).filter(item => !!item.url);
 
     return {
       id: data.id,
+      mediaUnavailable: !!data.__mediaUnavailable,
       title: data.title || '',
       description: data.description || '',
       content: data.content || '',
       media,
       mediaType: data.media_type || media[0]?.type || null,
-      thumbnailUrl: data.thumbnail_url || media[0]?.thumbnailUrl || data.media_url || media[0]?.url || '',
+      thumbnailUrl: data.thumbnail_url || media[0]?.thumbnailUrl ||
+        ((data.media_type || media[0]?.type) === 'image' ? data.media_url || media[0]?.url || '' : ''),
       mediaUrl: data.media_url || media[0]?.url || '',
       sound_id: data.sound_id || null,
       source: data.source || CONFIG.DEFAULT_SOURCE,
@@ -1322,7 +1448,7 @@
       }
     }
 
-    return mapPost(data, { likedByMe: false, bookmarkedByMe: false, myRepost: null });
+    return mapPost(await preparePostMedia(data), { likedByMe: false, bookmarkedByMe: false, myRepost: null });
   }
 
   // ===================================================================
