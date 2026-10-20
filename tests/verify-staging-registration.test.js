@@ -7,7 +7,7 @@ const stranger = '8022bdf2-1e05-49e6-87e3-99bb2342007d';
 const publicId = 'freeupper-privacy-v2-staging/' + owner + '/asset_' + 'a'.repeat(32);
 const assetId = 'b'.repeat(32);
 const post = { user_id: owner, visibility: 'followers', is_deleted: false, is_hidden: false };
-const cloudinaryAsset = { public_id: publicId, asset_id: assetId, type: 'authenticated', resource_type: 'image', bytes: 1234 };
+const cloudinaryAsset = { public_id: publicId, asset_id: assetId, type: 'authenticated', resource_type: 'image', bytes: 1234, format: 'jpg' };
 const valid = { viewerId: owner, post, cloudinaryAsset, expectedPublicId: publicId, expectedAssetId: assetId, resourceType: 'image' };
 test('accepts owned protected media for a restricted post', () => assert.equal(verifyStagingRegistration(valid), true));
 for (const [name, changes] of [
