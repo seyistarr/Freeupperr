@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { verifyStagingAsset } from '../lib/protected-media/verify-staging-asset.js';
 
-const publicId = 'freeupper-privacy-v2-staging/asset_' + 'a'.repeat(32);
+const publicId = 'freeupper-privacy-v2-staging/10000000-0000-4000-8000-000000000001/asset_' + 'a'.repeat(32);
 const assetId = 'b'.repeat(32);
 const valid = { asset_id: assetId, public_id: publicId, resource_type: 'image', type: 'authenticated', bytes: 1024, format: 'jpg' };
 const check = (asset, overrides = {}) => verifyStagingAsset({ asset, expectedPublicId: publicId, expectedAssetId: assetId, expectedResourceType: 'image', ...overrides });
