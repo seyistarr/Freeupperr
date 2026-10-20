@@ -1,4 +1,4 @@
-const CACHE_NAME = 'freeupper-pwa-v3';
+const CACHE_NAME = 'freeupper-pwa-v4';
 
 const URLS_TO_CACHE = [
   './',
@@ -34,6 +34,12 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+
+  // API responses may contain account-specific information; never cache them.
+  const url = new URL(event.request.url);
+  if (url.origin === self.location.origin &&
+      (url.pathname === '/api' || url.pathname.startsWith('/api/'))) return;
+  if (event.request.headers.has('Authorization')) return;
 
   event.respondWith(
     caches.match(event.request).then(cached => {
