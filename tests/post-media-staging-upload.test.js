@@ -122,7 +122,7 @@ test('registration rejects duplicate claims, lookup errors, and unique conflicts
 });
 
 test('registration refuses public, placeholder, mismatched, and oversized Cloudinary assets', async () => {
-  for (const asset of [{ type: 'upload' }, { access_mode: 'public' }, { placeholder: true },
+  for (const asset of [{ type: 'upload' }, { access_control: [{ access_type: 'anonymous' }] }, { placeholder: true },
     { deleted: true }, { asset_id: 'c'.repeat(32) }, { public_id: 'other' },
     { resource_type: 'raw' }, { bytes: 51 * 1024 * 1024 }]) {
     const r = await call('privacy-v2-register-asset', { asset });

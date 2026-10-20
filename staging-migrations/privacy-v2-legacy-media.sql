@@ -250,7 +250,7 @@ BEGIN
       IF j.state<>'revoking' OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(j.plan->'sources') x WHERE x->>'asset_id'=p_data->>'asset_id') THEN
         RAISE EXCEPTION 'Unexpected deletion'; END IF;
       IF p_data->>'invalidation_requested' IS DISTINCT FROM 'true' OR p_data->>'origin_absent' IS DISTINCT FROM 'true' OR
-        coalesce(p_data->>'provider_acknowledgement','') NOT IN ('deleted','not_found') THEN RAISE EXCEPTION 'Revocation request evidence required'; END IF;
+        coalesce(p_data->>'provider_acknowledgement','') NOT IN ('deleted','not_found','already_absent') THEN RAISE EXCEPTION 'Revocation request evidence required'; END IF;
       -- CDN waiting begins after the LAST source deletion, not the first one.
       -- Retries of already absent sources do not endlessly restart the clock;
       -- a source actually deleted again after restoration always does.

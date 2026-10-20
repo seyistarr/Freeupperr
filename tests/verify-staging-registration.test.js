@@ -21,7 +21,7 @@ for (const [name, changes] of [
   ['different Cloudinary asset', { cloudinaryAsset: { ...cloudinaryAsset, asset_id: 'c'.repeat(32) } }],
   ['oversized asset', { cloudinaryAsset: { ...cloudinaryAsset, bytes: 51 * 1024 * 1024 } }],
   ['placeholder asset', { cloudinaryAsset: { ...cloudinaryAsset, placeholder: true } }],
-  ['public access mode', { cloudinaryAsset: { ...cloudinaryAsset, access_mode: 'public' } }],
+  ['anonymous access grant', { cloudinaryAsset: { ...cloudinaryAsset, access_control: [{ access_type: 'anonymous' }] } }],
   ['deleted asset', { cloudinaryAsset: { ...cloudinaryAsset, deleted: true } }],
   ['raw resource', { resourceType: 'raw' }],
   ['missing post', { post: null }]

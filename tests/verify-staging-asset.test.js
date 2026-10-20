@@ -16,7 +16,7 @@ for (const [label, asset] of [
   ['zero bytes', { ...valid, bytes: 0 }],
   ['oversized asset', { ...valid, bytes: 51 * 1024 * 1024 }],
   ['deleted asset', { ...valid, deleted: true }],
-  ['public access mode', { ...valid, access_mode: 'public' }],
+  ['anonymous access grant', { ...valid, access_control: [{ access_type: 'anonymous' }] }],
   ['invalid format', { ...valid, format: '../jpg' }],
   ['missing metadata', null]
 ]) test('rejects ' + label, () => assert.equal(check(asset), false));

@@ -126,3 +126,13 @@ test('staging visibility endpoint binds to verified JWT owner and never downgrad
 test('abandon cleans authenticated orphan copies only before quarantine; public source deletion is never used for rollback',async()=>{
   const f=await fixture();f.job.state='quarantined';await assert.rejects(f.migration.abandon());assert.equal(f.deletes.length,0);
 });
+
+
+test('retrying an absent immutable source records an empty deletion map conservatively without restarting the wait',async()=>{
+  const f=await fixture();await f.migration.copy();f.job.state='quarantined';await f.migration.revoke();
+  f.migration.cloudinary.api.delete_resources_by_asset_ids=async()=>({deleted:{}});
+  await f.migration.revoke();
+  const evidence=f.calls.filter(c=>c.p_action==='deleted').at(-1).p_data;
+  assert.equal(evidence.provider_acknowledgement,'already_absent');assert.equal(evidence.invalidation_requested,true);
+  assert.equal(evidence.origin_absent,true);assert.equal(evidence.reset_wait,false);
+});
