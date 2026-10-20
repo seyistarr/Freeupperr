@@ -56,6 +56,7 @@ await assert.rejects(migration.quarantine());
 await migration.copy();await migration.copy();
 assert.equal((await db.query('SELECT visibility,is_hidden FROM privacy_test.posts WHERE id=$1',[post])).rows[0].visibility,'public');
 await migration.quarantine();
+await assert.rejects(db.query(`SELECT privacy_test.claim_protected_cleanup($1,$2,$3,false)`,[owner,post,'40000000-0000-4000-8000-000000000001']),/forward recovery/);
 await db.exec('RESET ROLE; SET ROLE authenticated');await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[owner]);
 assert.equal((await db.query('SELECT id FROM privacy_test.posts')).rows.length,0,'even owner cannot expose quarantined draft');
 await db.exec('RESET ROLE; SET ROLE service_role');

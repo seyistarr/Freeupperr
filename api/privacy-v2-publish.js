@@ -95,6 +95,10 @@ export default async function handler(req, res) {
     }
     if (!['publish', 'cancel'].includes(body.action)) return res.status(400).json({ error: 'Invalid transition' });
     if (body.action === 'cancel') {
+      const { data: draft, error: draftError } = await db.from('posts').select('legacy_migration_state')
+        .eq('id', body.post_id).eq('user_id', owner).maybeSingle();
+      if (draftError || !draft) return res.status(404).json({ error: 'Draft unavailable' });
+      if (draft.legacy_migration_state === 'pending') return res.status(409).json({ error: 'Legacy migration requires forward recovery' });
       cloudinary.config({ cloud_name: 'sxdcqs5x', api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
       const result = await cleanupStagingDraft({ db, cloudinary, ownerId: owner, postId: body.post_id });
       return res.status(result.status === 'published' ? 409 : 200).json(result);

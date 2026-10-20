@@ -116,10 +116,14 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION privacy_test.unsupported_protected_reference(jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION privacy_test.unsupported_protected_reference(jsonb) TO service_role;
-CREATE FUNCTION privacy_test.guard_protected_post_references() RETURNS trigger
+CREATE OR REPLACE FUNCTION privacy_test.guard_protected_post_references() RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE m jsonb; a privacy_test.post_media_assets%ROWTYPE; n integer; raw jsonb=to_jsonb(NEW);
 BEGIN
+  -- Ordinary draft cancellation/cleanup must not detach protected copies after
+  -- quarantine. Such jobs can only recover forward through their own workflow.
+  IF TG_OP='UPDATE' AND OLD.legacy_migration_state='pending' AND NEW.publishing_state='failed' THEN
+    RAISE EXCEPTION 'Legacy migration requires forward recovery'; END IF;
   IF NEW.visibility IS NULL OR NEW.visibility NOT IN ('public','followers','friends','only_me') THEN RAISE EXCEPTION 'Invalid audience'; END IF;
   IF NEW.visibility='public' OR NEW.publishing_state<>'published' THEN RETURN NEW; END IF;
   IF NEW.legacy_migration_state='pending' OR privacy_test.unsupported_protected_reference(raw) OR raw::text ~* '(https?://|blob:|data:|cloudinary\.com|/upload/)' OR
