@@ -19,6 +19,7 @@ const cases = [
   ['suspended author', { authorSuspended: true }, false],
   ['missing privacy state', { authorPrivate: undefined }, false],
   ['unknown audience', { visibility: 'invalid' }, false],
+  ['unknown audience owner', { visibility: 'invalid', viewerId: 'author' }, false],
 ];
 for (const [name, overrides, expected] of cases) {
   test(name, () => assert.equal(canViewProtectedMedia({ ...base, ...overrides }), expected));
