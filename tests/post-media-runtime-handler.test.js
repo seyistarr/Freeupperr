@@ -12,8 +12,16 @@ function response() {
   };
 }
 
+const isolated = {
+  FREEUPPER_PROTECTED_MEDIA_DELIVERY: 'enabled-in-isolated-staging',
+  FREEUPPER_MEDIA_TEST_ENV: 'isolated-freeupper-staging',
+  VERCEL_ENV: 'preview',
+  VERCEL_GIT_COMMIT_REF: 'feature/post-privacy-v2-integration',
+  SUPABASE_URL: 'https://tagkrhvgcbnybiuyvjxt.supabase.co',
+  CLOUDINARY_CLOUD_NAME: 'sxdcqs5x'
+};
 async function request(method, env = {}) {
-  const keys = ['FREEUPPER_PROTECTED_MEDIA_DELIVERY', 'FREEUPPER_MEDIA_TEST_ENV', 'VERCEL_ENV'];
+  const keys = Object.keys(isolated);
   const original = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   try {
     for (const key of keys) {
@@ -47,25 +55,26 @@ test('live handler denies delivery by default', async () => {
 });
 
 test('live handler denies staging flag without isolated environment', async () => {
-  const res = await request('GET', { FREEUPPER_PROTECTED_MEDIA_DELIVERY: 'enabled-in-isolated-staging' });
+  const res = await request('GET', { FREEUPPER_PROTECTED_MEDIA_DELIVERY: isolated.FREEUPPER_PROTECTED_MEDIA_DELIVERY });
   assert.equal(res.statusCode, 503);
 });
 
-test('live handler refuses production even when staging flags are set', async () => {
-  const res = await request('GET', {
-    FREEUPPER_PROTECTED_MEDIA_DELIVERY: 'enabled-in-isolated-staging',
-    FREEUPPER_MEDIA_TEST_ENV: 'isolated-freeupper-staging',
-    VERCEL_ENV: 'production'
+for (const [key, replacement] of [
+  ['VERCEL_ENV', 'production'],
+  ['VERCEL_ENV', 'other'],
+  ['VERCEL_GIT_COMMIT_REF', 'main'],
+  ['SUPABASE_URL', 'https://wrong-project.supabase.co'],
+  ['CLOUDINARY_CLOUD_NAME', 'wrong-cloud'],
+  ['FREEUPPER_MEDIA_TEST_ENV', 'not-isolated']
+]) {
+  test(`live handler refuses invalid ${key}: ${replacement}`, async () => {
+    const res = await request('GET', { ...isolated, [key]: replacement });
+    assert.equal(res.statusCode, 503);
   });
-  assert.equal(res.statusCode, 503);
-});
+}
 
 test('live handler denies missing token in isolated staging', async () => {
-  const res = await request('GET', {
-    FREEUPPER_PROTECTED_MEDIA_DELIVERY: 'enabled-in-isolated-staging',
-    FREEUPPER_MEDIA_TEST_ENV: 'isolated-freeupper-staging',
-    VERCEL_ENV: 'preview'
-  });
+  const res = await request('GET', isolated);
   assert.equal(res.statusCode, 404);
   assert.equal(res.body.error, 'Media unavailable');
 });
