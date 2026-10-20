@@ -33,10 +33,15 @@ DROP POLICY "Posts are viewable by everyone" ON public.posts;
 DROP POLICY "Public read posts" ON public.posts;
 CREATE POLICY "Privacy V2 audience read" ON public.posts
 FOR SELECT TO PUBLIC USING (
-  -- Explicit owner access is needed for Only Me. Ordinary viewers must
-  -- satisfy the audience checks below; hidden/deleted posts stay excluded.
+  -- Explicit owner access is needed for Only Me, but suspended authors
+  -- must not bypass the same suspension check enforced by media delivery.
+  -- Ordinary viewers must satisfy audience checks; hidden/deleted stay excluded.
   is_deleted IS FALSE AND is_hidden IS FALSE AND (
-    (auth.uid() IS NOT NULL AND auth.uid() = user_id)
+    (auth.uid() IS NOT NULL AND auth.uid() = user_id AND EXISTS (
+      SELECT 1 FROM public.profiles owner_profile
+      WHERE owner_profile.id = posts.user_id
+        AND owner_profile.suspended IS FALSE
+    ))
     OR EXISTS (
     SELECT 1 FROM public.profiles a
     WHERE a.id=posts.user_id AND a.suspended IS FALSE AND (
