@@ -7,7 +7,7 @@ BEGIN
    AND tablename='posts' AND cmd='SELECT' AND qual='true') <> 4
  THEN RAISE EXCEPTION 'Unexpected SELECT policy inventory'; END IF;
  IF (SELECT count(*) FROM pg_policies WHERE schemaname='public'
-   AND tablename='posts' AND cmd='ALL') <> 1
+   AND tablename='posts' AND cmd='ALL' AND policyname='Users can manage own posts' AND qual='(auth.uid() = user_id)') <> 1
  THEN RAISE EXCEPTION 'Unexpected ALL policy inventory'; END IF;
  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public'
    AND tablename='posts' AND cmd IN ('ALL','SELECT')
