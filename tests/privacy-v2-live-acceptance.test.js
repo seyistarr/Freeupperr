@@ -23,3 +23,28 @@ test('isolated preview SEO denies before legacy production queries while product
     assert.ok(code.slice(start).indexOf('blockIsolatedStagingSeo(res)')<code.slice(start).indexOf('await fetch(')|| !code.slice(start).includes('await fetch('));
   }
 });
+
+
+test('Cloudinary inventory follows every derived cursor and fails on loops or identity changes',async()=>{
+  const {readCompleteCloudinaryAsset}=await import('../lib/protected-media/cloudinary-asset-inventory.js');
+  const first={asset_id:'a'.repeat(32),public_id:'fixture',type:'upload',resource_type:'image',version:1,derived:[{id:'one'}],next_cursor:'page2'};
+  let calls=0;
+  const cloudinary={api:{async resource(id,options){calls++;if(!options.derived_next_cursor)return first;
+    assert.equal(options.derived_next_cursor,'page2');return {...first,derived:[{id:'two'}],next_cursor:null};},
+    async resource_by_asset_id(){return first;}}};
+  const result=await readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image'});
+  assert.equal(result.derived.length,2);assert.equal(result.next_cursor,undefined);assert.equal(calls,2);
+  cloudinary.api.resource=async()=>first;
+  await assert.rejects(readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image'}),/Incomplete/);
+  cloudinary.api.resource=async(id,options)=>options.derived_next_cursor?{...first,version:2}:first;
+  await assert.rejects(readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image'}),/changed/);
+});
+test('authenticated type tolerates obsolete access_mode but anonymous grants and public delivery still fail',async()=>{
+  const {verifyStagingAsset}=await import('../lib/protected-media/verify-staging-asset.js');
+  const publicId='freeupper-privacy-v2-staging/10000000-0000-4000-8000-000000000001/asset_'+'a'.repeat(32);
+  const asset={public_id:publicId,asset_id:'b'.repeat(32),type:'authenticated',resource_type:'image',access_mode:'public',bytes:69,format:'png'};
+  const args={asset,expectedPublicId:publicId,expectedAssetId:asset.asset_id,expectedResourceType:'image'};
+  assert.equal(verifyStagingAsset(args),true);
+  assert.equal(verifyStagingAsset({...args,asset:{...asset,type:'upload'}}),false);
+  assert.equal(verifyStagingAsset({...args,asset:{...asset,access_control:[{access_type:'anonymous'}]}}),false);
+});
