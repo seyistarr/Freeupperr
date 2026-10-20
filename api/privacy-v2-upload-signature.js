@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     if (error || !data?.user?.id) return res.status(401).json({ error: 'Authentication required' });
 
     const timestamp = Math.floor(Date.now() / 1000);
-    const folder = 'freeupper-privacy-v2-staging';
+    const folder = 'freeupper-privacy-v2-staging/' + data.user.id;
     const public_id = 'asset_' + randomUUID().replace(/-/g, '');
     // All upload parameters that influence asset identity or delivery are signed.
     const params = { timestamp, folder, public_id, type: 'authenticated', overwrite: false };
