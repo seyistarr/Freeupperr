@@ -1396,12 +1396,24 @@
   async function createPost(fields = {}) {
     const user = await requireUser();
 
+    // Central audience contract. Do not trust callers or silently coerce an
+    // unknown audience to Public (which could expose a user's intended post).
+    const audience = fields.visibility ?? 'public';
+    if (!['public', 'followers', 'friends', 'only_me'].includes(audience)) {
+      throw new Error('Invalid post audience');
+    }
+    // Fail closed: legacy public uploads cannot be published as restricted posts.
+    if (audience !== 'public') {
+      throw new Error('Restricted audiences are unavailable until protected media delivery is enabled.');
+    }
+
     const media = safeArray(fields.media);
     const firstMedia = media[0] || null;
     const hashtagNames = safeArray(fields.hashtags && fields.hashtags.length ? fields.hashtags : fields.tags);
 
     const payload = {
       user_id: user.id,
+      visibility: audience,
       title: fields.title || '',
       description: fields.description || '',
       content: fields.content || '',
@@ -1426,11 +1438,6 @@
       text_template_id: fields.textTemplateId || null,
       image_embedding: fields.imageEmbedding || null
     };
-
-    // Fail closed: legacy public uploads cannot be published as restricted posts.
-    if (fields.visibility != null && fields.visibility !== 'public') {
-      throw new Error('Restricted audiences are unavailable until protected media delivery is enabled.');
-    }
 
 
     const { data, error } = await sb
