@@ -25,5 +25,8 @@ ALTER TABLE public.post_media_assets ENABLE ROW LEVEL SECURITY;
 -- No browser role can directly read or mutate the registry. Access must be
 -- mediated by a server endpoint that validates JWT, ownership and audience.
 REVOKE ALL ON public.post_media_assets FROM PUBLIC, anon, authenticated;
+-- Explicit Data API grants required for newly created public tables from 2026-10-30.
+-- Never grant anon/authenticated direct registry access; server checks identity and audience.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.post_media_assets TO service_role;
 
 COMMIT;
