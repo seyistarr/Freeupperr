@@ -249,6 +249,8 @@ BEGIN
     ELSIF p_action='deleted' THEN
       IF j.state<>'revoking' OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(j.plan->'sources') x WHERE x->>'asset_id'=p_data->>'asset_id') THEN
         RAISE EXCEPTION 'Unexpected deletion'; END IF;
+      IF p_data->>'invalidation_requested' IS DISTINCT FROM 'true' OR p_data->>'origin_absent' IS DISTINCT FROM 'true' OR
+        coalesce(p_data->>'provider_acknowledgement','') NOT IN ('deleted','not_found') THEN RAISE EXCEPTION 'Revocation request evidence required'; END IF;
       -- CDN waiting begins after the LAST source deletion, not the first one.
       -- Retries of already absent sources do not endlessly restart the clock;
       -- a source actually deleted again after restoration always does.
@@ -288,7 +290,8 @@ BEGIN
     UPDATE privacy_test.legacy_media_jobs SET updated_at=now(),last_error=NULL WHERE id=j.id;
   END IF;
   INSERT INTO privacy_test.legacy_media_events(job_id,action,details) VALUES(j.id,p_action,
-    jsonb_build_object('slot',p_data->'slot','asset_id',p_data->'asset_id','vantage',p_data->'vantage'));
+    jsonb_build_object('slot',p_data->'slot','asset_id',p_data->'asset_id','vantage',p_data->'vantage','invalidation_requested',p_data->'invalidation_requested',
+      'provider_acknowledgement',p_data->'provider_acknowledgement','origin_absent',p_data->'origin_absent'));
   SELECT * INTO j FROM privacy_test.legacy_media_jobs WHERE id=j.id;
   RETURN to_jsonb(j);
 END $$;
