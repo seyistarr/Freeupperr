@@ -9,7 +9,13 @@ BEGIN
  IF (SELECT count(*) FROM pg_policies WHERE schemaname='public'
    AND tablename='posts' AND cmd='ALL') <> 1
  THEN RAISE EXCEPTION 'Unexpected ALL policy inventory'; END IF;
-END $$;
+ IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public'
+   AND tablename='posts' AND cmd IN ('ALL','SELECT')
+   AND policyname NOT IN ('Users can manage own posts',
+     'Anyone can view posts','Enable read access for all users',
+     'Posts are viewable by everyone','Public read posts'))
+ THEN RAISE EXCEPTION 'Unexpected posts read policy'; END IF;
+END $;
 DROP POLICY "Anyone can view posts" ON public.posts;
 DROP POLICY "Enable read access for all users" ON public.posts;
 DROP POLICY "Posts are viewable by everyone" ON public.posts;
