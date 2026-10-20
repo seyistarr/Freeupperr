@@ -22,7 +22,11 @@ DROP POLICY "Posts are viewable by everyone" ON public.posts;
 DROP POLICY "Public read posts" ON public.posts;
 CREATE POLICY "Privacy V2 audience read" ON public.posts
 FOR SELECT TO PUBLIC USING (
-  is_deleted IS FALSE AND is_hidden IS FALSE AND EXISTS (
+  -- Explicit owner access is needed for Only Me. Ordinary viewers must
+  -- satisfy the audience checks below; hidden/deleted posts stay excluded.
+  is_deleted IS FALSE AND is_hidden IS FALSE AND (
+    (auth.uid() IS NOT NULL AND auth.uid() = user_id)
+    OR EXISTS (
     SELECT 1 FROM public.profiles a
     WHERE a.id=posts.user_id AND a.suspended IS FALSE AND (
       (posts.visibility='public' AND (a.is_private IS FALSE OR EXISTS (
@@ -39,7 +43,11 @@ FOR SELECT TO PUBLIC USING (
           AND f.following_id=auth.uid() AND f.status='active'))
     )
   )
+  )
 );
 COMMIT;
--- Known limitations: owner ALL bypasses SELECT checks; review blocked-user
+-- Known limitations: the existing permissive owner ALL policy can still
+-- grant owner SELECT access to hidden/deleted posts regardless of this read
+-- policy. Split owner write privileges from owner read privileges before
+-- applying if hidden/deleted must also be denied to owners. Review blocked-user
 -- semantics, profile/follows RLS, SECURITY DEFINER RPCs, media URLs and video.
