@@ -3458,7 +3458,7 @@
                     const mediaUrl = typeof post.mediaUrl === 'string'
                         ? post.mediaUrl.trim()
                         : '';
-                    if (mediaType === 'video' && !mediaUrl) {
+                    if (mediaType === 'video' && !mediaUrl && !post.mediaUnavailable) {
                         console.warn('[video] Video post has no mediaUrl:', post.id);
                         return null;
                     }
@@ -3501,6 +3501,7 @@
                     return {
                         id: post.id,
                         src: mediaUrl,
+                        mediaUnavailable: !!post.mediaUnavailable,
                         poster: post.thumbnailUrl || (mediaType === 'image' ? mediaUrl : '') || '',
                         creator: author.name,
                         handle: isOwn ? '@' + (currentUser.username || 'me') : '@' + (profile.username || author.name
@@ -3669,6 +3670,7 @@
         // ─── BUILD MEDIA HTML ─────────────────────────────────────────
 
         function buildMediaHtml(v, i) {
+            if (v.mediaUnavailable) return '<div class="v-media-wrap" role="status">Media unavailable</div>';
             if (v.mediaType === 'video') {
                 const hintHtml = '';
                 if (v.isYouTube && v.ytId) {
