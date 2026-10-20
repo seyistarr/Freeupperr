@@ -1507,8 +1507,15 @@
       .select('id,user_id,visibility,is_deleted').eq('id',postId).single();
     if (readError) throw readError;
     if (!original || original.user_id !== user.id || original.is_deleted) throw new Error('You can only edit your own posts');
-    if (original.visibility !== 'public') throw new Error('Restricted posts cannot be edited here');
-    const { data, error } = await sb.rpc('edit_post', { p_post_id: postId, p_content: text, p_visibility: 'public' });
+    // The production edit_post RPC defaults visibility to Public. Explicitly
+    // preserve the existing audience so editing text never silently exposes it.
+    // Non-public edits remain blocked until the reviewed RPC migration ships.
+    if (original.visibility !== 'public') throw new Error('Restricted posts cannot be edited until the visibility-preserving RPC is deployed');
+    const { data, error } = await sb.rpc('edit_post', {
+      p_post_id: postId,
+      p_content: text,
+      p_visibility: original.visibility
+    });
     if (error) throw error;
     clearFeedContext();
     return data;
