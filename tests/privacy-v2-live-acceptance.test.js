@@ -29,15 +29,17 @@ test('Cloudinary inventory follows every derived cursor and fails on loops or id
   const {readCompleteCloudinaryAsset}=await import('../lib/protected-media/cloudinary-asset-inventory.js');
   const first={asset_id:'a'.repeat(32),public_id:'fixture',type:'upload',resource_type:'image',version:1,derived:[{id:'one'}],next_cursor:'page2'};
   let calls=0;
-  const cloudinary={api:{async resource(id,options){calls++;if(!options.derived_next_cursor)return first;
+  const cloudinary={config:()=>({cloud_name:'sxdcqs5x',api_key:'fake-key',api_secret:'fake-secret'}),api:{async resource(id,options){calls++;if(!options.derived_next_cursor)return first;
     assert.equal(options.derived_next_cursor,'page2');return {...first,derived:[{id:'two'}],next_cursor:null};},
     async resource_by_asset_id(){return first;}}};
-  const result=await readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image'});
+  const fetchImpl=async(url,options)=>{calls++;assert.equal(url.searchParams.get('next_cursor'),'page2');
+    assert.ok(options.headers.Authorization.startsWith('Basic '));return {ok:true,async json(){return {...first,derived:[{id:'two'}],next_cursor:null};}};};
+  const result=await readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image',fetchImpl});
   assert.equal(result.derived.length,2);assert.equal(result.next_cursor,undefined);assert.equal(calls,2);
   cloudinary.api.resource=async()=>first;
-  await assert.rejects(readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image'}),/Incomplete/);
+  await assert.rejects(readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image',fetchImpl:async()=>({ok:true,json:async()=>first})}),/Incomplete/);
   cloudinary.api.resource=async(id,options)=>options.derived_next_cursor?{...first,version:2}:first;
-  await assert.rejects(readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image'}),/changed/);
+  await assert.rejects(readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image',fetchImpl:async()=>({ok:true,json:async()=>({...first,version:2})})}),/changed/);
 });
 test('authenticated type tolerates obsolete access_mode but anonymous grants and public delivery still fail',async()=>{
   const {verifyStagingAsset}=await import('../lib/protected-media/verify-staging-asset.js');
