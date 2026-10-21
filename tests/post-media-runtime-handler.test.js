@@ -18,7 +18,9 @@ const isolated = {
   VERCEL_ENV: 'preview',
   VERCEL_GIT_COMMIT_REF: 'feature/post-privacy-v2-integration',
   SUPABASE_URL: 'https://tagkrhvgcbnybiuyvjxt.supabase.co',
-  CLOUDINARY_CLOUD_NAME: 'sxdcqs5x'
+  CLOUDINARY_CLOUD_NAME: 'sxdcqs5x',
+  SUPABASE_ANON_KEY:'sb_publishable_synthetic',SUPABASE_SERVICE_ROLE_KEY:'synthetic-service',
+  CLOUDINARY_API_KEY:'synthetic-key',CLOUDINARY_API_SECRET:'synthetic-secret'
 };
 async function request(method, env = {}) {
   const keys = Object.keys(isolated);

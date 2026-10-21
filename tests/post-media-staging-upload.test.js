@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
-import { stagingPublishingEnabled, requirePublishingSchema } from '../lib/protected-media/staging-publishing-server.js';
+import { publishingContext, requireRuntimeSchema } from '../lib/protected-media/publishing-runtime.js';
 import { verifyStagingRegistration } from '../lib/protected-media/verify-staging-registration.js';
 const owner = 'b27b41f5-744a-475b-b538-4699ad4fa1d4';
 const other = '8022bdf2-1e05-49e6-87e3-99bb2342007d';
@@ -13,17 +13,20 @@ const staging = {
   VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'feature/post-privacy-v2-integration',
   FREEUPPER_MEDIA_TEST_ENV: 'isolated-freeupper-staging',
   SUPABASE_URL: 'https://tagkrhvgcbnybiuyvjxt.supabase.co', CLOUDINARY_CLOUD_NAME: 'sxdcqs5x',
-  SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'server-only',
+  FREEUPPER_PROTECTED_PUBLISHING: 'enabled-in-isolated-staging',
+  FREEUPPER_PROTECTED_MEDIA_DELIVERY: 'enabled-in-isolated-staging',
+  SUPABASE_ANON_KEY: 'sb_publishable_test', SUPABASE_SERVICE_ROLE_KEY: 'server-only',
   CLOUDINARY_API_KEY: 'api-key', CLOUDINARY_API_SECRET: 'server-secret'
 };
 async function call(endpoint, options = {}) {
   const calls = [], inserted = [], signed = [];
-  const post = { id: postId, user_id: owner, visibility: 'followers', is_deleted: false, is_hidden: false, ...options.post };
+  const post = { id: postId, user_id: owner, visibility: 'followers', is_deleted: false, is_hidden: true, publishing_state: 'draft', ...options.post };
   const asset = { public_id: publicId, asset_id: assetId, type: 'authenticated', resource_type: 'image', bytes: 1234, format: 'jpg', ...options.asset };
   const db = { async rpc(name, args) {
     calls.push(['rpc', name, args]);
     if (options.rpcError && name === 'protected_publish_transition') return { error: { code: 'draft-unavailable' } };
     return { data: name === 'protected_publishing_capabilities' ? { version: 2 } :
+      name === 'protected_first_capabilities' ? {version:1,new_protected_posts:true,legacy_conversion_required:false} :
       args.p_action === 'register' ? { asset_id: postId, status: 'ready' } : { status: 'reserved' } };
   }, from(table) {
     calls.push(['table', table]);
@@ -36,8 +39,8 @@ async function call(endpoint, options = {}) {
   } };
   const context = {
     process: { env: { ...staging, ...options.env } },
-    console: { error() {} }, verifyStagingRegistration, stagingPublishingEnabled, requirePublishingSchema,
-    stagingPublishingDb(env) { if (!stagingPublishingEnabled(env)) throw Error('disabled'); return db; },
+    console: { error() {} }, verifyStagingRegistration, publishingContext, requireRuntimeSchema,
+    publishingDb(env,runtime) { calls.push(['client',env.SUPABASE_URL,env.SUPABASE_SERVICE_ROLE_KEY,{db:{schema:runtime.schema}}]);return db; },
     randomUUID: () => '30000000-0000-4000-8000-000000000003',
     createClient(url, key, config) {
       calls.push(['client', url, key, config]);
@@ -59,7 +62,7 @@ async function call(endpoint, options = {}) {
     status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
   await context.handler({ method: options.method || 'POST',
     headers: options.guest ? {} : { authorization: 'Bearer viewer-token' },
-    body: { ...(endpoint === 'privacy-v2-register-asset' ? { post_id: postId, public_id: publicId, asset_id: assetId, resource_type: 'image' } : {}), ...options.body }
+    body: {post_id:postId,slot:0, ...(endpoint === 'privacy-v2-register-asset' ? { post_id: postId, public_id: publicId, asset_id: assetId, resource_type: 'image' } : {}), ...options.body }
   }, res);
   return { res, calls, inserted, signed };
 }
@@ -91,9 +94,10 @@ test('signature ignores supplied ownership and delivery overrides and signs immu
 test('registration writes only verified server metadata to isolated schema and returns only registry reference', async () => {
   const r = await call('privacy-v2-register-asset', { body: { owner_id: other, delivery_type: 'upload', format: 'html', status: 'revoked' } });
   assert.equal(r.res.statusCode, 201);
-  assert.equal(r.inserted[0].owner_id, owner); assert.equal(r.inserted[0].post_id, postId);
-  assert.equal(r.inserted[0].delivery_type, 'authenticated'); assert.equal(r.inserted[0].format, 'jpg');
-  assert.equal(r.inserted[0].status, 'ready');
+  assert.equal(r.inserted.length,0);
+  const transition=r.calls.find(([kind,,args])=>kind==='rpc'&&args?.p_action==='register');
+  assert.equal(transition[2].p_owner,owner);assert.equal(transition[2].p_post,postId);
+  assert.equal(transition[2].p_data.format,'jpg');assert.equal(transition[2].p_data.resource_type,'image');
   const dbClient = r.calls.find(([name, , key]) => name === 'client' && key === 'server-only');
   assert.equal(dbClient[3].db.schema, 'privacy_test');
   const resource = r.calls.find(([name]) => name === 'resource');
@@ -103,22 +107,18 @@ test('registration writes only verified server metadata to isolated schema and r
 
 test('registration rejects foreign posts, foreign namespaces, and unavailable posts before querying Cloudinary', async () => {
   for (const options of [{ post: { user_id: other } }, { body: { public_id: publicId.replace(owner, other) } },
-    { post: { visibility: 'public' } }, { post: { is_hidden: true } }, { post: { is_deleted: true } }]) {
+    { post: { visibility: 'public' } }, { post: { is_hidden: false } }, { post: { is_deleted: true } }]) {
     const r = await call('privacy-v2-register-asset', options);
     assert.equal(r.res.statusCode, 404); assert.equal(r.inserted.length, 0);
     assert.equal(r.calls.some(([name]) => name === 'resource'), false);
   }
 });
 
-test('registration rejects duplicate claims, lookup errors, and unique conflicts from racing inserts', async () => {
-  for (const existing of [[{ id: 'existing', post_id: postId, owner_id: owner }], [{ id: 'existing', post_id: 'other', owner_id: other }]]) {
-    const r = await call('privacy-v2-register-asset', { existing });
-    assert.equal(r.res.statusCode, 409); assert.equal(r.inserted.length, 0);
-  }
-  const failed = await call('privacy-v2-register-asset', { lookupError: { code: 'unavailable' } });
-  assert.equal(failed.res.statusCode, 409); assert.equal(failed.inserted.length, 0);
-  const race = await call('privacy-v2-register-asset', { insertError: { code: '23505' } });
-  assert.equal(race.res.statusCode, 409); assert.equal(race.res.body.asset_id, undefined);
+test('registration rejects published posts and failed reserved-intent transitions without a direct registry insert', async () => {
+  const published=await call('privacy-v2-register-asset',{post:{publishing_state:'published',is_hidden:false}});
+  assert.equal(published.res.statusCode,404);
+  const failed=await call('privacy-v2-register-asset',{rpcError:true});
+  assert.equal(failed.res.statusCode,409);assert.equal(failed.inserted.length,0);
 });
 
 test('registration refuses public, placeholder, mismatched, and oversized Cloudinary assets', async () => {

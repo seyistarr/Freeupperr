@@ -110,6 +110,7 @@ test('server plans require all media and a poster, and reject legacy public URLs
   assert.throws(() => protectedMediaPlan(['image', 'video']));
   assert.throws(() => protectedDraftFields({ ...fields, mediaUrl: 'https://public.example/photo.jpg' }));
   assert.throws(() => protectedDraftFields({ ...fields, sound_id: 'public-sound' }));
+  assert.throws(() => protectedDraftFields({ ...fields, media: { overlay: 'unsupported' } }));
   assert.equal(stagingPublishingEnabled({ VERCEL_ENV: 'production' }), false);
 });
 
@@ -118,7 +119,7 @@ test('batch boundaries accept twenty images or exactly one 50 MiB video', () => 
   assert.doesNotThrow(() => validateProtectedStagingMediaSet({ ...valid(), files: [{ type: 'video/webm;codecs=vp9,opus', size: 50*1024*1024 }] }));
 });
 
-async function endpoint(action, { production = false, schemaMissing = false } = {}) {
+async function endpoint(action, { production = false, schemaMissing = false, conflictingAudience = false } = {}) {
   const inserts = [], transitions = [], deletions = [];
   const env = { VERCEL_ENV: production ? 'production' : 'preview',
     VERCEL_GIT_COMMIT_REF: 'feature/post-privacy-v2-integration',
@@ -144,8 +145,9 @@ async function endpoint(action, { production = false, schemaMissing = false } = 
   };
   const context = { process: { env }, console: { error() {} },
     stagingPublishingEnabled, protectedMediaPlan, protectedDraftFields, cleanupStagingDraft,
-    stagingPublishingDb() { return db; },
-    async requirePublishingSchema() { if (schemaMissing) throw Error('migration missing'); },
+    publishingContext:()=>stagingPublishingEnabled(env)?{mode:'staging',cloud:'sxdcqs5x',namespace:'freeupper-privacy-v2-staging'}:null,
+    publishingDb() { return db; },
+    async requireRuntimeSchema() { if (schemaMissing) throw Error('migration missing'); },
     randomUUID: () => postId,
     createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'owner' } } }) } }),
     cloudinary: { config() {}, uploader: { async destroy(id, params) { deletions.push({ id, params }); return { result: 'ok' }; } } }
@@ -156,24 +158,27 @@ async function endpoint(action, { production = false, schemaMissing = false } = 
   const res = { statusCode: 200, headers: {}, setHeader(k,v) { this.headers[k]=v; },
     status(code) { this.statusCode=code; return this; }, json(body) { this.body=body; return this; } };
   await context.handler({ method: action === 'capabilities' ? 'GET' : 'POST', headers: { authorization: 'Bearer owner-token' },
-    body: { action, post_id: postId, fields, visibility: 'friends', media_types: ['image'] } }, res);
+    body: { action, post_id: postId, fields, visibility: conflictingAudience ? 'only_me' : fields.visibility, media_types: ['image'] } }, res);
   return { res, inserts, transitions, deletions };
 }
 
 test('publishing endpoint creates hidden owned drafts and does not enable missing schema or production', async () => {
   const created = await endpoint('create');
   assert.equal(created.res.statusCode, 201);
-  assert.equal(created.inserts[0].table, 'posts');
-  assert.equal(created.inserts[0].data.is_hidden, true);
-  assert.equal(created.inserts[0].data.publishing_state, 'draft');
-  assert.equal(created.inserts[0].data.visibility, 'friends');
-  assert.equal(created.inserts[0].data.user_id, 'owner');
-  assert.equal(created.inserts[0].data.media.length, 0);
+  assert.equal(created.transitions[0].name, 'create_protected_draft');
+  assert.equal(created.transitions[0].p_visibility, 'friends');
+  assert.equal(created.transitions[0].p_owner, 'owner');
+  assert.equal(created.inserts.length, 0);
   for (const options of [{ production: true }, { schemaMissing: true }]) {
     const blocked = await endpoint('capabilities', options);
     assert.equal(blocked.res.statusCode, 503); assert.equal(blocked.res.body.enabled, undefined);
     assert.equal(blocked.inserts.length, 0);
   }
+});
+
+test('conflicting requested audiences reject before any draft writes', async () => {
+  const result=await endpoint('create',{conflictingAudience:true});
+  assert.equal(result.res.statusCode,400);assert.equal(result.transitions.length,0);assert.equal(result.inserts.length,0);
 });
 
 test('cancellation fails the draft before deleting authenticated assets and retains replay-window cleanup', async () => {

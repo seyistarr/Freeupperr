@@ -1425,9 +1425,25 @@
   // Separate explicit staging API: the legacy createPost public-only guard stays intact.
   async function createProtectedStagingPost({ fields, files, thumbnailFile, signal } = {}) {
     if (!window.ProtectedPublishing?.enabled) throw new Error('Protected staging publishing unavailable');
-    const accessToken = await window.ProtectedPublishing.accessToken();
-    const { publishProtectedStagingPost } = await import('./lib/protected-media/staging-publishing-client.js');
-    return publishProtectedStagingPost({ fields, files, thumbnailFile, accessToken, signal });
+    const owner = window.PrivacyStaging?.userId, controller = new AbortController();
+    const cancel = () => controller.abort();
+    const sessionChanged = () => {
+      if (!window.ProtectedPublishing.enabled || window.PrivacyStaging?.userId !== owner) cancel();
+    };
+    window.addEventListener('privacy-staging-session', sessionChanged);
+    signal?.addEventListener('abort', cancel, { once: true });
+    if (signal?.aborted) cancel();
+    try {
+      const accessToken = await window.ProtectedPublishing.accessToken();
+      sessionChanged();
+      if (controller.signal.aborted) throw new Error('Publishing cancelled because the account changed');
+      const { publishProtectedStagingPost } = await import('./lib/protected-media/staging-publishing-client.js');
+      return await publishProtectedStagingPost({ fields, files, thumbnailFile, accessToken, signal: controller.signal,
+        cloudName: window.ProtectedPublishing.cloudName });
+    } finally {
+      window.removeEventListener('privacy-staging-session', sessionChanged);
+      signal?.removeEventListener('abort', cancel);
+    }
   }
 
   async function createPost(fields = {}) {

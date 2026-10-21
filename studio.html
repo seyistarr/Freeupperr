@@ -2556,19 +2556,19 @@ async function publishPost() {
     const button = document.getElementById('publishBtn');
     button.disabled = true;
     try {
-      if (!window.ProtectedPublishing?.enabled) throw new Error('Protected staging publishing unavailable');
-      if (!S.media || S.textPost) throw new Error('Protected staging publishing currently requires images or one video');
+      if (!window.ProtectedPublishing?.enabled) throw new Error('Protected publishing unavailable');
+      if (!S.media || S.textPost) throw new Error('Protected publishing currently requires images or one video');
       saveCurrentCarouselText();
       const items = S.mediaFiles?.length ? S.mediaFiles : [S.media];
       if (S.attachedSound || S.textOverlays?.length || items.some(item => item.textOverlays?.length)) {
-        throw new Error('Remove music and text overlays before protected staging publishing; public transformations are unavailable');
+        throw new Error('Remove music and text overlays before protected publishing; public transformations are unavailable');
       }
       await PostsAPI.createProtectedStagingPost({
         fields: { title: caption.slice(0, 100), content: caption, tags: S.tags.slice(), source: 'studio',
           commentsHidden: hideComments, visibility: audience },
         files: items.map(item => item.blob)
       });
-      showToast('Protected post published in isolated staging');
+      showToast((window.ProtectedPublishing?.mode === 'production' ? 'Protected post published' : 'Protected post published in isolated staging'));
     } catch (error) { showToast(error.message || 'Protected publishing failed'); }
     finally { button.disabled = false; }
     return;

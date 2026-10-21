@@ -51,18 +51,19 @@ test('dry-run plans only read metadata/dependencies; source sharing blocks prepa
 async function fixture() {
   const plan=await buildLegacyPlan({post:post(),cloudinary:{api:{async resource(){return source();}}},db:{async rpc(name){return {data:name==='verified_legacy_source'?true:0};}}});
   const job={id:'30000000-0000-4000-8000-000000000001',state:'copying',original_row:post(),plan,copies:{},deletions:{}};
-  const calls=[],uploads=[],deletes=[];let remoteCopy=null,publicPresent=true;
-  const db={from(table){assert.equal(table,'legacy_media_events');return {async insert(row){assert.equal(row.action,'bulk_invalidation_capability');return {};}};},async rpc(name,args){if(name==='verified_legacy_source')return {data:true};calls.push(args);assert.equal(name,'legacy_media_transition');
+  const calls=[],uploads=[],deletes=[];let remoteCopy=null,publicPresent=true,evidence=null;
+  const db={from(table){assert.equal(table,'legacy_media_events');return {async insert(row){assert.equal(row.action,'bulk_invalidation_capability');return {};}};},async rpc(name,args){if(name==='verified_legacy_source')return {data:true};if(name==='legacy_deletion_authorized')return {data:true};if(name==='legacy_replacement_evidence'){if(args.p_digest)evidence=structuredClone(args.p_digest);return {data:evidence};}calls.push(args);assert.equal(name,'legacy_media_transition');
     if(args.p_action==='copy')job.copies[String(args.p_data.slot)]={...args.p_data.copy,registry_id:id};
     if(args.p_action==='revoking')job.state='revoking';
     return {data:structuredClone(job)};}};
-  const cloudinary={api:{
+  const cloudinary={utils:{private_download_url(_id,_format,options){return 'https://api.cloudinary.com/v1_1/sxdcqs5x/image/download?expires_at='+options.expires_at+'&signature=synthetic';}},api:{
     async resource(pid){if(pid==='legacy/photo'){if(!publicPresent)throw {http_code:404};return source();}if(remoteCopy)return remoteCopy;throw {http_code:404};},
     async resource_by_asset_id(asset){if(asset==='a'.repeat(32)){if(!publicPresent)throw {http_code:404};return source();}if(remoteCopy?.asset_id===asset)return remoteCopy;throw {http_code:404};},
     async delete_resources_by_asset_ids(ids,options){deletes.push({ids,options});publicPresent=false;return {deleted:{[ids[0]]:'deleted'}};}
-  },uploader:{async upload(u,options){uploads.push({u,options});remoteCopy={asset_id:'b'.repeat(32),public_id:options.public_id,resource_type:'image',type:'authenticated',format:'jpg',bytes:1000,context:{custom:options.context}};return remoteCopy;}}};
-  const migration=new LegacyMediaMigration({db,cloudinary,ownerId:owner,postId:id,env});
-  return {job,calls,uploads,deletes,migration,setCopy(value){remoteCopy=value;}};
+  },uploader:{async upload(u,options){uploads.push({u,options});remoteCopy={asset_id:'b'.repeat(32),public_id:options.public_id,resource_type:'image',type:'authenticated',format:'jpg',bytes:1000,version:456,context:{custom:options.context}};return remoteCopy;}}};
+  const mediaFetch=async()=>new Response(new Uint8Array(1000),{headers:{'content-type':'image/png'}});
+  const migration=new LegacyMediaMigration({db,cloudinary,ownerId:owner,postId:id,env,fetchImpl:mediaFetch});
+  return {job,calls,uploads,deletes,migration,mediaFetch,setCopy(value){remoteCopy=value;}};
 }
 test('retry recovers a lost registration without reuploading, with authenticated ownership-bound copies',async()=>{
   const f=await fixture();await f.migration.copy();await f.migration.copy();
@@ -83,7 +84,7 @@ test('old URL 200/redirects/network errors never count as verified, and waiting 
   // Sources are still present, so verification must fail even if HTTP probes would return 404.
   await assert.rejects(f.migration.observe('region_a'));assert.equal(requests,0);
   await f.migration.copy().catch(()=>{}); // Copy phase itself is frozen.
-  f.job.state='copying';await f.migration.copy();f.job.state='quarantined';await f.migration.revoke();
+  f.job.state='copying';f.migration.fetchImpl=f.mediaFetch;await f.migration.copy();f.job.state='quarantined';await f.migration.revoke();
   f.job.revocation_started_at=new Date(Date.now()-REVOCATION_WAIT_MS-1000).toISOString();
   for(const status of [200,206,301,403,500]) { f.migration.fetchImpl=async()=>({status});await assert.rejects(f.migration.observe('region_a')); }
   f.migration.fetchImpl=async(url,options)=>{assert.equal(options.redirect,'manual');assert.equal(options.headers,undefined);return {status:404};};
@@ -110,8 +111,8 @@ test('reviewed provenance attestation is read-only by default and binds immutabl
 test('staging visibility endpoint binds to verified JWT owner and never downgrades or bypasses database refusal',async()=>{
   for(const visibility of ['friends','public','unknown']) {
     let calls=0;
-    const context={process:{env},console:{error(){}},stagingPublishingEnabled:()=>true,requirePublishingSchema:async()=>{},
-      stagingPublishingDb:()=>({async rpc(name,args){calls++;assert.equal(name,'set_protected_visibility');assert.equal(args.p_owner,owner);
+    const context={process:{env},console:{error(){}},publishingContext:()=>({mode:'staging'}),requireRuntimeSchema:async()=>{},
+      publishingDb:()=>({async rpc(name,args){calls++;assert.equal(name,'set_new_protected_visibility');assert.equal(args.p_owner,owner);
         assert.equal(args.p_post,id);assert.equal(args.p_visibility,'friends');return {error:{message:'private upstream detail'}};}}),
       createClient:()=>({auth:{async getUser(token){assert.equal(token,'owner-token');return {data:{user:{id:owner}}};}}})};
     const code=readFileSync(new URL('../api/privacy-v2-publish.js',import.meta.url),'utf8')

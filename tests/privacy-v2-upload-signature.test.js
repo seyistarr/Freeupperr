@@ -8,7 +8,10 @@ const staging = {
   FREEUPPER_MEDIA_TEST_ENV: 'isolated-freeupper-staging',
   SUPABASE_URL: 'https://tagkrhvgcbnybiuyvjxt.supabase.co',
   CLOUDINARY_CLOUD_NAME: 'sxdcqs5x',
-  SUPABASE_ANON_KEY: 'test-anon-key',
+  FREEUPPER_PROTECTED_PUBLISHING: 'enabled-in-isolated-staging',
+  FREEUPPER_PROTECTED_MEDIA_DELIVERY: 'enabled-in-isolated-staging',
+  SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-role',
+  SUPABASE_ANON_KEY: 'sb_publishable_test',
   CLOUDINARY_API_KEY: 'test-api-key',
   CLOUDINARY_API_SECRET: 'test-secret'
 };

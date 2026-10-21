@@ -12,7 +12,7 @@ function worker({ cached, offline = false } = {}) {
     caches: {
       match: async request => { calls.push(['match', request]); return cached; },
       open: async () => cache,
-      keys: async () => ['freeupper-pwa-v7', 'freeupper-pwa-v8', 'freeupper-pwa-v9', 'freeupper-pwa-v10'],
+      keys: async () => ['freeupper-pwa-v7', 'freeupper-pwa-v8', 'freeupper-pwa-v9', 'freeupper-pwa-v10', 'freeupper-pwa-v11'],
       delete: async name => calls.push(['delete', name])
     },
     fetch: async request => { calls.push(['fetch', request]); if (offline) throw Error('offline'); return response; },
@@ -60,7 +60,7 @@ test('safe static network responses are still cached', async () => {
 test('activation removes prior caches that could contain API responses', async () => {
   const w = worker(); let done;
   w.events.activate({ waitUntil(promise) { done = promise; } }); await done;
-  assert.equal(w.calls.filter(([action]) => action === 'delete').length, 3);
+  assert.equal(w.calls.filter(([action]) => action === 'delete').length, 4);
   assert.equal(w.calls.find(([action]) => action === 'delete')[1], 'freeupper-pwa-v7');
   assert.ok(w.calls.some(([action]) => action === 'claim'));
 });

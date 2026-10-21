@@ -46,9 +46,9 @@ form.addEventListener('submit',async event=>{
     const changed=()=>{controllerChanged=true;};navigator.serviceWorker.addEventListener('controllerchange',changed);
     try {
       const registration=await navigator.serviceWorker.register('/service-worker.js',{updateViaCache:'none'});await registration.update();
-      await until(async()=>registration.active?.state==='activated'&&(await caches.keys()).includes('freeupper-pwa-v10')&&!(await caches.keys()).some(key=>/^freeupper-pwa-v[1-9]$/.test(key)));
+      await until(async()=>registration.active?.state==='activated'&&(await caches.keys()).includes('freeupper-pwa-v11')&&!(await caches.keys()).some(key=>/^freeupper-pwa-v[0-9]+$/.test(key)&&key!=='freeupper-pwa-v11'));
       const keys=await caches.keys();
-      const evidence=classifyWorkerUpgrade({hadActiveWorker:!!oldWorker,workerReplaced:!!oldWorker&&oldWorker!==registration.active,controllerChanged,newCachePresent:keys.includes('freeupper-pwa-v10'),obsoleteCachesRemaining:keys.some(key=>/^freeupper-pwa-v[1-9]$/.test(key))});
+      const evidence=classifyWorkerUpgrade({hadActiveWorker:!!oldWorker,workerReplaced:!!oldWorker&&oldWorker!==registration.active,controllerChanged,newCachePresent:keys.includes('freeupper-pwa-v11'),obsoleteCachesRemaining:keys.some(key=>/^freeupper-pwa-v[0-9]+$/.test(key)&&key!=='freeupper-pwa-v11')});
       const leaked=(await Promise.all(keys.map(async key=>(await (await caches.open(key)).keys()).some(r=>new URL(r.url).pathname.startsWith('/api/'))))).some(Boolean);
       if(leaked)throw Error('API present in CacheStorage');
       record('service worker',{passed:evidence.upgrade_verified,...evidence,note:evidence.upgrade_verified?'Actual active worker replacement observed.':'Upgrade remains unverified: requires a previously active older worker and controller change; old cache names alone are insufficient.'});

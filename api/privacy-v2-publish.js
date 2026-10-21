@@ -3,8 +3,9 @@ import { readStagingPosts } from '../lib/protected-media/staging-reader-server.j
 import { cleanupStagingDraft, sweepStagingDrafts, validCleanupWorker } from '../lib/protected-media/staging-cleanup-server.js';
 import { randomUUID } from 'node:crypto';
 import { v2 as cloudinary } from 'cloudinary';
-import { stagingPublishingEnabled, stagingPublishingDb, requirePublishingSchema,
+import { stagingPublishingEnabled, requirePublishingSchema,
   protectedMediaPlan, protectedDraftFields, isolatedStagingEnvironment } from '../lib/protected-media/staging-publishing-server.js';
+import { publishingContext, publishingDb, requireRuntimeSchema } from '../lib/protected-media/publishing-runtime.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function handler(req, res) {
@@ -36,21 +37,27 @@ export default async function handler(req, res) {
     const ready = database && cloud && configuration;
     return res.status(ready ? 200 : 503).json({ ready, database, cloud, configuration });
   }
-  if (!stagingPublishingEnabled(env)) return res.status(503).json({ error: 'Protected publishing unavailable' });
+  const maintenance = req.method === 'POST' &&
+    (req.query?.worker === 'cleanup' || ['status','cancel'].includes(req.body?.action));
+  const runtime = publishingContext(env, { deliveryOnly: maintenance });
+  if (!runtime) return res.status(503).json({ error: 'Protected publishing unavailable' });
   try {
-    const db = stagingPublishingDb(env);
-    await requirePublishingSchema(db);
+    const db = publishingDb(env, runtime);
+    await requireRuntimeSchema(db, runtime, { deliveryOnly: maintenance });
     if (req.method === 'GET' && !req.query?.reader) {
       // Public configuration only; never return a service-role key or Cloudinary secret.
-      return res.status(200).json({ enabled: true, supabaseUrl: env.SUPABASE_URL, anonKey: env.SUPABASE_ANON_KEY });
+      return res.status(200).json({ enabled: true, mode: runtime.mode, cloudName: runtime.cloud,
+        supabaseUrl: env.SUPABASE_URL, anonKey: env.SUPABASE_ANON_KEY,
+        legacyConversionEnabled: runtime.mode === 'staging' && env.FREEUPPER_LEGACY_MIGRATION === 'enabled-in-isolated-staging' });
     }
     const token = /^Bearer ([^\s]+)$/i.exec(req.headers?.authorization || '')?.[1];
     if (!token) return res.status(401).json({ error: 'Authentication required' });
     if (req.method === 'POST' && req.query?.worker === 'acceptance') {
+      if (runtime.mode !== 'staging') return res.status(404).json({ error: 'Acceptance disabled' });
       if (!validCleanupWorker(req.headers?.authorization, env.FREEUPPER_CLEANUP_TOKEN)) return res.status(401).json({ error: 'Authentication required' });
       if (env.FREEUPPER_STAGING_ACCEPTANCE !== 'synthetic-fixtures-only') return res.status(404).json({ error: 'Acceptance disabled' });
       const { runStagingAcceptance, AcceptanceFailure } = await import('../lib/protected-media/staging-live-acceptance.js');
-      cloudinary.config({ cloud_name: 'sxdcqs5x', api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
+      cloudinary.config({ cloud_name: runtime.cloud, api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
       try { return res.status(200).json(await runStagingAcceptance({ phase: req.body?.phase, env, db, cloudinary })); }
       catch (error) {
         return res.status(503).json({ error: 'Synthetic staging acceptance incomplete',
@@ -66,8 +73,8 @@ export default async function handler(req, res) {
       if (!validCleanupWorker(req.headers?.authorization, env.FREEUPPER_CLEANUP_TOKEN)) {
         return res.status(401).json({ error: 'Authentication required' });
       }
-      cloudinary.config({ cloud_name: 'sxdcqs5x', api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
-      return res.status(200).json(await sweepStagingDrafts({ db, cloudinary }));
+      cloudinary.config({ cloud_name: runtime.cloud, api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
+      return res.status(200).json(await sweepStagingDrafts({ db, cloudinary, namespace: runtime.namespace }));
     }
     const auth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: identity, error: identityError } = await auth.auth.getUser(token);
@@ -82,30 +89,35 @@ export default async function handler(req, res) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return res.status(400).json({ error: 'Invalid request' });
     if (body.action === 'create') {
       if (!['followers', 'friends', 'only_me'].includes(body.visibility)) return res.status(400).json({ error: 'Restricted audience required' });
+      if (body.fields?.visibility != null && body.fields.visibility !== body.visibility) {
+        return res.status(400).json({ error: 'Conflicting requested audiences' });
+      }
       let plan, fields;
       try { plan = protectedMediaPlan(body.media_types); fields = protectedDraftFields(body.fields); }
       catch (_) { return res.status(400).json({ error: 'Invalid protected draft' }); }
       const { data: profile, error: profileError } = await db.from('profiles').select('id').eq('id', owner).eq('suspended', false).maybeSingle();
-      if (profileError || !profile) return res.status(403).json({ error: 'Staging owner unavailable' });
+      if (profileError || !profile) return res.status(403).json({ error: 'Owner unavailable' });
       const id = randomUUID();
-      const { error } = await db.from('posts').insert({ id, user_id: owner, visibility: body.visibility,
-        is_hidden: true, is_deleted: false, publishing_state: 'draft', media: [], media_plan: plan,
-        publish_payload: fields, draft_expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString() });
+      const { error } = await db.rpc('create_protected_draft', { p_owner: owner, p_post: id,
+        p_visibility: body.visibility, p_plan: plan, p_fields: fields });
       if (error) return res.status(409).json({ error: 'Draft creation unavailable' });
       return res.status(201).json({ id, status: 'draft' });
     }
     if (typeof body.post_id !== 'string' || !UUID.test(body.post_id)) return res.status(400).json({ error: 'Invalid draft' });
-    if (['legacy-status', 'legacy-consent', 'legacy-quarantine-consent'].includes(body.action)) {
+    if (['legacy-status', 'legacy-consent', 'legacy-quarantine-consent', 'legacy-delete-consent'].includes(body.action)) {
+      if (runtime.mode !== 'staging' || env.FREEUPPER_LEGACY_MIGRATION !== 'enabled-in-isolated-staging') {
+        return res.status(503).json({ error: 'Legacy conversion is disabled; new protected posts remain available' });
+      }
       const { legacyOwnerRequest } = await import('../lib/protected-media/legacy-consent-server.js');
       const result = await legacyOwnerRequest({ db, owner, body });
       return res.status(result.status).json(result.data);
     }
     if (body.action === 'visibility') {
       if (!['followers', 'friends', 'only_me'].includes(body.visibility)) return res.status(400).json({ error: 'Explicit restricted audience required' });
-      const { data, error } = await db.rpc('set_protected_visibility', {
+      const { data, error } = await db.rpc('set_new_protected_visibility', {
         p_owner: owner, p_post: body.post_id, p_visibility: body.visibility
       });
-      if (error) return res.status(409).json({ error: 'Protected references and verified legacy revocation required' });
+      if (error) return res.status(409).json({ error: 'Only posts protected from creation may use this audience transition; legacy posts require separate conversion' });
       return res.status(200).json(data);
     }
     if (body.action === 'status') {
@@ -116,12 +128,10 @@ export default async function handler(req, res) {
     }
     if (!['publish', 'cancel'].includes(body.action)) return res.status(400).json({ error: 'Invalid transition' });
     if (body.action === 'cancel') {
-      const { data: draft, error: draftError } = await db.from('posts').select('legacy_migration_state')
-        .eq('id', body.post_id).eq('user_id', owner).maybeSingle();
-      if (draftError || !draft) return res.status(404).json({ error: 'Draft unavailable' });
-      if (draft.legacy_migration_state === 'pending') return res.status(409).json({ error: 'Legacy migration requires forward recovery' });
-      cloudinary.config({ cloud_name: 'sxdcqs5x', api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
-      const result = await cleanupStagingDraft({ db, cloudinary, ownerId: owner, postId: body.post_id });
+      // The database cleanup transition/legacy guard serializes cancellation.
+      // New publishing does not require legacy tables or columns to exist.
+      cloudinary.config({ cloud_name: runtime.cloud, api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
+      const result = await cleanupStagingDraft({ db, cloudinary, ownerId: owner, postId: body.post_id, namespace: runtime.namespace });
       return res.status(result.status === 'published' ? 409 : 200).json(result);
     }
     const { data, error } = await db.rpc('protected_publish_transition', {

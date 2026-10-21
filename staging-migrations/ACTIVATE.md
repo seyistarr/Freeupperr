@@ -2,6 +2,16 @@ Privacy V2 isolated staging activation
 
 Target only Supabase `tagkrhvgcbnybiuyvjxt` (Freeupperr Staging), schema `privacy_test`, and Cloudinary `sxdcqs5x`. Never run these commands against production. The feature branch remains `feature/post-privacy-v2-integration`; PR #9 stays draft.
 
+October 21 protected-first follow-up: `privacy-v2-protected-first.sql` must follow protected-publishing/readers-cleanup before deploying the new code. It has **not** been applied by this follow-up. The separate legacy `privacy-v2-replacement-deletion-consent.sql` (after owner-consent/independent-revocation) is also prepared but unexecuted. Existing migrations below retain their historical applied status. Do not rerun old migrations or the completed live suite. New publishing needs the first follow-up only; legacy processing additionally needs the second. See [release separation and deletion requirements](../docs/privacy-v2/legacy-media-rollout.md).
+
+For the existing, verified staging connection only, apply the pending files separately after their prerequisites; these commands were **not executed** in this follow-up:
+
+```sh
+PGOPTIONS='-c freeupper.privacy_v2_project_ref=tagkrhvgcbnybiuyvjxt' psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f staging-migrations/privacy-v2-protected-first.sql
+# Optional legacy track only, after owner-consent + independent-revocation:
+PGOPTIONS='-c freeupper.privacy_v2_project_ref=tagkrhvgcbnybiuyvjxt' psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f staging-migrations/privacy-v2-replacement-deletion-consent.sql
+```
+
 Database migrations, in order (already applied through the staging Supabase connector in this change):
 
 ```sh

@@ -3,22 +3,19 @@ import { authorizeProtectedMedia } from '../lib/protected-media/post-media-acces
 import { loadCloudinarySdk } from '../lib/protected-media/post-media-cloudinary.js';
 import { createExpiringDownloadUrl } from '../lib/protected-media/post-media-download-url.js';
 import { proxyProtectedMedia } from '../lib/protected-media/post-media-proxy.js';
+import { publishingContext } from '../lib/protected-media/publishing-runtime.js';
 
-// Disabled by default and strictly restricted to the isolated Privacy V2 preview branch.
+// Disabled by default. Production requires pinned deployment approval and DB release flags.
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   res.setHeader('Vary', 'Authorization');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (process.env.FREEUPPER_PROTECTED_MEDIA_DELIVERY !== 'enabled-in-isolated-staging' ||
-      !['preview', 'development'].includes(process.env.VERCEL_ENV) ||
-      process.env.VERCEL_GIT_COMMIT_REF !== 'feature/post-privacy-v2-integration' ||
-      process.env.FREEUPPER_MEDIA_TEST_ENV !== 'isolated-freeupper-staging' ||
-      process.env.SUPABASE_URL !== 'https://tagkrhvgcbnybiuyvjxt.supabase.co' ||
-      process.env.CLOUDINARY_CLOUD_NAME !== 'sxdcqs5x') {
+  if (!publishingContext(process.env, { deliveryOnly: true })) {
     return res.status(503).json({ error: 'Protected media delivery is not enabled' });
   }
   const assetId = typeof req.query?.asset_id === 'string' ? req.query.asset_id : '';

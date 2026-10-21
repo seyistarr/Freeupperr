@@ -69,7 +69,7 @@ test('readiness checks only staging services and returns booleans without secret
     let calls=0;
     const context={process:{env:{...env,VERCEL_ENV:production?'production':'preview'}},console:{error(){}},
       isolatedStagingEnvironment,stagingPublishingEnabled,requirePublishingSchema,
-      createClient(url){calls++;assert.equal(url,env.SUPABASE_URL);return {async rpc(){return {data:{version:2}};}};},
+      createClient(url){calls++;assert.equal(url,env.SUPABASE_URL);return {async rpc(name){return {data:name==='protected_publishing_capabilities'?{version:2}:{version:1,new_protected_posts:true,legacy_conversion_required:false}};}};},
       cloudinary:{config(options){assert.equal(options.cloud_name,'sxdcqs5x');},api:{async ping(){calls++;return {status:'ok'};}}}
     };
     const source=readFileSync(new URL('../api/privacy-v2-publish.js',import.meta.url),'utf8')
