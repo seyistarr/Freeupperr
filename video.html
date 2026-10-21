@@ -5409,7 +5409,20 @@
             const thumb = document.getElementById('sharePreviewThumb');
             const cap = document.getElementById('sharePreviewCaption');
             const handle = document.getElementById('sharePreviewHandle');
-            if (thumb) thumb.src = v.poster || v.thumbnailUrl || v.thumbnail_url || (v.mediaType === 'image' ? v.src : '') || '/freeupper.png';
+            if (thumb) {
+                const mediaType = v.mediaType || v.media_type || 'text';
+                const directImage = v.poster || v.thumbnailUrl || v.thumbnail_url ||
+                    (mediaType === 'image' ? v.src : '');
+                const previewCode = v.short_code || v.shortCode || v.share_code || v.shareCode;
+                const textPreview = mediaType === 'text' && previewCode
+                    ? '/api/post-text-og?style=video&code=' + encodeURIComponent(previewCode)
+                    : '';
+                thumb.src = directImage || textPreview || '/freeupper.png';
+                thumb.onerror = () => {
+                    thumb.onerror = null;
+                    thumb.src = '/freeupper.png';
+                };
+            }
             if (cap) cap.textContent = (v.caption || v.textBody || '').split('\n')[0].slice(0, 60);
             if (handle) handle.textContent = v.handle || '';
             const delRow = document.getElementById('deletePostRow');
