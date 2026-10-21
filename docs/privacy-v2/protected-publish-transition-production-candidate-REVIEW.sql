@@ -109,68 +109,6 @@ BEGIN
     RETURN jsonb_build_object('id',p_post,'visibility',p.visibility,'media',refs,'status','published');
   END IF;
   RAISE EXCEPTION 'Unknown publishing transition';
-END $$;)
-  THEN RAISE EXCEPTION 'Invalid media slot'; END IF;
-  IF p_action IN ('reserve','register') THEN
-    SELECT value INTO plan FROM jsonb_array_elements(p.media_plan) WHERE (value->>'slot')::int=(p_data->>'slot')::int;
-    IF plan IS NULL THEN RAISE EXCEPTION 'Unexpected media slot'; END IF;
-  END IF;
-  IF p_action='reserve' THEN
-    IF p_data->>'public_id' !~ ('^freeupper-protected-v2/' || p_owner::text || '/asset_[a-f0-9]{32}$') THEN
-      RAISE EXCEPTION 'Invalid asset namespace'; END IF;
-    -- The post lock serializes retries. Reissue only the same persisted ID;
-    -- never allocate an orphan if the first signature response was lost.
-    SELECT * INTO ticket FROM public.post_upload_intents WHERE post_id=p_post AND slot=(plan->>'slot')::int;
-    IF FOUND THEN
-      IF ticket.owner_id<>p_owner OR ticket.resource_type<>plan->>'type' OR ticket.state<>'reserved' OR
-        ticket.cloudinary_public_id !~ ('^freeupper-protected-v2/' || p_owner::text || '/asset_[a-f0-9]{32}$')
-      THEN RAISE EXCEPTION 'Upload intent unavailable'; END IF;
-      RETURN jsonb_build_object('status','reserved','public_id',ticket.cloudinary_public_id,
-        'timestamp',floor(extract(epoch FROM ticket.created_at))::bigint);
-    END IF;
-    INSERT INTO public.post_upload_intents(post_id,owner_id,slot,cloudinary_public_id,resource_type)
-      VALUES(p_post,p_owner,(plan->>'slot')::int,p_data->>'public_id',plan->>'type') RETURNING * INTO ticket;
-    RETURN jsonb_build_object('status','reserved','public_id',ticket.cloudinary_public_id,
-      'timestamp',floor(extract(epoch FROM ticket.created_at))::bigint);
-  ELSIF p_action='register' THEN
-    SELECT * INTO ticket FROM public.post_upload_intents WHERE post_id=p_post AND slot=(plan->>'slot')::int;
-    IF NOT FOUND OR ticket.owner_id<>p_owner OR ticket.cloudinary_public_id<>p_data->>'public_id' OR
-      ticket.resource_type<>p_data->>'resource_type' THEN RAISE EXCEPTION 'Upload intent mismatch'; END IF;
-    IF ticket.state='registered' AND EXISTS (SELECT 1 FROM public.post_media_assets a
-      WHERE a.id=ticket.asset_id AND a.cloudinary_asset_id=p_data->>'cloudinary_asset_id' AND a.status='ready') THEN
-      RETURN jsonb_build_object('asset_id',ticket.asset_id,'status','ready');
-    END IF;
-    IF ticket.state<>'reserved' OR p_data->>'cloudinary_asset_id' !~ '^[a-f0-9]{32}$' OR
-      p_data->>'format' !~ '^[a-z0-9]{2,8}$' THEN RAISE EXCEPTION 'Invalid registration'; END IF;
-    IF EXISTS (SELECT 1 FROM public.post_media_assets WHERE cloudinary_asset_id=p_data->>'cloudinary_asset_id') THEN
-      RAISE EXCEPTION 'Asset already registered'; END IF;
-    registry_id=gen_random_uuid();
-    INSERT INTO public.post_media_assets(id,post_id,owner_id,status,delivery_type,cloudinary_public_id,
-      cloudinary_asset_id,resource_type,format) VALUES(registry_id,p_post,p_owner,'ready','authenticated',
-      ticket.cloudinary_public_id,p_data->>'cloudinary_asset_id',ticket.resource_type,p_data->>'format');
-    UPDATE public.post_upload_intents SET asset_id=registry_id,state='registered' WHERE id=ticket.id;
-    RETURN jsonb_build_object('asset_id',registry_id,'status','ready');
-  ELSIF p_action='publish' THEN
-    IF NOT privacy_v2_private.valid_protected_media_plan(p.media_plan) OR EXISTS (
-      SELECT 1 FROM jsonb_array_elements(p.media_plan) e WHERE NOT EXISTS (
-        SELECT 1 FROM public.post_upload_intents i JOIN public.post_media_assets a ON a.id=i.asset_id
-        WHERE i.post_id=p_post AND i.slot=(e->>'slot')::int AND i.owner_id=p_owner AND i.state='registered'
-          AND i.resource_type=e->>'type' AND a.post_id=p_post AND a.owner_id=p_owner AND a.status='ready'
-          AND a.delivery_type='authenticated'
-      )
-    ) THEN RAISE EXCEPTION 'Incomplete protected media'; END IF;
-    SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object('type',e->>'type','asset_id',i.asset_id,
-      'thumbnail_asset_id',t.asset_id)) ORDER BY (e->>'slot')::int) INTO refs
-      FROM jsonb_array_elements(p.media_plan) e
-      JOIN public.post_upload_intents i ON i.post_id=p_post AND i.slot=(e->>'slot')::int
-      LEFT JOIN public.post_upload_intents t ON t.post_id=p_post AND t.slot=20 AND e->>'type'='video'
-      WHERE e->>'role'='media';
-    IF refs IS NULL THEN RAISE EXCEPTION 'Missing media'; END IF;
-    UPDATE public.posts SET media=refs,publishing_state='published',is_hidden=false WHERE id=p_post;
-    UPDATE public.post_upload_intents SET cleanup_pending=false WHERE post_id=p_post;
-    RETURN jsonb_build_object('id',p_post,'visibility',p.visibility,'media',refs,'status','published');
-  END IF;
-  RAISE EXCEPTION 'Unknown publishing transition';
 END $$;
 REVOKE ALL ON FUNCTION public.protected_publish_transition(uuid,uuid,text,jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.protected_publish_transition(uuid,uuid,text,jsonb) TO service_role;
