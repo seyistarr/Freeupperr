@@ -1,4 +1,4 @@
-const CACHE_NAME = 'freeupper-pwa-v8';
+const CACHE_NAME = 'freeupper-pwa-v9';
 
 const URLS_TO_CACHE = [
   './',
@@ -20,7 +20,7 @@ const URLS_TO_CACHE = [
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(URLS_TO_CACHE))
+    caches.open(CACHE_NAME).then(cache => cache.addAll(URLS_TO_CACHE)).then(() => self.skipWaiting())
   );
 });
 
@@ -28,7 +28,7 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(
       keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-    ))
+    )).then(() => self.clients.claim())
   );
 });
 
@@ -48,7 +48,7 @@ self.addEventListener('fetch', event => {
 
 
   event.respondWith(
-    caches.match(event.request).then(cached => {
+    caches.open(CACHE_NAME).then(cache => cache.match(event.request)).then(cached => {
       if (cached) return cached;
 
       return fetch(event.request).then(response => {
@@ -69,7 +69,7 @@ self.addEventListener('fetch', event => {
       }).catch(async () => {
         // Never return index.html as JavaScript or CSS.
         if (event.request.mode === 'navigate') {
-          return (await caches.match('./index.html')) || Response.error();
+          return (await (await caches.open(CACHE_NAME)).match('./index.html')) || Response.error();
         }
         return Response.error();
       });

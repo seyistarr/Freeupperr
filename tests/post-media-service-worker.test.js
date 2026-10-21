@@ -6,13 +6,13 @@ const source = readFileSync(new URL('../service-worker.js', import.meta.url), 'u
 function worker({ cached, offline = false } = {}) {
   const events = {}, calls = [], writes = [];
   const response = { status: 200, type: 'basic', clone() { return this; } };
-  const cache = { put: async (...args) => writes.push(args), addAll: async paths => calls.push(['precache', paths]) };
+  const cache = { match: async request => { calls.push(['match', request]); return cached; }, put: async (...args) => writes.push(args), addAll: async paths => calls.push(['precache', paths]) };
   vm.runInNewContext(source, {
-    self: { location: { origin: 'https://freeupper.test' }, addEventListener: (name, cb) => { events[name] = cb; } }, URL,
+    self: { skipWaiting: async () => calls.push(['skipWaiting']), clients: { claim: async () => calls.push(['claim']) }, location: { origin: 'https://freeupper.test' }, addEventListener: (name, cb) => { events[name] = cb; } }, URL,
     caches: {
       match: async request => { calls.push(['match', request]); return cached; },
       open: async () => cache,
-      keys: async () => ['freeupper-pwa-v7', 'freeupper-pwa-v8'],
+      keys: async () => ['freeupper-pwa-v7', 'freeupper-pwa-v8', 'freeupper-pwa-v9'],
       delete: async name => calls.push(['delete', name])
     },
     fetch: async request => { calls.push(['fetch', request]); if (offline) throw Error('offline'); return response; },
@@ -60,8 +60,9 @@ test('safe static network responses are still cached', async () => {
 test('activation removes prior caches that could contain API responses', async () => {
   const w = worker(); let done;
   w.events.activate({ waitUntil(promise) { done = promise; } }); await done;
-  assert.equal(w.calls.filter(([action]) => action === 'delete').length, 1);
+  assert.equal(w.calls.filter(([action]) => action === 'delete').length, 2);
   assert.equal(w.calls.find(([action]) => action === 'delete')[1], 'freeupper-pwa-v7');
+  assert.ok(w.calls.some(([action]) => action === 'claim'));
 });
 
 
@@ -72,4 +73,9 @@ test('legacy media, downloads, shared links and staging navigations bypass Cache
     const w=worker({cached:{oldPublicBytes:true}});
     assert.equal(await w.request(path),undefined);assert.equal(w.calls.length,0);assert.equal(w.writes.length,0);
   }
+});
+
+test('successful installation activates the safe worker without waiting for old tabs', async () => {
+ const w=worker(); let done; w.events.install({waitUntil(value){done=value;}}); await done;
+ assert.ok(w.calls.some(([action])=>action==='skipWaiting'));
 });

@@ -95,6 +95,11 @@ export default async function handler(req, res) {
       return res.status(201).json({ id, status: 'draft' });
     }
     if (typeof body.post_id !== 'string' || !UUID.test(body.post_id)) return res.status(400).json({ error: 'Invalid draft' });
+    if (['legacy-status', 'legacy-consent', 'legacy-quarantine-consent'].includes(body.action)) {
+      const { legacyOwnerRequest } = await import('../lib/protected-media/legacy-consent-server.js');
+      const result = await legacyOwnerRequest({ db, owner, body });
+      return res.status(result.status).json(result.data);
+    }
     if (body.action === 'visibility') {
       if (!['followers', 'friends', 'only_me'].includes(body.visibility)) return res.status(400).json({ error: 'Explicit restricted audience required' });
       const { data, error } = await db.rpc('set_protected_visibility', {

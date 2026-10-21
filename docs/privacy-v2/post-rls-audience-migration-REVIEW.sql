@@ -11,7 +11,7 @@ BEGIN
  THEN RAISE EXCEPTION 'Unexpected ALL policy inventory'; END IF;
  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public'
    AND tablename='posts' AND cmd IN ('ALL','SELECT')
-   AND policyname NOT IN ('Users can manage own posts',
+   AND permissive='PERMISSIVE' AND policyname NOT IN ('Users can manage own posts',
      'Anyone can view posts','Enable read access for all users',
      'Posts are viewable by everyone','Public read posts'))
  THEN RAISE EXCEPTION 'Unexpected posts read policy'; END IF;
@@ -36,7 +36,7 @@ FOR SELECT TO PUBLIC USING (
   -- Explicit owner access is needed for Only Me, but suspended authors
   -- must not bypass the same suspension check enforced by media delivery.
   -- Ordinary viewers must satisfy audience checks; hidden/deleted stay excluded.
-  is_deleted IS FALSE AND is_hidden IS FALSE AND (
+  publishing_state='published' AND is_deleted IS FALSE AND is_hidden IS FALSE AND (
     (auth.uid() IS NOT NULL AND auth.uid() = user_id AND EXISTS (
       SELECT 1 FROM public.profiles owner_profile
       WHERE owner_profile.id = posts.user_id

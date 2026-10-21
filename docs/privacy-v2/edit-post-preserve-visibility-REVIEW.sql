@@ -12,7 +12,7 @@ CREATE OR REPLACE FUNCTION public.edit_post(
   p_tags text[] DEFAULT NULL,
   p_visibility text DEFAULT NULL
 ) RETURNS public.posts
-LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public', 'pg_temp'
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $function$
 DECLARE updated_post public.posts;
 BEGIN
@@ -43,4 +43,6 @@ BEGIN
   RETURN updated_post;
 END;
 $function$;
+REVOKE ALL ON FUNCTION public.edit_post(uuid,text,text,text,text,text[],text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.edit_post(uuid,text,text,text,text,text[],text) TO authenticated;
 COMMIT;

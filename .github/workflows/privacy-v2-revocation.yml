@@ -1,0 +1,78 @@
+name: Isolated staging revocation evidence
+on:
+  push:
+    branches: [feature/post-privacy-v2-integration]
+    paths: [.github/revocation/request.json]
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        options: [first, second]
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: privacy-v2-revocation-${{ inputs.runner || github.run_id }}
+  cancel-in-progress: false
+jobs:
+  first:
+    if: github.ref == 'refs/heads/feature/post-privacy-v2-integration' && (inputs.runner == 'first' || github.event_name == 'push')
+    runs-on: ubuntu-24.04
+    environment: privacy-v2-revocation-first
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REVOCATION_RUNNER: first
+      REVOCATION_FIRST_ACCOUNT: ${{ vars.REVOCATION_FIRST_ACCOUNT }}
+      REVOCATION_SECOND_ACCOUNT: ${{ vars.REVOCATION_SECOND_ACCOUNT }}
+      REVOCATION_EVIDENCE_BUCKET: ${{ vars.REVOCATION_EVIDENCE_BUCKET }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: aws-actions/configure-aws-credentials@b47578312673ae6fa5b5096b330d9fbac3d116df
+        with:
+          role-to-assume: ${{ vars.REVOCATION_ROLE_ARN }}
+          aws-region: ${{ vars.REVOCATION_REGION }}
+      - run: node scripts/privacy-v2/revocation-runner.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: revocation-first-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            evidence.json
+            receipt.json
+          if-no-files-found: ignore
+  second:
+    if: github.ref == 'refs/heads/feature/post-privacy-v2-integration' && (inputs.runner == 'second' || github.event_name == 'push')
+    runs-on: windows-2022
+    environment: privacy-v2-revocation-second
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REVOCATION_FIRST_BUCKET: ${{ vars.REVOCATION_FIRST_BUCKET }}
+      REVOCATION_RUNNER: second
+      REVOCATION_FIRST_ACCOUNT: ${{ vars.REVOCATION_FIRST_ACCOUNT }}
+      REVOCATION_SECOND_ACCOUNT: ${{ vars.REVOCATION_SECOND_ACCOUNT }}
+      REVOCATION_EVIDENCE_BUCKET: ${{ vars.REVOCATION_EVIDENCE_BUCKET }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: aws-actions/configure-aws-credentials@b47578312673ae6fa5b5096b330d9fbac3d116df
+        with:
+          role-to-assume: ${{ vars.REVOCATION_ROLE_ARN }}
+          aws-region: ${{ vars.REVOCATION_REGION }}
+      - run: node scripts/privacy-v2/revocation-runner.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: revocation-second-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            evidence.json
+            receipt.json
+          if-no-files-found: ignore
