@@ -1,5 +1,43 @@
 # Privacy V2 release preparation — 2026-10-21
 
+## Protected-first live staging acceptance update
+
+**Production remains NO-GO; PR #9 stays draft.** On October 21, the approved staging project `tagkrhvgcbnybiuyvjxt` and Cloudinary `sxdcqs5x` passed the focused API/database checks below. Evidence: [phase results, failures and retests](evidence/protected-first-acceptance-2026-10-21.json) and [unsigned direct-URL checks](evidence/protected-first-direct-urls-2026-10-21.json). These supersede older statements below that the protected-first staging migration was unexecuted. No production resources were modified.
+
+Applied after verifying the exact project, seven prerequisite function bodies, indexes, grants and RLS:
+
+- `20261021110111 privacy_v2_protected_first`
+- `20261021121638 privacy_v2_live_session_boundary`
+- `20261021121653 privacy_v2_upload_reservation_retry`
+- `20261021121942 privacy_v2_anonymous_public_read`
+
+The latter three address confirmed live failures: a logged-out JWT could still query protected rows directly; repeating a signature request failed rather than returning its reservation; anonymous Public staging reads lacked schema usage. The session function returns only a current-user/current-session existence bit, has no caller-supplied identities, pins an empty search path, and is not executable by anon. The upload retry uses the original ID **and original timestamp**, preserving the 65-minute cleanup replay boundary. Public schema access was granted only after checking that anon could read only RLS-protected posts/profiles/follows and had no mutations or non-trigger RPC execution.
+
+| Actual live check | Result |
+|---|---|
+| Synthetic Followers image, Mutuals video + protected poster, Only Me image | Passed authenticated signing/upload/registration/publication; owner mismatch denied; video blocked until poster ready; no public references stored |
+| Owner, approved follower, reciprocal follower, pending follower, stranger, guest | All 18 audience cases passed; authorized media bodies matched synthetic bytes; denied media returned 404; guest metadata returned 401 |
+| Feed/profile/search filters and viewer-JWT invoker reader RPC; direct PostgREST RLS | Passed audience restrictions after the fixes; anon direct SQL also returned zero restricted/hidden rows and one Public control |
+| Follow approval, withdrawal and loss/restoration of reciprocity | Passed metadata/media/direct-RLS checks using unchanged JWTs |
+| Ten unsigned Cloudinary image/video/poster paths | Authenticated paths 401; corresponding public paths 404 |
+| API/Auth logout + direct database access with old JWT | Initially failed direct RLS; passed after fix: media 404, metadata 401, direct rows zero |
+| Lost signature, upload and registration responses; incomplete publication; foreign cancellation; cancellation retry | Passed; one registry row retained across registration retry; failed draft media inaccessible; final cleanup still pending replay expiry |
+| Active formats / unsupported combinations | Real authenticated SVG upload rejected by registration/publication, then cancelled; text-only/music/overlays rejected |
+| Public compatibility control | Staging public Cloudinary upload, Public row insertion and anonymous read passed; conversion through new-post visibility endpoint denied. Public Create/Studio UI was not run |
+| Browser Create/Studio/playback, account switching, object URL cleanup, SW v11 upgrade/cache behavior | **NOT RUN** |
+
+The five fresh accounts used the fixed server marker `privacy-v2-protected-first-20261021` and synthetic roles only. All five were retired after acceptance and their Auth sessions revoked (remaining sessions: zero). No tokens/passwords/Cloudinary credentials were returned. Published synthetic fixtures and the synthetic Public control are retained. Two failed-draft cleanup intents remain pending until their original replay windows end at **13:20:07 UTC** and **13:27:51 UTC on October 21**; the first normal five-minute cleanup sweep eligible for both is **13:30 UTC**. Verify pending=false and Cloudinary absence afterward; that final sweep has not been observed. A lost *create* response was not simulated; known-draft status recovery is the check actually performed.
+
+The temporary `FREEUPPER_STAGING_ACCEPTANCE=protected-first-synthetic-only` mode rejects every legacy phase. It was disabled after acceptance; the final feature preview must reflect that disabled setting. Existing legacy deletion clocks and zero-observation counts were confirmed unchanged. No legacy deletion/consent migration was applied, no legacy invalidation/deletion was requested, and no qualifying revocation check ran. November 20 21:04:08 UTC and the second-runner one-hour interval remain intact.
+
+Browser setup: the Opera connector's `list_tabs` returned **Browser not connected**. Enable **Allow AI connection**, sign into the Opera connector, and expose an authorized controllable staging tab (the currently exposed Opera tools only navigate/read). Alternatively run `/privacy-v2-acceptance.html` manually on the feature preview using two fresh staging accounts with server-controlled `app_metadata.privacy_v2_browser_acceptance=true`, entering passwords directly in the page. Retired API fixtures are not browser accounts. For a real upgrade result, start with an actually active older worker; an old cache name or a fresh v11 installation is insufficient. Retain the harness output. Do not count any API results here as browser acceptance.
+
+Focused validation only: six acceptance-harness checks and eleven upload-signature checks passed; `npm ci --ignore-scripts` now succeeds after reconciling the inconsistent existing lockfile. Production review SQL was regenerated with the retry transition; `live-session-production-REVIEW.sql` is an additional review-only prerequisite after the protected-first package and before any activation. None was executed.
+
+Remaining new-post release blockers: actual browser acceptance, the deferred cleanup verification, review of production migrations/approved-follow consent and RPC consumers, isolated recovery/external monitoring exercises, and explicit production approval. Legacy ownership evidence, AWS independent runners and the full November revocation wait continue to block **legacy conversion separately**. Reposts/engagement were not newly accepted; the isolated reader excludes reposts. No production release readiness is claimed.
+
+## Earlier preparation snapshot
+
 Follow-up: [current blocker resolution and exact setup](blockers-2026-10-21.md). It records newer nine-URL diagnostics, harness/logout fixes, review-only production findings and runner/recovery configuration; the results below remain the earlier historical snapshot.
 
 **Decision: NO-GO for production. PR #9 stays draft.** Production databases, Cloudinary assets, settings and live deployment were not modified. Review SQL was exercised only in a disposable local PostgreSQL model.
