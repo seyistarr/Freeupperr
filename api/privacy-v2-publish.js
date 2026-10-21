@@ -116,6 +116,7 @@ export default async function handler(req, res) {
       return res.status(result.status).json(result.data);
     }
     if (body.action === 'visibility') {
+      if (runtime.mode !== 'staging') return res.status(404).json({ error: 'Visibility transition unavailable' });
       if (!['followers', 'friends', 'only_me'].includes(body.visibility)) return res.status(400).json({ error: 'Explicit restricted audience required' });
       const { data, error } = await db.rpc('set_new_protected_visibility', {
         p_owner: owner, p_post: body.post_id, p_visibility: body.visibility
