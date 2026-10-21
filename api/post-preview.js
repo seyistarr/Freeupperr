@@ -97,7 +97,7 @@ async function renderVideoImage(req, res, code) {
       const u = new URL(post.media_url);
       if (u.hostname === 'res.cloudinary.com') {
         const match = u.pathname.match(/^\/(.+?)\/video\/upload\/(?:.*\/)?(v\d+\/[^?#]+)$/);
-        if (match) poster = u.origin + '/' + match[1] + '/video/upload/so_1,w_1200,h_630,c_fill/' + match[2].replace(/\.[^/.]+$/, '.jpg');
+        if (match) poster = u.origin + '/' + match[1] + '/video/upload/so_1,w_800,h_800,c_fit/' + match[2].replace(/\.[^/.]+$/, '.jpg');
       }
     }
     if (!poster) return res.status(404).end();
@@ -112,11 +112,11 @@ async function renderVideoImage(req, res, code) {
     const data = 'data:' + mime + ';base64,' + Buffer.from(imageBytes).toString('base64');
     const h = React.createElement;
     const layout = h('div', { style: { display: 'flex', width: '100%', height: '100%', position: 'relative', alignItems: 'center', justifyContent: 'center', backgroundColor: '#101016' } },
-      h('img', { src: data, style: { position: 'absolute', width: '100%', height: '100%', objectFit: 'cover' } }),
+      h('img', { src: data, style: { position: 'absolute', width: '100%', height: '100%', objectFit: 'contain' } }),
       h('div', { style: { display: 'flex', width: 112, height: 112, borderRadius: 56, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.58)', border: '4px solid white' } },
         h('svg', { width: 54, height: 54, viewBox: '0 0 54 54' }, h('path', { d: 'M16 8 L45 27 L16 46 Z', fill: '#ffffff' })))
     );
-    const png = Buffer.from(await new ImageResponse(layout, { width: 1200, height: 630 }).arrayBuffer());
+    const png = Buffer.from(await new ImageResponse(layout, { width: 800, height: 800 }).arrayBuffer());
     res.setHeader('Content-Type','image/png');
     res.setHeader('Cache-Control','public, max-age=300, s-maxage=3600');
     return res.status(200).end(png);
