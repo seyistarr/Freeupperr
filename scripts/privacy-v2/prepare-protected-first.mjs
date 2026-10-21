@@ -13,8 +13,9 @@ function functionSQL(sql, name) {
 }
 export function prepareProtectedFirst() {
   const paths = ['staging-migrations/privacy-v2-protected-publishing.sql',
-    'staging-migrations/privacy-v2-readers-cleanup.sql', 'staging-migrations/privacy-v2-protected-first.sql'];
-  const [publishing, readers, core] = paths.map(read);
+    'staging-migrations/privacy-v2-readers-cleanup.sql', 'staging-migrations/privacy-v2-protected-first.sql',
+    'staging-migrations/privacy-v2-upload-reservation-retry.sql'];
+  const [publishing, readers, core, retry] = paths.map(read);
   const port = value => value.replaceAll('privacy_test.', 'public.')
     .replaceAll('freeupper-privacy-v2-staging/', 'freeupper-protected-v2/')
     .replaceAll('public.protected_post_origins', 'privacy_v2_private.protected_post_origins')
@@ -37,7 +38,7 @@ export function prepareProtectedFirst() {
 -- No legacy job, consent, deletion, observation or 31-day dependency.
 -- Prerequisites: registry/global uniqueness, production expansion, approved
 -- follows, audience RLS, visibility-preserving edits and RPC exposure fixes.
--- Source SHA256:\n${paths.map((p,i)=>'-- '+p+' '+createHash('sha256').update([publishing,readers,core][i]).digest('hex')).join('\n')}
+-- Source SHA256:\n${paths.map((p,i)=>'-- '+p+' '+createHash('sha256').update([publishing,readers,core,retry][i]).digest('hex')).join('\n')}
 BEGIN;
 DO $$ BEGIN
  IF current_setting('freeupper.privacy_v2_project_ref',true) IS DISTINCT FROM 'jmjtqidirpmnegzvmiaq'
@@ -57,7 +58,7 @@ GRANT EXECUTE ON FUNCTION privacy_v2_private.can_view_post_for(uuid,uuid),privac
 ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS cleanup_lease uuid,
  ADD COLUMN IF NOT EXISTS cleanup_lease_until timestamptz;
 `;
-  const transition = functionSQL(publishing,'protected_publish_transition');
+  const transition = functionSQL(retry,'protected_publish_transition');
   const intentColumns = `ALTER TABLE public.post_upload_intents ADD COLUMN IF NOT EXISTS cleanup_attempts integer NOT NULL DEFAULT 0,
  ADD COLUMN IF NOT EXISTS cleanup_after timestamptz NOT NULL DEFAULT now();\n`;
   const extra = `

@@ -27,9 +27,9 @@ export default async function handler(req, res) {
     if (req.body?.post_id == null || req.body?.slot == null) {
       return res.status(400).json({ error: 'An owned draft and media slot are required' });
     }
-    const timestamp = Math.floor(Date.now() / 1000);
+    let timestamp = Math.floor(Date.now() / 1000);
     const folder = runtime.namespace + '/' + data.user.id;
-    const public_id = 'asset_' + randomUUID().replace(/-/g, '');
+    let public_id = 'asset_' + randomUUID().replace(/-/g, '');
     if (req.body?.post_id != null || req.body?.slot != null) {
       if (typeof req.body.post_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.body.post_id) ||
           !Number.isInteger(req.body.slot) || req.body.slot < 0 || req.body.slot > 20) {
@@ -38,11 +38,28 @@ export default async function handler(req, res) {
       const db = publishingDb(env, runtime);
       await requireRuntimeSchema(db, runtime);
       // Persist the owner/post/slot/public ID before issuing any reusable signature.
-      const { error: intentError } = await db.rpc('protected_publish_transition', {
+      const { data: intent, error: intentError } = await db.rpc('protected_publish_transition', {
         p_owner: data.user.id, p_post: req.body.post_id, p_action: 'reserve',
         p_data: { slot: req.body.slot, public_id: folder + '/' + public_id }
       });
       if (intentError) return res.status(409).json({ error: 'Draft upload unavailable' });
+      // Older reviewed databases return status only on first reservation. New
+      // databases return the durable ID for both first requests and retries.
+      if (intent?.public_id != null) {
+        const prefix=folder+'/';
+        if (typeof intent.public_id !== 'string' || !intent.public_id.startsWith(prefix) ||
+            !/^asset_[a-f0-9]{32}$/.test(intent.public_id.slice(prefix.length))) {
+          return res.status(409).json({ error: 'Draft upload unavailable' });
+        }
+        public_id=intent.public_id.slice(prefix.length);
+        // Retrying must not extend the original signature's replay window;
+        // cleanup waits 65 minutes from this same persisted reservation time.
+        if (!Number.isSafeInteger(intent.timestamp) || intent.timestamp<=0 ||
+            intent.timestamp>timestamp+60 || intent.timestamp<timestamp-3600) {
+          return res.status(409).json({ error: 'Draft upload unavailable' });
+        }
+        timestamp=intent.timestamp;
+      }
     }
     // All upload parameters that influence asset identity or delivery are signed.
     const params = { timestamp, folder, public_id, type: 'authenticated', overwrite: false };

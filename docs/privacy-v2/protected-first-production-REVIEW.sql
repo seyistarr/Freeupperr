@@ -7,6 +7,7 @@
 -- staging-migrations/privacy-v2-protected-publishing.sql 83784cdf7d6d32704113618df3e37f9d34247e1469c6970792496c716a4d28e8
 -- staging-migrations/privacy-v2-readers-cleanup.sql f868ddf25d1ad2ef4137048d94ffe01891219dc6319a58e329ab1a04c140a2a3
 -- staging-migrations/privacy-v2-protected-first.sql 0b1e6ab1887a333a77954d2971388979c1162d1f16c594de57f06aa3b23be9c4
+-- staging-migrations/privacy-v2-upload-reservation-retry.sql db3671b0ac06912e69d707d6357fbcda9004f2d14d632fd6770f19cef1fe78ae
 BEGIN;
 DO $$ BEGIN
  IF current_setting('freeupper.privacy_v2_project_ref',true) IS DISTINCT FROM 'jmjtqidirpmnegzvmiaq'
@@ -208,9 +209,20 @@ BEGIN
   IF p_action='reserve' THEN
     IF p_data->>'public_id' !~ ('^freeupper-protected-v2/' || p_owner::text || '/asset_[a-f0-9]{32}$') THEN
       RAISE EXCEPTION 'Invalid asset namespace'; END IF;
+    -- The post lock serializes retries. Reissue only the same persisted ID;
+    -- never allocate an orphan if the first signature response was lost.
+    SELECT * INTO ticket FROM public.post_upload_intents WHERE post_id=p_post AND slot=(plan->>'slot')::int;
+    IF FOUND THEN
+      IF ticket.owner_id<>p_owner OR ticket.resource_type<>plan->>'type' OR ticket.state<>'reserved' OR
+        ticket.cloudinary_public_id !~ ('^freeupper-protected-v2/' || p_owner::text || '/asset_[a-f0-9]{32}$')
+      THEN RAISE EXCEPTION 'Upload intent unavailable'; END IF;
+      RETURN jsonb_build_object('status','reserved','public_id',ticket.cloudinary_public_id,
+        'timestamp',floor(extract(epoch FROM ticket.created_at))::bigint);
+    END IF;
     INSERT INTO public.post_upload_intents(post_id,owner_id,slot,cloudinary_public_id,resource_type)
-      VALUES(p_post,p_owner,(plan->>'slot')::int,p_data->>'public_id',plan->>'type');
-    RETURN jsonb_build_object('status','reserved');
+      VALUES(p_post,p_owner,(plan->>'slot')::int,p_data->>'public_id',plan->>'type') RETURNING * INTO ticket;
+    RETURN jsonb_build_object('status','reserved','public_id',ticket.cloudinary_public_id,
+      'timestamp',floor(extract(epoch FROM ticket.created_at))::bigint);
   ELSIF p_action='register' THEN
     SELECT * INTO ticket FROM public.post_upload_intents WHERE post_id=p_post AND slot=(plan->>'slot')::int;
     IF NOT FOUND OR ticket.owner_id<>p_owner OR ticket.cloudinary_public_id<>p_data->>'public_id' OR

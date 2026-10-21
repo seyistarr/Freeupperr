@@ -129,6 +129,8 @@ export default async function handler(req, res) {
     }
     if (!['publish', 'cancel'].includes(body.action)) return res.status(400).json({ error: 'Invalid transition' });
     if (body.action === 'cancel') {
+      const owned=await db.from('posts').select('id').eq('id',body.post_id).eq('user_id',owner).maybeSingle();
+      if (owned.error || !owned.data) return res.status(404).json({ error: 'Draft unavailable' });
       // The database cleanup transition/legacy guard serializes cancellation.
       // New publishing does not require legacy tables or columns to exist.
       cloudinary.config({ cloud_name: runtime.cloud, api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
