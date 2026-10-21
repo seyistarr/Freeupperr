@@ -59,3 +59,20 @@ test('an explicit short derivative page is complete despite an unrelated generic
   const result=await readCompleteCloudinaryAsset({cloudinary,publicId:'fixture',resourceType:'image',fetchImpl:()=>{throw Error('not a derivative page');}});
   assert.equal(result.derived_inventory_complete,true);assert.equal(result.derived.length,0);assert.equal(result.next_cursor,undefined);
 });
+
+test('protected-first acceptance uses fresh fixtures and cannot enter legacy phases',async()=>{
+  const {protectedFirstAcceptanceEnabled,runProtectedFirstAcceptance,PROTECTED_FIRST_RUN}=await import('../lib/protected-media/staging-live-acceptance.js');
+  const isolated={...env,FREEUPPER_STAGING_ACCEPTANCE:'protected-first-synthetic-only'};
+  assert.equal(protectedFirstAcceptanceEnabled(isolated),true);
+  assert.equal(acceptanceEnabled(isolated),false);
+  assert.notEqual(PROTECTED_FIRST_RUN,'privacy-v2-live-20261020');
+  for(const phase of ['legacy-revoke-image','legacy-copy-video','legacy-status','diagnostics','arbitrary-operation']) {
+    await assert.rejects(runProtectedFirstAcceptance({phase,env:isolated}),error=>error.check==='protected_first_phase');
+  }
+  for(const change of [{VERCEL_ENV:'production'},{VERCEL_GIT_COMMIT_REF:'main'},
+    {SUPABASE_URL:'https://production.supabase.co'},{CLOUDINARY_CLOUD_NAME:'production'},
+    {FREEUPPER_STAGING_ACCEPTANCE:'synthetic-fixtures-only'}]) {
+    assert.equal(protectedFirstAcceptanceEnabled({...isolated,...change}),false);
+    await assert.rejects(runProtectedFirstAcceptance({phase:'seed',env:{...isolated,...change}}),error=>error.check==='acceptance_disabled');
+  }
+});

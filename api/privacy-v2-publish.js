@@ -55,10 +55,11 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && req.query?.worker === 'acceptance') {
       if (runtime.mode !== 'staging') return res.status(404).json({ error: 'Acceptance disabled' });
       if (!validCleanupWorker(req.headers?.authorization, env.FREEUPPER_CLEANUP_TOKEN)) return res.status(401).json({ error: 'Authentication required' });
-      if (env.FREEUPPER_STAGING_ACCEPTANCE !== 'synthetic-fixtures-only') return res.status(404).json({ error: 'Acceptance disabled' });
-      const { runStagingAcceptance, AcceptanceFailure } = await import('../lib/protected-media/staging-live-acceptance.js');
+      if (!['synthetic-fixtures-only','protected-first-synthetic-only'].includes(env.FREEUPPER_STAGING_ACCEPTANCE)) return res.status(404).json({ error: 'Acceptance disabled' });
+      const { runStagingAcceptance, runProtectedFirstAcceptance, AcceptanceFailure } = await import('../lib/protected-media/staging-live-acceptance.js');
       cloudinary.config({ cloud_name: runtime.cloud, api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
-      try { return res.status(200).json(await runStagingAcceptance({ phase: req.body?.phase, env, db, cloudinary })); }
+      const runner = env.FREEUPPER_STAGING_ACCEPTANCE === 'protected-first-synthetic-only' ? runProtectedFirstAcceptance : runStagingAcceptance;
+      try { return res.status(200).json(await runner({ phase: req.body?.phase, env, db, cloudinary })); }
       catch (error) {
         return res.status(503).json({ error: 'Synthetic staging acceptance incomplete',
           failedCheck: error instanceof AcceptanceFailure ? error.check :
