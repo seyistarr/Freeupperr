@@ -60,12 +60,12 @@ export default async function handler(req, res) {
   const templateId = String(post.text_template_id || '').toLowerCase();
   const theme = templates[templateId] || templates.neon;
   const lines = previewMessage.split(/\n+/).map(line => line.trim()).filter(Boolean);
-  const fontSize = lines.length >= 7 ? 35 : previewMessage.length > 165 ? 37 : previewMessage.length > 110 ? 43 : previewMessage.length > 70 ? 49 : 57;
+  const fontSize = lines.length >= 7 ? 40 : previewMessage.length > 165 ? 43 : previewMessage.length > 110 ? 52 : previewMessage.length > 70 ? 66 : previewMessage.length > 45 ? 82 : 96;
   const textCard = h('div', {
     style: {
       display: 'flex', width: '100%', height: '100%', position: 'relative',
       alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-      padding: '58px 95px', boxSizing: 'border-box',
+      padding: '48px 110px', boxSizing: 'border-box',
       backgroundColor: theme[0], backgroundImage: theme[2],
       fontFamily: 'sans-serif'
     }
@@ -76,9 +76,9 @@ export default async function handler(req, res) {
     } }) : null,
     h('div', { style: {
       display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'center',
-      textAlign: 'center', fontSize, lineHeight: 1.24, fontWeight: 800,
+      textAlign: 'center', fontSize, lineHeight: 1.12, fontWeight: 800,
       color: theme[1], flexDirection: 'column'
-    } }, ...lines.slice(0, 10).map(line => h('div', { style: { display: 'flex', justifyContent: 'center', width: '100%', textAlign: 'center' } }, line)))
+    } }, ...lines.slice(0, 10).map(line => h('div', { style: { display: 'flex', justifyContent: 'center', width: '100%', textAlign: 'center', overflowWrap: 'break-word' } }, line)))
   );
   const layout = videoStyle ? textCard : h('div', {
     style: {
