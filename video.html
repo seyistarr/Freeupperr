@@ -5413,15 +5413,81 @@
                 const mediaType = v.mediaType || v.media_type || 'text';
                 const directImage = v.poster || v.thumbnailUrl || v.thumbnail_url ||
                     (mediaType === 'image' ? v.src : '');
-                const previewCode = v.short_code || v.shortCode || v.share_code || v.shareCode;
-                const textPreview = mediaType === 'text' && previewCode
-                    ? '/api/post-text-og?style=video&code=' + encodeURIComponent(previewCode)
-                    : '';
-                thumb.src = directImage || textPreview || '/freeupper.png';
-                thumb.onerror = () => {
-                    thumb.onerror = null;
-                    thumb.src = '/freeupper.png';
+                const previewCode = v.short_code || v.shortCode || v.postData?.short_code;
+                const fallback = '/freeupper.png';
+                const setThumb = (url) => {
+                    thumb.onerror = () => { thumb.onerror = null; thumb.src = fallback; };
+                    thumb.src = url || fallback;
                 };
+                if (mediaType === 'text') {
+                    if (previewCode) {
+                        setThumb('/api/post-text-og?style=video&code=' + encodeURIComponent(previewCode));
+                    } else {
+                        // Render the post itself when no short-code OG image is available.
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 360; canvas.height = 450;
+                        const ctx = canvas.getContext('2d');
+                        const palette = {
+                            darkq: ['#111118','#f5f5f5'], blackmin: ['#111111','#f5f5f5'],
+                            cleanq: ['#ffffff','#111111'], whitemin: ['#ffffff','#111111'],
+                            sticky: ['#ffe566','#374151'], neon: ['#0d0020','#e879f9'],
+                            sunset: ['#ff6b6b','#ffffff'], gold: ['#0a0600','#ffd700'],
+                            aura: ['#050510','#ffffff'], notebook: ['#fdf8f0','#1e293b'],
+                            aurora: ['#020c18','#ffffff'], ocean: ['#0072ff','#ffffff'],
+                            midnight: ['#06061a','#c4b5fd'], galaxy: ['#03001e','#c4b5fd'],
+                            pastel: ['#fce4ec','#4c1d6b'], cotton: ['#fbc2eb','#5c1a6e']
+                        };
+                        const id = String(v.textTemplateId || v.postData?.text_template_id || 'darkq').toLowerCase();
+                        const colors = palette[id] || palette.darkq;
+                        ctx.fillStyle = colors[0]; ctx.fillRect(0,0,360,450);
+                        ctx.fillStyle = colors[1]; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                        const message = String(v.textBody || v.caption || 'FreeUpper post').trim();
+                        let rows = [];
+                        let size = 39;
+                        for (; size >= 16; size -= 2) {
+                            ctx.font = '800 ' + size + 'px system-ui, sans-serif';
+                            rows = [];
+                            for (const paragraph of message.split(/\n/)) {
+                                let line = '';
+                                for (const word of paragraph.split(/\s+/)) {
+                                    const next = line ? line + ' ' + word : word;
+                                    if (line && ctx.measureText(next).width > 318) { rows.push(line); line = word; }
+                                    else line = next;
+                                }
+                                rows.push(line);
+                            }
+                            if (rows.length * size * 1.18 <= 390 && rows.every(x => ctx.measureText(x).width <= 330)) break;
+                        }
+                        const lineHeight = size * 1.18;
+                        rows.forEach((line, i) => ctx.fillText(line, 180, 225 + (i - (rows.length - 1) / 2) * lineHeight, 330));
+                        setThumb(canvas.toDataURL('image/png'));
+                    }
+                } else if (mediaType === 'video' && !directImage) {
+                    const src = String(v.src || '');
+                    const cloudinary = src.match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/video\/upload\/)(.*)$/);
+                    if (cloudinary) {
+                        const path = cloudinary[2].replace(/\.[^/.?#]+(?=\?|$)/, '.jpg');
+                        setThumb(cloudinary[1] + 'so_1,w_360,h_450,c_fill/' + path);
+                    } else if (v.ytId) {
+                        setThumb('https://img.youtube.com/vi/' + encodeURIComponent(v.ytId) + '/hqdefault.jpg');
+                    } else if (src) {
+                        // Extract a frame for same-origin/CORS-enabled videos without a poster.
+                        const video = document.createElement('video');
+                        video.crossOrigin = 'anonymous'; video.muted = true; video.preload = 'auto';
+                        video.onloadeddata = () => { try { video.currentTime = Math.min(1, Math.max(0, (video.duration || 1) / 2)); } catch {} };
+                        video.onseeked = () => {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = 180; canvas.height = 225;
+                                canvas.getContext('2d').drawImage(video, 0, 0, 180, 225);
+                                if (_shareIdx === idx) setThumb(canvas.toDataURL('image/jpeg', .8));
+                            } catch { if (_shareIdx === idx) setThumb(fallback); }
+                            video.removeAttribute('src'); video.load();
+                        };
+                        video.onerror = () => { if (_shareIdx === idx) setThumb(fallback); };
+                        setThumb(fallback); video.src = src;
+                    } else setThumb(fallback);
+                } else setThumb(directImage);
             }
             if (cap) cap.textContent = (v.caption || v.textBody || '').split('\n')[0].slice(0, 60);
             if (handle) handle.textContent = v.handle || '';
