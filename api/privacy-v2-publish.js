@@ -71,6 +71,7 @@ export default async function handler(req, res) {
       }
     }
     if (req.method === 'POST' && req.query?.worker === 'cleanup') {
+      if (runtime.mode !== 'staging') return res.status(404).json({ error: 'Staging cleanup unavailable' });
       if (!validCleanupWorker(req.headers?.authorization, env.FREEUPPER_CLEANUP_TOKEN)) {
         return res.status(401).json({ error: 'Authentication required' });
       }
@@ -129,6 +130,15 @@ export default async function handler(req, res) {
         ...(data.publishing_state === 'published' ? { media: data.media, visibility: data.visibility } : {}) });
     }
     if (!['publish', 'cancel'].includes(body.action)) return res.status(400).json({ error: 'Invalid transition' });
+    if (body.action === 'cancel' && runtime.mode === 'production') {
+      // Production cancellation must be serialized by the production DB RPC.
+      // Never run staging Cloudinary cleanup against production assets.
+      const { data, error } = await db.rpc('protected_publish_transition', {
+        p_owner: owner, p_post: body.post_id, p_action: 'cancel', p_data: {}
+      });
+      if (error) return res.status(409).json({ error: 'Draft cancellation unavailable' });
+      return res.status(200).json(data);
+    }
     if (body.action === 'cancel') {
       const owned=await db.from('posts').select('id').eq('id',body.post_id).eq('user_id',owner).maybeSingle();
       if (owned.error || !owned.data) return res.status(404).json({ error: 'Draft unavailable' });
@@ -144,7 +154,7 @@ export default async function handler(req, res) {
     if (error) return res.status(409).json({ error: 'Draft transition unavailable' });
     return res.status(200).json(data);
   } catch (error) {
-    console.error('Staging protected publishing unavailable', error?.name || 'Error');
+    console.error('Protected publishing unavailable', error?.name || 'Error');
     return res.status(503).json({ error: 'Protected publishing unavailable' });
   }
 }
