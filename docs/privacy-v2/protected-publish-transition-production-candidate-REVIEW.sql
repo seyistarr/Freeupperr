@@ -47,7 +47,9 @@ BEGIN
   IF p_action IN ('reserve','register') AND
     (jsonb_typeof(p_data) IS DISTINCT FROM 'object' OR
      jsonb_typeof(p_data->'slot') IS DISTINCT FROM 'number' OR
-     (p_data->>'slot') !~ '^(0|[1-9][0-9]?)
+     (p_data->>'slot') !~ '^(0|[1-9][0-9]?)$')
+  THEN RAISE EXCEPTION 'Invalid media slot'; END IF;
+  IF p_action IN ('reserve','register') THEN
     SELECT value INTO plan FROM jsonb_array_elements(p.media_plan) WHERE (value->>'slot')::int=(p_data->>'slot')::int;
     IF plan IS NULL THEN RAISE EXCEPTION 'Unexpected media slot'; END IF;
   END IF;
