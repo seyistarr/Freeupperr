@@ -12,7 +12,7 @@ const env={VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'feature/post-privacy-v2-i
   CLOUDINARY_CLOUD_NAME:'sxdcqs5x',FREEUPPER_PROTECTED_MEDIA_DELIVERY:'enabled-in-isolated-staging',
   FREEUPPER_PROTECTED_PUBLISHING:'enabled-in-isolated-staging',SUPABASE_ANON_KEY:'sb_publishable_test',
   SUPABASE_SERVICE_ROLE_KEY:'secret',CLOUDINARY_API_KEY:'key',CLOUDINARY_API_SECRET:'secret',
-  FREEUPPER_LEGACY_MIGRATION:'enabled-in-isolated-staging'};
+  FREEUPPER_LEGACY_MIGRATION:'enabled-in-isolated-staging',FREEUPPER_CLOUDINARY_BULK_INVALIDATION_EVIDENCE_SHA256:'e'.repeat(64)};
 const post=()=>({id,user_id:owner,visibility:'public',publishing_state:'published',is_hidden:false,is_deleted:false,
   media:[{url,type:'image',thumbnailUrl:url,public_id:'legacy/photo'}],media_url:url,thumbnail_url:url,publish_payload:{title:'caption',source:'composer'}});
 const source=()=>({asset_id:'a'.repeat(32),public_id:'legacy/photo',version:123,resource_type:'image',type:'upload',bytes:1000,format:'jpg',secure_url:url,
@@ -26,7 +26,7 @@ test('inventory includes top-level aliases, media URLs, video posters and every 
   assert.ok(oldVideo.entries[oldVideo.refs[0].thumbnail_slot].url.includes('/so_0/'));
   assert.equal(v.entries.length,2);assert.equal(v.refs[0].type,'video');assert.equal(v.entries[1].type,'image');
   const a=source();a.derived=[{secure_url:url.replace('/v123/','/w_300/v123/')}];
-  const probes=probeUrls(a,p.entries);assert.equal(probes.length,4);assert.ok(probes.some(u=>u.includes('/upload/legacy/photo')));
+  const probes=probeUrls(a,p.entries);assert.equal(probes.length,6);assert.ok(probes.some(u=>u.includes('/upload/legacy/photo')));
 });
 test('unknown alias fields, external/signed URLs, music, layers, ambiguous versions and unsupported media fail closed',()=>{
   for(const patch of [{sound_id:id},{text_template_id:id},{audio_url:'//cdn.example/audio.mp3'},{publish_payload:{poster:url}},
@@ -52,7 +52,7 @@ async function fixture() {
   const plan=await buildLegacyPlan({post:post(),cloudinary:{api:{async resource(){return source();}}},db:{async rpc(name){return {data:name==='verified_legacy_source'?true:0};}}});
   const job={id:'30000000-0000-4000-8000-000000000001',state:'copying',original_row:post(),plan,copies:{},deletions:{}};
   const calls=[],uploads=[],deletes=[];let remoteCopy=null,publicPresent=true;
-  const db={async rpc(name,args){if(name==='verified_legacy_source')return {data:true};calls.push(args);assert.equal(name,'legacy_media_transition');
+  const db={from(table){assert.equal(table,'legacy_media_events');return {async insert(row){assert.equal(row.action,'bulk_invalidation_capability');return {};}};},async rpc(name,args){if(name==='verified_legacy_source')return {data:true};calls.push(args);assert.equal(name,'legacy_media_transition');
     if(args.p_action==='copy')job.copies[String(args.p_data.slot)]={...args.p_data.copy,registry_id:id};
     if(args.p_action==='revoking')job.state='revoking';
     return {data:structuredClone(job)};}};

@@ -1,5 +1,7 @@
 # Privacy V2 release preparation — 2026-10-21
 
+Follow-up: [current blocker resolution and exact setup](blockers-2026-10-21.md). It records newer nine-URL diagnostics, harness/logout fixes, review-only production findings and runner/recovery configuration; the results below remain the earlier historical snapshot.
+
 **Decision: NO-GO for production. PR #9 stays draft.** Production databases, Cloudinary assets, settings and live deployment were not modified. Review SQL was exercised only in a disposable local PostgreSQL model.
 
 ## Implemented and checked

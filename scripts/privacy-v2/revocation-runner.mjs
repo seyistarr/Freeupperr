@@ -45,7 +45,7 @@ async function main() {
   const bucket = process.env.REVOCATION_EVIDENCE_BUCKET;
   if (!/^freeupper-staging-revocation-[a-z0-9-]+$/.test(bucket || '')) throw Error('Staging evidence bucket required');
   const config = aws(['s3api','get-object-lock-configuration','--bucket',bucket]);
-  if (config.ObjectLockConfiguration?.ObjectLockEnabled !== 'Enabled' || config.ObjectLockConfiguration?.Rule?.DefaultRetention?.Mode !== 'COMPLIANCE') throw Error('Immutable compliance retention required');
+  if (config.ObjectLockConfiguration?.ObjectLockEnabled !== 'Enabled' || (config.ObjectLockConfiguration?.Rule?.DefaultRetention?.Mode !== 'COMPLIANCE' || (config.ObjectLockConfiguration?.Rule?.DefaultRetention?.Days || 0)<90)) throw Error('Immutable compliance retention required');
   let first;
   if (runner === 'second') {
     const firstBucket=process.env.REVOCATION_FIRST_BUCKET;
@@ -72,9 +72,12 @@ async function main() {
     qualifying:false,reason:'Independent evidence candidate; trusted server ingestion and origin absence checks still required'};
   await writeFile('evidence.json', JSON.stringify(evidence));
   const key = all_absent ? `privacy-v2/${runner}.json` : `privacy-v2/failed/${runner}-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}.json`;
-  const result = aws(['s3api','put-object','--bucket',bucket,'--expected-bucket-owner',identity.Account,'--key',key,'--body','evidence.json','--if-none-match','*',
-    '--object-lock-mode','COMPLIANCE','--object-lock-retain-until-date',new Date(Date.now()+90*86400000).toISOString()]);
+  const result = aws(['s3api','put-object','--bucket',bucket,'--expected-bucket-owner',identity.Account,'--key',key,'--body','evidence.json','--if-none-match','*']);
   if (!result.VersionId) throw Error('Versioned immutable receipt required');
+  // Inherit the bucket's COMPLIANCE default. The writer has no retention-changing
+  // permission and cannot override/shorten it, including during PutObject.
+  const stored=aws(['s3api','head-object','--bucket',bucket,'--expected-bucket-owner',identity.Account,'--key',key,'--version-id',result.VersionId]);
+  if(stored.ObjectLockMode!=='COMPLIANCE'||Date.parse(stored.ObjectLockRetainUntilDate)<Date.now()+89*86400000)throw Error('Immutable retention not confirmed');
   await writeFile('receipt.json',JSON.stringify({bucket,key,version:result.VersionId,sha256:digest(await readFile('evidence.json'))}));
   if (!all_absent) throw Error('Old media remains reachable; immutable failure evidence recorded');
 }

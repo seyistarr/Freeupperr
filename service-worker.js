@@ -1,4 +1,4 @@
-const CACHE_NAME = 'freeupper-pwa-v9';
+const CACHE_NAME = 'freeupper-pwa-v10';
 
 const URLS_TO_CACHE = [
   './',
