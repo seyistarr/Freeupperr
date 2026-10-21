@@ -1,0 +1,32 @@
+-- REVIEW ONLY — do not apply independently.
+-- Fixes PR #9 draft creator for actual production posts.title NOT NULL and
+-- protected_post_origins.post_id FK to posts.id.
+-- Must be installed with the complete release guard, reference guard, payload
+-- hydration, and service-only permissions. The placeholder stays active.
+--
+-- Replace the two INSERT statements at the end of create_protected_draft with:
+--
+-- INSERT INTO public.posts
+--   (id,user_id,title,content,source,tags,comments_hidden,media_type,
+--    visibility,is_hidden,is_deleted,publishing_state,media,media_plan,
+--    publish_payload,draft_expires_at)
+-- VALUES
+--   (p_post,p_owner,coalesce(p_fields->>'title',''),
+--    coalesce(p_fields->>'content',''),p_fields->>'source',
+--    ARRAY(SELECT jsonb_array_elements_text(p_fields->'tags')),
+--    coalesce((p_fields->>'comments_hidden')::boolean,false),
+--    p_plan->0->>'type',
+--    p_visibility,true,false,'draft','[]'::jsonb,p_plan,p_fields,
+--    now()+interval '1 hour');
+--
+-- INSERT INTO privacy_v2_private.protected_post_origins(post_id,owner_id)
+-- VALUES(p_post,p_owner);
+--
+-- IMPORTANT: A BEFORE INSERT guard must allow ONLY this authenticated
+-- service-only draft creator; otherwise a service-role direct insert could
+-- bypass origin-based checks while the origin row does not yet exist.
+-- A safe approach is a SECURITY DEFINER creator with explicit caller-role
+-- validation and a transaction-local authorization token validated by the
+-- insert guard, not an unrestricted bypass based on service_role.
+-- Verify the production triggers' execution order before installation.
+-- Do not activate delivery or publishing until the guards and API pass review.
