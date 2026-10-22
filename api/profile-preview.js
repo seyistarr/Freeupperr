@@ -98,6 +98,15 @@ export default async function handler(req, res) {
     return res.status(404).send('Profile unavailable');
   }
 
+  // Real visitors receive an HTTP redirect, not an intermediate loading page.
+  // Link unfurlers retain the server-rendered Open Graph metadata below.
+  const userAgent = String(req.headers?.['user-agent'] || '');
+  const isPreviewCrawler = /facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|Discordbot|Slackbot|LinkedInBot|Pinterestbot|Googlebot|bingbot|Applebot|SkypeUriPreview|Embedly|Iframely|crawler|spider|bot|preview/i.test(userAgent);
+  if (!isPreviewCrawler) {
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.redirect(302, '/profile.html?freeupper_id=' + encodeURIComponent(profile.freeupper_id));
+  }
+
   let isSetupComplete = false;
   try {
     const eligibilityResponse = await fetch(
