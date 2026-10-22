@@ -5588,6 +5588,7 @@
             // Fetch each protected image with the signed-in viewer's bearer token.
             // Object URLs remain local to this tab and are revoked when removed.
             const protectedImageUrls = new WeakMap();
+            const protectedImageNodes = new Set();
             async function loadProtectedImages(scope) {
                 const root = scope || document;
                 const nodes = Array.from(root.querySelectorAll('[data-protected-asset]'));
@@ -5620,6 +5621,7 @@
                         img.onload = () => { if (!node.isConnected) URL.revokeObjectURL(url); };
                         node.replaceChildren(img);
                         protectedImageUrls.set(node, url);
+                        protectedImageNodes.add(node);
                         img.src = url;
                         node.dataset.protectedLoaded = '1';
                     } catch (_) {
@@ -5630,6 +5632,14 @@
                 }));
             }
             const protectedImageObserver = new MutationObserver(() => {
+                for (const node of protectedImageNodes) {
+                    if (!node.isConnected) {
+                        const url = protectedImageUrls.get(node);
+                        if (url) URL.revokeObjectURL(url);
+                        protectedImageUrls.delete(node);
+                        protectedImageNodes.delete(node);
+                    }
+                }
                 document.querySelectorAll('[data-protected-asset]').forEach(node => {
                     if (node.dataset.protectedLoading !== '1' && node.dataset.protectedLoaded !== '1') {
                         loadProtectedImages(document).catch(() => {});
