@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   // Fail closed until both production release controls and DB approval exist.
   if (req.method === 'GET' && req.query?.capability === 'test') {
     const disabled = () => res.status(200).json({ enabled: false, audiences: ['public'] });
-    const token = /^Bearer (\\S+)$/i.exec(req.headers?.authorization || '')?.[1];
+    const token = /^Bearer ([^\s]+)$/i.exec(req.headers?.authorization || '')?.[1];
     if (!token) return disabled();
     const context = publishingContext(env);
     if (!context || context.mode !== 'production') return disabled();
