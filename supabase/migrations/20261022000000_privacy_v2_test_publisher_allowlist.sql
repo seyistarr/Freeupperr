@@ -1,6 +1,7 @@
 -- Default-deny test publisher allowlist. This migration does not activate
 -- production release gates or populate any account IDs.
 create schema if not exists privacy_v2_private;
+revoke all on schema privacy_v2_private from public, anon, authenticated;
 
 create table if not exists privacy_v2_private.test_publishers (
   user_id uuid primary key references auth.users(id) on delete cascade,
