@@ -5510,7 +5510,16 @@
                 // The authorized viewer's browser must obtain each image through
                 // /api/post-media with a bearer token; public HTML has no token.
                 if (mediaItems.some(item => item.protected || item.assetId || item.asset_id)) {
-                    return '<div class="ig-media-container fu-protected-media-placeholder" role="status" aria-label="Protected media requires authorized loading">Protected media · Sign in to view</div>';
+                    const imageItems = mediaItems.filter(item => item.type === 'image' && (item.assetId || item.asset_id));
+                    if (imageItems.length !== mediaItems.length) {
+                        return '<div class="ig-media-container fu-protected-media-placeholder" role="status">Protected video is not available yet</div>';
+                    }
+                    const tiles = imageItems.map(item => {
+                        const id = item.assetId || item.asset_id;
+                        if (!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id)) return '';
+                        return '<div class="ig-media-container fu-protected-media-placeholder" data-protected-asset="' + id + '" role="status">Loading protected image…</div>';
+                    }).join('');
+                    return tiles || '<div class="ig-media-container fu-protected-media-placeholder" role="status">Protected media unavailable</div>';
                 }
 
                 if (mediaItems.length === 1) {
@@ -5574,6 +5583,67 @@
                     const idx = Math.round(el.scrollLeft / w);
                     counter.textContent = `${Math.min(idx + 1, items.length)}/${items.length}`;
                 }, { passive: true });
+            }
+
+            // Fetch each protected image with the signed-in viewer's bearer token.
+            // Object URLs remain local to this tab and are revoked when removed.
+            const protectedImageUrls = new WeakMap();
+            async function loadProtectedImages(scope) {
+                const root = scope || document;
+                const nodes = Array.from(root.querySelectorAll('[data-protected-asset]'));
+                if (!nodes.length) return;
+                const client = window.sb;
+                if (!client?.auth?.getSession) return;
+                const { data, error } = await client.auth.getSession();
+                const token = !error && data?.session?.access_token;
+                if (!token) {
+                    nodes.forEach(node => { node.textContent = 'Sign in to view protected media'; });
+                    return;
+                }
+                await Promise.all(nodes.map(async node => {
+                    if (node.dataset.protectedLoading === '1' || node.dataset.protectedLoaded === '1') return;
+                    node.dataset.protectedLoading = '1';
+                    try {
+                        const assetId = node.dataset.protectedAsset;
+                        const response = await fetch('/api/post-media?asset_id=' + encodeURIComponent(assetId), {
+                            headers: { Authorization: 'Bearer ' + token },
+                            cache: 'no-store', credentials: 'same-origin'
+                        });
+                        if (!response.ok) throw new Error('Access unavailable');
+                        const blob = await response.blob();
+                        if (!blob.type.startsWith('image/')) throw new Error('Unexpected media');
+                        if (!node.isConnected) return;
+                        const url = URL.createObjectURL(blob);
+                        const img = document.createElement('img');
+                        img.className = 'fade-in-image loaded';
+                        img.alt = 'Protected post image';
+                        img.onload = () => { if (!node.isConnected) URL.revokeObjectURL(url); };
+                        node.replaceChildren(img);
+                        protectedImageUrls.set(node, url);
+                        img.src = url;
+                        node.dataset.protectedLoaded = '1';
+                    } catch (_) {
+                        if (node.isConnected) node.textContent = 'Protected media unavailable';
+                    } finally {
+                        delete node.dataset.protectedLoading;
+                    }
+                }));
+            }
+            const protectedImageObserver = new MutationObserver(() => {
+                document.querySelectorAll('[data-protected-asset]').forEach(node => {
+                    if (node.dataset.protectedLoading !== '1' && node.dataset.protectedLoaded !== '1') {
+                        loadProtectedImages(document).catch(() => {});
+                    }
+                });
+            });
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    protectedImageObserver.observe(document.body, { childList: true, subtree: true });
+                    loadProtectedImages(document).catch(() => {});
+                }, { once: true });
+            } else {
+                protectedImageObserver.observe(document.body, { childList: true, subtree: true });
+                loadProtectedImages(document).catch(() => {});
             }
 
             function initAllMediaScrollRows(scope) {
