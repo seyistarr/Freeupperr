@@ -3127,6 +3127,34 @@
 
         async function handlePostUpload(event) {
             const files = Array.from(event.target.files);
+            // Restricted assets must never be uploaded through the public
+            // Cloudinary uploader. Hold the original files locally until the
+            // authenticated protected-draft workflow owns the upload.
+            if ((document.getElementById('postAudience')?.value || 'public') !== 'public') {
+                if (!files.length) return;
+                const video = files.some(f => f.type.startsWith('video/'));
+                if (video || files.some(f => !f.type.startsWith('image/')) ||
+                    files.length + state.postMedia.length > 20 ||
+                    files.some(f => f.size > CONFIG.LIMITS.maxFileSize) ||
+                    state.postMedia.some(m => !m.protectedFile)) {
+                    showToast('Choose up to 20 local images for a protected post. Videos and public uploads cannot be mixed.', 'o');
+                    event.target.value = '';
+                    return;
+                }
+                for (const file of files) {
+                    const url = URL.createObjectURL(file);
+                    state.postMedia.push({ url, type: 'image', protectedFile: file, uploading: false });
+                    state.postEmbeddings.push(null);
+                }
+                renderPostImageGrid();
+                event.target.value = '';
+                return;
+            }
+            if (state.postMedia.some(m => m.protectedFile)) {
+                showToast('Remove protected files before switching to Public.', 'o');
+                event.target.value = '';
+                return;
+            }
             if (!files.length) return;
 
             const hasVideo = files.some(f => f.type.startsWith('video'));
