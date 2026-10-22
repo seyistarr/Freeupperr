@@ -1,4 +1,6 @@
-const CACHE_NAME = 'freeupper-pwa-v4';
+// Bump this version when precached app assets change so installed PWAs refresh.
+const CACHE_NAME = 'freeupper-pwa-v5';
+const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
   './',
@@ -27,7 +29,8 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(
-      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+      keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+        .map(key => caches.delete(key))
     ))
   );
 });
