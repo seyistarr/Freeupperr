@@ -425,8 +425,8 @@
   function shareOrigin() {
     const host = window.location.hostname.toLowerCase();
     return host === 'www.freeupper.com' || host === 'freeupper.com'
-      ? 'https://www.freeupper.com'
-      : (host.endsWith('.vercel.app') ? window.location.origin : 'https://www.freeupper.com');
+      ? 'https://freeupper.com'
+      : (host.endsWith('.vercel.app') ? window.location.origin : 'https://freeupper.com');
   }
 
   function getPostShareUrl(post, sharePage) {
