@@ -7381,29 +7381,14 @@
                 if (action === 'copy') {
                     recordShareForPost();
                     const shareUrl = preparedShareUrls.get(post.id) || url;
-                    // Avoid copying a legacy UUID while the short-link request is still pending.
-                    // For iOS, keep clipboard writes in the original tap when the URL is ready.
-                    if (shareUrl.includes('?post=')) {
-                        window.Router?.resolvePostShareUrl?.(post, 'index.html').then(resolved => {
-                            if (resolved && !resolved.includes('?post=')) {
-                                preparedShareUrls.set(post.id, resolved);
-                                window.prompt('Copy this short post link:', resolved);
-                            } else {
-                                window.prompt('Copy this post link:', shareUrl);
-                            }
-                            closeShareModal();
-                        }).catch(() => {
-                            window.prompt('Copy this post link:', shareUrl);
-                            closeShareModal();
-                        });
-                        return;
-                    }
+                    // Copy in the original tap handler: iOS requires transient user activation.
+                    // A short URL is prepared when the share sheet opens.
                     copyTextToClipboard(shareUrl).then(() => {
+                        closeShareModal();
                         showToast('Link copied to clipboard 📋');
-                        closeShareModal();
                     }).catch(() => {
-                        window.prompt('Copy this post link:', shareUrl);
                         closeShareModal();
+                        showToast('Could not copy link. Please try again.');
                     });
                     return;
                 }
