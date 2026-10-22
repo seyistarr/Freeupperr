@@ -18,6 +18,35 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   const env = process.env;
+  // Production credential preflight is read-only and never activates publishing.
+  // Require a verified approved test-publisher bearer token; never expose secrets.
+  if (req.method === 'GET' && req.query?.readiness === 'production') {
+    const unavailable = () => res.status(503).json({ ready: false });
+    if (env.VERCEL_ENV !== 'production' ||
+        env.SUPABASE_URL !== 'https://jmjtqidirpmnegzvmiaq.supabase.co' ||
+        env.CLOUDINARY_CLOUD_NAME !== 'duzyf1kda' ||
+        !env.SUPABASE_SERVICE_ROLE_KEY || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return unavailable();
+    const token = /^Bearer ([^\\s]+)$/i.exec(req.headers?.authorization || '')?.[1];
+    if (!token) return res.status(401).json({ ready: false });
+    try {
+      const auth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } });
+      const { data: identity, error: identityError } = await auth.auth.getUser(token);
+      if (identityError || !identity?.user?.id) return res.status(403).json({ ready: false });
+      const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } });
+      if (!await requireTestPublisher(db, { mode: 'production' }, identity.user.id)) return res.status(403).json({ ready: false });
+      const { data: release, error: releaseError } = await db.rpc('protected_first_release_status');
+      if (releaseError || release?.version !== 1) return unavailable();
+      cloudinary.config({ cloud_name: 'duzyf1kda', api_key: env.CLOUDINARY_API_KEY,
+        api_secret: env.CLOUDINARY_API_SECRET, secure: true });
+      const cloud = await cloudinary.api.ping();
+      return res.status(cloud?.status === 'ok' ? 200 : 503).json({
+        ready: cloud?.status === 'ok', credentials: cloud?.status === 'ok' ? 'verified' : 'unavailable',
+        releaseEnabled: release.delivery === true && release.publishing === true
+      });
+    } catch (_) { return unavailable(); }
+  }
   // Reuse this existing serverless function for the test capability probe.
   // Fail closed until both production release controls and DB approval exist.
   if (req.method === 'GET' && req.query?.capability === 'test') {
