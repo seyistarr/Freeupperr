@@ -5506,6 +5506,12 @@
             function buildMediaHTML(p, postIndex) {
                 const mediaItems = getMediaItems(p);
                 if (!mediaItems || mediaItems.length === 0) return '';
+                // Never render protected assets as public URLs or broken media.
+                // The authorized viewer's browser must obtain each image through
+                // /api/post-media with a bearer token; public HTML has no token.
+                if (mediaItems.some(item => item.protected || item.assetId || item.asset_id)) {
+                    return '<div class="ig-media-container fu-protected-media-placeholder" role="status" aria-label="Protected media requires authorized loading">Protected media · Sign in to view</div>';
+                }
 
                 if (mediaItems.length === 1) {
                     const item = mediaItems[0];
