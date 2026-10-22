@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireTestPublisher } from '../lib/protected-media/test-publisher-guard.js';
 import { readStagingPosts } from '../lib/protected-media/staging-reader-server.js';
 import { cleanupStagingDraft, sweepStagingDrafts, validCleanupWorker } from '../lib/protected-media/staging-cleanup-server.js';
 import { randomUUID } from 'node:crypto';
@@ -91,6 +92,7 @@ export default async function handler(req, res) {
     const body = req.body;
     if (!body || typeof body !== 'object' || Array.isArray(body)) return res.status(400).json({ error: 'Invalid request' });
     if (body.action === 'create') {
+      if (!await requireTestPublisher(db, runtime, owner)) return res.status(403).json({ error: 'Protected publishing not approved for this account' });
       if (!['followers', 'friends', 'only_me'].includes(body.visibility)) return res.status(400).json({ error: 'Restricted audience required' });
       if (body.fields?.visibility != null && body.fields.visibility !== body.visibility) {
         return res.status(400).json({ error: 'Conflicting requested audiences' });
@@ -106,6 +108,7 @@ export default async function handler(req, res) {
       if (error) return res.status(409).json({ error: 'Draft creation unavailable' });
       return res.status(201).json({ id, status: 'draft' });
     }
+    if (body.action === 'publish' && !await requireTestPublisher(db, runtime, owner)) return res.status(403).json({ error: 'Protected publishing not approved for this account' });
     if (typeof body.post_id !== 'string' || !UUID.test(body.post_id)) return res.status(400).json({ error: 'Invalid draft' });
     if (['legacy-status', 'legacy-consent', 'legacy-quarantine-consent', 'legacy-delete-consent'].includes(body.action)) {
       if (runtime.mode !== 'staging' || env.FREEUPPER_LEGACY_MIGRATION !== 'enabled-in-isolated-staging') {
