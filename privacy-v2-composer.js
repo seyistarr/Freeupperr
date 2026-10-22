@@ -49,7 +49,7 @@
   }
   async function publish({ audience, title, content, tags, commentsHidden, media, onProgress }) {
     if (!['followers', 'friends', 'only_me'].includes(audience)) throw new Error('Invalid audience');
-    const video = media.length === 1 && media[0]?.type === 'video';
+    const video = Array.isArray(media) && media.length === 1 && media[0]?.type === 'video';
     if (!Array.isArray(media) || !media.length || media.length > 20 ||
         media.some(m => !m.protectedFile || !['image', 'video'].includes(m.type) ||
           !m.protectedFile.type.startsWith(m.type + '/')) ||
