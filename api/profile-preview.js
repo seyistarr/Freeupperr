@@ -132,7 +132,17 @@ export default async function handler(req, res) {
 
   const username = isUnverified ? '' : cleanText(publicHandle(profile.username || profile.display_username || ''), 80);
 
-  const bio = isUnverified ? 'View this profile on FreeUpper.' : cleanText(redactEmails(profile.bio || `Connect with ${displayName} on FreeUpper.`), 180);
+  // Social platforms already display the linked domain beneath the description.
+  // Remove repeated FreeUpper homepage URLs from preview text only; leave
+  // the stored profile bio and the rendered profile page unchanged.
+  const previewBio = String(profile.bio || '')
+    .replace(/https?:\/\/(?:www\.)?freeupper\.com\/?(?:\?[^\s]*)?/gi, '')
+    .replace(/\bwww\.freeupper\.com\/?/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const bio = isUnverified
+    ? 'View this profile on FreeUpper.'
+    : cleanText(redactEmails(previewBio || `Connect with ${displayName} on FreeUpper.`), 180);
 
   const title = username
     ? `${displayName} (@${username}) • FreeUpper`
