@@ -1983,22 +1983,24 @@
                             <div class="fmt-hint">Select text, tap B / I / S to format — # and @ are never affected.</div>
                         </div>
 
+                        <div class="form-group">
+                            <label class="form-lbl" for="postAudience">Who can view this post?</label>
+                            <select class="form-inp" id="postAudience" aria-describedby="postAudienceNote" onchange="handlePostAudienceChange(event)">
+                                <option value="public">Public</option>
+                                <option value="followers" disabled>Followers — coming soon</option>
+                                <option value="friends" disabled>Mutuals — coming soon</option>
+                                <option value="only_me" disabled>Only Me — coming soon</option>
+                            </select>
+                            <div class="fmt-hint" id="postAudienceNote">Private publishing is being prepared. Public is the only available option.</div>
+                        </div>
+
                         <!-- Media -->
                         <div class="form-group">
                             <label class="form-lbl">
                                 Media
                                 <span class="optional">(up to 20 images, or 1 video ≤100MB / 3min)</span>
                             </label>
-                        <div class="form-group">
-                            <label class="form-lbl" for="postAudience">Who can view this post?</label>
-                            <select class="form-inp" id="postAudience" aria-describedby="postAudienceNote">
-                                <option value="public">Public</option>
-                                <option value="followers" disabled>Followers — coming soon</option>
-                                <option value="friends" disabled>Mutuals — coming soon</option>
-                                <option value="private" disabled>Only Me — coming soon</option>
-                            </select>
-                            <div class="fmt-hint" id="postAudienceNote">Private publishing is being prepared. Public is the only available option.</div>
-                        </div>
+
                             <div class="upload-row">
                                 <input class="form-inp" id="postMediaUrlInput" type="text" placeholder="Paste image or YouTube link…" oninput="previewPostMedia()" aria-label="Media URL">
                                 <button type="button" class="upload-btn" onclick="document.getElementById('postFileInput').click()" aria-label="Upload media files">
@@ -2202,6 +2204,7 @@
     <!-- ══════════════════════════════════════════
     SHARED NAV SCRIPTS
     ══════════════════════════════════════════ -->
+    <script src="privacy-v2-composer.js" defer></script>
     <script src="bottom-nav.js" defer>
     </script>
     <script src="side-nav.js" defer>
@@ -3058,6 +3061,11 @@
 
         function previewPostMedia() {
             const input = document.getElementById('postMediaUrlInput');
+            if ((document.getElementById('postAudience')?.value || 'public') !== 'public') {
+                input.value = '';
+                input.placeholder = 'External media links are not supported for protected posts';
+                return;
+            }
             const url = input.value.trim();
             if (!url) {
                 input.placeholder = 'Paste image or YouTube link…';
@@ -3123,8 +3131,70 @@
             }
         }
 
+        function handlePostAudienceChange(event) {
+            const select = event.target;
+            const requested = select.value;
+            const hasProtected = state.postMedia.some(m => m.protectedFile);
+            const hasPublic = state.postMedia.some(m => !m.protectedFile);
+            if (requested !== 'public' && hasPublic) {
+                select.value = 'public';
+                showToast('Remove public media before choosing a protected audience', 'o');
+                return;
+            }
+            if (requested === 'public' && hasProtected) {
+                select.value = select.dataset.previousProtectedAudience || 'only_me';
+                showToast('Remove protected images before switching to Public', 'o');
+                return;
+            }
+            if (requested !== 'public') select.dataset.previousProtectedAudience = requested;
+            const input = document.getElementById('postMediaUrlInput');
+            if (input) {
+                input.disabled = requested !== 'public';
+                input.placeholder = requested === 'public'
+                    ? 'Paste image or YouTube link…'
+                    : 'External media links are disabled for protected posts';
+                if (requested !== 'public') input.value = '';
+            }
+        }
+
         async function handlePostUpload(event) {
             const files = Array.from(event.target.files);
+            if (files.some(f => f.size === 0)) {
+                showToast('Empty files cannot be uploaded', 'o');
+                event.target.value = '';
+                return;
+            }
+            // Restricted assets must never be uploaded through the public
+            // Cloudinary uploader. Hold the original files locally until the
+            // authenticated protected-draft workflow owns the upload.
+            if ((document.getElementById('postAudience')?.value || 'public') !== 'public') {
+                if (!files.length) return;
+                const video = files.some(f => f.type.startsWith('video/'));
+                if ((video && (files.length !== 1 || state.postMedia.length !== 0)) ||
+                    (!video && state.postMedia.some(m => m.type === 'video')) ||
+                    files.some(f => !f.type.startsWith('image/') && !f.type.startsWith('video/')) ||
+                    files.length + state.postMedia.length > 20 ||
+                    files.some(f => f.size > CONFIG.LIMITS.maxFileSize) ||
+                    state.postMedia.some(m => !m.protectedFile)) {
+                    showToast('Choose up to 20 protected images or one video; do not mix with public media.', 'o');
+                    event.target.value = '';
+                    return;
+                }
+                for (const file of files) {
+                    const url = URL.createObjectURL(file);
+                    state.postMedia.push({ url, type: file.type.startsWith('video/') ? 'video' : 'image',
+                        protectedFile: file, uploading: false });
+                    state.postEmbeddings.push(null);
+                }
+                renderPostImageGrid();
+                event.target.value = '';
+                return;
+            }
+            if (state.postMedia.some(m => m.protectedFile)) {
+                showToast('Remove protected files before switching to Public.', 'o');
+                event.target.value = '';
+                return;
+            }
             if (!files.length) return;
 
             const hasVideo = files.some(f => f.type.startsWith('video'));
@@ -3742,12 +3812,47 @@
             const user = requireAuth(true);
             if (!user) return;
 
+            const audience = document.getElementById('postAudience')?.value || 'public';
             const titleEl = document.getElementById('postTitle');
             const contentEl = document.getElementById('postContent');
             const title = titleEl.value.trim();
             const content = contentEl.value.trim();
             const hideComments = document.getElementById('postHideComments').checked;
 
+            if (audience !== 'public') {
+                if (!window.FreeUpperProtectedPublish) {
+                    showToast('Protected publishing is not ready', 'r');
+                    return;
+                }
+                const btn = document.getElementById('postSubmitBtn');
+                btn.classList.add('loading');
+                btn.disabled = true;
+                try {
+                    await window.FreeUpperProtectedPublish.publish({
+                        audience, title, content,
+                        tags: mergeHashtagLists(extractHashtags(title), extractHashtags(content)),
+                        commentsHidden: hideComments, media: state.postMedia,
+                        onProgress: (done, total) => showToast('Securing media ' + done + '/' + total, 'p')
+                    });
+                    state.postMedia.forEach(m => { if (m.url?.startsWith('blob:')) URL.revokeObjectURL(m.url); });
+                    state.postMedia = [];
+                    state.postEmbeddings = [];
+                    renderPostImageGrid();
+                    showToast('Protected post published!', 'g');
+                    window.location.href = 'index.html?refresh=' + Date.now();
+                } catch (error) {
+                    showToast(error.message || 'Protected publishing unavailable', 'r');
+                } finally {
+                    btn.classList.remove('loading');
+                    btn.disabled = false;
+                }
+                return;
+            }
+
+            if (state.postMedia.some(m => m.protectedFile)) {
+                showToast('Remove protected files before publishing publicly', 'o');
+                return;
+            }
             if (!title && !content && state.postMedia.length === 0) {
                 showToast('Please add a title, content or media', 'o');
                 return;
@@ -4130,6 +4235,7 @@
         window.selectCondition = selectCondition;
         window.formatPrice = formatPrice;
         window.detectLocation = detectLocation;
+        window.handlePostAudienceChange = handlePostAudienceChange;
         window.submitPost = submitPost;
         window.submitItem = submitItem;
         window.showToast = showToast;

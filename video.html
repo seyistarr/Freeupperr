@@ -3437,6 +3437,26 @@
 
         // ─── LOAD VIDEO POSTS ──────────────────────────────────────
 
+        const protectedVideoBlobUrls = new Set();
+        let protectedVideoAuthGeneration = 0;
+        function clearProtectedVideoMedia() {
+            protectedVideoAuthGeneration++;
+            for (const url of protectedVideoBlobUrls) {
+                document.querySelectorAll('video, img').forEach(element => {
+                    if (element.src === url) {
+                        if (element.tagName === 'VIDEO') element.pause();
+                        element.removeAttribute('src');
+                        if (element.tagName === 'VIDEO') element.load();
+                    }
+                });
+                URL.revokeObjectURL(url);
+            }
+            protectedVideoBlobUrls.clear();
+        }
+        window.addEventListener('pagehide', clearProtectedVideoMedia);
+        window.sb?.auth?.onAuthStateChange?.((event) => {
+            if (['SIGNED_OUT', 'USER_UPDATED', 'SIGNED_IN'].includes(event)) clearProtectedVideoMedia();
+        });
         async function loadVideoPosts() {
             try {
                 const feedItems = await window.PostsAPI.loadFeedWithReposts(0, 20, 'studio');
@@ -3453,12 +3473,18 @@
                         post.mediaUrl.match(/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null;
 
                     const mediaType = post.mediaType || 'text';
+                    const protectedAsset = Array.isArray(post.media)
+                        ? post.media.find(m => m.protected && m.assetId &&
+                            m.type === mediaType) : null;
+                    // Protected assets have no public mediaUrl. Resolve them
+                    // only through the authenticated media endpoint below.
+                    if (post.protectedMedia && !protectedAsset) return null;
 
                     // ─── Validate video posts have a real mediaUrl ───
                     const mediaUrl = typeof post.mediaUrl === 'string'
                         ? post.mediaUrl.trim()
                         : '';
-                    if (mediaType === 'video' && !mediaUrl) {
+                    if (mediaType === 'video' && !mediaUrl && !protectedAsset) {
                         console.warn('[video] Video post has no mediaUrl:', post.id);
                         return null;
                     }
@@ -3500,7 +3526,8 @@
 
                     return {
                         id: post.id,
-                        src: mediaUrl,
+                        src: protectedAsset ? '' : mediaUrl,
+                        protectedAssetId: protectedAsset?.assetId || null,
                         poster: post.thumbnailUrl || (mediaType === 'image' ? mediaUrl : '') || '',
                         creator: author.name,
                         handle: isOwn ? '@' + (currentUser.username || 'me') : '@' + (profile.username || author.name
@@ -3556,6 +3583,35 @@
                     }
                 }
                 const videoEntries = feedItems.map(mapEntryToVideoPost).filter(Boolean);
+                const protectedEntries = videoEntries.filter(v => v.protectedAssetId);
+                if (protectedEntries.length) {
+                    const { data, error } = await window.sb?.auth?.getSession?.() || {};
+                    const token = !error && data?.session?.access_token;
+                    const generation = protectedVideoAuthGeneration;
+                    await Promise.all(protectedEntries.map(async v => {
+                        if (!token) return;
+                        try {
+                            const response = await fetch('/api/post-media?asset_id=' +
+                                encodeURIComponent(v.protectedAssetId), {
+                                headers: { Authorization: 'Bearer ' + token },
+                                cache: 'no-store', credentials: 'same-origin'
+                            });
+                            if (!response.ok) return;
+                            const blob = await response.blob();
+                            const expected = v.mediaType === 'video' ? 'video/' : 'image/';
+                            if (!blob.type.startsWith(expected) || blob.size > 50 * 1024 * 1024 ||
+                                generation !== protectedVideoAuthGeneration) return;
+                            const url = URL.createObjectURL(blob);
+                            if (generation !== protectedVideoAuthGeneration) {
+                                URL.revokeObjectURL(url);
+                                return;
+                            }
+                            v.src = url;
+                            if (v.mediaType === 'image') v.images = [url];
+                            protectedVideoBlobUrls.add(url);
+                        } catch (_) { /* fail closed */ }
+                    }));
+                }
                 const seen = new Set();
                 const deduped = [];
                 for (const v of videoEntries) {
