@@ -32,7 +32,7 @@
       const session = !error && data?.session;
       if (!session?.access_token) { lastUser = null; return; }
       lastUser = session.user?.id || null;
-      const response = await fetch('/api/privacy-v2-test-capability', {
+      const response = await fetch('/api/privacy-v2-publish?capability=test', {
         headers: { Authorization: 'Bearer ' + session.access_token },
         cache: 'no-store', credentials: 'same-origin'
       });
