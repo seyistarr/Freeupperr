@@ -45,7 +45,7 @@
         }
         const resourceUrl = 'https://api.cloudinary.com/v1_1/' +
           encodeURIComponent(signed.cloud_name) + '/image/upload';
-        const result = await fetch(resourceUrl, { method: 'POST', body: upload });
+        const result = await fetch(resourceUrl, { method: 'POST', body: upload, cache: 'no-store' });
         const asset = await result.json().catch(() => ({}));
         if (!result.ok || !asset.asset_id || !asset.public_id || asset.type !== 'authenticated') {
           throw new Error('Protected media upload failed');
