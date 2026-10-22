@@ -214,6 +214,19 @@
         if (typeof item === 'string') {
           return { url: item, type: 'image', thumbnailUrl: '' };
         }
+        // Protected-first posts store opaque registry UUIDs, not public URLs.
+        // Never derive a Cloudinary URL from an asset ID. The viewer must
+        // authenticate against /api/post-media for each media request.
+        if (item.asset_id) {
+          return {
+            type: item.type || 'image',
+            assetId: item.asset_id,
+            thumbnailAssetId: item.thumbnail_asset_id || null,
+            protected: true,
+            url: '',
+            thumbnailUrl: ''
+          };
+        }
         return {
           ...item,
           url: item.url || '',
@@ -221,7 +234,7 @@
           thumbnailUrl: item.thumbnailUrl || item.thumbnail_url || ''
         };
       })
-      .filter(item => !!item.url);
+      .filter(item => !!item.url || (item.protected && item.assetId));
   }
 
   // ===================================================================
@@ -286,6 +299,8 @@
 
       // Media
       media,
+      visibility: row.visibility || 'public',
+      protectedMedia: media.some(item => item.protected === true),
       mediaUrl: row.media_url || media[0]?.url || '',
       mediaType: row.media_type || media[0]?.type || null,
       thumbnailUrl: (function () {
