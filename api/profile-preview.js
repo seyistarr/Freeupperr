@@ -221,13 +221,16 @@ export default async function handler(req, res) {
   >
 
 </head>
-<body style="font-family:system-ui,sans-serif;max-width:680px;margin:8vh auto;padding:24px;line-height:1.6">
-  <main>
-    <h1>${escapeHtml(displayName)}</h1>
-    ${username ? `<p>@${escapeHtml(username)}</p>` : ''}
-    <p>${safeDescription}</p>
-    <p><a href="${escapeHtml(profilePage)}">Open in FreeUpper</a></p>
+<body style="font-family:system-ui,sans-serif;background:#000;color:#fff;margin:0;min-height:100vh;display:grid;place-items:center">
+  <main style="text-align:center;padding:24px">
+    <p>Opening profile on FreeUpper…</p>
+    <p><a style="color:#a78bfa" href="${escapeHtml(profilePage)}">Continue to profile</a></p>
   </main>
+  <script>
+    // The metadata above stays available to social crawlers.
+    // Human visitors should never need to click through an intermediate page.
+    window.location.replace(${JSON.stringify(profilePage)});
+  </script>
 </body>
 </html>`;
 
