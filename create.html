@@ -3170,17 +3170,20 @@
             if ((document.getElementById('postAudience')?.value || 'public') !== 'public') {
                 if (!files.length) return;
                 const video = files.some(f => f.type.startsWith('video/'));
-                if (video || files.some(f => !f.type.startsWith('image/')) ||
+                if ((video && (files.length !== 1 || state.postMedia.length !== 0)) ||
+                    (!video && state.postMedia.some(m => m.type === 'video')) ||
+                    files.some(f => !f.type.startsWith('image/') && !f.type.startsWith('video/')) ||
                     files.length + state.postMedia.length > 20 ||
                     files.some(f => f.size > CONFIG.LIMITS.maxFileSize) ||
                     state.postMedia.some(m => !m.protectedFile)) {
-                    showToast('Choose up to 20 local images for a protected post. Videos and public uploads cannot be mixed.', 'o');
+                    showToast('Choose up to 20 protected images or one video; do not mix with public media.', 'o');
                     event.target.value = '';
                     return;
                 }
                 for (const file of files) {
                     const url = URL.createObjectURL(file);
-                    state.postMedia.push({ url, type: 'image', protectedFile: file, uploading: false });
+                    state.postMedia.push({ url, type: file.type.startsWith('video/') ? 'video' : 'image',
+                        protectedFile: file, uploading: false });
                     state.postEmbeddings.push(null);
                 }
                 renderPostImageGrid();
