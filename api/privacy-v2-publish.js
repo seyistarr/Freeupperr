@@ -26,7 +26,7 @@ export default async function handler(req, res) {
         env.SUPABASE_URL !== 'https://jmjtqidirpmnegzvmiaq.supabase.co' ||
         env.CLOUDINARY_CLOUD_NAME !== 'duzyf1kda' ||
         !env.SUPABASE_SERVICE_ROLE_KEY || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return unavailable();
-    const token = /^Bearer ([^\\s]+)$/i.exec(req.headers?.authorization || '')?.[1];
+    const token = /^Bearer ([^\s]+)$/i.exec(req.headers?.authorization || '')?.[1];
     if (!token) return res.status(401).json({ ready: false });
     try {
       const auth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY,
