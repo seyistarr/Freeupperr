@@ -5529,6 +5529,17 @@
                     const lbl = document.getElementById('copyLbl');
                     try {
                         const shareUrl = preparedVideoShareUrls.get(videoPosts[idx]?.id) || url;
+                        if (!/^https:\/\/[^/]+\/[pv]\/[A-Za-z0-9_-]{6,16}$/.test(shareUrl)) {
+                            const current = videoPosts[idx];
+                            if (current?.id) {
+                                const sharePost = { ...current, media_type: current.mediaType || current.media_type || 'text' };
+                                Promise.resolve(window.Router?.resolvePostShareUrl?.(sharePost, 'video.html'))
+                                    .then(resolved => { if (resolved) preparedVideoShareUrls.set(current.id, resolved); })
+                                    .catch(() => {});
+                            }
+                            showToast('Preparing short link. Please try again in a moment.');
+                            return;
+                        }
                         // Copy immediately in the tap handler; avoid losing iOS user activation.
                         if (navigator.clipboard?.writeText && window.isSecureContext) {
                             await navigator.clipboard.writeText(shareUrl);
