@@ -1,6 +1,6 @@
 import React from 'react';
 import { ImageResponse } from '@vercel/og';
-const SITE = 'https://www.freeupper.com';
+const SITE = 'https://freeupper.com';
 const API = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
 const KEY = process.env.SUPABASE_ANON_KEY;
 const esc = (s = '') => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
