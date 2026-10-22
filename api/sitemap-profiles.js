@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   try {
     for (let offset = 0; offset < MAX_URLS; offset += PAGE_SIZE) {
       const params = new URLSearchParams({
-        select: 'freeupper_id',
+        select: 'freeupper_id,username',
         is_private: 'eq.false',
         suspended: 'eq.false',
         profile_setup_completed_at: 'not.is.null',
@@ -37,7 +37,9 @@ export default async function handler(req, res) {
       for (const row of rows) {
         const id = row?.freeupper_id;
         if (typeof id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(id)) {
-          urls.push(`  <url><loc>${escapeXml(`${SITE_URL}/u/${encodeURIComponent(id)}`)}</loc></url>`);
+          const username = row?.username;
+          const slug = typeof username === 'string' && /^[A-Za-z0-9_.]+$/.test(username) ? `/@${encodeURIComponent(username)}` : `/u/${encodeURIComponent(id)}`;
+          urls.push(`  <url><loc>${escapeXml(`${SITE_URL}${slug}`)}</loc></url>`);
         }
       }
       if (rows.length < PAGE_SIZE) break;
