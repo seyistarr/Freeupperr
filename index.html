@@ -5589,6 +5589,25 @@
             // Object URLs remain local to this tab and are revoked when removed.
             const protectedImageUrls = new WeakMap();
             const protectedImageNodes = new Set();
+            let protectedAuthGeneration = 0;
+            function clearProtectedImages() {
+                protectedAuthGeneration++;
+                for (const node of protectedImageNodes) {
+                    const url = protectedImageUrls.get(node);
+                    if (url) URL.revokeObjectURL(url);
+                    protectedImageUrls.delete(node);
+                    if (node.isConnected) {
+                        node.replaceChildren(document.createTextNode('Sign in to view protected media'));
+                        node.dataset.protectedLoaded = '1';
+                    }
+                }
+                protectedImageNodes.clear();
+            }
+            // A sign-out must invalidate both already rendered blobs and
+            // any authorized fetch that was still in flight.
+            window.sb?.auth?.onAuthStateChange?.((event) => {
+                if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') clearProtectedImages();
+            });
             async function loadProtectedImages(scope) {
                 const root = scope || document;
                 const nodes = Array.from(root.querySelectorAll('[data-protected-asset]'));
@@ -5601,6 +5620,7 @@
                     nodes.forEach(node => { node.textContent = 'Sign in to view protected media'; });
                     return;
                 }
+                const generation = protectedAuthGeneration;
                 await Promise.all(nodes.map(async node => {
                     if (node.dataset.protectedLoading === '1' || node.dataset.protectedLoaded === '1') return;
                     node.dataset.protectedLoading = '1';
@@ -5613,7 +5633,7 @@
                         if (!response.ok) throw new Error('Access unavailable');
                         const blob = await response.blob();
                         if (!blob.type.startsWith('image/')) throw new Error('Unexpected media');
-                        if (!node.isConnected) return;
+                        if (!node.isConnected || generation !== protectedAuthGeneration) return;
                         const url = URL.createObjectURL(blob);
                         const img = document.createElement('img');
                         img.className = 'fade-in-image loaded';
