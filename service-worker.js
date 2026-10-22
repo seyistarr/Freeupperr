@@ -3,7 +3,7 @@ const CACHE_NAME = 'freeupper-pwa-v4';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './create.htm',        // was create.html
+  './create.html',
   './profile.html',
   './search.html',
   './settings.html',
