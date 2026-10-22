@@ -2,7 +2,7 @@ import { publicName, publicHandle, redactEmails } from './profile-seo-privacy.js
 const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-const SITE_URL = 'https://www.freeupper.com';
+const SITE_URL = 'https://freeupper.com';
 const FALLBACK_IMAGE = `${SITE_URL}/freeupper.png`;
 
 function escapeHtml(value = '') {
