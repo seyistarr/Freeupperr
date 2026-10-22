@@ -3438,9 +3438,22 @@
         // ─── LOAD VIDEO POSTS ──────────────────────────────────────
 
         const protectedVideoBlobUrls = new Set();
-        window.addEventListener('pagehide', () => {
-            for (const url of protectedVideoBlobUrls) URL.revokeObjectURL(url);
+        function clearProtectedVideoMedia() {
+            for (const url of protectedVideoBlobUrls) {
+                document.querySelectorAll('video, img').forEach(element => {
+                    if (element.src === url) {
+                        if (element.tagName === 'VIDEO') element.pause();
+                        element.removeAttribute('src');
+                        if (element.tagName === 'VIDEO') element.load();
+                    }
+                });
+                URL.revokeObjectURL(url);
+            }
             protectedVideoBlobUrls.clear();
+        }
+        window.addEventListener('pagehide', clearProtectedVideoMedia);
+        window.sb?.auth?.onAuthStateChange?.((event) => {
+            if (['SIGNED_OUT', 'USER_UPDATED', 'SIGNED_IN'].includes(event)) clearProtectedVideoMedia();
         });
         async function loadVideoPosts() {
             try {
