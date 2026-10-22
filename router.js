@@ -183,8 +183,18 @@
       }
 
       // Public profile URL
-      window.location.href =
-        '/u/' + encodeURIComponent(profile.freeupper_id);
+      // Resolve the public username without changing the existing RPC signature.
+      const { data: publicProfile, error: publicError } = await window.sb
+        .from('profiles')
+        .select('username')
+        .eq('id', userId)
+        .maybeSingle();
+      const username = !publicError && publicProfile && String(publicProfile.username || '').trim();
+      if (username && /^[A-Za-z0-9_.]+$/.test(username)) {
+        window.location.href = '/@' + encodeURIComponent(username);
+      } else {
+        window.location.href = '/u/' + encodeURIComponent(profile.freeupper_id);
+      }
     } catch (error) {
       console.error(
         'Router.openProfile: Unexpected error',
