@@ -18,6 +18,28 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   const env = process.env;
+  // Reuse this existing serverless function for the test capability probe.
+  // Fail closed until both production release controls and DB approval exist.
+  if (req.method === 'GET' && req.query?.capability === 'test') {
+    const disabled = () => res.status(200).json({ enabled: false, audiences: ['public'] });
+    const token = /^Bearer (\\S+)$/i.exec(req.headers?.authorization || '')?.[1];
+    if (!token) return disabled();
+    const context = publishingContext(env);
+    if (!context || context.mode !== 'production') return disabled();
+    try {
+      const auth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+      const { data: identity, error } = await auth.auth.getUser(token);
+      if (error || !identity?.user?.id) return disabled();
+      const db = publishingDb(env, context);
+      await requireRuntimeSchema(db, context);
+      if (!await requireTestPublisher(db, context, identity.user.id)) return disabled();
+      return res.status(200).json({
+        enabled: true, audiences: ['public', 'followers', 'friends', 'only_me']
+      });
+    } catch (_) { return disabled(); }
+  }
   // Read-only readiness checks work before enabling the feature. Values and
   // upstream errors are never returned; all requests target the exact staging services.
   if (req.method === 'GET' && req.query?.readiness === '1') {
