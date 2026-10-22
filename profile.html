@@ -2634,6 +2634,7 @@
             // ─── PUBLIC PROFILE IDENTITY HELPERS ──────────────────────
             function buildProfileHref(user) {
                 if (user && user.freeupper_id) {
+                    if (user.username && /^[A-Za-z0-9_.]+$/.test(user.username)) return '/@' + encodeURIComponent(user.username);
                     return '/u/' + encodeURIComponent(user.freeupper_id);
                 }
                 if (user && user.id) {
@@ -2644,6 +2645,7 @@
 
             function getPublicProfileUrl() {
                 if (targetUser && targetUser.freeupper_id) {
+                    if (targetUser.username && /^[A-Za-z0-9_.]+$/.test(targetUser.username)) return 'https://www.freeupper.com/@' + encodeURIComponent(targetUser.username);
                     return 'https://www.freeupper.com/u/' + encodeURIComponent(targetUser.freeupper_id);
                 }
                 return null;
@@ -2865,6 +2867,8 @@
                     return { type: 'freeupper_id', value: freeupperId.trim().toUpperCase() };
                 }
                 var pathname = window.location.pathname || '';
+                var usernameMatch = pathname.match(/^\/@([A-Za-z0-9_.]+)\/?$/);
+                if (usernameMatch) return { type: 'username', value: usernameMatch[1] };
                 var publicMatch = pathname.match(/^\/u\/(FU[A-Z0-9]+)\/?$/i);
                 if (publicMatch) {
                     return { type: 'freeupper_id', value: publicMatch[1].trim().toUpperCase() };
@@ -2923,6 +2927,13 @@
                 if (!profile.id && profile.profile_id) profile.id = profile.profile_id;
                 if (!profile.id) throw new Error('Profile resolver returned no profile ID');
                 return profile;
+            }
+
+            async function fetchProfileByUsername(username) {
+                var result = await window.sb.from('profiles').select('freeupper_id').ilike('username', username).eq('is_private', false).maybeSingle();
+                if (result.error) throw result.error;
+                if (!result.data) throw new Error('Profile not found');
+                return fetchProfileByFreeUpperId(result.data.freeupper_id);
             }
 
             async function fetchProfileByUuid(userId) {
@@ -3239,7 +3250,9 @@
                         }
                     }
 
-                    if (targetInfo.type === 'freeupper_id') {
+                    if (targetInfo.type === 'username') {
+                        profile = await fetchProfileByUsername(targetInfo.value);
+                    } else if (targetInfo.type === 'freeupper_id') {
                         profile = await fetchProfileByFreeUpperId(targetInfo.value);
                     } else if (targetInfo.type === 'uuid') {
                         profile = await fetchProfileByUuid(targetInfo.value);
