@@ -464,6 +464,7 @@
       .from('posts')
       .select(POST_SELECT)
       .eq('is_hidden', false)
+      .eq('publishing_state', 'published')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -503,6 +504,7 @@
       .select(POST_SELECT)
       .eq('user_id', userId)
       .eq('is_hidden', false)
+      .eq('publishing_state', 'published')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
