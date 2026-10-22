@@ -1985,7 +1985,7 @@
 
                         <div class="form-group">
                             <label class="form-lbl" for="postAudience">Who can view this post?</label>
-                            <select class="form-inp" id="postAudience" aria-describedby="postAudienceNote">
+                            <select class="form-inp" id="postAudience" aria-describedby="postAudienceNote" onchange="handlePostAudienceChange(event)">
                                 <option value="public">Public</option>
                                 <option value="followers" disabled>Followers — coming soon</option>
                                 <option value="friends" disabled>Mutuals — coming soon</option>
@@ -3131,6 +3131,32 @@
             }
         }
 
+        function handlePostAudienceChange(event) {
+            const select = event.target;
+            const requested = select.value;
+            const hasProtected = state.postMedia.some(m => m.protectedFile);
+            const hasPublic = state.postMedia.some(m => !m.protectedFile);
+            if (requested !== 'public' && hasPublic) {
+                select.value = 'public';
+                showToast('Remove public media before choosing a protected audience', 'o');
+                return;
+            }
+            if (requested === 'public' && hasProtected) {
+                select.value = select.dataset.previousProtectedAudience || 'only_me';
+                showToast('Remove protected images before switching to Public', 'o');
+                return;
+            }
+            if (requested !== 'public') select.dataset.previousProtectedAudience = requested;
+            const input = document.getElementById('postMediaUrlInput');
+            if (input) {
+                input.disabled = requested !== 'public';
+                input.placeholder = requested === 'public'
+                    ? 'Paste image or YouTube link…'
+                    : 'External media links are disabled for protected posts';
+                if (requested !== 'public') input.value = '';
+            }
+        }
+
         async function handlePostUpload(event) {
             const files = Array.from(event.target.files);
             // Restricted assets must never be uploaded through the public
@@ -4201,6 +4227,7 @@
         window.selectCondition = selectCondition;
         window.formatPrice = formatPrice;
         window.detectLocation = detectLocation;
+        window.handlePostAudienceChange = handlePostAudienceChange;
         window.submitPost = submitPost;
         window.submitItem = submitItem;
         window.showToast = showToast;
