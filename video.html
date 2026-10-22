@@ -3438,7 +3438,9 @@
         // ─── LOAD VIDEO POSTS ──────────────────────────────────────
 
         const protectedVideoBlobUrls = new Set();
+        let protectedVideoAuthGeneration = 0;
         function clearProtectedVideoMedia() {
+            protectedVideoAuthGeneration++;
             for (const url of protectedVideoBlobUrls) {
                 document.querySelectorAll('video, img').forEach(element => {
                     if (element.src === url) {
@@ -3585,6 +3587,7 @@
                 if (protectedEntries.length) {
                     const { data, error } = await window.sb?.auth?.getSession?.() || {};
                     const token = !error && data?.session?.access_token;
+                    const generation = protectedVideoAuthGeneration;
                     await Promise.all(protectedEntries.map(async v => {
                         if (!token) return;
                         try {
@@ -3596,10 +3599,16 @@
                             if (!response.ok) return;
                             const blob = await response.blob();
                             const expected = v.mediaType === 'video' ? 'video/' : 'image/';
-                            if (!blob.type.startsWith(expected) || blob.size > 50 * 1024 * 1024) return;
-                            v.src = URL.createObjectURL(blob);
-                            if (v.mediaType === 'image') v.images = [v.src];
-                            protectedVideoBlobUrls.add(v.src);
+                            if (!blob.type.startsWith(expected) || blob.size > 50 * 1024 * 1024 ||
+                                generation !== protectedVideoAuthGeneration) return;
+                            const url = URL.createObjectURL(blob);
+                            if (generation !== protectedVideoAuthGeneration) {
+                                URL.revokeObjectURL(url);
+                                return;
+                            }
+                            v.src = url;
+                            if (v.mediaType === 'image') v.images = [url];
+                            protectedVideoBlobUrls.add(url);
                         } catch (_) { /* fail closed */ }
                     }));
                 }
