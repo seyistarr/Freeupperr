@@ -1,5 +1,5 @@
 const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
-const SITE_URL = 'https://www.freeupper.com';
+const SITE_URL = 'https://freeupper.com';
 const PAGE_SIZE = 1000;
 const MAX_URLS = 50000;
 
