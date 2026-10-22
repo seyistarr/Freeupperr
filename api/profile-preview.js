@@ -28,9 +28,31 @@ function normalizeId(value = '') {
 }
 
 export default async function handler(req, res) {
-  const freeupperId = normalizeId(
-    req.query?.freeupper_id || ''
-  );
+  let freeupperId = normalizeId(req.query?.freeupper_id || '');
+  const usernameQuery = String(req.query?.username || '').trim().replace(/^@/, '');
+  if (usernameQuery) {
+    if (!/^[A-Za-z0-9_.]{1,80}$/.test(usernameQuery)) return res.status(404).send('Profile not found');
+    if (!SUPABASE_ANON_KEY) return res.status(503).send('Temporarily unavailable');
+    try {
+      const params = new URLSearchParams({
+        select: 'freeupper_id,username',
+        username: 'ilike.' + usernameQuery,
+        is_private: 'eq.false',
+        limit: '2'
+      });
+      const response = await fetch(SUPABASE_URL + '/rest/v1/profiles?' + params, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY }
+      });
+      if (!response.ok) throw new Error('Username lookup failed: ' + response.status);
+      const rows = await response.json();
+      const match = rows.find(row => String(row.username).toLowerCase() === usernameQuery.toLowerCase());
+      if (!match) return res.status(404).send('Profile not found');
+      freeupperId = normalizeId(match.freeupper_id);
+    } catch (error) {
+      console.error('Profile username lookup failed', error);
+      return res.status(503).send('Temporarily unavailable');
+    }
+  }
 
   if (!freeupperId) {
     res.setHeader('X-Robots-Tag', 'noindex');
@@ -109,8 +131,9 @@ export default async function handler(req, res) {
 
   if (!isSetupComplete) res.setHeader('X-Robots-Tag', 'noindex, follow');
 
-  const profileUrl =
-    `${SITE_URL}/u/${encodeURIComponent(profile.freeupper_id)}`;
+  const profileUrl = username && /^[A-Za-z0-9_.]+$/.test(username)
+    ? `${SITE_URL}/@${encodeURIComponent(username)}`
+    : `${SITE_URL}/u/${encodeURIComponent(profile.freeupper_id)}`;
 
   const imageUrl = isUnverified ? FALLBACK_IMAGE :
   `${SITE_URL}/api/profile-og?freeupper_id=${encodeURIComponent(
