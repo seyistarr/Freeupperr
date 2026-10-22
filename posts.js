@@ -660,7 +660,8 @@
         .from('posts')
         .select(POST_SELECT)
         .in('id', missingIds)
-        .eq('is_hidden', false);
+        .eq('is_hidden', false)
+        .eq('publishing_state', 'published');
 
       if (source) {
         query = query.eq('source', source);
@@ -1348,7 +1349,8 @@
       .from('posts')
       .select(POST_SELECT)
       .in('id', ids)
-      .eq('is_hidden', false);
+      .eq('is_hidden', false)
+      .eq('publishing_state', 'published');
 
     if (postsError) {
       console.error('findSimilarPosts postgres error:', postsError);
