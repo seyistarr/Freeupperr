@@ -149,6 +149,14 @@ Deno.serve(async (request: Request) => {
       });
       return error ? reply(409, { error: "Registration unavailable" }) : reply(201, data);
     }
+    if (body.action === "visibility") {
+      if (!["followers", "friends", "only_me"].includes(body.visibility))
+        return reply(400, { error: "Restricted audience required" });
+      const { data, error } = await db.rpc("set_new_protected_visibility", {
+        p_owner: owner, p_post: body.post_id, p_visibility: body.visibility
+      });
+      return error ? reply(409, { error: "Visibility transition unavailable" }) : reply(200, data);
+    }
     if (body.action === "cancel") {
       // The existing database transition atomically marks the owned draft
       // failed and queues its upload intents for later Cloudinary cleanup.
