@@ -149,6 +149,46 @@ Deno.serve(async (request: Request) => {
       });
       return error ? reply(409, { error: "Registration unavailable" }) : reply(201, data);
     }
+    if (body.action === "cancel") {
+      const { data: owned, error: ownedError } = await db.from("posts")
+        .select("id").eq("id", body.post_id).eq("user_id", owner).maybeSingle();
+      if (ownedError || !owned) return reply(404, { error: "Draft unavailable" });
+      const lease = crypto.randomUUID();
+      const { data: claim, error: claimError } = await db.rpc("claim_protected_cleanup", {
+        p_owner: owner, p_post: body.post_id, p_lease: lease, p_expired_only: false
+      });
+      if (claimError || !claim) return reply(409, { error: "Cleanup unavailable" });
+      if (!claim.claimed) return reply(claim.status === "published" ? 409 : 200,
+        { id: body.post_id, status: claim.status, cleanupPending: claim.status !== "published" });
+      const cloud = Deno.env.get("CLOUDINARY_CLOUD_NAME");
+      const apiKey = Deno.env.get("CLOUDINARY_API_KEY");
+      const apiSecret = Deno.env.get("CLOUDINARY_API_SECRET");
+      if (cloud !== "duzyf1kda" || !apiKey || !apiSecret)
+        return reply(503, { error: "Cleanup pending" });
+      const { v2: cloudinary } = await import("npm:cloudinary@2.5.1");
+      cloudinary.config({ cloud_name: cloud, api_key: apiKey, api_secret: apiSecret, secure: true });
+      const results = [];
+      for (const intent of claim.intents || []) {
+        let ok = false;
+        const prefix = "freeupper-protected-v2/" + owner + "/asset_";
+        if (typeof intent.cloudinary_public_id === "string" &&
+            intent.cloudinary_public_id.startsWith(prefix) &&
+            /^[a-f0-9]{32}$/.test(intent.cloudinary_public_id.slice(prefix.length))) {
+          try {
+            const outcomes = await Promise.all(["image","video","raw"].map(resource_type =>
+              cloudinary.uploader.destroy(intent.cloudinary_public_id, {
+                resource_type, type: "authenticated", invalidate: true
+              })));
+            ok = outcomes.every(outcome => ["ok","not found"].includes(outcome?.result));
+          } catch { /* Leave cleanup pending for retry. */ }
+        }
+        results.push({ id: intent.id, ok });
+      }
+      const { data: recorded, error: recordError } = await db.rpc("record_protected_cleanup", {
+        p_owner: owner, p_post: body.post_id, p_lease: lease, p_results: results
+      });
+      return recordError || !recorded ? reply(503, { error: "Cleanup pending" }) : reply(200, recorded);
+    }
     return reply(503, { error: "Publishing action not migrated" });
   } catch {
     return reply(503, { error: "Protected publishing unavailable" });
