@@ -69,6 +69,42 @@ Deno.serve(async (request: Request) => {
       return reply(200, { id: data.id, status: data.publishing_state,
         ...(data.publishing_state === "published" ? { media: data.media, visibility: data.visibility } : {}) });
     }
+    if (typeof body.post_id !== "string" || !uuid.test(body.post_id))
+      return reply(400, { error: "Invalid draft" });
+    if (body.action === "publish") {
+      const { data, error } = await db.rpc("protected_publish_transition", {
+        p_owner: owner, p_post: body.post_id, p_action: "publish", p_data: {}
+      });
+      return error ? reply(409, { error: "Draft transition unavailable" }) : reply(200, data);
+    }
+    if (body.action === "sign") {
+      if (!Number.isInteger(body.slot) || body.slot < 0 || body.slot > 20)
+        return reply(400, { error: "Invalid slot" });
+      const folder = "freeupper-protected-v2/" + owner;
+      const proposed = folder + "/asset_" + crypto.randomUUID().replaceAll("-", "");
+      const { data: intent, error } = await db.rpc("protected_publish_transition", {
+        p_owner: owner, p_post: body.post_id, p_action: "reserve",
+        p_data: { slot: body.slot, public_id: proposed }
+      });
+      const now = Math.floor(Date.now() / 1000);
+      if (error || typeof intent?.public_id !== "string" ||
+          !intent.public_id.startsWith(folder + "/asset_") ||
+          !/^[a-f0-9]{32}$/.test(intent.public_id.slice((folder + "/asset_").length)) ||
+          !Number.isSafeInteger(intent.timestamp) || intent.timestamp < now - 3600 ||
+          intent.timestamp > now + 60)
+        return reply(409, { error: "Reservation unavailable" });
+      const cloud = Deno.env.get("CLOUDINARY_CLOUD_NAME");
+      const apiKey = Deno.env.get("CLOUDINARY_API_KEY");
+      const apiSecret = Deno.env.get("CLOUDINARY_API_SECRET");
+      if (cloud !== "duzyf1kda" || !apiKey || !apiSecret)
+        return reply(503, { error: "Upload signing unavailable" });
+      const params = { timestamp: intent.timestamp, folder,
+        public_id: intent.public_id.slice((folder + "/").length),
+        type: "authenticated", overwrite: false };
+      const { v2: cloudinary } = await import("npm:cloudinary@2.5.1");
+      const signature = cloudinary.utils.api_sign_request(params, apiSecret);
+      return reply(200, { cloud_name: cloud, api_key: apiKey, ...params, signature });
+    }
     return reply(503, { error: "Publishing action not migrated" });
   } catch {
     return reply(503, { error: "Protected publishing unavailable" });
