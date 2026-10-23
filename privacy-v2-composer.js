@@ -2,7 +2,11 @@
 // Never use the public Cloudinary uploader or public media URLs here.
 (function () {
   'use strict';
+  const EDGE_PUBLISHING = 'https://jmjtqidirpmnegzvmiaq.supabase.co/functions/v1/protected-publishing';
   async function request(path, token, payload) {
+    // Publishing/signing/registration are served by the production Edge Function.
+    // Its server-side release gates remain authoritative.
+    path = EDGE_PUBLISHING;
     const response = await fetch(path, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -72,7 +76,7 @@
         const entry = uploadFiles[index];
         const slot = entry.slot ?? index;
         const signed = await request('/api/privacy-v2-upload-signature', bearer, {
-          post_id: draftId, slot
+          action: 'sign', post_id: draftId, slot
         });
         const upload = new FormData();
         upload.append('file', entry.file);
@@ -88,7 +92,7 @@
           throw new Error('Protected media upload failed');
         }
         await request('/api/privacy-v2-register-asset', bearer, {
-          post_id: draftId, slot, public_id: asset.public_id,
+          action: 'register', post_id: draftId, slot, public_id: asset.public_id,
           asset_id: asset.asset_id, resource_type: entry.type
         });
         onProgress?.(index + 1, uploadFiles.length);
@@ -98,6 +102,10 @@
       });
     } catch (error) {
       if (draftId) {
+        // A lost publish response must not cause cancellation of a committed post.
+        const status = await request('/api/privacy-v2-publish', bearer,
+          { action: 'status', post_id: draftId }).catch(() => null);
+        if (status?.status === 'published') return status;
         await request('/api/privacy-v2-publish', bearer,
           { action: 'cancel', post_id: draftId }).catch(() => {});
       }
