@@ -105,6 +105,50 @@ Deno.serve(async (request: Request) => {
       const signature = cloudinary.utils.api_sign_request(params, apiSecret);
       return reply(200, { cloud_name: cloud, api_key: apiKey, ...params, signature });
     }
+    if (body.action === "register") {
+      if (!Number.isInteger(body.slot) || body.slot < 0 || body.slot > 20 ||
+          typeof body.public_id !== "string" || typeof body.asset_id !== "string" ||
+          !/^[a-f0-9]{32}$/i.test(body.asset_id) ||
+          !["image","video"].includes(body.resource_type))
+        return reply(400, { error: "Invalid asset" });
+      const prefix = "freeupper-protected-v2/" + owner + "/asset_";
+      if (!body.public_id.startsWith(prefix) ||
+          !/^[a-f0-9]{32}$/.test(body.public_id.slice(prefix.length)))
+        return reply(404, { error: "Asset unavailable" });
+      const { data: post, error: postError } = await db.from("posts")
+        .select("id,user_id,visibility,is_deleted,is_hidden,publishing_state")
+        .eq("id", body.post_id).eq("user_id", owner).maybeSingle();
+      if (postError || !post || post.publishing_state !== "draft" ||
+          post.is_deleted !== false || post.is_hidden !== true ||
+          !["followers","friends","only_me"].includes(post.visibility))
+        return reply(404, { error: "Asset unavailable" });
+      const cloud = Deno.env.get("CLOUDINARY_CLOUD_NAME");
+      const apiKey = Deno.env.get("CLOUDINARY_API_KEY");
+      const apiSecret = Deno.env.get("CLOUDINARY_API_SECRET");
+      if (cloud !== "duzyf1kda" || !apiKey || !apiSecret)
+        return reply(503, { error: "Registration unavailable" });
+      const { v2: cloudinary } = await import("npm:cloudinary@2.5.1");
+      cloudinary.config({ cloud_name: cloud, api_key: apiKey, api_secret: apiSecret, secure: true });
+      const asset = await cloudinary.api.resource(body.public_id, {
+        resource_type: body.resource_type, type: "authenticated"
+      });
+      const formats = body.resource_type === "image"
+        ? ["jpg","jpeg","png","webp","avif","gif"] : ["mp4","webm","mov","m4v"];
+      if (!asset || asset.asset_id !== body.asset_id || asset.public_id !== body.public_id ||
+          asset.resource_type !== body.resource_type || asset.type !== "authenticated" ||
+          asset.placeholder || asset.deleted ||
+          (Array.isArray(asset.access_control) &&
+            asset.access_control.some(rule => rule?.access_type === "anonymous")) ||
+          !Number.isSafeInteger(asset.bytes) || asset.bytes <= 0 || asset.bytes > 50 * 1024 * 1024 ||
+          typeof asset.format !== "string" || !formats.includes(asset.format))
+        return reply(404, { error: "Asset unavailable" });
+      const { data, error } = await db.rpc("protected_publish_transition", {
+        p_owner: owner, p_post: body.post_id, p_action: "register",
+        p_data: { slot: body.slot, public_id: body.public_id,
+          cloudinary_asset_id: body.asset_id, resource_type: body.resource_type, format: asset.format }
+      });
+      return error ? reply(409, { error: "Registration unavailable" }) : reply(201, data);
+    }
     return reply(503, { error: "Publishing action not migrated" });
   } catch {
     return reply(503, { error: "Protected publishing unavailable" });
