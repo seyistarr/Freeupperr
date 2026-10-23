@@ -3131,6 +3131,48 @@
             }
         }
 
+        // Fail closed: restricted audiences are unlocked only after the server's
+        // protected publishing AND delivery release gates are approved.
+        async function refreshProtectedAudienceAvailability() {
+            const select = document.getElementById('postAudience');
+            const note = document.getElementById('postAudienceNote');
+            if (!select) return;
+            const restricted = ['followers', 'friends', 'only_me'];
+            const lock = () => {
+                for (const option of select.options) {
+                    if (restricted.includes(option.value)) {
+                        option.disabled = true;
+                        option.textContent = ({ followers: 'Followers', friends: 'Mutuals', only_me: 'Only Me' })[option.value] + ' — coming soon';
+                    }
+                }
+                if (restricted.includes(select.value)) select.value = 'public';
+                if (note) note.textContent = 'Private publishing is being prepared. Public is the only available option.';
+            };
+            lock();
+            try {
+                const client = window.sb;
+                if (!client?.rpc || !window.FreeUpperProtectedPublish?.publish) return;
+                const [releaseResult, capabilityResult] = await Promise.all([
+                    client.rpc('protected_first_release_status'),
+                    client.rpc('protected_publishing_capabilities')
+                ]);
+                const release = releaseResult.data;
+                const capabilities = capabilityResult.data;
+                if (releaseResult.error || capabilityResult.error ||
+                    release?.version !== 1 || release?.delivery !== true ||
+                    release?.publishing !== true || release?.legacy_conversion !== false ||
+                    capabilities?.ready !== true) return;
+                for (const option of select.options) {
+                    if (restricted.includes(option.value)) {
+                        option.disabled = false;
+                        option.textContent = ({ followers: 'Followers', friends: 'Mutuals', only_me: 'Only Me' })[option.value];
+                    }
+                }
+                if (note) note.textContent = 'Restricted posts use authenticated protected media.';
+            } catch (_) { lock(); }
+        }
+        window.addEventListener('load', refreshProtectedAudienceAvailability);
+
         function handlePostAudienceChange(event) {
             const select = event.target;
             const requested = select.value;
