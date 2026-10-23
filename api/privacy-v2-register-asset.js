@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireTestPublisher } from '../lib/protected-media/test-publisher-guard.js';
 import { v2 as cloudinary } from 'cloudinary';
 import { publishingContext, publishingDb, requireRuntimeSchema } from '../lib/protected-media/publishing-runtime.js';
 import { verifyStagingRegistration } from '../lib/protected-media/verify-staging-registration.js';
@@ -37,6 +38,7 @@ export default async function handler(req, res) {
     }
     const db = publishingDb(env, runtime);
     await requireRuntimeSchema(db, runtime);
+    if (!await requireTestPublisher(db, runtime, viewerId)) return res.status(403).json({ error: 'Protected publishing not approved for this account' });
     const { data: post, error: postError } = await db.from('posts')
       .select('id,user_id,visibility,is_deleted,is_hidden,publishing_state').eq('id', post_id).maybeSingle();
     const draft = post?.publishing_state === 'draft';

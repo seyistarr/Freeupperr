@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireTestPublisher } from '../lib/protected-media/test-publisher-guard.js';
 import { randomUUID } from 'node:crypto';
 import { v2 as cloudinary } from 'cloudinary';
 import { publishingContext, publishingDb, requireRuntimeSchema } from '../lib/protected-media/publishing-runtime.js';
@@ -37,6 +38,7 @@ export default async function handler(req, res) {
       }
       const db = publishingDb(env, runtime);
       await requireRuntimeSchema(db, runtime);
+      if (!await requireTestPublisher(db, runtime, data.user.id)) return res.status(403).json({ error: 'Protected publishing not approved for this account' });
       // Persist the owner/post/slot/public ID before issuing any reusable signature.
       const { data: intent, error: intentError } = await db.rpc('protected_publish_transition', {
         p_owner: data.user.id, p_post: req.body.post_id, p_action: 'reserve',

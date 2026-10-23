@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireTestPublisher } from '../lib/protected-media/test-publisher-guard.js';
 import { readStagingPosts } from '../lib/protected-media/staging-reader-server.js';
 import { cleanupStagingDraft, sweepStagingDrafts, validCleanupWorker } from '../lib/protected-media/staging-cleanup-server.js';
 import { randomUUID } from 'node:crypto';
@@ -17,6 +18,57 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   const env = process.env;
+  // Production credential preflight is read-only and never activates publishing.
+  // Require a verified approved test-publisher bearer token; never expose secrets.
+  if (req.method === 'GET' && req.query?.readiness === 'production') {
+    const unavailable = () => res.status(503).json({ ready: false });
+    if (env.VERCEL_ENV !== 'production' ||
+        env.SUPABASE_URL !== 'https://jmjtqidirpmnegzvmiaq.supabase.co' ||
+        env.CLOUDINARY_CLOUD_NAME !== 'duzyf1kda' ||
+        !env.SUPABASE_SERVICE_ROLE_KEY || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) return unavailable();
+    const token = /^Bearer ([^\s]+)$/i.exec(req.headers?.authorization || '')?.[1];
+    if (!token) return res.status(401).json({ ready: false });
+    try {
+      const auth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } });
+      const { data: identity, error: identityError } = await auth.auth.getUser(token);
+      if (identityError || !identity?.user?.id) return res.status(403).json({ ready: false });
+      const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } });
+      if (!await requireTestPublisher(db, { mode: 'production' }, identity.user.id)) return res.status(403).json({ ready: false });
+      const { data: release, error: releaseError } = await db.rpc('protected_first_release_status');
+      if (releaseError || release?.version !== 1) return unavailable();
+      cloudinary.config({ cloud_name: 'duzyf1kda', api_key: env.CLOUDINARY_API_KEY,
+        api_secret: env.CLOUDINARY_API_SECRET, secure: true });
+      const cloud = await cloudinary.api.ping();
+      return res.status(cloud?.status === 'ok' ? 200 : 503).json({
+        ready: cloud?.status === 'ok', credentials: cloud?.status === 'ok' ? 'verified' : 'unavailable',
+        releaseEnabled: release.delivery === true && release.publishing === true
+      });
+    } catch (_) { return unavailable(); }
+  }
+  // Reuse this existing serverless function for the test capability probe.
+  // Fail closed until both production release controls and DB approval exist.
+  if (req.method === 'GET' && req.query?.capability === 'test') {
+    const disabled = () => res.status(200).json({ enabled: false, audiences: ['public'] });
+    const token = /^Bearer ([^\s]+)$/i.exec(req.headers?.authorization || '')?.[1];
+    if (!token) return disabled();
+    const context = publishingContext(env);
+    if (!context || context.mode !== 'production') return disabled();
+    try {
+      const auth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+      const { data: identity, error } = await auth.auth.getUser(token);
+      if (error || !identity?.user?.id) return disabled();
+      const db = publishingDb(env, context);
+      await requireRuntimeSchema(db, context);
+      if (!await requireTestPublisher(db, context, identity.user.id)) return disabled();
+      return res.status(200).json({
+        enabled: true, audiences: ['public', 'followers', 'friends', 'only_me']
+      });
+    } catch (_) { return disabled(); }
+  }
   // Read-only readiness checks work before enabling the feature. Values and
   // upstream errors are never returned; all requests target the exact staging services.
   if (req.method === 'GET' && req.query?.readiness === '1') {
@@ -91,6 +143,7 @@ export default async function handler(req, res) {
     const body = req.body;
     if (!body || typeof body !== 'object' || Array.isArray(body)) return res.status(400).json({ error: 'Invalid request' });
     if (body.action === 'create') {
+      if (!await requireTestPublisher(db, runtime, owner)) return res.status(403).json({ error: 'Protected publishing not approved for this account' });
       if (!['followers', 'friends', 'only_me'].includes(body.visibility)) return res.status(400).json({ error: 'Restricted audience required' });
       if (body.fields?.visibility != null && body.fields.visibility !== body.visibility) {
         return res.status(400).json({ error: 'Conflicting requested audiences' });
@@ -106,6 +159,7 @@ export default async function handler(req, res) {
       if (error) return res.status(409).json({ error: 'Draft creation unavailable' });
       return res.status(201).json({ id, status: 'draft' });
     }
+    if (body.action === 'publish' && !await requireTestPublisher(db, runtime, owner)) return res.status(403).json({ error: 'Protected publishing not approved for this account' });
     if (typeof body.post_id !== 'string' || !UUID.test(body.post_id)) return res.status(400).json({ error: 'Invalid draft' });
     if (['legacy-status', 'legacy-consent', 'legacy-quarantine-consent', 'legacy-delete-consent'].includes(body.action)) {
       if (runtime.mode !== 'staging' || env.FREEUPPER_LEGACY_MIGRATION !== 'enabled-in-isolated-staging') {
