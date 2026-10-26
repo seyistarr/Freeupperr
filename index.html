@@ -7621,7 +7621,7 @@
                 const isPostOwner = post && cu && post.user_id === cu.id;
                 const isPinned = !!c.pinned;
                 const pinnedBadgeHtml = isPinned ? '<span class="comment-pinned-badge"><svg viewBox="0 0 24 24" width="11" height="11"><path d="M12 17v5"/><path d="M9 3h6l1 6-2 2v3H8v-3L6 9Z"/></svg> Pinned</span>' : '';
-                const editedTagHtml = c.edited ? '<span class="comment-edited-tag">(edited)</span>' : '';
+                const editedTagHtml = '';
 
                 const ds = getAllDescendants(c.id, allComments);
                 const ownerId = post ? post.user_id : null;
@@ -7668,7 +7668,7 @@
                                     <button class="comment-menu-btn-top" onclick="openCommentActionsMenu(event, '${c.id}', ${isMine}, ${isPostOwner}, ${isPinned})">⋯</button>
                                 </div>
                             </div>
-                            <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${renderedMsg}${editedTagHtml}</div>
+                            <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}" data-edit-message="${escapeHtml(cleanReplyEditText(c.message, ''))}">${renderedMsg}${editedTagHtml}</div>
                             ${commentMediaHtml}
                             ${il?`<button class="comment-show-more">Show more</button>`:''}
                             <div class="comment-meta">
@@ -7693,19 +7693,19 @@
                 const post = appData.posts.find(p => p.id === postId);
                 const isMine = cu && cu.id === r.userId;
                 const isPostOwner = post && cu && post.user_id === cu.id;
-                const editedTagHtml = r.edited ? '<span class="comment-edited-tag">(edited)</span>' : '';
+                const editedTagHtml = '';
 
                 const pc = allComments.find(c => c.id === r.parentId),
                     ru = pc ? (pc.profile ? pc.profile.display_name : '') : '';
                 const mn = (ru && ru !== username) ? `<span style="color:#7C3AED;font-weight:600;">@${escapeHtml(ru)}</span> ` :
                     '';
-                const il = r.message.length > 220;
+                const il = cleanReplyEditText(r.message, ru).length > 220;
                 const avatarHtml = avatar ?
                     `<img src="${avatar}" alt="">` :
                     `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8.5" r="3.3"/><path d="M4.8 19c.6-4 3.6-6.3 7.2-6.3s6.6 2.3 7.2 6.3c-2 1.8-4.6 2.8-7.2 2.8s-5.2-1-7.2-2.8z"/></svg>`;
                 const avatarClass = avatar ? 'reply-avatar-dot has-image' : 'reply-avatar-dot';
                 const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
-                const renderedMsg = linkifyContent(r.message, r.mentions);
+                const renderedMsg = linkifyContent(cleanReplyEditText(r.message, ru), r.mentions);
                 const replyMediaHtml = r.imageUrl
                     ? `<img class="reply-media" src="${escapeHtml(r.imageUrl)}" alt="Reply media" loading="lazy" onclick="event.stopPropagation(); window.openCommentImageViewer(this.currentSrc || this.src)">`
                     : '';
@@ -7726,7 +7726,7 @@
                                     <button class="reply-menu-btn-top" onclick="openCommentActionsMenu(event, '${r.id}', ${isMine}, ${isPostOwner}, false)">⋯</button>
                                 </div>
                             </div>
-                            <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${renderedMsg}${editedTagHtml}</div>
+                            <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}" data-edit-message="${escapeHtml(cleanReplyEditText(r.message, ru))}">${mn}${renderedMsg}${editedTagHtml}</div>
                             ${replyMediaHtml}
                             ${il?`<button class="comment-show-more">Show more</button>`:''}
                             <div class="reply-meta">
@@ -7811,11 +7811,21 @@
                 window._activeActionSheet = null;
             }
 
+            function cleanReplyEditText(text, parentName) {
+                let value = String(text || '').replace(/\s*\(edited\)\s*$/i, '').trim();
+                if (parentName) {
+                    const name = String(parentName).replace(/^@/, '');
+                    while (value.startsWith('@' + name) && (!value[name.length + 1] || /\s/.test(value[name.length + 1]))) {
+                        value = value.slice(name.length + 1).trimStart();
+                    }
+                }
+                return value;
+            }
             function startEditComment(commentId) {
                 const el = document.querySelector('.comment-text[data-cid="' + commentId + '"]');
                 if (!el) return;
                 const originalHtml = el.innerHTML;
-                const originalText = el.textContent;
+                const originalText = el.getAttribute('data-edit-message') ?? el.textContent.replace(/\s*\(edited\)\s*$/i, '').trim();
                 el.innerHTML =
                     '<div class="comment-edit-box">' +
                     '<textarea rows="2">' + escapeHtml(originalText) + '</textarea>' +
