@@ -99,6 +99,17 @@
     return guest;
   }
 
+  async function readMyPrivateProfile() {
+    try {
+      const { data, error } = await sb.rpc('get_my_private_profile');
+      if (error) throw error;
+      return (Array.isArray(data) ? data[0] : data) || {};
+    } catch (error) {
+      console.warn('Private profile unavailable:', error);
+      return {};
+    }
+  }
+
   // ─── AUTHENTICATED USER (async) ───────────────────────────
   async function getAuthenticatedUser() {
     const { data: { user }, error } = await sb.auth.getUser();
@@ -108,7 +119,7 @@
 
     const { data: profile, error: profileError } = await sb
       .from('profiles')
-      .select('*')
+      .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
       .eq('id', user.id)
       .maybeSingle();
 
@@ -160,6 +171,7 @@
       profile = newProfile;
     }
 
+    const privateProfile = await readMyPrivateProfile();
     const localUser = {
       id: user.id,
       username: profile.username || '',
@@ -177,10 +189,10 @@
       isPrivate: profile.is_private || false,
       hideFollowerCount: profile.hide_follower_count || false,
       activityStatus: profile.activity_status !== undefined ? profile.activity_status : true,
-      gender: profile.gender || '',
+      gender: privateProfile.gender || '',
       country: profile.country || '',
-      phone: profile.phone || '',
-      dob: profile.dob || null
+      phone: privateProfile.phone || '',
+      dob: privateProfile.dob || null
     };
 
     writeLocalUser(localUser);
@@ -195,7 +207,7 @@
     try {
       const { data: profile, error } = await sb
         .from('profiles')
-        .select('*')
+        .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
         .eq('id', authUser.id)
         .maybeSingle();
 
@@ -228,6 +240,7 @@
         finalProfile = inserted;
       }
 
+      const privateProfile = await readMyPrivateProfile();
       const localUser = {
         id: authUser.id,
         username: finalProfile.username || '',
@@ -245,10 +258,10 @@
         isPrivate: finalProfile.is_private || false,
         hideFollowerCount: finalProfile.hide_follower_count || false,
         activityStatus: finalProfile.activity_status !== undefined ? finalProfile.activity_status : true,
-        gender: finalProfile.gender || '',
+        gender: privateProfile.gender || '',
         country: finalProfile.country || '',
-        phone: finalProfile.phone || '',
-        dob: finalProfile.dob || null
+        phone: privateProfile.phone || '',
+        dob: privateProfile.dob || null
       };
       writeLocalUser(localUser);
     } catch (err) {
