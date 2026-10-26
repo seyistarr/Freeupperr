@@ -22,8 +22,11 @@ sessions and refresh-token state when changing API hosts.
 
 Run `npm run test:api` and `npx wrangler deploy --config cloudflare/api/wrangler.jsonc --dry-run`.
 Deploy the gateway before updating frontend assets. `GET /health` identifies the
-gateway without disclosing backend configuration. Production frontend deploys also
-deploy the gateway first. The PWA cache version is incremented for this migration.
+gateway without disclosing backend configuration. The API and frontend have separate
+Cloudflare Builds triggers, each pinned to its own Worker and deployment command.
+Never deploy the API from the frontend's Build: Cloudflare CI overrides Worker names
+to the Build's connected Worker. Both configs explicitly own only their own domains.
+The PWA cache version is incremented for this migration.
 
 Google's registered Supabase callback remains unchanged; the gateway's authorize
 route redirects to the provider while the callback still goes to Supabase and then

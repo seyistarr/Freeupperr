@@ -112,3 +112,15 @@ test('all production browser clients use the gateway and preserve the original s
   }
   assert.match(composer, /https:\/\/api\.freeupper\.com\/functions\/v1\/protected-publishing/);
 });
+
+test('frontend and API deployments own separate Worker names, commands and domains', async () => {
+  const pkg = JSON.parse(await readFile('package.json', 'utf8'));
+  const web = JSON.parse(await readFile('wrangler.jsonc', 'utf8'));
+  const api = JSON.parse(await readFile('cloudflare/api/wrangler.jsonc', 'utf8'));
+  assert.equal(pkg.scripts['deploy:cloudflare'], 'wrangler deploy --keep-vars');
+  assert.match(pkg.scripts['deploy:api'], /--config cloudflare\/api\/wrangler.jsonc/);
+  assert.equal(web.name, 'freeupper-web');
+  assert.equal(api.name, 'freeupper-api');
+  assert.deepEqual(web.routes.map(r => r.pattern), ['freeupper.com', 'www.freeupper.com']);
+  assert.deepEqual(api.routes.map(r => r.pattern), ['api.freeupper.com']);
+});
