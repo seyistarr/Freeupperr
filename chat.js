@@ -4213,7 +4213,7 @@
         if (userIds.length) {
             const { data: profiles, error: profErr } = await sb
                 .from('profiles')
-                .select('*')
+                .select('id, username, display_name, display_username, avatar_url, verified_status')
                 .in('id', userIds);
             if (profErr) console.error('profiles fetch error:', profErr);
             (profiles || []).forEach(p => { profileMap[p.id] = p; });
@@ -5639,7 +5639,7 @@
 
         messageInputArea.dataset.defaultHtml = messageInputArea.innerHTML;
 
-        const { data: profile } = await sb.from('profiles').select('*').eq('id', currentUserId).single();
+        const { data: profile } = await sb.from('profiles').select('id, username, display_name, display_username, avatar_url, bio, verified_status, is_private, is_online, last_seen_at').eq('id', currentUserId).single();
         currentUserProfile = profile || {};
 
         await sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
