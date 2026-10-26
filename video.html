@@ -4793,7 +4793,7 @@
                 '<span data-author-badge-wrapper>' + badgeHtml + '</span>' +
                 '<span class="comment-time">' + formatRelativeTime(comment.time) + editedTagHtml + '</span>' +
                 '</div>' +
-                '<div class="comment-text" data-cid="' + comment.id + '">' + commentTextHtml + '</div>' +
+                '<div class="comment-text" data-cid="' + comment.id + '" data-edit-message="' + escapeHtml(cleanReplyEditText(comment.message, '')) + '">' + commentTextHtml + '</div>' +
                 buildCommentMedia(comment, 'comment-media') +
                 '<button class="comment-reply-btn" onclick="replyToComment(\'' + comment.id + '\',\'' + escapeHtml(
                     username) + '\')">Reply</button>' +
@@ -4833,7 +4833,7 @@
             const avatarHtml = avatar ? '<img src="' + avatar + '" alt="">' : username.charAt(0).toUpperCase();
             const avatarClass = avatar ? 'reply-avatar-dot has-image' : 'reply-avatar-dot';
             const badgeHtml = window.getVerifiedBadgeHTML ? window.getVerifiedBadgeHTML(verifiedStatus) : '';
-            const replyTextHtml = renderCaptionWithMentionsAndTags(reply.message, reply.mentions || []);
+            const replyTextHtml = renderCaptionWithMentionsAndTags(cleanReplyEditText(reply.message, parentName), reply.mentions || []);
             const editedTagHtml = ''; // Keep edit history internal; do not display an edited badge.
 
             return '<div class="reply-item" data-comment-id="' + reply.id + '" data-author-id="' + author.id + '">' +
@@ -4846,7 +4846,7 @@
                 '@' + escapeHtml(username) +
                 '<span data-author-badge-wrapper>' + badgeHtml + '</span>' +
                 '</div>' +
-                '<div class="reply-text">' + mention + replyTextHtml + editedTagHtml + '</div>' +
+                '<div class="comment-text reply-text" data-cid="' + reply.id + '" data-edit-message="' + escapeHtml(cleanReplyEditText(reply.message, parentName)) + '">' + mention + replyTextHtml + editedTagHtml + '</div>' +
                 buildCommentMedia(reply, 'reply-media') +
                 '<div class="reply-meta">' +
                 '<span class="reply-time">' + formatRelativeTime(reply.time) + '</span>' +
@@ -5080,11 +5080,21 @@
             }, 0);
         }
 
-        function startEditComment(commentId) {
+        function cleanReplyEditText(text, parentName) {
+                let value = String(text || '').replace(/\s*\(edited\)\s*$/i, '').trim();
+                if (parentName) {
+                    const name = String(parentName).replace(/^@/, '');
+                    while (value.startsWith('@' + name) && (!value[name.length + 1] || /\s/.test(value[name.length + 1]))) {
+                        value = value.slice(name.length + 1).trimStart();
+                    }
+                }
+                return value;
+            }
+            function startEditComment(commentId) {
             const el = document.querySelector('.comment-text[data-cid="' + commentId + '"]');
             if (!el) return;
             const originalHtml = el.innerHTML;
-            const originalText = el.textContent;
+            const originalText = el.getAttribute('data-edit-message') ?? el.textContent.replace(/\s*\(edited\)\s*$/i, '').trim();
 
             el.innerHTML =
                 '<div class="comment-edit-box">' +
