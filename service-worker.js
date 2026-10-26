@@ -1,5 +1,5 @@
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v6';
+const CACHE_NAME = 'freeupper-pwa-v7';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -40,6 +40,7 @@ self.addEventListener('fetch', event => {
 
   // API responses may contain account-specific information; never cache them.
   const url = new URL(event.request.url);
+  if (url.origin === 'https://api.freeupper.com') return;
   if (url.origin === self.location.origin &&
       (url.pathname === '/api' || url.pathname.startsWith('/api/'))) return;
   if (event.request.headers.has('Authorization')) return;

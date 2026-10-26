@@ -2,7 +2,7 @@
 // Never use the public Cloudinary uploader or public media URLs here.
 (function () {
   'use strict';
-  const EDGE_PUBLISHING = 'https://jmjtqidirpmnegzvmiaq.supabase.co/functions/v1/protected-publishing';
+  const EDGE_PUBLISHING = 'https://api.freeupper.com/functions/v1/protected-publishing';
   async function request(path, token, payload) {
     // Publishing/signing/registration are served by the production Edge Function.
     // Its server-side release gates remain authoritative.

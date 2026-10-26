@@ -11,7 +11,7 @@
   'use strict';
 
   // ─── CONFIG ────────────────────────────────────────────────
-  const SUPABASE_URL = 'https://jmjtqidirpmnegzvmiaq.supabase.co';
+  const SUPABASE_URL = 'https://api.freeupper.com';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptanRxaWRpcnBtbmVnenZtaWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4ODk0OTAsImV4cCI6MjA5OTQ2NTQ5MH0.Lfxtyexew35L3uzy3bxPcBHogsnlMcAVOE-Ho50FZpk';
 
   const CLOUDINARY_CLOUD_NAME = 'duzyf1kda';
@@ -33,7 +33,10 @@
     console.error('auth.js: include the Supabase CDN script before this file.');
     return;
   }
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    // Preserve sessions created before the API hostname changed.
+    auth: { storageKey: 'sb-jmjtqidirpmnegzvmiaq-auth-token' }
+  });
   window.sb = sb;
 
   // ─── CHANGE LISTENERS ──────────────────────────────────────
