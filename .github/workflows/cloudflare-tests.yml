@@ -1,0 +1,37 @@
+name: Cloudflare migration
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:cloudflare
+      - run: npx wrangler deploy --dry-run --outdir .wrangler/test-build
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+      - run: node --test tests/*.test.js
+        env:
+          FREEUPPER_TEST_BUNDLE: .wrangler/test-build
+      - name: Verify static assets and disabled routes in workerd
+        run: |
+          npx wrangler dev --local --port 8787 > /tmp/freeupper-dev.log 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8787/__migration/health > /dev/null; then break; fi
+            sleep 1
+          done
+          FREEUPPER_TEST_ORIGIN=http://localhost:8787 npm run test:cloudflare
+        env:
+          WRANGLER_SEND_METRICS: 'false'
