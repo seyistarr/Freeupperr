@@ -53,7 +53,7 @@
   // model is already warm by the time the user picks an image —
   // avoids a multi-second delay right at upload time.
   function preloadModel() {
-    loadModel().catch(() => {});
+    return loadModel();
   }
 
   // ===================================================================
@@ -73,14 +73,16 @@
     // infer(img, true) returns the internal 1024-dim feature vector
     // (the layer before final classification) — this is the actual
     // "embedding" we want for similarity comparison, not class labels.
-    const array = await embeddingTensor.data();
-embeddingTensor.dispose(); // free GPU/CPU memory immediately
-
-if (array.length !== 1024) {
-  throw new Error(`Image embedding dimension mismatch: expected 1024, got ${array.length}`);
-}
-
-return Array.from(array);
+    const embeddingTensor = model.infer(imageElement, true);
+    try {
+      const array = await embeddingTensor.data();
+      if (array.length !== 1024) {
+        throw new Error(`Image embedding dimension mismatch: expected 1024, got ${array.length}`);
+      }
+      return Array.from(array);
+    } finally {
+      embeddingTensor.dispose(); // free GPU/CPU memory even if readback fails
+    }
   }
 
   // ===================================================================

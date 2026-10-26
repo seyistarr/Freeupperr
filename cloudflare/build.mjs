@@ -23,7 +23,7 @@ composer = composer.replace('    const video = Array.isArray(media)', "    throw
 await writeFile(composerFile, composer);
 const swFile = new URL('public/service-worker.js', output);
 let sw = await readFile(swFile, 'utf8');
-sw = sw.replace("const CACHE_NAME = 'freeupper-pwa-v5'", "const CACHE_NAME = 'freeupper-pwa-v5-cloudflare-v1'");
+sw = sw.replace(/const CACHE_NAME = '([^']+)'/, (_, version) => `const CACHE_NAME = '${version}-cloudflare-v1'`);
 sw = sw.replace("  if (event.request.headers.has('Authorization')) return;", "  if (/^\\/(?:u|p|v)(?:\\/|$)/.test(url.pathname) || url.pathname.startsWith('/@') || url.pathname === '/sitemap-profiles.xml') return;\n  if (event.request.headers.has('Authorization')) return;");
 sw = sw.replace('          cache.put(event.request, responseClone);', "          if (!/no-store|private/.test(response.headers.get('Cache-Control') || '')) return cache.put(event.request, responseClone);");
 await writeFile(swFile, sw);
