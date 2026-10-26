@@ -1792,7 +1792,7 @@
                     return false;
                 }
                 try {
-                    const { data, error } = await sb.from('profiles').select('is_admin, suspended').eq('id', user.id)
+                    const { data, error } = await sb.rpc('get_my_admin_access')
                         .single();
                     if (error) {
                         console.error('Profile fetch error:', error);
@@ -1955,7 +1955,7 @@
                 try {
                     const [reqs, users, ps, market, cats, subcats, reports, fb] = await Promise.all([
                         sb.from('verification_requests').select('*').order('created_at', { ascending: false }),
-                        sb.from('profiles').select('*').order('display_name'),
+                        sb.rpc('list_admin_profiles'),
                         sb.from('posts').select('*').order('created_at', { ascending: false }),
                         sb.from('market_items').select('*').order('created_at', { ascending: false }),
                         sb.from('market_categories').select('*').order('sort_order', { ascending: true }),
@@ -3257,7 +3257,7 @@
                         .from('profiles')
                         .update({ verified: true, verified_status: 'verified' })
                         .eq('id', reqData.user_id)
-                        .select();
+                        .select('id');
                     if (profileError) throw profileError;
                     if (!updatedProfile || updatedProfile.length === 0) throw new Error('Profile update failed – check RLS.');
                     showToast('✅ Verification approved!', 'g');
@@ -3274,7 +3274,7 @@
                         .from('profiles')
                         .update({ verified: true, verified_status: 'verified' })
                         .eq('id', userId)
-                        .select();
+                        .select('id');
                     if (error) throw error;
                     if (!data?.length) throw new Error('Update blocked – check RLS.');
                     showToast('✅ User verified directly!', 'g');
@@ -3288,10 +3288,7 @@
                 if (!confirm('Withdraw verified badge?')) return;
                 try {
                     const { data, error } = await sb
-                        .from('profiles')
-                        .update({ verified: false, verified_status: 'none' })
-                        .eq('id', userId)
-                        .select();
+                        .from('profiles').update({ verified: false, verified_status: 'none' }).eq('id', userId).select('id');
                     if (error) throw error;
                     if (!data?.length) throw new Error('Update blocked – check RLS.');
                     await sb.from('verification_requests')
@@ -3442,11 +3439,7 @@
                 if (reason === null) return;
                 try {
                     const { data, error } = await sb
-                        .from('profiles')
-                        .update({ suspended: true, suspended_reason: reason || null, suspended_at: new Date()
-                                .toISOString() })
-                        .eq('id', userId)
-                        .select();
+                        .from('profiles').update({ suspended: true, suspended_reason: reason || null, suspended_at: new Date().toISOString() }).eq('id', userId).select('id');
                     if (error) throw error;
                     if (!data?.length) throw new Error('Update blocked – check RLS.');
                     showToast('🚫 User suspended', 'o');
@@ -3460,10 +3453,7 @@
                 if (!confirm('Restore this user\'s access?')) return;
                 try {
                     const { data, error } = await sb
-                        .from('profiles')
-                        .update({ suspended: false, suspended_reason: null, suspended_at: null })
-                        .eq('id', userId)
-                        .select();
+                        .from('profiles').update({ suspended: false, suspended_reason: null, suspended_at: null }).eq('id', userId).select('id');
                     if (error) throw error;
                     if (!data?.length) throw new Error('Update blocked – check RLS.');
                     showToast('✅ User restored', 'g');
