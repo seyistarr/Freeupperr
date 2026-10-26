@@ -7672,7 +7672,7 @@
                             ${commentMediaHtml}
                             ${il?`<button class="comment-show-more">Show more</button>`:''}
                             <div class="comment-meta">
-                                <span class="comment-time">${formatRelativeTime(c.time)}</span>
+                                <span class="comment-time">${formatRelativeTime(c.edited && c.updatedAt ? c.updatedAt : c.time)}</span>
                                 <button class="comment-reply-btn" data-post-id="${postId}">Reply</button>
                                 <button class="comment-like-btn ${isLiked?'liked':''}" data-comment-id="${c.id}">
                                     <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -7696,7 +7696,7 @@
                 const editedTagHtml = '';
 
                 const pc = allComments.find(c => c.id === r.parentId),
-                    ru = pc ? (pc.profile ? pc.profile.display_name : '') : '';
+                    ru = pc ? (window.getAuthorFromProfile(pc.profile || {}).name || '') : '';
                 const mn = (ru && ru !== username) ? `<span style="color:#7C3AED;font-weight:600;">@${escapeHtml(ru)}</span> ` :
                     '';
                 const il = cleanReplyEditText(r.message, ru).length > 220;
@@ -7730,7 +7730,7 @@
                             ${replyMediaHtml}
                             ${il?`<button class="comment-show-more">Show more</button>`:''}
                             <div class="reply-meta">
-                                <span class="reply-time">${formatRelativeTime(r.time)}</span>
+                                <span class="reply-time">${formatRelativeTime(r.edited && r.updatedAt ? r.updatedAt : r.time)}</span>
                                 <button class="reply-reply-btn" data-post-id="${postId}">Reply</button>
                                 <button class="reply-like-btn ${isLiked?'liked':''}" data-comment-id="${r.id}">
                                     <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -7812,14 +7812,14 @@
             }
 
             function cleanReplyEditText(text, parentName) {
-                let value = String(text || '').replace(/\s*\(edited\)\s*$/i, '').trim();
-                if (parentName) {
-                    const name = String(parentName).replace(/^@/, '');
-                    while (value.startsWith('@' + name) && (!value[name.length + 1] || /\s/.test(value[name.length + 1]))) {
+                let value = String(text || '').trim();
+                const name = String(parentName || '').replace(/^@/, '').trim();
+                if (name) {
+                    while (value.toLowerCase().startsWith(('@' + name).toLowerCase()) && (!value[name.length + 1] || /\s/.test(value[name.length + 1]))) {
                         value = value.slice(name.length + 1).trimStart();
                     }
                 }
-                return value;
+                return value.replace(/(?:\s*\(edited\))+\s*$/gi, '').trim();
             }
             function startEditComment(commentId) {
                 const el = document.querySelector('.comment-text[data-cid="' + commentId + '"]');
