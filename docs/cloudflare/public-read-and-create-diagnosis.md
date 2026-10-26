@@ -65,7 +65,9 @@ the cached model Promise so the page's existing success/error handlers work.
 A second bug referenced an undeclared `embeddingTensor`; restore
 `model.infer(imageElement, true)` and dispose the resulting tensor in `finally`,
 including readback and dimension failures. Preserve the existing public embedding
-API, 1024-value format, ranking behavior and all integration hooks. No OTD/OCIDE
+API, 1024-value format, ranking behavior and all integration hooks. Bump the
+PWA asset cache so installed clients refresh the repaired scripts; keep the
+Worker-specific cache suffix as source cache versions change. No OTD/OCIDE
 files or integration configurations are modified.
 
 ## Live checks and remaining acceptance
