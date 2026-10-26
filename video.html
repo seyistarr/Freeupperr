@@ -4791,7 +4791,7 @@
                 '<span data-author-name class="comment-username" onclick="goToProfile(\'' + author.id +
                 '\')" style="cursor:pointer;">@' + escapeHtml(username) + '</span>' +
                 '<span data-author-badge-wrapper>' + badgeHtml + '</span>' +
-                '<span class="comment-time">' + formatRelativeTime(comment.time) + editedTagHtml + '</span>' +
+                '<span class="comment-time">' + formatRelativeTime(comment.edited && comment.updatedAt ? comment.updatedAt : comment.time) + editedTagHtml + '</span>' +
                 '</div>' +
                 '<div class="comment-text" data-cid="' + comment.id + '" data-edit-message="' + escapeHtml(cleanReplyEditText(comment.message, '')) + '">' + commentTextHtml + '</div>' +
                 buildCommentMedia(comment, 'comment-media') +
@@ -4819,7 +4819,7 @@
             const avatar = author.avatar;
             const verifiedStatus = author.verified_status;
             const parent = allComments.find(c => c.id === reply.parentId);
-            const parentName = parent ? (parent.profile ? parent.profile.display_name : '') : '';
+            const parentName = parent ? (window.getAuthorFromProfile(parent.profile || {}).name || '') : '';
             const mention = (parentName && parentName !== username) ?
                 '<span style="color:var(--p);font-weight:500;">@' + escapeHtml(parentName) + '</span> ' : '';
             const post = videoPosts.find(p => p.id === postId);
@@ -4849,7 +4849,7 @@
                 '<div class="comment-text reply-text" data-cid="' + reply.id + '" data-edit-message="' + escapeHtml(cleanReplyEditText(reply.message, parentName)) + '">' + mention + replyTextHtml + editedTagHtml + '</div>' +
                 buildCommentMedia(reply, 'reply-media') +
                 '<div class="reply-meta">' +
-                '<span class="reply-time">' + formatRelativeTime(reply.time) + '</span>' +
+                '<span class="reply-time">' + formatRelativeTime(reply.edited && reply.updatedAt ? reply.updatedAt : reply.time) + '</span>' +
                 '<button class="reply-reply-btn" onclick="replyToComment(\'' + reply.id + '\',\'' + escapeHtml(
                     username) + '\')">Reply</button>' +
                 '<button class="reply-like-btn ' + (isLiked ? 'liked' : '') +
@@ -5081,17 +5081,17 @@
         }
 
         function cleanReplyEditText(text, parentName) {
-                let value = String(text || '').replace(/\s*\(edited\)\s*$/i, '').trim();
-                if (parentName) {
-                    const name = String(parentName).replace(/^@/, '');
-                    while (value.startsWith('@' + name) && (!value[name.length + 1] || /\s/.test(value[name.length + 1]))) {
+                let value = String(text || '').trim();
+                const name = String(parentName || '').replace(/^@/, '').trim();
+                if (name) {
+                    while (value.toLowerCase().startsWith(('@' + name).toLowerCase()) && (!value[name.length + 1] || /\s/.test(value[name.length + 1]))) {
                         value = value.slice(name.length + 1).trimStart();
                     }
                 }
-                return value;
+                return value.replace(/(?:\s*\(edited\))+\s*$/gi, '').trim();
             }
             function startEditComment(commentId) {
-            const el = document.querySelector('.comment-text[data-cid="' + commentId + '"]');
+            const el = document.querySelector('.comment-text[data-cid="' + commentId + '"]') || document.querySelector('.reply-item[data-comment-id="' + commentId + '"] .reply-text');
             if (!el) return;
             const originalHtml = el.innerHTML;
             const originalText = el.getAttribute('data-edit-message') ?? el.textContent.replace(/\s*\(edited\)\s*$/i, '').trim();
