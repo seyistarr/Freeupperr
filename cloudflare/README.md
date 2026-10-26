@@ -9,7 +9,9 @@ and www.freeupper.com; this configuration declares no domains or routes.
 Use Node 24 and the committed lockfile (`npm ci`). In the existing Cloudflare
 Workers Builds trigger, use repository root `/`, build command
 `npm run build:cloudflare`, and deploy command `npm run deploy:cloudflare`.
-The deploy script keeps dashboard variables. Wrangler is pinned in devDependencies.
+The deploy script keeps dashboard variables. The existing PR Preview job uses
+`npm run build:cloudflare` followed by `npx wrangler preview`; its empty
+`previews` configuration has no privileged bindings. Wrangler is pinned in devDependencies.
 
 `npm run build:cloudflare` prepares an allowlist of tracked browser assets, copies
 public handlers from current main, and adapts the edge OG renderer for Workers'
