@@ -162,7 +162,7 @@
       const { data: newProfile, error: insertError } = await sb
         .from('profiles')
         .insert(insertPayload)
-        .select()
+        .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
         .single();
       if (insertError) {
         console.error('getAuthenticatedUser: could not create profile', insertError);
@@ -231,7 +231,7 @@
         const { data: inserted, error: insertError } = await sb
           .from('profiles')
           .insert(insertPayload)
-          .select()
+          .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
           .single();
         if (insertError) {
           console.error('syncSessionToLocal: could not create profile', insertError);
@@ -791,7 +791,7 @@
         .from('profiles')
         .update({ avatar_url: data.secure_url })
         .eq('id', user.id)
-        .select()
+        .select('avatar_url')
         .single();
       if (updateError) {
         throw new Error('Failed to update avatar: ' + updateError.message);
@@ -827,7 +827,7 @@
       .from('profiles')
       .update({ cover_url: data.secure_url })
       .eq('id', user.id)
-      .select()
+      .select('cover_url')
       .single();
     if (updateError) {
       throw new Error('Failed to update cover photo: ' + updateError.message);
