@@ -33,7 +33,7 @@ async function runPreview(eligibility) {
     send(body) { this.body = body; return this; }
   };
   try {
-    await handler({ query: { freeupper_id: 'FU_TEST' } }, res);
+    await handler({ headers: { 'user-agent': 'Twitterbot' }, query: { freeupper_id: 'FU_TEST' } }, res);
     return { res, headers, calls };
   } finally {
     globalThis.fetch = originalFetch;

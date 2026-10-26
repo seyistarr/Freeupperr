@@ -35,7 +35,7 @@ test('sitemap requests only completed public unsuspended profiles', async () => 
   assert.equal(params.get('is_private'), 'eq.false');
   assert.equal(params.get('suspended'), 'eq.false');
   assert.equal(res.statusCode, 200);
-  assert.match(res.body, /https:\/\/www\.freeupper\.com\/u\/FU_GOOD/);
+  assert.match(res.body, /https:\/\/freeupper\.com\/u\/FU_GOOD/);
 });
 
 test('invalid identifiers cannot enter the sitemap', async () => {
