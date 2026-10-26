@@ -2991,20 +2991,31 @@
             }
 
             // ─── ACCOUNT DETAILS ──────────────────────────────
-            window.openAccountDetails = function() {
+            window.openAccountDetails = async function() {
                 var user = getCurrentUser();
                 document.getElementById('acctUsername').textContent = '@' + (user?.username || 'user');
                 document.getElementById('acctEmail').textContent = user?.email || 'user@email.com';
                 document.getElementById('phoneInp').value = user?.phone || '';
                 document.getElementById('phoneSaveBtn').disabled = true;
                 openFS('accountDetailsModal');
+                try {
+                    var privateResult = await sb.rpc('get_my_private_profile');
+                    if (privateResult.error) throw privateResult.error;
+                    var privateData = Array.isArray(privateResult.data) ? privateResult.data[0] : privateResult.data;
+                    if (privateData) {
+                        document.getElementById('phoneInp').value = privateData.phone || '';
+                        window._freeupperPrivatePhone = privateData.phone || '';
+                    }
+                } catch (err) {
+                    console.warn('Could not load private account details:', err);
+                }
             };
 
             window.onPhoneChange = function() {
                 var user = getCurrentUser();
                 var inp = document.getElementById('phoneInp');
                 var btn = document.getElementById('phoneSaveBtn');
-                btn.disabled = inp.value === (user?.phone || '');
+                btn.disabled = inp.value === (window._freeupperPrivatePhone ?? user?.phone ?? '');
             };
 
             window.savePhone = async function() {
