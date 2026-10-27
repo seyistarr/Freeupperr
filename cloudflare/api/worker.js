@@ -4,7 +4,7 @@ const ORIGINS = new Set(['https://freeupper.com', 'https://www.freeupper.com',
   'https://freeupper-web.oluwaseyistarr.workers.dev']);
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE']);
 const FUNCTIONS = new Set(['link-preview', 'manage-sessions', 'delete-account',
-  'delete-cloudinary', 'protected-publishing']);
+  'delete-cloudinary', 'protected-publishing', 'protected-media']);
 const HEADERS = ['authorization', 'content-type', 'accept', 'accept-profile',
   'content-profile', 'x-client-info', 'prefer', 'range', 'range-unit', 'if-match',
   'if-none-match', 'if-modified-since', 'x-upsert', 'cache-control',
