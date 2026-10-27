@@ -69,11 +69,36 @@ export default async function handler(req, res) {
     : 'Discover this post on FreeUpper.';
   const img = post.media_type === 'video' ? origin + '/api/post-preview?image=video&code=' + encodeURIComponent(code) : (post.media_type === 'text' || (!post.media_url && !post.thumbnail_url)) ? origin + '/api/post-text-og?code=' + encodeURIComponent(code) + (type === 'video' ? '&style=video' : '') : (safeImage(post.thumbnail_url) || safeImage(post.media_url) || SITE + '/freeupper.png');
   const publicBody = clean(post.content || post.description || post.title || '', 3000);
-  const schema = { '@context': 'https://schema.org', '@type': 'SocialMediaPosting',
-    headline: title, articleBody: publicBody, description, mainEntityOfPage: url, url };
-  if (post.created_at) schema.datePublished = post.created_at;
-  const postSchema = '<script type="application/ld+json">' +
-    JSON.stringify(schema).replace(/</g, '\\u003c') + '</script>';
+  // Metadata comes from a separate public-only RPC; never infer an author or date.
+  let seo = null;
+  try {
+    const seoResponse = await fetch(API + '/rest/v1/rpc/get_public_post_seo_metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + KEY },
+      body: JSON.stringify({ p_code: code }),
+      signal: AbortSignal.timeout(5000)
+    });
+    if (seoResponse.ok) {
+      const rows = await seoResponse.json();
+      seo = Array.isArray(rows) ? rows[0] : rows;
+    }
+  } catch (error) {
+    console.error('Public post SEO metadata unavailable', error);
+  }
+  // Never emit incomplete SocialMediaPosting markup: Google requires both fields.
+  const authorName = clean(seo?.author_name || '', 120);
+  const authorUsername = clean(seo?.author_username || '', 80);
+  const publishedAt = seo?.published_at && !Number.isNaN(Date.parse(seo.published_at))
+    ? new Date(seo.published_at).toISOString() : null;
+  const schema = authorName && authorUsername && publishedAt ? {
+    '@context': 'https://schema.org', '@type': 'SocialMediaPosting',
+    headline: title, articleBody: publicBody, description,
+    author: { '@type': 'Person', name: authorName,
+      url: SITE + '/@' + encodeURIComponent(authorUsername) },
+    datePublished: publishedAt, mainEntityOfPage: url, url
+  } : null;
+  const postSchema = schema ? '<script type="application/ld+json">' +
+    JSON.stringify(schema).replace(/</g, '\\u003c') + '</script>' : '';
   let videoSchema = '';
   if (type === 'video' && post.media_type === 'video') {
     try {
