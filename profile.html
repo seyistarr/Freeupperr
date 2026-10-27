@@ -2730,6 +2730,8 @@
             var repostedPostIds = [];
             var likedPostIds = [];
             var bookmarkedPostIds = [];
+            var _profileBookmarksError = null;
+            var _profileRepostsError = null;
             var marketItemsCache = [];
             var _sugOffset = 0;
             var _profileUserPosts = [];
@@ -3030,14 +3032,14 @@
 
             async function getUserBookmarks(userId) {
                 var result = await window.sb.from('bookmarks').select('post_id').eq('user_id', userId);
-                if (result.error) return [];
-                return result.data.map(function(b) { return b.post_id; });
+                if (result.error) { console.error('Failed to load saved posts:', result.error); throw result.error; }
+                return (result.data || []).map(function(b) { return b.post_id; });
             }
 
             async function getUserReposts(userId) {
                 var result = await window.sb.from('reposts').select('post_id').eq('user_id', userId);
-                if (result.error) return [];
-                return result.data.map(function(r) { return r.post_id; });
+                if (result.error) { console.error('Failed to load reposts:', result.error); throw result.error; }
+                return (result.data || []).map(function(r) { return r.post_id; });
             }
 
             async function getUserMarketItems(userId) {
@@ -3404,8 +3406,8 @@
 
                     if (isOwnerLocal && user && user.isLoggedIn) {
                         promises.push(getUserLikes(targetId).catch(function() { return []; }));
-                        promises.push(getUserBookmarks(targetId).catch(function() { return []; }));
-                        promises.push(getUserReposts(targetId).catch(function() { return []; }));
+                        promises.push(getUserBookmarks(targetId).catch(function(err) { return { loadError: err }; }));
+                        promises.push(getUserReposts(targetId).catch(function(err) { return { loadError: err }; }));
                     } else {
                         promises.push(Promise.resolve([]));
                         promises.push(Promise.resolve([]));
@@ -3425,8 +3427,12 @@
                     var userPosts = results[1] || [];
                     var marketItems = results[2] || [];
                     var likedIds = results[3] || [];
-                    var bookmarkedIds = results[4] || [];
-                    var repostedIds = results[5] || [];
+                    var bookmarksError = results[4] && results[4].loadError;
+                    var repostsError = results[5] && results[5].loadError;
+                    var bookmarkedIds = bookmarksError ? [] : (results[4] || []);
+                    var repostedIds = repostsError ? [] : (results[5] || []);
+                    _profileBookmarksError = bookmarksError || null;
+                    _profileRepostsError = repostsError || null;
                     var rel = results[6] || { iFollowThem: false, theyFollowMe: false };
 
                     if (!isOwnerLocal) {
@@ -3661,6 +3667,10 @@
             }
 
             async function renderReposts(container, repostedIds) {
+                if (_profileRepostsError) {
+                    container.innerHTML = '<div class="empty-state"><h3>Could not load reposts</h3><p>Please try again later.</p></div>';
+                    return;
+                }
                 if (!repostedIds.length) {
                     container.innerHTML = '<div class="empty-state"><h3>No reposts</h3><p>Posts you repost will appear here.</p></div>';
                     return;
@@ -3678,6 +3688,10 @@
             }
 
             async function renderStar(container, userPosts, bookmarkedIds) {
+                if (_profileBookmarksError) {
+                    container.innerHTML = '<div class="empty-state"><h3>Could not load saved posts</h3><p>Please try again later.</p></div>';
+                    return;
+                }
                 if (!bookmarkedIds.length) {
                     container.innerHTML = '<div class="empty-state"><h3>No saved posts</h3><p>Save posts you love to find them instantly.</p></div>';
                     return;
