@@ -14,7 +14,7 @@ for (const path of files) await cp(path, new URL('public/' + path, output));
 const swFile = new URL('public/service-worker.js', output);
 let sw = await readFile(swFile, 'utf8');
 sw = sw.replace(/const CACHE_NAME = '([^']+)'/, (_, version) => `const CACHE_NAME = '${version}-cloudflare-v1'`);
-sw = sw.replace("  if (event.request.headers.has('Authorization')) return;", "  if (/^\\/(?:u|p|v)(?:\\/|$)/.test(url.pathname) || url.pathname.startsWith('/@') || url.pathname === '/sitemap-profiles.xml') return;\n  if (event.request.headers.has('Authorization')) return;");
+sw = sw.replace("  if (event.request.headers.has('Authorization')) return;", "  if (/^\\/(?:u|p|v)(?:\\/|$)/.test(url.pathname) || url.pathname.startsWith('/@') || (url.pathname === '/sitemap-profiles.xml' || url.pathname === '/sitemap-posts.xml')) return;\n  if (event.request.headers.has('Authorization')) return;");
 sw = sw.replace('          cache.put(event.request, responseClone);', "          if (!/no-store|private/.test(response.headers.get('Cache-Control') || '')) return cache.put(event.request, responseClone);");
 await writeFile(swFile, sw);
 for (const dir of ['assets', 'themes']) await cp(dir, new URL('public/' + dir, output), { recursive: true });
@@ -25,7 +25,7 @@ const anon = auth.match(/const SUPABASE_ANON_KEY = '([^']+)'/)?.[1];
 if (!anon || JSON.parse(Buffer.from(anon.split('.')[1], 'base64url')).role !== 'anon') throw Error('Expected browser anon key');
 await writeFile(new URL('public-key.js', output), `export default ${JSON.stringify(anon)};\n`);
 await mkdir(new URL('api/', output));
-const publicHandlers = ['post-preview', 'post-text-og', 'post-short-link', 'profile-preview', 'profile-og', 'profile-seo-privacy', 'sitemap-profiles'];
+const publicHandlers = ['post-preview', 'post-text-og', 'post-short-link', 'profile-preview', 'profile-og', 'profile-seo-privacy', 'sitemap-profiles', 'sitemap-posts'];
 for (const name of publicHandlers) {
   let source = await readFile(`api/${name}.js`, 'utf8');
   source = source.replaceAll("requestHost.endsWith('.vercel.app')", "(requestHost.endsWith('.vercel.app') || requestHost === 'freeupper-web.oluwaseyistarr.workers.dev' || requestHost === 'localhost')");
