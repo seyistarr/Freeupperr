@@ -1,4 +1,5 @@
 import { invoke } from './adapter.js';
+import { postMedia } from './post-media.js';
 import profilePreview from './generated/api/profile-preview.js';
 import profileOg from './generated/api/profile-og.js';
 import postPreview from './generated/api/post-preview.js';
@@ -12,7 +13,7 @@ const handlers = new Map([
   ['/api/post-short-link', postShortLink], ['/api/sitemap-profiles', sitemap]
 ]);
 const disabled = new Map([
-  ['/api/post-media', ['GET']], ['/api/privacy-v2-publish', ['GET', 'POST']],
+  ['/api/privacy-v2-publish', ['GET', 'POST']],
   ['/api/privacy-v2-upload-signature', ['POST']], ['/api/privacy-v2-register-asset', ['POST']]
 ]);
 function unavailable(status, message, extra = {}) {
@@ -25,6 +26,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
+    if (path === '/api/post-media') return postMedia(request);
     if (path === '/__migration/health') return Response.json({ ok: true,
       worker: 'freeupper-web', publicRoutesReady: true, restrictedAudiencesEnabled: false },
       { headers: { 'Cache-Control': 'no-store' } });

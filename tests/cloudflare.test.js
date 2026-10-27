@@ -35,7 +35,10 @@ test('Workers runtime static assets, routes and privacy boundaries', { skip: !or
     assert.ok(text.length > 100, path);
     if (path === '/manifest.webmanifest') assert.match(response.headers.get('Content-Type'), /application\/manifest\+json/);
   }
-  for (const path of ['/api/post-media', '/api/privacy-v2-publish', '/api/privacy-v2-upload-signature', '/api/privacy-v2-register-asset']) {
+  const media = await fetch(origin + '/api/post-media');
+  assert.equal(media.status, 401);
+  assert.match(media.headers.get('Cache-Control'), /private, no-store/);
+  for (const path of ['/api/privacy-v2-publish', '/api/privacy-v2-upload-signature', '/api/privacy-v2-register-asset']) {
     const response = await fetch(origin + path, { method: path.includes('signature') || path.includes('register') ? 'POST' : 'GET' });
     assert.equal(response.status, 503, path);
     assert.match(response.headers.get('Cache-Control'), /no-store/);

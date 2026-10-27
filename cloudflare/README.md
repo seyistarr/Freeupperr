@@ -1,8 +1,24 @@
 # FreeUpper Workers deployment
 
-Worker: `freeupper-web` at https://freeupper-web.oluwaseyistarr.workers.dev.
-The existing GitHub connection builds `main`. Vercel continues serving freeupper.com
-and www.freeupper.com; this configuration declares no domains or routes.
+Worker: `freeupper-web` serves freeupper.com, www.freeupper.com and
+https://freeupper-web.oluwaseyistarr.workers.dev. GitHub Actions deploys `main`
+only after the Worker test job succeeds.
+
+`GET /api/post-media?asset_id=<uuid>` forwards the caller's Bearer token and
+optional Range header to the fixed
+`https://api.freeupper.com/functions/v1/protected-media` endpoint. The gateway
+supplies its own anon key; Supabase verifies the JWT and checks the asset's owner,
+approved follower or mutual relationship on every request. Media streams through
+the proxy with private/no-store headers. Cookies, caller API keys, arbitrary query
+parameters, signed URLs and upstream redirects are never forwarded to clients.
+Missing credentials return 401; unsupported methods return 405.
+
+This route does not enable delivery or publishing release flags. The deployed
+Edge Function's independent delivery gate remains authoritative. At inspection
+on 2026-10-27, `protected_first_release_status()` reported both `delivery: false`
+and `publishing: false`. Fixture playback tests do not establish live privacy
+acceptance; approved authenticated end-to-end verification is still required
+before enabling global restricted publishing.
 
 ## Build and deploy
 

@@ -16,6 +16,17 @@ test('Workers public previews and WASM images preserve privacy', { skip: !bundle
   const mf = new Miniflare(convertV4MiniflareOptions({ name: 'freeupper-test', modules, compatibilityDate: '2026-10-22', compatibilityFlags: ['nodejs_compat'],
     outboundService: async request => {
       const url = new URL(request.url);
+      if (url.origin === 'https://api.freeupper.com' && url.pathname === '/functions/v1/protected-media') {
+        assert.equal(url.search, '?asset_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+        if (request.headers.get('Authorization') !== 'Bearer owner-fixture') {
+          return Response.json({ error: 'Media unavailable' }, { status: 404 });
+        }
+        const range = request.headers.get('Range');
+        return new Response('data', { status: range ? 206 : 200, headers: {
+          'Content-Type': 'video/mp4', 'Content-Length': '4', 'Accept-Ranges': 'bytes',
+          ...(range ? { 'Content-Range': 'bytes 0-3/100' } : {})
+        } });
+      }
       if (url.pathname.endsWith('/get_profile_by_freeupper_id')) return Response.json([{
         freeupper_id: 'FU_TEST', is_private: privateProfile, username: 'person@example.com', display_name: 'person@example.com', bio: 'Contact person@example.com'
       }]);
@@ -56,5 +67,19 @@ test('Workers public previews and WASM images preserve privacy', { skip: !bundle
     response = await request('/api/post-text-og?code=abcdef');
     assert.equal(response.status, 200);
     assert.equal(Buffer.from(await response.arrayBuffer()).subarray(0, 4).toString('hex'), '89504e47');
+    const mediaPath = '/api/post-media?asset_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    assert.equal((await request(mediaPath, {})).status, 401);
+    for (const range of [null, 'bytes=0-3']) {
+      response = await request(mediaPath, { Authorization: 'Bearer owner-fixture', ...(range ? { Range: range } : {}) });
+      assert.equal(response.status, range ? 206 : 200);
+      assert.equal(await response.text(), 'data');
+      assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+      if (range) assert.equal(response.headers.get('Content-Range'), 'bytes 0-3/100');
+    }
+    // A successful owner request must never populate a cache for another viewer.
+    assert.equal((await request(mediaPath, { Authorization: 'Bearer stranger-fixture' })).status, 404);
+    assert.equal((await request(mediaPath, {})).status, 401);
+    assert.equal((await request('/api/privacy-v2-publish', {})).status, 503);
+    assert.equal((await request('/__migration/health', {}).then(r => r.json())).restrictedAudiencesEnabled, false);
   } finally { await mf.dispose(); }
 });
