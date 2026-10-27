@@ -1915,6 +1915,47 @@
 .mini-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}.mini-overlay.open{opacity:1;pointer-events:auto}
 .mini-modal{width:min(300px,86vw);background:var(--bg3);border:1px solid var(--brd2);border-radius:20px;padding:18px}
 .link-preview{display:none;align-items:center;gap:12px;padding:10px 12px;margin:12px 0;border:1.5px solid var(--brd);border-radius:14px;background:var(--inp)}.link-preview.show{display:flex}.link-preview img{width:36px;height:36px;border-radius:8px;background:var(--bg4);flex-shrink:0}.link-preview .lp-text{min-width:0}.link-preview .lp-host{font-weight:700;font-size:14px}.link-preview .lp-url{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── Theme-aware composer: white in light mode, dark in dark mode ── */
+[data-theme="light"] .composer-card{--text:#0d0d0d;--muted:rgba(0,0,0,.45);--muted2:rgba(0,0,0,.35);--brd:rgba(0,0,0,.1);--inp:#f3f3f5;background:#fff;color:#0d0d0d}
+[data-theme="dark"] .composer-card{--text:#fff;--muted:rgba(255,255,255,.45);--muted2:rgba(255,255,255,.3);--brd:rgba(255,255,255,.12);--inp:#1a1a1a;background:#0f0f0f;color:#fff}
+
+[data-theme="light"] .composer-card .mention-highlight{color:var(--pd)}
+[data-theme="dark"] .composer-card .mention-highlight{color:var(--pl)}
+
+[data-theme="light"] .opts-row .picker-btn{background:#fff;color:#0d0d0d;border-color:rgba(0,0,0,.12)}
+[data-theme="dark"] .opts-row .picker-btn{background:#0f0f0f;color:#fff;border-color:rgba(255,255,255,.12)}
+[data-theme="light"] .opts-row .picker-btn .arrow svg{stroke:#555}
+[data-theme="dark"] .opts-row .picker-btn .arrow svg{stroke:#aaa}
+
+/* ── Taller content space ── */
+.composer-card textarea.mention-textarea{min-height:240px!important}
+
+/* ── Title: real text, scrolls horizontally on its own ── */
+.composer-card #postTitleBackdrop{display:none!important}
+.composer-card #postTitle{
+  display:block;width:100%;height:30px;line-height:30px;
+  padding:0!important;margin:0;
+  font-size:18px;font-weight:800;
+  color:var(--text)!important;-webkit-text-fill-color:var(--text);
+  caret-color:var(--text);
+}
+.composer-card #postTitle::placeholder{font-weight:500;color:var(--muted2);-webkit-text-fill-color:var(--muted2)}
+.composer-card .mention-textarea-wrap:first-child{margin-bottom:12px}
+
+/* ── Publish button: normal flow, below Audience + Comments ── */
+.main{padding-bottom:calc(var(--nav-h) + 40px + env(safe-area-inset-bottom,0px))!important}
+#postSubmitBtn{position:relative;margin-top:6px}
+@media (min-width:768px){.main{padding-bottom:24px!important}}
+
+/* ── Link card in composer ── */
+.composer-link-card{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:12px 0 4px;border:1.5px solid var(--brd);border-radius:14px;background:var(--inp);position:relative}
+.composer-link-card img{width:40px;height:40px;border-radius:10px;object-fit:cover;background:#e5e5ea;flex-shrink:0}
+.clc-text{min-width:0;flex:1;padding-right:22px}
+.clc-host{font-size:12px;font-weight:700;color:var(--muted)}
+.clc-title{font-size:14px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clc-desc{font-size:12px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.clc-x{position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;color:var(--muted);cursor:pointer}
 </style>
 </head>
 <body>
@@ -1958,10 +1999,10 @@
                     <form id="post-form" onsubmit="event.preventDefault();submitPost();" novalidate>
 
                         <!-- Content --><div class="form-group"><div class="composer-card">
-<div class="mention-textarea-wrap"><div class="mention-backdrop" id="postTitleBackdrop" aria-hidden="true" style="white-space:nowrap;font-weight:800;font-size:18px;"></div><input class="form-inp mention-textarea" id="postTitle" type="text" placeholder="Free to say what's on your mind?" maxlength="100" autocomplete="off" aria-label="Title" style="font-weight:800;font-size:18px;"></div>
-<span class="char-c" id="postTitleCount" style="display:none"></span><div class="card-divider"></div>
+<div class="mention-textarea-wrap"><div class="mention-backdrop" id="postTitleBackdrop" aria-hidden="true"></div><input class="form-inp mention-textarea" id="postTitle" type="text" placeholder="Free to say what's on your mind?" maxlength="100" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Title"></div>
+<span class="char-c" id="postTitleCount" style="display:none"></span>
 <div class="mention-textarea-wrap"><div class="mention-backdrop" id="postContentBackdrop" aria-hidden="true"></div><textarea class="form-inp mention-textarea" id="postContent" placeholder="What's on your mind? Use @ to mention, # for hashtags" rows="4" aria-label="Content"></textarea></div>
-<div class="hashtag-suggestions" id="hashtagSuggestions" role="listbox"></div><div class="image-scroll" id="postImageGrid" role="list"></div>
+<div class="hashtag-suggestions" id="hashtagSuggestions" role="listbox"></div><div class="image-scroll" id="postImageGrid" role="list"></div><div id="composerLinkCard"></div>
 <div class="composer-count"><span class="char-c" id="postContentCount">0/10,000</span></div>
 <div class="fmt-toolbar" role="toolbar" aria-label="Text formatting"><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('bold')" title="Bold">B</button><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('italic')" title="Italic">I</button><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('underline')" title="Underline">U</button><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('mono')" title="Monospace">S</button><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('normal')" title="Remove formatting">Aa</button><span class="fmt-divider"></span><button type="button" class="fmt-btn" onclick="insertBullet()" title="List"><svg viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M3 6h2M3 12h2M3 18h2"/></svg></button><button type="button" class="fmt-btn" onclick="insertLink()" title="Link"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l2-2"/></svg></button><button type="button" class="fmt-btn" onclick="document.getElementById('postFileInput').click()" title="Add image or video"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 16-6-6L4 21"/></svg></button><button type="button" class="fmt-btn" onclick="toggleEmojiRow()" title="Emoji"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14q4 5 8 0M9 9h.1M15 9h.1"/></svg></button><span class="fmt-divider"></span><button type="button" class="fmt-btn" onclick="insertAtCursor('@')" title="Mention">@</button><button type="button" class="fmt-btn" onclick="insertAtCursor('#')" title="Hashtag">#</button></div>
 <div class="emoji-row" id="emojiRow"><button type="button" onclick="insertAtCursor('😂')">😂</button><button type="button" onclick="insertAtCursor('🔥')">🔥</button><button type="button" onclick="insertAtCursor('❤️')">❤️</button><button type="button" onclick="insertAtCursor('😍')">😍</button><button type="button" onclick="insertAtCursor('🙏')">🙏</button><button type="button" onclick="insertAtCursor('🎉')">🎉</button><button type="button" onclick="insertAtCursor('😎')">😎</button><button type="button" onclick="insertAtCursor('💯')">💯</button></div>
@@ -2171,49 +2212,20 @@
         /**
          * ================================================================
          *  CREATE PAGE — Freeupper
-         *  Version: 2.5 (composer video tiles render stored posters)
+         *  Version: 2.6 (composer link card + title sync fix)
          *  Description: Full-featured post & marketplace listing composer
          *  with live purple highlighting for @mentions and #hashtags.
          *
-         *  v2.5 changes
+         *  v2.6 changes
          *  ----------------------------------------------------------------
-         *  - renderPostImageGrid() now prefers m.thumbnailUrl when
-         *    present, rendering video tiles as <img> instead of a raw
-         *    <video> with no poster. Previously a freshly uploaded
-         *    video's tile stayed a black rectangle until the browser
-         *    finished decoding a frame, even though Cloudinary had
-         *    already returned a perfect JPG poster that was sitting
-         *    unused on the media object.
-         *  - Added forceComposerVideoThumbnails() — composer twin of
-         *    profile.html's forceVideoThumbnails(). Runs at the end of
-         *    every render and seeks any remaining <video> tiles to
-         *    their first frame. Only matters during the blob-URL window
-         *    (before Cloudinary responds) or if a poster failed to
-         *    generate server-side. No-op when every video tile is an
-         *    <img>.
-         *  - The <img src="…mp4"> trap is avoided by the same
-         *    hasPoster guard used on the profile side: thumbnailUrl
-         *    must differ from the video URL to be used as an <img>.
-         *
-         *  v2.4 changes
-         *  ----------------------------------------------------------------
-         *  - YouTube thumbnail URL switched from maxresdefault.jpg to
-         *    hqdefault.jpg in both buildYouTubeThumb() and the composer's
-         *    YouTube-link branch.
-         *  - No other behaviour changed from v2.3.
-         *
-         *  v2.3 changes
-         *  ----------------------------------------------------------------
-         *  - Added thumbnail helpers (buildCloudinaryVideoThumb,
-         *    buildYouTubeThumb, resolveMediaThumbnail) under CONFIG.
-         *  - uploadToCloudinary() resolves with thumbnailUrl so every
-         *    uploaded video carries its own poster frame.
-         *  - handlePostUpload() stores thumbnailUrl on the media entry.
-         *  - previewPostMedia() attaches thumbnailUrl to YouTube links
-         *    and external image links.
-         *  - submitPost() maps thumbnailUrl into each media entry and
-         *    passes it at the top level of PostsAPI.createPost so
-         *    posts.js can persist posts.thumbnail_url directly.
+         *  - Removed card-divider between title and content.
+         *  - Title input now syncs backdrop on every keystroke event so
+         *    visible text no longer drifts from the real text.
+         *  - Disabled browser spellcheck / autocorrect on the title.
+         *  - Added #composerLinkCard after the media grid.
+         *  - renderPostImageGrid now refreshes the link card.
+         *  - Added renderComposerLinkCard() / removeComposerLink() so a
+         *    pasted link renders as a card in the composer.
          * ================================================================
          */
 
@@ -2607,11 +2619,14 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
             const bd = document.getElementById('postTitleBackdrop');
             if (!ta || !bd || ta._backdropWired) return;
             ta._backdropWired = true;
-            ta.addEventListener('input', () => {
+            const sync = () => {
                 syncMentionBackdrop(ta, bd);
-            });
-            ta.addEventListener('scroll', () => { bd.scrollLeft = ta.scrollLeft; });
-            syncMentionBackdrop(ta, bd);
+                bd.insertAdjacentHTML('beforeend', '<span style="display:inline-block;width:10px"></span>');
+                bd.scrollLeft = ta.scrollLeft;
+                requestAnimationFrame(() => { bd.scrollLeft = ta.scrollLeft; });
+            };
+            ['input', 'keyup', 'keydown', 'click', 'focus', 'select', 'scroll'].forEach(ev => ta.addEventListener(ev, sync));
+            sync();
         }
 
         // ──────────────────────────────────────────────────────────────
@@ -3384,6 +3399,7 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
             // generation — force a seek to 0.1s once metadata loads so
             // the tile shows a first frame instead of a black box.
             forceComposerVideoThumbnails(grid);
+            renderComposerLinkCard();
         }
 
         // Composer-side twin of profile.html's forceVideoThumbnails().
@@ -4271,5 +4287,76 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
         window.submitItem = submitItem;
         window.showToast = showToast;
     </script>
+
+<script>
+const _linkMetaCache = {};
+const _esc = s => escapeHtmlForMentions(s).replace(/"/g, '&quot;');
+
+function getComposerLinkUrl() {
+    const c = document.getElementById('postContent')?.value || '';
+    const m = c.match(/https?:\/\/[^\s]+/i);
+    if (m) return m[0];
+    const mm = state.postMedia.find(x => /^(youtube_|external_)/.test(x.public_id || ''));
+    if (!mm) return '';
+    return (mm.public_id || '').startsWith('youtube_')
+        ? 'https://www.youtube.com/watch?v=' + mm.public_id.slice(8)
+        : mm.url;
+}
+
+function renderComposerLinkCard() {
+    const box = document.getElementById('composerLinkCard');
+    if (!box) return;
+    const url = getComposerLinkUrl();
+    if (!url) { box.innerHTML = ''; box.dataset.url = ''; return; }
+    if (box.dataset.url === url && box.innerHTML) return;
+    box.dataset.url = url;
+    let host = '';
+    try { host = new URL(url).hostname.replace(/^www\./, ''); } catch (e) {}
+    const draw = (meta) => {
+        if (box.dataset.url !== url) return;
+        const logo = meta.logo || ('https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64');
+        box.innerHTML = `<div class="composer-link-card">
+            <img src="${_esc(logo)}" alt="" onerror="this.style.visibility='hidden'">
+            <div class="clc-text">
+                <div class="clc-host">${_esc(host)}</div>
+                ${meta.title ? `<div class="clc-title">${_esc(meta.title)}</div>` : ''}
+                ${meta.description ? `<div class="clc-desc">${_esc(meta.description)}</div>` : `<div class="clc-desc">${_esc(url)}</div>`}
+            </div>
+            <button type="button" class="clc-x" onclick="removeComposerLink()" aria-label="Remove link">×</button>
+        </div>`;
+    };
+    draw(_linkMetaCache[url] || {});
+    if (!_linkMetaCache[url]) {
+        fetch('https://api.microlink.io/?url=' + encodeURIComponent(url))
+            .then(r => r.json())
+            .then(j => {
+                const d = (j && j.data) || {};
+                _linkMetaCache[url] = {
+                    title: d.title || '',
+                    description: d.description || '',
+                    logo: (d.logo && d.logo.url) || (d.image && d.image.url) || ''
+                };
+                draw(_linkMetaCache[url]);
+            })
+            .catch(() => { _linkMetaCache[url] = {}; });
+    }
+}
+
+function removeComposerLink() {
+    const ta = document.getElementById('postContent');
+    if (ta && /https?:\/\/[^\s]+/i.test(ta.value)) {
+        ta.value = ta.value.replace(/https?:\/\/[^\s]+\s?/i, '');
+        ta.dispatchEvent(new Event('input'));
+    } else {
+        const i = state.postMedia.findIndex(x => /^(youtube_|external_)/.test(x.public_id || ''));
+        if (i > -1) removePostImage(i);
+    }
+    renderComposerLinkCard();
+}
+
+document.getElementById('postContent')?.addEventListener('input', renderComposerLinkCard);
+window.removeComposerLink = removeComposerLink;
+window.renderComposerLinkCard = renderComposerLinkCard;
+</script>
 </body>
 </html>
