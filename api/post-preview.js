@@ -68,6 +68,12 @@ export default async function handler(req, res) {
     ? rawDescription
     : 'Discover this post on FreeUpper.';
   const img = post.media_type === 'video' ? origin + '/api/post-preview?image=video&code=' + encodeURIComponent(code) : (post.media_type === 'text' || (!post.media_url && !post.thumbnail_url)) ? origin + '/api/post-text-og?code=' + encodeURIComponent(code) + (type === 'video' ? '&style=video' : '') : (safeImage(post.thumbnail_url) || safeImage(post.media_url) || SITE + '/freeupper.png');
+  const publicBody = clean(post.content || post.description || post.title || '', 3000);
+  const schema = { '@context': 'https://schema.org', '@type': 'SocialMediaPosting',
+    headline: title, articleBody: publicBody, description, mainEntityOfPage: url, url };
+  if (post.created_at) schema.datePublished = post.created_at;
+  const postSchema = '<script type="application/ld+json">' +
+    JSON.stringify(schema).replace(/</g, '\\u003c') + '</script>';
   let videoSchema = '';
   if (type === 'video' && post.media_type === 'video') {
     try {
@@ -106,9 +112,10 @@ export default async function handler(req, res) {
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(img)}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${esc(img)}">
-<link rel="manifest" href="/manifest.webmanifest">\n<meta name="theme-color" content="#2e1065">\n<meta name="robots" content="index,follow">\n${videoSchema}
-</head><body><main><article><h1>${esc(title)}</h1><p>${esc(clean(post.content || post.description || post.title || '', 3000))}</p><a href="${esc(destination)}">View post on FreeUpper</a></article></main>
-<script>location.replace(${JSON.stringify(destination)})</script></body></html>`;
+<link rel="manifest" href="/manifest.webmanifest">\n<meta name="theme-color" content="#2e1065">\n<meta name="robots" content="index,follow">\n${postSchema}${videoSchema}
+<style>body{margin:0;background:#100d18;color:white;font:16px/1.6 system-ui,sans-serif}main{max-width:720px;margin:5vh auto;padding:24px}article{padding:24px;background:#1c1728;border-radius:18px}h1,p{overflow-wrap:anywhere}.preview{display:block;max-width:100%;max-height:65vh;object-fit:contain;margin:16px auto;border-radius:12px}a{display:inline-block;padding:12px 20px;border-radius:12px;background:#8051df;color:white;font-weight:700;text-decoration:none}</style>
+</head><body><main><article><h1>${esc(title)}</h1><img class="preview" src="${esc(img)}" alt="${esc(title)}"><p>${esc(publicBody)}</p><a href="${esc(destination)}">${post.media_type === 'video' ? 'Watch video on FreeUpper' : 'View post on FreeUpper'}</a></article></main>
+</body></html>`;
   res.setHeader('Content-Type','text/html; charset=utf-8');
   res.setHeader('Cache-Control','no-store');
   return res.status(200).send(html);
