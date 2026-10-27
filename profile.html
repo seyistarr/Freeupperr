@@ -630,6 +630,12 @@
             border: none;
         }
         .grid-card:active { transform: scale(.97); }
+        /* Lightweight placeholders preserve the existing profile grid geometry. */
+        .profile-grid-skeleton { pointer-events: none; }
+        .profile-grid-skeleton .grid-card { animation: sklPulse 1.3s ease-in-out infinite; }
+        .profile-grid-skeleton .grid-card:nth-child(2n) { animation-delay: .18s; }
+        .profile-grid-skeleton .grid-card:nth-child(3n) { animation-delay: .36s; }
+
         .grid-card img {
             width: 100%;
             height: 100%;
@@ -3614,6 +3620,7 @@
                     case 'market': renderMarket(container, marketItems); break;
                 }
 
+                container.dataset.profileRendered = targetUserId || '';
                 if (tab === 'posts' || tab === 'love' || tab === 'share' || tab === 'star') {
                     requestAnimationFrame(function() { forceVideoThumbnails(container); });
                 }
@@ -3648,64 +3655,96 @@
                     '</div>';
             }
 
-            async function loadProfileCollectionPosts(ids) {
-                if (!ids || !ids.length) return [];
+            // Reuse resolved collection posts across Saved/Reposts tab switches.
+            // Never cache missing or inaccessible posts as successful results.
+            var _collectionPostCache = new Map();
+            var _collectionPostRequests = new Map();
+            function getCachedCollectionPosts(ids) {
                 var wanted = new Set(ids);
-                var found = allPosts.filter(function(p) { return wanted.has(p.id); });
+                var posts = allPosts.filter(function(p) { return wanted.has(p.id); });
+                posts.forEach(function(p) { _collectionPostCache.set(p.id, p); });
+                ids.forEach(function(id) {
+                    if (_collectionPostCache.has(id) && !posts.some(function(p) { return p.id === id; })) {
+                        posts.push(_collectionPostCache.get(id));
+                    }
+                });
+                return posts;
+            }
+            async function loadProfileCollectionPosts(ids) {
+                var found = getCachedCollectionPosts(ids);
                 var foundIds = new Set(found.map(function(p) { return p.id; }));
                 var missingIds = ids.filter(function(id) { return !foundIds.has(id); });
                 if (missingIds.length && window.PostsAPI && window.PostsAPI.loadPostById) {
-                    var fetched = await Promise.all(missingIds.map(function(id) {
-                        return window.PostsAPI.loadPostById(id).catch(function(err) {
-                            console.warn('Profile collection post unavailable:', id, err);
-                            return null;
-                        });
+                    await Promise.all(missingIds.map(function(id) {
+                        if (!_collectionPostRequests.has(id)) {
+                            var request = Promise.resolve().then(function() {
+                                return window.PostsAPI.loadPostById(id);
+                            }).then(function(post) {
+                                if (post) _collectionPostCache.set(id, post);
+                            }).catch(function(err) {
+                                console.warn('Profile collection post unavailable:', id, err);
+                            }).finally(function() { _collectionPostRequests.delete(id); });
+                            _collectionPostRequests.set(id, request);
+                        }
+                        return _collectionPostRequests.get(id);
                     }));
-                    fetched.forEach(function(p) { if (p) found.push(p); });
                 }
-                return found;
+                return getCachedCollectionPosts(ids);
             }
-
-            async function renderReposts(container, repostedIds) {
-                if (_profileRepostsError) {
-                    container.innerHTML = '<div class="empty-state"><h3>Could not load reposts</h3><p>Please try again later.</p></div>';
+            function renderProfileCollection(container, ids, type) {
+                var isSaved = type === 'star';
+                var error = isSaved ? _profileBookmarksError : _profileRepostsError;
+                if (error) {
+                    container.innerHTML = '<div class="empty-state"><h3>Could not load ' + (isSaved ? 'saved posts' : 'reposts') + '</h3><p>Please try again later.</p></div>';
                     return;
                 }
-                if (!repostedIds.length) {
-                    container.innerHTML = '<div class="empty-state"><h3>No reposts</h3><p>Posts you repost will appear here.</p></div>';
+                if (!ids.length) {
+                    container.innerHTML = isSaved
+                        ? '<div class="empty-state"><h3>No saved posts</h3><p>Save posts you love to find them instantly.</p></div>'
+                        : '<div class="empty-state"><h3>No reposts</h3><p>Posts you repost will appear here.</p></div>';
                     return;
                 }
-                container.innerHTML = '<div class="grid-3" style="min-height:120px"></div>';
-                var found = await loadProfileCollectionPosts(repostedIds);
-                if (!found.length) {
-                    container.innerHTML = '<div class="empty-state"><h3>No available reposts</h3><p>Reposted posts may be private, deleted, or unavailable.</p></div>';
-                    return;
+                var requestId = String(Number(container.dataset.collectionRequest || 0) + 1);
+                container.dataset.collectionRequest = requestId;
+                var orderedIds = ids.slice();
+                function paint(posts, loading) {
+                    if (container.dataset.collectionRequest !== requestId) return;
+                    var order = new Map(orderedIds.map(function(id, index) { return [id, index]; }));
+                    posts = posts.filter(function(p) { return order.has(p.id); })
+                        .sort(function(a, b) { return order.get(a.id) - order.get(b.id); });
+                    if (posts.length) {
+                        container.innerHTML = '<div class="grid-3">' +
+                            posts.map(function(p) { return buildGridPostCard(p, { forceNavigate: true }); }).join('') +
+                            (loading ? Array.from({ length: Math.min(6, orderedIds.length - posts.length) }, function() {
+                                return '<div class="grid-card profile-grid-skeleton" aria-hidden="true"></div>';
+                            }).join('') : '') + '</div>';
+                        requestAnimationFrame(function() { forceVideoThumbnails(container); });
+                    } else if (loading) {
+                        container.innerHTML = '<div class="grid-3 profile-grid-skeleton" aria-label="Loading posts">' +
+                            Array.from({ length: Math.min(9, orderedIds.length) }, function() {
+                                return '<div class="grid-card" aria-hidden="true"></div>';
+                            }).join('') + '</div>';
+                    } else {
+                        container.innerHTML = '<div class="empty-state"><h3>No available ' +
+                            (isSaved ? 'saved posts' : 'reposts') +
+                            '</h3><p>These posts may be private, deleted, or unavailable.</p></div>';
+                    }
                 }
-                found.sort(function(a,b) { return repostedIds.indexOf(a.id)-repostedIds.indexOf(b.id); });
-                container.innerHTML = '<div class="grid-3">' +
-                    found.map(function(p) { return buildGridPostCard(p, { forceNavigate: true }); }).join('') + '</div>';
-                forceVideoThumbnails(container);
+                var cached = getCachedCollectionPosts(orderedIds);
+                paint(cached, cached.length < orderedIds.length);
+                if (cached.length === orderedIds.length) return;
+                loadProfileCollectionPosts(orderedIds).then(function(posts) {
+                    paint(posts, false);
+                }).catch(function(err) {
+                    console.warn('Profile collection failed:', err);
+                    paint(getCachedCollectionPosts(orderedIds), false);
+                });
             }
-
-            async function renderStar(container, userPosts, bookmarkedIds) {
-                if (_profileBookmarksError) {
-                    container.innerHTML = '<div class="empty-state"><h3>Could not load saved posts</h3><p>Please try again later.</p></div>';
-                    return;
-                }
-                if (!bookmarkedIds.length) {
-                    container.innerHTML = '<div class="empty-state"><h3>No saved posts</h3><p>Save posts you love to find them instantly.</p></div>';
-                    return;
-                }
-                container.innerHTML = '<div class="grid-3" style="min-height:120px"></div>';
-                var found = await loadProfileCollectionPosts(bookmarkedIds);
-                if (!found.length) {
-                    container.innerHTML = '<div class="empty-state"><h3>No available saved posts</h3><p>Saved posts may be private, deleted, or unavailable.</p></div>';
-                    return;
-                }
-                found.sort(function(a,b) { return bookmarkedIds.indexOf(a.id)-bookmarkedIds.indexOf(b.id); });
-                container.innerHTML = '<div class="grid-3">' +
-                    found.map(function(p) { return buildGridPostCard(p, { forceNavigate: true }); }).join('') + '</div>';
-                forceVideoThumbnails(container);
+            function renderReposts(container, repostedIds) {
+                renderProfileCollection(container, repostedIds, 'share');
+            }
+            function renderStar(container, userPosts, bookmarkedIds) {
+                renderProfileCollection(container, bookmarkedIds, 'star');
             }
 
             function renderMarket(container, marketItems) {
@@ -3822,7 +3861,18 @@
                 document.getElementById('panel-' + tab).classList.add('active');
                 activeTab = tab;
                 if (viewerIsBlockedByPrivacy) return;
-                if (!_secondaryDataLoaded) return;
+                var panel = document.getElementById('panel-' + tab);
+                if (!_secondaryDataLoaded) {
+                    if (panel && !panel.hasChildNodes()) {
+                        panel.innerHTML = '<div class="grid-3 profile-grid-skeleton" aria-label="Loading posts">' +
+                            Array.from({ length: 9 }, function() { return '<div class="grid-card" aria-hidden="true"></div>'; }).join('') +
+                            '</div>';
+                    }
+                    return;
+                }
+                // Keep already-rendered grids in place when moving between tabs.
+                // Interaction handlers can still call renderTab to refresh changed data.
+                if (panel && panel.dataset.profileRendered === targetUserId && panel.hasChildNodes()) return;
                 renderTab(tab);
             };
 
