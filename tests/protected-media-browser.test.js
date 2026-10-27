@@ -105,6 +105,8 @@ test('browser decodes private images/videos/posters and rejects cross-session de
   } finally {
     clearTimeout(timeout); child.kill('SIGTERM'); await once(child, 'exit').catch(() => {});
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
-    await rm(temp, { recursive: true, force: true });
+    // Chromium helpers may finish profile writes just after the parent exits.
+    // Retry transient ENOTEMPTY/EBUSY failures; persistent cleanup errors still fail.
+    await rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
