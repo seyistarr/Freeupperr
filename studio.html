@@ -2545,6 +2545,14 @@ async function publishPost() {
     return;
   }
   if (!S.media && !S.textPost) { showToast('Capture media or write a text post first'); return; }
+  // Fail closed: the legacy Studio uploader uses public Cloudinary presets.
+  // Never let a restricted audience reach that uploader until the protected
+  // authenticated-upload and publishing flow is integrated and verified.
+  const selectedAudience = document.getElementById('studioAudience')?.value || 'public';
+  if (selectedAudience !== 'public') {
+    showToast('Protected publishing is not ready yet. No media was uploaded.');
+    return;
+  }
   if (!window.PostsAPI || typeof window.PostsAPI.createPost !== 'function') { showToast('System not ready, please refresh'); return; }
 
   const caption = document.getElementById('detCaption').value.trim();
