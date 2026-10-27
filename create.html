@@ -3222,36 +3222,16 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
             }
             if (!files.length) return;
 
-            const hasVideo = files.some(f => f.type.startsWith('video'));
-            const hasMultiple = files.length > 1;
-
-            if (hasVideo) {
-                if (state.postMedia.length > 0) {
-                    showToast('Remove existing media before adding a video', 'o');
-                    event.target.value = '';
-                    return;
-                }
-                if (hasMultiple) {
-                    showToast('Only one video allowed per post', 'o');
-                    event.target.value = '';
-                    return;
-                }
-            } else {
-                if (state.postMedia.some(m => m.type === 'video')) {
-                    showToast('Remove the video before adding images', 'o');
-                    event.target.value = '';
-                    return;
-                }
-            }
-
-            const remaining = hasVideo ? 1 : (CONFIG.LIMITS.maxPostImages - state.postMedia.length);
+            // Public posts may contain photos and videos in one ordered gallery.
+            const remaining = CONFIG.LIMITS.maxPostImages - state.postMedia.length;
             if (remaining <= 0) {
-                showToast(`Max ${CONFIG.LIMITS.maxPostImages} images`, 'o');
+                showToast(`Maximum ${CONFIG.LIMITS.maxPostImages} media files per post`, 'o');
                 event.target.value = '';
                 return;
             }
-
             const toUpload = files.slice(0, remaining);
+            if (files.length > remaining) showToast(`Only ${remaining} more media files allowed`, 'o');
+
             const progress = document.getElementById('postProgress');
             const bar = document.getElementById('postProgressBar');
 
@@ -3358,8 +3338,6 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
             const grid = document.getElementById('postImageGrid');
             if (!grid) return;
 
-            const hasVideo = state.postMedia.some(m => m.type === 'video');
-
             const thumbHtml = state.postMedia.map((m, i) => {
                 var inner;
                 if (m.type === 'video') {
@@ -3385,8 +3363,8 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
                         </div>`;
             }).join('');
 
-            const addBtn = (!hasVideo && state.postMedia.length > 0 && state.postMedia.length < CONFIG.LIMITS.maxPostImages) ?
-                `<div class="image-add-btn" onclick="document.getElementById('postFileInput').click()" role="button" tabindex="0" aria-label="Add more images">
+            const addBtn = (state.postMedia.length > 0 && state.postMedia.length < CONFIG.LIMITS.maxPostImages) ?
+                `<div class="image-add-btn" onclick="document.getElementById('postFileInput').click()" role="button" tabindex="0" aria-label="Add more photos or videos">
                             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             Add
                         </div>` :
