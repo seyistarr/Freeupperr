@@ -36,6 +36,7 @@ test('composer beta readiness uses only the authenticated status RPC and exclude
       window: { FreeUpperProtectedPublish: { publish() {} }, sb: { rpc: async name => {
         assert.equal(name, 'protected_studio_beta_status'); return { data: { approved, ready: true, mode } };
       } } } };
+    context.syncAudienceLabel = () => {};
     vm.createContext(context); vm.runInContext(code, context);
     await context.refreshProtectedAudienceAvailability();
     for (const option of select.options.filter(o => o.value !== 'public')) assert.equal(option.disabled, !approved || mode !== 'production');
