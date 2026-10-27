@@ -880,6 +880,7 @@ function flipCamera() {
   S.flashOn = false;
   const fb = document.getElementById('flashBtn'); if (fb) fb.classList.remove('on');
   startCamera();
+  refreshStudioAudienceAccess().catch(() => {});
 }
 function applyCamFilter() {
   const vid = document.getElementById('camVideo');
@@ -2794,6 +2795,35 @@ async function publishPost() {
     showScreen('scPost');
   }
 }
+
+async function refreshStudioAudienceAccess() {
+  const select = document.getElementById('studioAudience');
+  const note = document.getElementById('studioAudienceNote');
+  if (!select || !note) return;
+  for (const opt of select.options) if (opt.value !== 'public') opt.disabled = true;
+  select.value = 'public';
+  note.textContent = 'Checking protected publishing availability…';
+  try {
+    if (!window.sb) throw Error('Auth unavailable');
+    const {data: session} = await window.sb.auth.getSession();
+    if (!session?.session?.user) {
+      note.textContent = 'Sign in to check restricted audience availability.';
+      return;
+    }
+    const {data,error} = await window.sb.rpc('protected_studio_beta_status');
+    if (error || !data?.approved || !data?.ready) {
+      note.textContent = 'Restricted publishing is not yet available for this account.';
+      return;
+    }
+    for (const opt of select.options) if (opt.value !== 'public') {
+      opt.disabled = false;
+      opt.textContent = opt.value === 'followers' ? 'Followers' :
+        opt.value === 'friends' ? 'Mutuals' : 'Only Me';
+    }
+    note.textContent = 'Protected publishing beta — only authorized viewers can access restricted posts.';
+  } catch (_) { note.textContent = 'Restricted publishing is currently unavailable.'; }
+}
+window.addEventListener('focus', () => { refreshStudioAudienceAccess().catch(() => {}); });
 
 /* ═══════════ INIT ═══════════ */
 function init() {
