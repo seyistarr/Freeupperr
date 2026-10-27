@@ -57,6 +57,7 @@
     <script src="global.js" defer></script>
     <script src="auth.js" defer></script>
     <script src="posts.js" defer></script>
+    <script src="protected-media-client.js" defer></script>
     <script src="header-badges.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js" defer></script>
@@ -5519,8 +5520,9 @@
                         const id = item.assetId || item.asset_id;
                         if (!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id)) return '';
                         const kind = item.type === 'video' ? 'video' : 'image';
+                        const poster = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.thumbnailAssetId || '') ? item.thumbnailAssetId : '';
                         return '<div class="ig-media-container fu-protected-media-placeholder" data-protected-asset="' + id +
-                            '" data-protected-kind="' + kind + '" role="status">Loading protected ' + kind + '…</div>';
+                            '" data-protected-kind="' + kind + '"' + (poster ? ' data-protected-poster="' + poster + '"' : '') + ' role="status">Loading protected ' + kind + '…</div>';
                     }).join('');
                     return tiles || '<div class="ig-media-container fu-protected-media-placeholder" role="status">Protected media unavailable</div>';
                 }
@@ -5586,114 +5588,6 @@
                     const idx = Math.round(el.scrollLeft / w);
                     counter.textContent = `${Math.min(idx + 1, items.length)}/${items.length}`;
                 }, { passive: true });
-            }
-
-            // Fetch each protected image with the signed-in viewer's bearer token.
-            // Object URLs remain local to this tab and are revoked when removed.
-            const protectedImageUrls = new WeakMap();
-            const protectedImageNodes = new Set();
-            let protectedAuthGeneration = 0;
-            function clearProtectedImages() {
-                protectedAuthGeneration++;
-                for (const node of protectedImageNodes) {
-                    const url = protectedImageUrls.get(node);
-                    if (url) URL.revokeObjectURL(url);
-                    protectedImageUrls.delete(node);
-                    if (node.isConnected) {
-                        node.replaceChildren(document.createTextNode('Sign in to view protected media'));
-                        node.dataset.protectedLoaded = '1';
-                    }
-                }
-                protectedImageNodes.clear();
-            }
-            // A sign-out must invalidate both already rendered blobs and
-            // any authorized fetch that was still in flight.
-            window.sb?.auth?.onAuthStateChange?.((event) => {
-                if (event === 'SIGNED_OUT' || event === 'USER_UPDATED' ||
-                    event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
-                    clearProtectedImages();
-                }
-            });
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) clearProtectedImages();
-                else loadProtectedImages(document).catch(() => {});
-            });
-            async function loadProtectedImages(scope) {
-                const root = scope || document;
-                const nodes = Array.from(root.querySelectorAll('[data-protected-asset]'));
-                if (!nodes.length) return;
-                const client = window.sb;
-                if (!client?.auth?.getSession) return;
-                const { data, error } = await client.auth.getSession();
-                const token = !error && data?.session?.access_token;
-                if (!token) {
-                    nodes.forEach(node => { node.textContent = 'Sign in to view protected media'; });
-                    return;
-                }
-                const generation = protectedAuthGeneration;
-                await Promise.all(nodes.map(async node => {
-                    if (node.dataset.protectedLoading === '1' || node.dataset.protectedLoaded === '1') return;
-                    node.dataset.protectedLoading = '1';
-                    try {
-                        const assetId = node.dataset.protectedAsset;
-                        const response = await fetch('/api/post-media?asset_id=' + encodeURIComponent(assetId), {
-                            headers: { Authorization: 'Bearer ' + token },
-                            cache: 'no-store', credentials: 'same-origin'
-                        });
-                        if (!response.ok) throw new Error('Access unavailable');
-                        const blob = await response.blob();
-                        const kind = node.dataset.protectedKind === 'video' ? 'video' : 'image';
-                        if (!blob.type.startsWith(kind + '/')) throw new Error('Unexpected media');
-                        // A bounded Blob fetch is a safe first implementation; the
-                        // proxy enforces 50 MB and rejects larger responses.
-                        if (blob.size > 50 * 1024 * 1024) throw new Error('Media too large');
-                        if (!node.isConnected || generation !== protectedAuthGeneration) return;
-                        const url = URL.createObjectURL(blob);
-                        const mediaEl = document.createElement(kind === 'video' ? 'video' : 'img');
-                        if (kind === 'video') {
-                            mediaEl.controls = true;
-                            mediaEl.playsInline = true;
-                            mediaEl.preload = 'metadata';
-                            mediaEl.setAttribute('controlsList', 'nodownload');
-                        } else {
-                            mediaEl.className = 'fade-in-image loaded';
-                            mediaEl.alt = 'Protected post image';
-                        }
-                        node.replaceChildren(mediaEl);
-                        protectedImageUrls.set(node, url);
-                        protectedImageNodes.add(node);
-                        mediaEl.src = url;
-                        node.dataset.protectedLoaded = '1';
-                    } catch (_) {
-                        if (node.isConnected) node.textContent = 'Protected media unavailable';
-                    } finally {
-                        delete node.dataset.protectedLoading;
-                    }
-                }));
-            }
-            const protectedImageObserver = new MutationObserver(() => {
-                for (const node of protectedImageNodes) {
-                    if (!node.isConnected) {
-                        const url = protectedImageUrls.get(node);
-                        if (url) URL.revokeObjectURL(url);
-                        protectedImageUrls.delete(node);
-                        protectedImageNodes.delete(node);
-                    }
-                }
-                document.querySelectorAll('[data-protected-asset]').forEach(node => {
-                    if (node.dataset.protectedLoading !== '1' && node.dataset.protectedLoaded !== '1') {
-                        loadProtectedImages(document).catch(() => {});
-                    }
-                });
-            });
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', () => {
-                    protectedImageObserver.observe(document.body, { childList: true, subtree: true });
-                    loadProtectedImages(document).catch(() => {});
-                }, { once: true });
-            } else {
-                protectedImageObserver.observe(document.body, { childList: true, subtree: true });
-                loadProtectedImages(document).catch(() => {});
             }
 
             function initAllMediaScrollRows(scope) {

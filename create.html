@@ -3152,16 +3152,10 @@
             try {
                 const client = window.sb;
                 if (!client?.rpc || !window.FreeUpperProtectedPublish?.publish) return;
-                const [releaseResult, capabilityResult] = await Promise.all([
-                    client.rpc('protected_first_release_status'),
-                    client.rpc('protected_publishing_capabilities')
-                ]);
-                const release = releaseResult.data;
-                const capabilities = capabilityResult.data;
-                if (releaseResult.error || capabilityResult.error ||
-                    release?.version !== 1 || release?.delivery !== true ||
-                    release?.publishing !== true || release?.legacy_conversion !== false ||
-                    capabilities?.ready !== true) return;
+                // The status RPC is scoped to auth.uid() and checks the private
+                // release controls. Internal release RPCs are service-role only.
+                const { data: beta, error } = await client.rpc('protected_studio_beta_status');
+                if (error || beta?.approved !== true || beta?.ready !== true) return;
                 for (const option of select.options) {
                     if (restricted.includes(option.value)) {
                         option.disabled = false;

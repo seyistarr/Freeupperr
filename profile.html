@@ -2571,6 +2571,7 @@
     <script src="/global.js"></script>
     <script src="/auth.js"></script>
     <script src="/posts.js"></script>
+    <script src="/protected-media-client.js"></script>
     <script src="/listings.js"></script>
     <script src="/settings.js"></script>
     <script src="/bottom-nav.js" defer></script>
@@ -3093,7 +3094,13 @@
                 opts = opts || {};
                 var mediaHtml = '';
                 var noMediaFallback = '<div class="no-media" style="display:none">' + escapeHtml(post.title) + '</div>';
-                if (post.mediaType === 'image' && post.mediaUrl) {
+                const protectedItem = post.media?.find(item => item.protected && item.assetId);
+                if (post.protectedMedia) {
+                    const asset = protectedItem?.type === 'video' ? protectedItem.thumbnailAssetId : protectedItem?.assetId;
+                    mediaHtml = window.FreeUpperProtectedMedia && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(asset || '')
+                        ? '<div class="no-media" data-protected-asset="' + asset + '" data-protected-kind="image" role="status">Protected media</div>'
+                        : '<div class="no-media" role="status">Protected media unavailable</div>';
+                } else if (post.mediaType === 'image' && post.mediaUrl) {
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
                     var thumbnailUrl = post.thumbnailUrl || '';
@@ -3135,7 +3142,13 @@
             function buildGridLoveCard(post) {
                 var mediaHtml = '';
                 var noMediaFallback = '<div class="no-media" style="display:none">' + escapeHtml(post.title) + '</div>';
-                if (post.mediaType === 'image' && post.mediaUrl) {
+                const protectedItem = post.media?.find(item => item.protected && item.assetId);
+                if (post.protectedMedia) {
+                    const asset = protectedItem?.type === 'video' ? protectedItem.thumbnailAssetId : protectedItem?.assetId;
+                    mediaHtml = window.FreeUpperProtectedMedia && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(asset || '')
+                        ? '<div class="no-media" data-protected-asset="' + asset + '" data-protected-kind="image" role="status">Protected media</div>'
+                        : '<div class="no-media" role="status">Protected media unavailable</div>';
+                } else if (post.mediaType === 'image' && post.mediaUrl) {
                     mediaHtml = '<img src="' + post.mediaUrl + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' + noMediaFallback;
                 } else if (post.mediaType === 'video' && post.mediaUrl) {
                     var thumbnailUrl = post.thumbnailUrl || '';

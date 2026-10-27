@@ -43,6 +43,7 @@
     <script src="global.js"></script>
     <script src="auth.js"></script>
     <script src="posts.js"></script>
+    <script src="protected-media-client.js"></script>
     <script src="listings.js"></script>
     <script src="router.js"></script>
     <script src="mentions.js"></script>
@@ -3439,6 +3440,8 @@
 
         const protectedVideoBlobUrls = new Set();
         let protectedVideoAuthGeneration = 0;
+        let protectedVideoReload = false;
+        let protectedVideoRefreshPending = false;
         function clearProtectedVideoMedia() {
             protectedVideoAuthGeneration++;
             for (const url of protectedVideoBlobUrls) {
@@ -3449,15 +3452,35 @@
                         if (element.tagName === 'VIDEO') element.load();
                     }
                 });
-                URL.revokeObjectURL(url);
+                window.FreeUpperProtectedMedia?.release(url);
             }
             protectedVideoBlobUrls.clear();
         }
         window.addEventListener('pagehide', clearProtectedVideoMedia);
         window.sb?.auth?.onAuthStateChange?.((event) => {
-            if (['SIGNED_OUT', 'USER_UPDATED', 'SIGNED_IN'].includes(event)) clearProtectedVideoMedia();
+            if (['SIGNED_OUT', 'USER_UPDATED', 'SIGNED_IN', 'TOKEN_REFRESHED'].includes(event)) {
+                const hadProtected = protectedVideoBlobUrls.size > 0;
+                clearProtectedVideoMedia();
+                if (hadProtected) setTimeout(refreshProtectedVideoFeed, 0);
+            }
+        });
+        async function refreshProtectedVideoFeed() {
+            if (document.hidden || protectedVideoRefreshPending) return;
+            protectedVideoRefreshPending = true;
+            try { await refreshVideos(true); }
+            finally { protectedVideoRefreshPending = false; }
+        }
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                protectedVideoReload = protectedVideoBlobUrls.size > 0;
+                clearProtectedVideoMedia();
+            } else if (protectedVideoReload) {
+                protectedVideoReload = false;
+                refreshProtectedVideoFeed().catch(() => {});
+            }
         });
         async function loadVideoPosts() {
+            clearProtectedVideoMedia();
             try {
                 const feedItems = await window.PostsAPI.loadFeedWithReposts(0, 20, 'studio');
                 const currentUser = getCurrentUser();
@@ -3584,37 +3607,34 @@
                 }
                 const videoEntries = feedItems.map(mapEntryToVideoPost).filter(Boolean);
                 const protectedEntries = videoEntries.filter(v => v.protectedAssetId);
-                if (protectedEntries.length) {
-                    const { data, error } = await window.sb?.auth?.getSession?.() || {};
-                    const token = !error && data?.session?.access_token;
-                    const generation = protectedVideoAuthGeneration;
-                    await Promise.all(protectedEntries.map(async v => {
-                        if (!token) return;
-                        try {
-                            const response = await fetch('/api/post-media?asset_id=' +
-                                encodeURIComponent(v.protectedAssetId), {
-                                headers: { Authorization: 'Bearer ' + token },
-                                cache: 'no-store', credentials: 'same-origin'
-                            });
-                            if (!response.ok) return;
-                            const blob = await response.blob();
-                            const expected = v.mediaType === 'video' ? 'video/' : 'image/';
-                            if (!blob.type.startsWith(expected) || blob.size > 50 * 1024 * 1024 ||
-                                generation !== protectedVideoAuthGeneration) return;
-                            const url = URL.createObjectURL(blob);
-                            if (generation !== protectedVideoAuthGeneration) {
-                                URL.revokeObjectURL(url);
-                                return;
-                            }
-                            v.src = url;
-                            if (v.mediaType === 'image') v.images = [url];
-                            protectedVideoBlobUrls.add(url);
-                        } catch (_) { /* fail closed */ }
-                    }));
-                }
+                const generation = protectedVideoAuthGeneration;
+                await Promise.all(protectedEntries.map(async v => {
+                    const resolved = [];
+                    try {
+                        const client = window.FreeUpperProtectedMedia;
+                        if (!client) throw Error('Protected media unavailable');
+                        const media = v.postData.media;
+                        for (const item of media) {
+                            if (!item.protected || !item.assetId) throw Error('Invalid protected media');
+                            resolved.push(await client.asset(item.assetId, item.type));
+                        }
+                        const posterId = media[0]?.thumbnailAssetId;
+                        const poster = posterId ? await client.asset(posterId, 'image') : '';
+                        if (poster) resolved.push(poster);
+                        if (generation !== protectedVideoAuthGeneration) throw Error('Session changed');
+                        v.src = resolved[0];
+                        v.poster = poster || (v.mediaType === 'image' ? resolved[0] : '');
+                        if (v.mediaType === 'image') v.images = resolved.slice(0, media.length);
+                        for (const url of resolved) protectedVideoBlobUrls.add(url);
+                    } catch (_) {
+                        for (const url of resolved) window.FreeUpperProtectedMedia?.release(url);
+                        v.src = ''; v.poster = ''; v.images = [];
+                    }
+                }));
                 const seen = new Set();
                 const deduped = [];
                 for (const v of videoEntries) {
+                    if (v.protectedAssetId && !v.src) continue;
                     if (!seen.has(v.id)) {
                         seen.add(v.id);
                         deduped.push(v);
@@ -5853,15 +5873,15 @@
 
         // ─── REFRESH ──────────────────────────────────────────────
 
-        async function refreshVideos() {
-            showToast('Refreshing videos…');
+        async function refreshVideos(silent = false) {
+            if (!silent) showToast('Refreshing videos…');
             try {
                 const fresh = await loadVideoPosts();
                 videoPosts = fresh;
                 let filtered = buildEligibleFeed(feedMode);
                 if (filtered.length === 0) filtered = buildEligibleFeed('foryou');
                 buildFeed(filtered);
-                showToast('Videos refreshed ✓');
+                if (!silent) showToast('Videos refreshed ✓');
                 jumpToSharedPost();
             } catch (err) {
                 showToast('Refresh failed, using cached data');

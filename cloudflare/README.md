@@ -44,8 +44,15 @@ Dynamic metadata always uses private/no-store responses. The Worker PWA excludes
 API and share/profile routes from its cache and respects private/no-store headers.
 Human profile links redirect locally; crawler metadata retains production canonical
 URLs. Post links open the app on the Worker origin. Restricted audience controls
-and protected publishing are locked in Worker-generated assets, regardless of
-backend release readiness. The Vercel sources and release gates are unchanged.
+use `protected_studio_beta_status()` for both composer and Studio. The build
+preserves those account-specific server gates. Internal release-status and
+publishing-capability RPCs remain inaccessible to browser roles.
+
+The shared `protected-media-client.js` fetches opaque registry IDs with the current
+JWT, limits parallel downloads to three and each response to 50 MB, and keeps only
+temporary Blob URLs. Homepage media, profile posters and video-page carousels use
+the authenticated route. Session changes and hidden/closed pages revoke private
+Blob URLs. No protected URL is persisted to storage or written back to a post.
 
 ## Verification
 
@@ -54,6 +61,7 @@ npm ci
 npm run build:cloudflare
 npx wrangler deploy --dry-run --outdir .wrangler/test-build
 FREEUPPER_TEST_BUNDLE=.wrangler/test-build node --test tests/*.test.js
+FREEUPPER_CHROMIUM=/usr/bin/chromium node --test tests/protected-media-browser.test.js
 npx wrangler dev --local --port 8787
 # In a second terminal:
 FREEUPPER_TEST_ORIGIN=http://localhost:8787 npm run test:cloudflare
@@ -65,12 +73,16 @@ protected-route denials. Synthetic upstreams run inside workerd without producti
 writes. Existing authorization and SEO tests remain enabled. Two stale test fixtures
 were corrected for main's crawler split and canonical hostname.
 
+Browser fixture tests cover real image/video decoding, generated posters, the
+Studio upload pipeline and session invalidation. They use synthetic API responses
+and are not production Supabase/Cloudinary acceptance evidence.
+
 Signed-in acceptance still needs an approved user: Google OAuth completion, chat
 send/receive, public uploads and post creation, private account access boundaries,
 and video playback on target devices. OAuth returns to the current page and may be
 blocked if the Worker origin is absent from Supabase's existing redirect allowlist;
 do not modify that configuration as part of this migration. Restricted publishing
-is intentionally unavailable. Fetching video/chat/create HTML alone does not prove
+remains disabled until release verification succeeds. Fetching video/chat/create HTML alone does not prove
 these authenticated flows work.
 
 The original migration branch contained only a placeholder static page and disabled

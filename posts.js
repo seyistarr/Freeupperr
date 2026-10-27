@@ -277,6 +277,8 @@
     if (!row) return null;
 
     const media = normalizeMedia(row);
+    // Registry-backed posts must never fall back to legacy public URLs.
+    const protectedMedia = media.some(item => item.protected === true);
     const profile = normalizeProfile(row.profiles);
 
     return {
@@ -300,10 +302,11 @@
       // Media
       media,
       visibility: row.visibility || 'public',
-      protectedMedia: media.some(item => item.protected === true),
-      mediaUrl: row.media_url || media[0]?.url || '',
+      protectedMedia,
+      mediaUrl: protectedMedia ? '' : (row.media_url || media[0]?.url || ''),
       mediaType: row.media_type || media[0]?.type || null,
       thumbnailUrl: (function () {
+        if (protectedMedia) return '';
         var stored = row.thumbnail_url || media[0]?.thumbnailUrl || '';
         if (stored) return stored;
         // Only images can safely use their media URL as a thumbnail.

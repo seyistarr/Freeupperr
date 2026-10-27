@@ -9,18 +9,8 @@ const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).sp
 const files = tracked.filter(p => !p.includes('/') && /\.(html|js|css|png|ico|svg|webmanifest)$/.test(p));
 files.push('robots.txt', 'sitemap.xml');
 for (const path of files) await cp(path, new URL('public/' + path, output));
-// Worker-only restrictions: retain main's lock and prevent the shared backend
-// readiness flags from enabling restricted publishing on this preview origin.
-const createFile = new URL('public/create.html', output);
-let create = await readFile(createFile, 'utf8');
-const gate = '            lock();\n            try {';
-if (!create.includes(gate)) throw Error('Audience availability gate changed');
-create = create.replace(gate, '            lock();\n            return; // Restricted audiences stay disabled on workers.dev.\n            try {');
-await writeFile(createFile, create);
-const composerFile = new URL('public/privacy-v2-composer.js', output);
-let composer = await readFile(composerFile, 'utf8');
-composer = composer.replace('    const video = Array.isArray(media)', "    throw new Error('Restricted publishing is unavailable on this preview');\n    const video = Array.isArray(media)");
-await writeFile(composerFile, composer);
+// Both composer and Studio enforce authenticated server-side beta readiness.
+// Do not override their gates in generated assets.
 const swFile = new URL('public/service-worker.js', output);
 let sw = await readFile(swFile, 'utf8');
 sw = sw.replace(/const CACHE_NAME = '([^']+)'/, (_, version) => `const CACHE_NAME = '${version}-cloudflare-v1'`);
