@@ -8,11 +8,12 @@ import postPreview from './generated/api/post-preview.js';
 import postTextOg from './generated/api/post-text-og.js';
 import postShortLink from './generated/api/post-short-link.js';
 import sitemap from './generated/api/sitemap-profiles.js';
+import postSitemap from './generated/api/sitemap-posts.js';
 
 const handlers = new Map([
   ['/api/profile-preview', profilePreview], ['/api/profile-og', profileOg],
   ['/api/post-preview', postPreview], ['/api/post-text-og', postTextOg],
-  ['/api/post-short-link', postShortLink], ['/api/sitemap-profiles', sitemap]
+  ['/api/post-short-link', postShortLink], ['/api/sitemap-profiles', sitemap], ['/api/sitemap-posts', postSitemap]
 ]);
 const disabled = new Map([
   ['/api/privacy-v2-publish', ['GET', 'POST']],
@@ -51,6 +52,7 @@ export default {
       } else if ((match = path.match(/^\/(p|v)\/([^/]+)\/?$/))) {
         handler = postPreview; query.code = decodeURIComponent(match[2]); query.type = match[1] === 'v' ? 'video' : 'post'; delete query.image;
       } else if (path === '/sitemap-profiles.xml') handler = sitemap;
+      else if (path === '/sitemap-posts.xml') handler = postSitemap;
     } catch { return unavailable(400, 'Invalid URL'); }
     if (handler) {
       if (!['GET', 'HEAD'].includes(request.method)) return unavailable(405, 'Method not allowed', { Allow: 'GET, HEAD' });
