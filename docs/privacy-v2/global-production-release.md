@@ -29,7 +29,7 @@ private posts cannot be converted to Public or gain public media URLs.
 Normal deletion hides a post and revokes media access immediately while retaining
 recoverability for seven days. `/recently-deleted.html`, linked from the owner's
 profile, supports Restore and Delete permanently. Permanent deletion is
-irreversible and queues authenticated asset destruction after any issued upload
+irreversible, denies even the owner's ordinary metadata REST access, and queues authenticated asset destruction after any issued upload
 signatures expire (65 minutes from reservation). Existing deletion timestamps are
 preserved. Cancellation/abandoned drafts also queue cleanup. The Cloudflare cron
 continues every five minutes independently of publishing availability.

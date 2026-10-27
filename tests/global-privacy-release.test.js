@@ -4,7 +4,7 @@ const fields={source:'studio',title:'Private test',content:'',tags:[],comments_h
 test('global release retains genuine identity, evidence, audience and deletion boundaries',async t=>{const db=new PGlite();try{
  await db.exec(await readFile('tests/fixtures/production-protected-workflow.sql','utf8'));
  const migrations=await readdir('supabase/migrations');
- for(const suffix of ['_temporary_production_verification.sql','_permanent_controlled_privacy_beta.sql','_global_privacy_release.sql']){
+ for(const suffix of ['_temporary_production_verification.sql','_permanent_controlled_privacy_beta.sql','_global_privacy_release.sql','_retired_post_metadata_boundary.sql']){
   if(suffix.includes('permanent'))await db.exec(await readFile('tests/fixtures/production-beta-dependencies.sql','utf8'));
   if(suffix.includes('global'))await db.exec("CREATE TABLE auth.users(id uuid PRIMARY KEY,is_anonymous boolean DEFAULT false); ALTER TABLE public.profiles ADD COLUMN username text; ALTER TABLE privacy_v2_private.release_control ADD CONSTRAINT release_control_restricted_enabled_check CHECK(restricted_enabled=false)");
   await db.exec(await readFile('supabase/migrations/'+migrations.find(n=>n.endsWith(suffix)),'utf8'));
@@ -53,6 +53,8 @@ test('global release retains genuine identity, evidence, audience and deletion b
   await assert.rejects(as('authenticated',owner,'SELECT public.restore_post($1)',[post]),/not owned/);
   await as('authenticated',outside,'SELECT public.restore_post($1)',[post]);assert.equal(await rpc('authorize_protected_asset',[asset,outside]),true);
   await as('authenticated',outside,'SELECT public.permanently_delete_post($1)',[post]);assert.equal(await rpc('authorize_protected_asset',[asset,outside]),false);
+  assert.equal((await as('authenticated',outside,'SELECT id,content,publish_payload FROM public.posts WHERE id=$1',[post])).rows.length,0,'even owner REST cannot read permanent content');
+  const trash=(await as('authenticated',outside,'SELECT public.list_deleted_posts() value')).rows[0].value;assert.ok(!trash.some(p=>p.id===post));
   await assert.rejects(as('authenticated',outside,'SELECT public.restore_post($1)',[post]),/cannot be restored/);
   const intent=(await db.query('SELECT * FROM public.post_upload_intents WHERE post_id=$1',[post])).rows[0];assert.equal(intent.cleanup_pending,true);assert.ok(new Date(intent.cleanup_after)-new Date(intent.created_at)>=65*60000);
  });

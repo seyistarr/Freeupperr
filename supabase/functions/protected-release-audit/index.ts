@@ -58,6 +58,10 @@ Deno.serve(async(request:Request)=>{
   const anonymousAttempt=await api('/functions/v1/protected-publishing',undefined,{action:'create'});check(anonymousAttempt.status===401,'anonymous publishing denied');await anonymousAttempt.body?.cancel();
   const publicPosts=await api('/rest/v1/posts?select=id&visibility=eq.public&is_deleted=eq.false&is_hidden=eq.false&limit=1',undefined);check(publicPosts.ok&&(await publicPosts.json()).length===1,'existing Public posts work');
   const photo=await create(OWNER,'image','followers');
+  for(const action of ['sign','visibility']){const denied=await api('/functions/v1/protected-publishing',sessions.get(OUTSIDE),{action,post_id:photo.id,slot:0,visibility:'only_me'});
+   const body=await denied.json();check([403,404,409].includes(denied.status)&&!body.signature&&!body.url,'cross-owner '+action+' denied');}
+  const deleteOther=await api('/rest/v1/rpc/permanently_delete_post',sessions.get(OUTSIDE),{p_post_id:photo.id});check(deleteOther.status===403,'cross-owner permanent deletion denied');await deleteOther.body?.cancel();
+
   for(const audience of ['followers','friends','only_me']){
    if(audience!=='followers')await publish(OWNER,{action:'visibility',post_id:photo.id,visibility:audience});
    for(const viewer of relationships){const visible=viewer.id===OWNER||(audience==='followers'&&viewer.follows_owner)||(audience==='friends'&&viewer.follows_owner&&viewer.owner_follows);
@@ -69,6 +73,7 @@ Deno.serve(async(request:Request)=>{
   const outside=await create(OUTSIDE,'image','only_me');await media(outside.assets[0],OUTSIDE,200);await media(outside.assets[0],OWNER,404);check(true,'previously non-allowlisted account publishes protected post');
   await rpc('delete_post',OUTSIDE,{p_post_id:outside.id});await media(outside.assets[0],OUTSIDE,404);await rpc('restore_post',OUTSIDE,{p_post_id:outside.id});await media(outside.assets[0],OUTSIDE,200);
   await rpc('permanently_delete_post',OUTSIDE,{p_post_id:outside.id});await media(outside.assets[0],OUTSIDE,404);
+  const retiredMetadata=await api('/rest/v1/posts?select=id,content,publish_payload&id=eq.'+outside.id,sessions.get(OUTSIDE));check(retiredMetadata.ok&&(await retiredMetadata.json()).length===0,'permanent deletion revokes owner metadata API');
   const restore=await api('/rest/v1/rpc/restore_post',sessions.get(OUTSIDE),{p_post_id:outside.id});check(!restore.ok,'permanent deletion cannot restore');await restore.body?.cancel();
   const video=await create(OWNER,'video','only_me');for(const asset of video.assets){await media(asset,OWNER,200);await media(asset,OUTSIDE,404);await media(asset,undefined,401);}
   const cancelled=await publish(OWNER,{action:'create',visibility:'only_me',media_types:['image'],fields:{source:'studio',title:'Privacy release audit '+run,content:'',tags:[]}});created.push({id:cancelled.id,owner:OWNER});await publish(OWNER,{action:'sign',post_id:cancelled.id,slot:0});const cancelledResult=await publish(OWNER,{action:'cancel',post_id:cancelled.id});check(cancelledResult.cleanupPending===true,'cancel queues delayed cleanup');
