@@ -85,7 +85,7 @@ Deno.serve(async(request:Request)=>{
    for(const post of recovered.data||[])if(!created.some(p=>p.id===post.id))created.push({id:post.id,owner:post.user_id});
   }catch{passed=false;failure||='Audit draft recovery failed';}
   for(const post of created)try{const r=await api('/rest/v1/rpc/permanently_delete_post',sessions.get(post.owner),{p_post_id:post.id});if(!r.ok){passed=false;failure||='Audit post retirement failed';}await r.body?.cancel();}catch{passed=false;failure||='Audit post retirement failed';}
-  for(const token of sessions.values())try{await db.auth.admin.signOut(token,'local');}catch{passed=false;failure||='Test session revocation failed';}
+  for(const token of sessions.values())try{const revoked=await db.auth.admin.signOut(token,'local');if(revoked.error){passed=false;failure||='Test session revocation failed';}}catch{passed=false;failure||='Test session revocation failed';}
  }
  const result={checks,relationships,posts:created,failure:failure||null,scope:'server-authorized live test-account sessions; not interactive browser acceptance'};
  const saved=await db.rpc('complete_release_workflow_audit',{p_run:run,p_passed:passed,p_result:result});
