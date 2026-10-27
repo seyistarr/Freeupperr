@@ -100,9 +100,8 @@ test('registration failure stops publish; lost publish responses recover without
   assert.ok(!unknown.calls.some(c => c.action === 'cancel'), 'unknown commit state must not be cancelled');
 });
 
-test('verification readiness explicitly marks create requests without changing the chosen audience', async () => {
+test('stale temporary readiness cannot publish or fall back to public upload', async () => {
   const s = setup({ verification: true });
-  await s.publish({ audience: 'only_me' });
-  assert.equal(s.calls[0].verification, true);
-  assert.equal(s.calls[0].visibility, 'only_me');
+  await assert.rejects(s.publish({ audience: 'only_me' }), /not enabled/);
+  assert.equal(s.calls.length, 0);
 });

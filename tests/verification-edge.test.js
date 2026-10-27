@@ -9,13 +9,13 @@ async function edge(slug, options={}) {
  const rpc=async(name,args)=>{
   calls.push({name,args});
   if(options.rpc)return options.rpc(name,args);
-  const values={protected_publisher_beta_allowed:true,protected_publishing_access:{mode:'verification',expires_at:'2026-11-03T12:00:00Z'},
-   create_verification_draft:{},authorize_protected_asset:true,protected_media_release_allowed:true,
+  const values={protected_publisher_beta_allowed:true,protected_publishing_access:{mode:'production',expires_at:'2026-11-03T12:00:00Z'},
+   create_protected_draft:{},protected_cleanup_worker_authorized:!!options.workerAllowed,expire_protected_drafts:0,claim_protected_cleanup_batch:[],record_protected_security_audit:null,authorize_protected_asset:true,protected_media_release_allowed:true,
    list_verification_posts:[],retire_verification_post:{retired:true},claim_verification_cleanup:[]};
   return {data:values[name],error:null};
  };
  const row=slug==='protected-media'?{id,post_id:id,owner_id:owner,status:'ready',delivery_type:'authenticated',resource_type:'image',format:'jpg',cloudinary_public_id:'freeupper-protected-v2/'+owner+'/asset_'+'0'.repeat(32)}:{id:owner};
- const query={select(){return this;},eq(){return this;},async maybeSingle(){return {data:row,error:null};}};
+ const query={select(){return this;},eq(){return this;},async limit(){return {data:[row],error:null};},async maybeSingle(){return {data:row,error:null};}};
  const env={SUPABASE_URL:'https://jmjtqidirpmnegzvmiaq.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fixture-service',SUPABASE_ANON_KEY:'fixture-anon',CLOUDINARY_CLOUD_NAME:'duzyf1kda',CLOUDINARY_API_KEY:'fixture-key',CLOUDINARY_API_SECRET:'fixture-secret'};
  const cloudinary={config(){},utils:{private_download_url(publicId,format,opts){return 'https://api.cloudinary.com/v1_1/duzyf1kda/image/download?expires_at='+opts.expires_at+'&signature=fixture';}},uploader:{async destroy(publicId,opts){destroyed.push({publicId,opts});if(options.destroyFails)throw Error('Remote failure');return {result:'ok'};}}};
  const createClient=(url,key)=> key===env.SUPABASE_SERVICE_ROLE_KEY?{rpc,from:()=>query}:{auth:{getUser:async token=>({data:{user:token==='valid-user'?{id:owner}:null},error:token==='valid-user'?null:{message:'Invalid JWT'}})}};
@@ -25,20 +25,20 @@ async function edge(slug, options={}) {
  const context={Deno:{env:{get:k=>env[k]},serve:fn=>{handler=fn;}},createClient,cloudinary,cloudinaryFixture:cloudinary,URL,Request,Response,Headers,AbortSignal,TransformStream,Uint8Array,
   crypto:{randomUUID:()=>id},console:{error(){}},fetch:async(url,init)=>{calls.push({url,init});return new Response('private bytes',{headers:{'Content-Type':'image/jpeg'}});}};
  vm.runInNewContext(stripTypeScriptTypes(source),context);
- const request=async(body,token='valid-user')=>handler(new Request('https://api.freeupper.com/functions/v1/'+slug+(slug==='protected-media'?'?asset_id='+id:''),{
-  method:slug==='protected-media'?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(slug==='protected-media'?{}:{body:JSON.stringify(body)})}));
+ const request=async(body,token='valid-user',extraHeaders={})=>handler(new Request('https://api.freeupper.com/functions/v1/'+slug+(slug==='protected-media'?'?asset_id='+id:''),{
+  method:slug==='protected-media'?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',...extraHeaders},...(slug==='protected-media'?{}:{body:JSON.stringify(body)})}));
  return {request,calls,destroyed};
 }
-const create={action:'create',verification:true,visibility:'followers',media_types:['image'],fields:{source:'studio',title:'Test',content:'',tags:[]}};
+const create={action:'create',verification:false,visibility:'followers',media_types:['image'],fields:{source:'studio',title:'Test',content:'',tags:[]}};
 test('publishing verifies normal JWTs and denies excluded users before privileged creation',async()=>{
  let e=await edge('protected-publishing');assert.equal((await e.request(create,'invalid-user')).status,401);assert.equal(e.calls.length,0);
  e=await edge('protected-publishing',{rpc:async()=>({data:false,error:null})});assert.equal((await e.request(create)).status,403);
 });
-test('verification create requires an explicit flag and calls only the verification draft RPC',async()=>{
+test('permanent create rejects temporary flags and calls only the production draft RPC',async()=>{
  const e=await edge('protected-publishing');
- assert.equal((await e.request({...create,verification:false})).status,400);
- const r=await e.request(create);assert.equal(r.status,201);assert.equal((await r.json()).verification,true);
- assert.ok(e.calls.some(c=>c.name==='create_verification_draft'));assert.ok(!e.calls.some(c=>c.name==='create_protected_draft'));
+ assert.equal((await e.request({...create,verification:true})).status,400);
+ const r=await e.request(create);assert.equal(r.status,201);assert.equal((await r.json()).verification,false);
+ assert.ok(e.calls.some(c=>c.name==='create_protected_draft'));assert.ok(!e.calls.some(c=>c.name==='create_verification_draft'));
 });
 test('disabled mode and unmarked post contexts cannot sign, register or publish',async()=>{
  const e=await edge('protected-publishing',{rpc:async name=>({data:name==='protected_publisher_beta_allowed'?true:{mode:'disabled'},error:null})});
@@ -71,4 +71,16 @@ test('cleanup uses the authenticated owner and keeps remote deletion pending on 
 test('cross-owner cleanup denial performs no Cloudinary operation',async()=>{
  const e=await edge('protected-publishing',{rpc:async()=>({data:null,error:{message:'unavailable'}})});
  assert.equal((await e.request({action:'verification-cleanup',post_id:id})).status,404);assert.equal(e.destroyed.length,0);
+});
+
+test('maintenance token authorizes only fixed cleanup/audit actions, never user publishing or media',async()=>{
+ for(const workerAllowed of [false,true]){
+  const e=await edge('protected-publishing',{workerAllowed});
+  const h={'X-FreeUpper-Action':'cleanup','X-FreeUpper-Worker-Secret':'ab'.repeat(32)};
+  assert.equal((await e.request({},'fixture-anon',h)).status,workerAllowed?200:403);
+  assert.equal((await e.request(create,'fixture-anon',{'X-FreeUpper-Worker-Secret':'ab'.repeat(32)})).status,401);
+  assert.equal(e.destroyed.length,0,'empty retirement queue cannot delete an asset');
+ }
+ const e=await edge('protected-publishing',{workerAllowed:true});
+ assert.equal((await e.request({},'valid-user',{'X-FreeUpper-Action':'cleanup','X-FreeUpper-Worker-Secret':'ab'.repeat(32)})).status,403,'normal user JWT is not a maintenance identity');
 });

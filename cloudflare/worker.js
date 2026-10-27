@@ -1,5 +1,6 @@
 import { invoke } from './adapter.js';
 import { postMedia } from './post-media.js';
+import { runProtectedMaintenance } from './protected-cleanup.js';
 import profilePreview from './generated/api/profile-preview.js';
 import profileOg from './generated/api/profile-og.js';
 import postPreview from './generated/api/post-preview.js';
@@ -23,6 +24,7 @@ function unavailable(status, message, extra = {}) {
   } });
 }
 export default {
+  async scheduled(event, env, ctx) { ctx.waitUntil(runProtectedMaintenance(env)); },
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;

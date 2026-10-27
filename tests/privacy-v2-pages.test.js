@@ -30,15 +30,15 @@ test('profile post and saved grids fetch only the registered video poster', () =
 });
 test('composer beta readiness uses only the authenticated status RPC and excludes unapproved users', async () => {
   const code = extract(create, 'async function refreshProtectedAudienceAvailability()', "window.addEventListener('load', refreshProtectedAudienceAvailability)");
-  for (const approved of [false, true]) {
+  for (const [approved, mode] of [[false,'production'],[true,'production'],[true,'verification'],[true,'disabled']]) {
     const select = { options: ['public', 'followers', 'friends', 'only_me'].map(value => ({ value })), value: 'public' };
     const context = { document: { getElementById: id => id === 'postAudience' ? select : {} },
       window: { FreeUpperProtectedPublish: { publish() {} }, sb: { rpc: async name => {
-        assert.equal(name, 'protected_studio_beta_status'); return { data: { approved, ready: true } };
+        assert.equal(name, 'protected_studio_beta_status'); return { data: { approved, ready: true, mode } };
       } } } };
     vm.createContext(context); vm.runInContext(code, context);
     await context.refreshProtectedAudienceAvailability();
-    for (const option of select.options.filter(o => o.value !== 'public')) assert.equal(option.disabled, !approved);
+    for (const option of select.options.filter(o => o.value !== 'public')) assert.equal(option.disabled, !approved || mode !== 'production');
   }
 });
 test('Studio delegates restricted uploads to the shared publisher and refuses unrendered effects', async () => {
@@ -82,7 +82,7 @@ test('Studio focus/readiness rechecks never silently switch a restricted selecti
     const select = { value: 'friends', options: ['public', 'followers', 'friends', 'private'].map(value => ({ value })) };
     const context = { document: { getElementById: id => id === 'studioAudience' ? select : {} },
       window: { sb: { auth: { getSession: async () => ({ data: { session: { user: { id: 'owner' } } } }) },
-        rpc: async () => ({ data: { approved, ready: approved, mode: 'verification' } }) } } };
+        rpc: async () => ({ data: { approved, ready: approved, mode: 'production' } }) } } };
     vm.createContext(context); vm.runInContext(code, context);
     await context.refreshStudioAudienceAccess();
     assert.equal(select.value, 'friends');

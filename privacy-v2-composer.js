@@ -66,7 +66,7 @@
     }
     const bearer = await token();
     const { data: beta, error: betaError } = await window.sb.rpc('protected_studio_beta_status');
-    if (betaError || beta?.approved !== true || beta?.ready !== true) {
+    if (betaError || beta?.approved !== true || beta?.ready !== true || beta.mode !== 'production') {
       throw new Error('Protected publishing beta is not enabled for this account');
     }
     const poster = video ? await videoPoster(media[0].protectedFile) : null;
@@ -76,12 +76,11 @@
     try {
       const draft = await request(bearer, {
         action: 'create', visibility: audience, media_types: media.map(m => m.type),
-        verification: beta.mode === 'verification',
+        verification: false,
         fields: { title, content, tags, commentsHidden, source }
       });
       draftId = draft.id;
       if (!draftId) throw new Error('Draft creation failed');
-      if (beta.mode === 'verification' && draft.verification !== true) throw new Error('Verification draft confirmation unavailable');
       for (let index = 0; index < uploadFiles.length; index++) {
         const entry = uploadFiles[index];
         const slot = entry.slot ?? index;

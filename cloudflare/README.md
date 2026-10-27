@@ -100,3 +100,9 @@ The database enforces the three account IDs and per-post markers. General releas
 flags and legacy conversion remain off. Owners identify and retire their test
 posts at `/privacy-verification.html`; cleanup remains available after expiry.
 Automated fixtures do not count as authenticated production acceptance.
+
+The permanent three-account privacy beta and scheduled protected-asset cleanup
+are documented in [permanent-controlled-beta.md](../docs/privacy-v2/permanent-controlled-beta.md).
+`PRIVACY_CLEANUP_TOKEN` is a server-only maintenance secret; preserve it with
+`--keep-vars`. Never put it in a browser asset. The scheduled handler has no HTTP
+route and cannot authorize user publishing or playback.

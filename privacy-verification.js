@@ -15,9 +15,9 @@
       if (!signedIn) { status.textContent = 'Sign in here with your existing FreeUpper account.'; return; }
       const { data: beta, error: betaError } = await window.sb.rpc('protected_studio_beta_status');
       if (stamp !== generation) return;
-      status.textContent = !betaError && beta?.approved && beta?.ready && beta.mode === 'verification'
-        ? 'Verification publishing is available until ' + new Date(beta.verification_expires_at).toLocaleString() + '. General restricted publishing remains disabled.'
-        : 'Verification publishing is unavailable for this account or has expired. You can still clean up your own verification posts.';
+      status.textContent = !betaError && beta?.approved && beta?.ready && beta.mode === 'production'
+        ? 'Controlled beta publishing is active for your account. Temporary verification publishing has ended.'
+        : 'Restricted publishing is unavailable for this account. You can still clean up your own verification posts.';
       const result = await window.FreeUpperProtectedPublish.verificationList();
       if (stamp !== generation) return;
       if (!Array.isArray(result.posts)) throw Error('Verification list unavailable');

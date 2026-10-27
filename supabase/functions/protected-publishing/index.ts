@@ -25,13 +25,18 @@ Deno.serve(async (request: Request) => {
     const db = createClient(endpoint, secret, { auth: { persistSession: false, autoRefreshToken: false } });
     // Internal cleanup: requires both a valid service-role JWT and a separate
     // server-only worker secret. Runs independently of publishing release flags.
-    if (request.headers.get("X-FreeUpper-Action") === "cleanup") {
+    const workerAction = request.headers.get("X-FreeUpper-Action");
+    if (["cleanup", "security-audit"].includes(workerAction || "")) {
       const bearer = request.headers.get("Authorization") || "";
       const workerSecret = Deno.env.get("FREEUPPER_CLEANUP_WORKER_SECRET");
       const supplied = request.headers.get("X-FreeUpper-Worker-Secret") || "";
-      if (bearer !== `Bearer ${secret}` || !workerSecret ||
-          workerSecret.length < 32 || supplied !== workerSecret)
-        return reply(403, { error: "Worker forbidden" });
+      const legacyWorker = bearer === `Bearer ${secret}` && !!workerSecret && workerSecret.length >= 32 && supplied === workerSecret;
+      let scheduledWorker = false;
+      if (bearer === `Bearer ${anon}` && /^[a-f0-9]{64}$/.test(supplied)) {
+        const { data, error } = await db.rpc("protected_cleanup_worker_authorized", { p_token: supplied });
+        scheduledWorker = !error && data === true;
+      }
+      if (!legacyWorker && !scheduledWorker) return reply(403, { error: "Worker forbidden" });
       const cloud = Deno.env.get("CLOUDINARY_CLOUD_NAME");
       const apiKey = Deno.env.get("CLOUDINARY_API_KEY");
       const apiSecret = Deno.env.get("CLOUDINARY_API_SECRET");
@@ -40,6 +45,35 @@ Deno.serve(async (request: Request) => {
       const { v2: cloudinary } = await import("npm:cloudinary@2.5.1");
       cloudinary.config({ cloud_name: cloud, api_key: apiKey,
         api_secret: apiSecret, secure: true });
+      if (workerAction === "security-audit") {
+        // Storage checks use real configured Cloudinary signatures, but return
+        // statuses only. This never substitutes for normal-user JWT acceptance.
+        const { data: assets, error } = await db.from("post_media_assets")
+          .select("id,cloudinary_public_id,resource_type,format,status").limit(30);
+        if (error || !Array.isArray(assets)) return reply(503, { error: "Audit unavailable" });
+        const results = [];
+        for (const asset of assets) {
+          if (!/^freeupper-protected-v2\/[a-f0-9-]{36}\/asset_[a-f0-9]{32}$/.test(asset.cloudinary_public_id) ||
+              !["image","video"].includes(asset.resource_type) || !/^[a-z0-9]{2,8}$/.test(asset.format)) continue;
+          const probe = async (expires_at: number) => {
+            const signed = cloudinary.utils.private_download_url(asset.cloudinary_public_id, asset.format,
+              { resource_type: asset.resource_type, type: "authenticated", expires_at, attachment: false });
+            const response = await fetch(signed, { redirect: "manual", signal: AbortSignal.timeout(15000) });
+            const status = response.status; await response.body?.cancel(); return status;
+          };
+          results.push({ asset_id: asset.id, registry_status: asset.status,
+            valid_download_status: await probe(Math.floor(Date.now()/1000)+60),
+            expired_download_status: await probe(Math.floor(Date.now()/1000)-3600) });
+        }
+        const passed = results.length > 0 && results.every(result =>
+          [400,401,403,404].includes(result.expired_download_status) &&
+          (result.registry_status !== "ready" || result.valid_download_status === 200));
+        const report = { expired_urls_denied: passed, assets: results };
+        const { error: saveError } = await db.rpc("record_protected_security_audit", { p_results: report });
+        return saveError ? reply(503, { error: "Audit recording failed" }) : reply(passed ? 200 : 503, report);
+      }
+      const { error: expireError } = await db.rpc("expire_protected_drafts");
+      if (expireError) return reply(503, { error: "Draft cleanup unavailable" });
       const { data: batch, error: claimError } = await db.rpc(
         "claim_protected_cleanup_batch", { p_limit: 3 });
       if (claimError || !Array.isArray(batch))
@@ -54,7 +88,7 @@ Deno.serve(async (request: Request) => {
           try {
             const results = await Promise.all(["image", "video"].map(resource_type =>
               cloudinary.uploader.destroy(item.public_id, {
-                resource_type, type: "authenticated", invalidate: true
+                resource_type, type: "authenticated", invalidate: true, timeout: 15000
               })));
             success = results.every(result =>
               result?.result === "ok" || result?.result === "not found");
@@ -128,9 +162,9 @@ Deno.serve(async (request: Request) => {
     const { data: access, error: accessError } = await db.rpc("protected_publishing_access", {
       p_owner: owner, p_post: body.action === "create" ? null : body.post_id
     });
-    if (accessError || !["production", "verification"].includes(access?.mode)) return reply(503, { error: "Protected publishing unavailable" });
-    const verification = access.mode === "verification";
-    if (body.action === "create" && verification !== (body.verification === true)) return reply(400, { error: "Verification mode must be explicitly selected" });
+    if (accessError || access?.mode !== "production") return reply(503, { error: "Protected publishing unavailable" });
+    const verification = false;
+    if (body.verification === true) return reply(400, { error: "Temporary verification publishing has ended" });
     if (body.action === "create") {
       const types = body.media_types, fields = body.fields;
       if (!["followers","friends","only_me"].includes(body.visibility) ||
@@ -155,7 +189,7 @@ Deno.serve(async (request: Request) => {
       const plan = types.map((type, slot) => ({ slot, type, role: "media" }));
       if (types[0] === "video") plan.push({ slot: 20, type: "image", role: "thumbnail" });
       const id = crypto.randomUUID();
-      const { error } = await db.rpc(verification ? "create_verification_draft" : "create_protected_draft", {
+      const { error } = await db.rpc("create_protected_draft", {
         p_owner: owner, p_post: id, p_visibility: body.visibility, p_plan: plan,
         p_fields: { title: fields.title ?? "", content: fields.content ?? "",
           tags: fields.tags ?? [], source: fields.source, comments_hidden: !!fields.commentsHidden }
