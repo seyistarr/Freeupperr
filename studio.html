@@ -2595,6 +2595,41 @@ async function publishProtectedStudioPost(audience) {
       await action({action:'register',post_id:postId,slot:i,public_id:uploaded.public_id,
         asset_id:uploaded.asset_id,resource_type:resource});
     }
+    // Videos require a separate authenticated poster asset in slot 20.
+    if (types.length === 1 && types[0] === 'video') {
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      const objectUrl = URL.createObjectURL(files[0]);
+      let poster;
+      try {
+        video.src = objectUrl;
+        await new Promise((resolve,reject) => {
+          video.onloadeddata = resolve;
+          video.onerror = () => reject(new Error('Could not decode video poster'));
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        if (!canvas.width || !canvas.height) throw new Error('Invalid video dimensions');
+        canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+        poster = await new Promise(resolve => canvas.toBlob(resolve,'image/jpeg',0.85));
+        if (!poster) throw new Error('Could not create video poster');
+      } finally { URL.revokeObjectURL(objectUrl); video.removeAttribute('src'); video.load(); }
+      const signed = await action({action:'sign',post_id:postId,slot:20});
+      const form = new FormData();
+      for (const key of ['api_key','timestamp','folder','public_id','type','overwrite','signature'])
+        if (signed[key] !== undefined) form.append(key,String(signed[key]));
+      form.append('file',poster,'poster.jpg');
+      const response = await fetch('https://api.cloudinary.com/v1_1/' +
+        encodeURIComponent(signed.cloud_name) + '/image/upload',{method:'POST',body:form});
+      const uploaded = await response.json().catch(() => ({}));
+      if (!response.ok || !uploaded.asset_id || !uploaded.public_id)
+        throw new Error('Authenticated video poster upload failed');
+      await action({action:'register',post_id:postId,slot:20,
+        public_id:uploaded.public_id,asset_id:uploaded.asset_id,resource_type:'image'});
+    }
     setProgress(90,'Publishing…','Finalizing your protected post');
     await action({action:'publish',post_id:postId});
     published = true;
