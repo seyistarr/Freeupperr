@@ -55,7 +55,7 @@ Deno.serve(async(request:Request)=>{
    const readiness=await api('/rest/v1/rpc/protected_studio_beta_status',verified.data.session!.access_token,{});
    const ready=await readiness.json();check(readiness.ok&&ready.approved===true&&ready.ready===true&&ready.mode==='production','global selector readiness '+account.username);
   }
-  const anon=await api('/functions/v1/protected-publishing',undefined,{action:'create'});check(anon.status===401,'anonymous publishing denied');await anon.body?.cancel();
+  const anonymousAttempt=await api('/functions/v1/protected-publishing',undefined,{action:'create'});check(anonymousAttempt.status===401,'anonymous publishing denied');await anonymousAttempt.body?.cancel();
   const publicPosts=await api('/rest/v1/posts?select=id&visibility=eq.public&is_deleted=eq.false&is_hidden=eq.false&limit=1',undefined);check(publicPosts.ok&&(await publicPosts.json()).length===1,'existing Public posts work');
   const photo=await create(OWNER,'image','followers');
   for(const audience of ['followers','friends','only_me']){
