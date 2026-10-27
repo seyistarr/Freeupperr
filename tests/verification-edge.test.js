@@ -10,7 +10,7 @@ async function edge(slug, options={}) {
   calls.push({name,args});
   if(options.rpc)return options.rpc(name,args);
   const values={protected_publisher_beta_allowed:true,protected_publishing_access:{mode:'production',expires_at:'2026-11-03T12:00:00Z'},
-   create_protected_draft:{},protected_cleanup_worker_authorized:!!options.workerAllowed,expire_protected_drafts:0,claim_protected_cleanup_batch:[],record_protected_security_audit:null,authorize_protected_asset:true,protected_media_release_allowed:true,
+   create_protected_draft:{},publish_restricted_text:{id,status:'published',media:[]},protected_cleanup_worker_authorized:!!options.workerAllowed,expire_protected_drafts:0,claim_protected_cleanup_batch:[],record_protected_security_audit:null,authorize_protected_asset:true,protected_media_release_allowed:true,
    list_verification_posts:[],retire_verification_post:{retired:true},claim_verification_cleanup:[]};
   return {data:values[name],error:null};
  };
@@ -18,11 +18,11 @@ async function edge(slug, options={}) {
  const query={select(){return this;},eq(){return this;},async limit(){return {data:[row],error:null};},async maybeSingle(){return {data:row,error:null};}};
  const env={SUPABASE_URL:'https://jmjtqidirpmnegzvmiaq.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fixture-service',SUPABASE_ANON_KEY:'fixture-anon',CLOUDINARY_CLOUD_NAME:'duzyf1kda',CLOUDINARY_API_KEY:'fixture-key',CLOUDINARY_API_SECRET:'fixture-secret'};
  const cloudinary={config(){},utils:{private_download_url(publicId,format,opts){return 'https://api.cloudinary.com/v1_1/duzyf1kda/image/download?expires_at='+opts.expires_at+'&signature=fixture';}},uploader:{async destroy(publicId,opts){destroyed.push({publicId,opts});if(options.destroyFails)throw Error('Remote failure');return {result:'ok'};}}};
- const createClient=(url,key)=> key===env.SUPABASE_SERVICE_ROLE_KEY?{rpc,from:()=>query}:{auth:{getUser:async token=>({data:{user:token==='valid-user'?{id:owner}:null},error:token==='valid-user'?null:{message:'Invalid JWT'}})}};
+ const createClient=(url,key)=> key===env.SUPABASE_SERVICE_ROLE_KEY?{rpc,from:()=>query}:{auth:{getUser:async token=>({data:{user:token==='valid-user'?{id:owner,is_anonymous:!!options.anonymous}:null},error:token==='valid-user'?null:{message:'Invalid JWT'}})}};
  let source=await readFile('supabase/functions/'+slug+'/index.ts','utf8');
  source=source.replace(/import \{ createClient \} from "npm:[^"]+";/,'').replace(/import \{ v2 as cloudinary \} from "npm:[^"]+";/,'')
   .replaceAll('await import("npm:cloudinary@2.5.1")','({v2:cloudinaryFixture})');
- const context={Deno:{env:{get:k=>env[k]},serve:fn=>{handler=fn;}},createClient,cloudinary,cloudinaryFixture:cloudinary,URL,Request,Response,Headers,AbortSignal,TransformStream,Uint8Array,
+ const context={Deno:{env:{get:k=>env[k]},serve:fn=>{handler=fn;}},createClient,cloudinary,cloudinaryFixture:cloudinary,atob,URL,Request,Response,Headers,AbortSignal,TransformStream,Uint8Array,
   crypto:{randomUUID:()=>id},console:{error(){}},fetch:async(url,init)=>{calls.push({url,init});return new Response('private bytes',{headers:{'Content-Type':'image/jpeg'}});}};
  vm.runInNewContext(stripTypeScriptTypes(source),context);
  const request=async(body,token='valid-user',extraHeaders={})=>handler(new Request('https://api.freeupper.com/functions/v1/'+slug+(slug==='protected-media'?'?asset_id='+id:''),{
@@ -83,4 +83,14 @@ test('maintenance token authorizes only fixed cleanup/audit actions, never user 
  }
  const e=await edge('protected-publishing',{workerAllowed:true});
  assert.equal((await e.request({},'valid-user',{'X-FreeUpper-Action':'cleanup','X-FreeUpper-Worker-Secret':'ab'.repeat(32)})).status,403,'normal user JWT is not a maintenance identity');
+});
+test('verified rotated project anon keys still require the independent maintenance key',async()=>{
+ const token='header.'+Buffer.from(JSON.stringify({role:'anon',ref:'jmjtqidirpmnegzvmiaq'})).toString('base64url')+'.signature';
+ for(const workerAllowed of [false,true]){const e=await edge('protected-publishing',{workerAllowed});const r=await e.request({},token,{'X-FreeUpper-Action':'cleanup','X-FreeUpper-Worker-Secret':'ab'.repeat(32)});assert.equal(r.status,workerAllowed?200:403);}
+});
+
+test('restricted text still requires an eligible normal user and rejects media URL injection',async()=>{
+ const e=await edge('protected-publishing');const r=await e.request({action:'text',visibility:'only_me',fields:{source:'composer',content:'Private',tags:[]}});assert.equal(r.status,201);assert.ok(e.calls.some(c=>c.name==='publish_restricted_text'));
+ assert.equal((await e.request({action:'text',visibility:'only_me',fields:{source:'composer',mediaUrl:'https://public.invalid'}})).status,400);
+ const anonymous=await edge('protected-publishing',{anonymous:true});assert.equal((await anonymous.request(create)).status,401);
 });

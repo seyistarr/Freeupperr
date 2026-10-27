@@ -1,3 +1,5 @@
+> Historical three-account stage. The current release is documented in [global-production-release.md](global-production-release.md).
+
 # Permanent controlled beta — 2026-10-27
 
 ## Acceptance evidence

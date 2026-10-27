@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import vm from 'node:vm';import {stripTypeScriptTypes} from 'node:module';
+async function audit(allowed=false){let handler;const calls=[];const source=(await readFile('supabase/functions/protected-release-audit/index.ts','utf8')).replace(/^import .*;$/gm,'');
+ const env={SUPABASE_URL:'https://jmjtqidirpmnegzvmiaq.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'service',SUPABASE_ANON_KEY:'anon'};
+ const db={rpc:async(name)=>{calls.push(name);return {data:name==='protected_cleanup_worker_authorized'?allowed:false,error:null};},auth:{admin:{getUserById(){throw Error('must not access identity');}}}};
+ vm.runInNewContext(stripTypeScriptTypes(source),{Deno:{env:{get:k=>env[k]},serve:fn=>{handler=fn;}},createClient:()=>db,Response,Request,AbortSignal});
+ const request=(body={run_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'},method='POST')=>handler(new Request('https://project.supabase.co/functions/v1/protected-release-audit',{method,headers:{'X-FreeUpper-Worker-Secret':'invalid'},...(method==='POST'?{body:JSON.stringify(body)}:{})}));return{calls,request};}
+test('one-use live audit denies ordinary callers before accessing any test identity',async()=>{const a=await audit();assert.equal((await a.request()).status,403);assert.deepEqual(a.calls,['protected_cleanup_worker_authorized']);});
+test('even a maintenance credential cannot run without a private queued audit',async()=>{const a=await audit(true);assert.equal((await a.request()).status,409);assert.deepEqual(a.calls,['protected_cleanup_worker_authorized','claim_release_workflow_audit']);assert.equal((await a.request({run_id:'invalid'})).status,400);assert.equal((await a.request({},'GET')).status,405);});

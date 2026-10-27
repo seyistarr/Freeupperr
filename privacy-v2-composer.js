@@ -53,11 +53,12 @@
       URL.revokeObjectURL(url);
     }
   }
-  async function publish({ audience, title, content, tags, commentsHidden, media, source = 'composer', onProgress }) {
+  async function publish({ audience, title, content, tags, commentsHidden, media, source = 'composer', textTemplateId, onProgress }) {
     if (!['followers', 'friends', 'only_me'].includes(audience)) throw new Error('Invalid audience');
     if (!['composer', 'studio'].includes(source)) throw new Error('Invalid publishing source');
+    const text = Array.isArray(media) && media.length === 0 && !!String(content || title || '').trim();
     const video = Array.isArray(media) && media.length === 1 && media[0]?.type === 'video';
-    if (!Array.isArray(media) || !media.length || media.length > 20 ||
+    if (!Array.isArray(media) || (!media.length && !text) || media.length > 20 ||
         media.some(m => !(m.protectedFile instanceof Blob) || !['image', 'video'].includes(m.type) ||
           !m.protectedFile.type.startsWith(m.type + '/') || m.protectedFile.size <= 0 ||
           m.protectedFile.size > 50 * 1024 * 1024) ||
@@ -67,7 +68,13 @@
     const bearer = await token();
     const { data: beta, error: betaError } = await window.sb.rpc('protected_studio_beta_status');
     if (betaError || beta?.approved !== true || beta?.ready !== true || beta.mode !== 'production') {
-      throw new Error('Protected publishing beta is not enabled for this account');
+      throw new Error('Protected publishing is unavailable for this account');
+    }
+    if (text) {
+      const result = await request(bearer, { action:'text', visibility:audience,
+        fields:{title,content,tags,commentsHidden,source,textTemplateId} });
+      if (result.status !== 'published') throw new Error('Restricted text publication failed');
+      return result;
     }
     const poster = video ? await videoPoster(media[0].protectedFile) : null;
     const uploadFiles = media.map(m => ({ file: m.protectedFile, type: m.type }));

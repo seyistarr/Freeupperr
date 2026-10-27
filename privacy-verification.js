@@ -16,7 +16,7 @@
       const { data: beta, error: betaError } = await window.sb.rpc('protected_studio_beta_status');
       if (stamp !== generation) return;
       status.textContent = !betaError && beta?.approved && beta?.ready && beta.mode === 'production'
-        ? 'Controlled beta publishing is active for your account. Temporary verification publishing has ended.'
+        ? 'Restricted publishing is active for your account. Temporary verification publishing has ended.'
         : 'Restricted publishing is unavailable for this account. You can still clean up your own verification posts.';
       const result = await window.FreeUpperProtectedPublish.verificationList();
       if (stamp !== generation) return;

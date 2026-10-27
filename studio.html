@@ -16,7 +16,7 @@
 <script src="global.js"></script>
 <script src="auth.js"></script>
 <script src="posts.js"></script>
-<script src="privacy-v2-composer.js?v=controlled-beta-1"></script>
+<script src="privacy-v2-composer.js?v=privacy-global-1"></script>
 <script src="mentions.js"></script>
 <script src="sounds.js"></script>
 <script src="video-render.js"></script>
@@ -694,11 +694,11 @@ input,textarea{font-family:var(--font-body);outline:none;border:none;background:
       <label class="tag-lbl" for="studioAudience">Who can view this post?</label>
       <select id="studioAudience" aria-describedby="studioAudienceNote" style="width:100%;padding:12px;border-radius:12px;background:var(--inp-bg);color:var(--text);border:1px solid var(--brd)">
         <option value="public">Public</option>
-        <option value="followers" disabled>Followers — coming soon</option>
-        <option value="friends" disabled>Mutuals — coming soon</option>
-        <option value="private" disabled>Only Me — coming soon</option>
+        <option value="followers" disabled>Followers</option>
+        <option value="friends" disabled>Mutuals</option>
+        <option value="only_me" disabled>Only Me</option>
       </select>
-      <div class="toggle-row-sub" id="studioAudienceNote">Private publishing is being prepared. Public is the only available option.</div>
+      <div class="toggle-row-sub" id="studioAudienceNote">Sign in to choose who can view your post.</div>
     </div>
     <div class="toggle-row">
       <div>
@@ -2544,12 +2544,13 @@ async function publishProtectedStudioPost(audience) {
   const button = document.getElementById('publishBtn');
   button.disabled = true;
   try {
-    if (!S.media || S.textPost || S.attachedSound || S.filter !== 'none' || S.beauty ||
+    const textPost = S.textPost && !S.media;
+    if ((!S.media && !textPost) || S.attachedSound || S.filter !== 'none' || S.beauty ||
         S.textOverlays.length || S.mediaFiles?.some(item => item.textOverlays?.length)) {
-      throw new Error('Protected beta supports plain photos and videos only; remove effects, music, or text layers.');
+      throw new Error('Protected publishing requires plain media; remove effects, music, or media text layers.');
     }
     if (!window.FreeUpperProtectedPublish?.publish) throw new Error('Protected publishing is not ready');
-    const files = S.mediaFiles?.length > 1 ? S.mediaFiles.map(item => item.blob) : [S.media.blob];
+    const files = textPost ? [] : S.mediaFiles?.length > 1 ? S.mediaFiles.map(item => item.blob) : [S.media.blob];
     const caption = document.getElementById('detCaption').value.trim();
     showScreen('scProgress');
     document.getElementById('progActive').style.display = 'flex';
@@ -2559,7 +2560,8 @@ async function publishProtectedStudioPost(audience) {
     setProgress(0, 'Preparing protected media…', 'Only approved viewers will have access');
     await window.FreeUpperProtectedPublish.publish({
       audience: audience === 'private' ? 'only_me' : audience, source: 'studio',
-      title: caption.slice(0, 100), content: caption, tags: S.tags.slice(),
+      title: textPost ? S.textPost.text.slice(0,100) : caption.slice(0, 100), content: textPost ? S.textPost.text : caption, tags: S.tags.slice(),
+      textTemplateId: textPost ? S.textPost.templateId : undefined,
       commentsHidden: document.getElementById('hideComments').checked,
       media: files.map(file => ({ protectedFile: file, type: S.media.type === 'video' ? 'video' : 'image' })),
       onProgress(done, total) { setProgress(Math.round(done / total * 90), 'Uploading protected media…', 'Only approved viewers will have access'); }
@@ -2778,10 +2780,14 @@ async function refreshStudioAudienceAccess() {
       opt.textContent = opt.value === 'followers' ? 'Followers' :
         opt.value === 'friends' ? 'Mutuals' : 'Only Me';
     }
-    note.textContent = 'Controlled beta — only authorized viewers can access restricted posts.';
+    note.textContent = 'Only authorized viewers can access restricted posts.';
   } catch (_) { note.textContent = 'Restricted publishing is currently unavailable.'; }
 }
 window.addEventListener('focus', () => { refreshStudioAudienceAccess().catch(() => {}); });
+window.addEventListener('load', () => {
+  refreshStudioAudienceAccess().catch(() => {});
+  window.sb?.auth?.onAuthStateChange?.(() => setTimeout(() => refreshStudioAudienceAccess().catch(() => {}), 0));
+});
 
 /* ═══════════ INIT ═══════════ */
 function init() {

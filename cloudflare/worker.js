@@ -1,6 +1,7 @@
 import { invoke } from './adapter.js';
 import { postMedia } from './post-media.js';
 import { runProtectedMaintenance } from './protected-cleanup.js';
+import { releaseHealth } from './release-health.js';
 import profilePreview from './generated/api/profile-preview.js';
 import profileOg from './generated/api/profile-og.js';
 import postPreview from './generated/api/post-preview.js';
@@ -29,9 +30,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === '/api/post-media') return postMedia(request);
-    if (path === '/__migration/health') return Response.json({ ok: true,
-      worker: 'freeupper-web', publicRoutesReady: true, restrictedAudiencesEnabled: false },
-      { headers: { 'Cache-Control': 'no-store' } });
+    if (path === '/__migration/health') return releaseHealth(env);
     if (disabled.has(path)) {
       const allowed = disabled.get(path);
       return unavailable(allowed.includes(request.method) ? 503 : 405,

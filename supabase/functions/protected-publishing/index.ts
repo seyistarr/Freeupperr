@@ -32,7 +32,14 @@ Deno.serve(async (request: Request) => {
       const supplied = request.headers.get("X-FreeUpper-Worker-Secret") || "";
       const legacyWorker = bearer === `Bearer ${secret}` && !!workerSecret && workerSecret.length >= 32 && supplied === workerSecret;
       let scheduledWorker = false;
-      if (bearer === `Bearer ${anon}` && /^[a-f0-9]{64}$/.test(supplied)) {
+      // The platform verifies this JWT (verify_jwt=true). Accept valid rotated
+      // project anon keys rather than pinning to one environment-key string.
+      let anonIdentity = bearer === `Bearer ${anon}`;
+      try {
+        const claims = JSON.parse(atob(bearer.slice(7).split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        anonIdentity ||= claims.role === 'anon' && claims.ref === 'jmjtqidirpmnegzvmiaq';
+      } catch (_) { /* Non-JWT fixture or invalid credentials remain denied. */ }
+      if (anonIdentity && /^[a-f0-9]{64}$/.test(supplied)) {
         const { data, error } = await db.rpc("protected_cleanup_worker_authorized", { p_token: supplied });
         scheduledWorker = !error && data === true;
       }
@@ -110,7 +117,7 @@ Deno.serve(async (request: Request) => {
     if (!match) return reply(401, { error: "Authentication required" });
     const auth = createClient(endpoint, anon, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: identity, error: identityError } = await auth.auth.getUser(match[1]);
-    if (identityError || !identity?.user?.id) return reply(401, { error: "Authentication required" });
+    if (identityError || !identity?.user?.id || identity.user.is_anonymous === true) return reply(401, { error: "Authentication required" });
     const owner = identity.user.id;
     const raw = await request.text();
     if (raw.length > 16384) return reply(413, { error: "Request too large" });
@@ -154,17 +161,25 @@ Deno.serve(async (request: Request) => {
       }
       return reply(200, { id: body.post_id, retired: true, cleanupPending: pending });
     }
-    // Production beta: deny every publishing action unless the authenticated
-    // owner is in the private, server-maintained publisher allowlist.
+    // Every publishing action requires an existing, eligible production Auth user.
     const { data: betaApproved, error: betaError } = await db.rpc("protected_publisher_beta_allowed", { p_user: owner });
-    if (betaError || betaApproved !== true) return reply(403, { error: "Protected publishing beta access denied" });
-    if (body.action !== "create" && (typeof body.post_id !== "string" || !uuid.test(body.post_id))) return reply(400, { error: "Invalid draft" });
+    if (betaError || betaApproved !== true) return reply(403, { error: "Protected publishing access denied" });
+    if (!["create","text"].includes(body.action) && (typeof body.post_id !== "string" || !uuid.test(body.post_id))) return reply(400, { error: "Invalid draft" });
     const { data: access, error: accessError } = await db.rpc("protected_publishing_access", {
-      p_owner: owner, p_post: body.action === "create" ? null : body.post_id
+      p_owner: owner, p_post: ["create","text"].includes(body.action) ? null : body.post_id
     });
     if (accessError || access?.mode !== "production") return reply(503, { error: "Protected publishing unavailable" });
     const verification = false;
     if (body.verification === true) return reply(400, { error: "Temporary verification publishing has ended" });
+    if (body.action === "text") {
+      const fields=body.fields;
+      if (!["followers","friends","only_me"].includes(body.visibility) || !fields || typeof fields!=="object" || Array.isArray(fields) ||
+        Object.keys(fields).some(k=>!["title","content","tags","source","commentsHidden","textTemplateId"].includes(k)) ||
+        !["composer","studio"].includes(fields.source)) return reply(400,{error:"Invalid restricted text"});
+      const {data,error}=await db.rpc("publish_restricted_text",{p_owner:owner,p_post:crypto.randomUUID(),p_visibility:body.visibility,
+        p_fields:{title:fields.title??"",content:fields.content??"",tags:fields.tags??[],source:fields.source,comments_hidden:!!fields.commentsHidden},p_template:fields.textTemplateId??null});
+      return error?reply(409,{error:"Restricted text publication unavailable"}):reply(201,data);
+    }
     if (body.action === "create") {
       const types = body.media_types, fields = body.fields;
       if (!["followers","friends","only_me"].includes(body.visibility) ||

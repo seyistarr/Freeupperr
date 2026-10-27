@@ -106,3 +106,8 @@ are documented in [permanent-controlled-beta.md](../docs/privacy-v2/permanent-co
 `PRIVACY_CLEANUP_TOKEN` is a server-only maintenance secret; preserve it with
 `--keep-vars`. Never put it in a browser asset. The scheduled handler has no HTTP
 route and cannot authorize user publishing or playback.
+
+The current global Privacy V2 release supersedes the three-account beta. See
+[global-production-release.md](../docs/privacy-v2/global-production-release.md).
+After a secret update, deploy the resulting Worker version; storing a secret
+alone does not update traffic. Production health reads actual database gates.

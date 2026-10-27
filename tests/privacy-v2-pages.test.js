@@ -29,7 +29,7 @@ test('profile post and saved grids fetch only the registered video poster', () =
   }
 });
 test('composer beta readiness uses only the authenticated status RPC and excludes unapproved users', async () => {
-  const code = extract(create, 'async function refreshProtectedAudienceAvailability()', "window.addEventListener('load', refreshProtectedAudienceAvailability)");
+  const code = extract(create, 'async function refreshProtectedAudienceAvailability()', "window.addEventListener('load'");
   for (const [approved, mode] of [[false,'production'],[true,'production'],[true,'verification'],[true,'disabled']]) {
     const select = { options: ['public', 'followers', 'friends', 'only_me'].map(value => ({ value })), value: 'public' };
     const context = { document: { getElementById: id => id === 'postAudience' ? select : {} },

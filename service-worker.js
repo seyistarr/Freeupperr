@@ -1,5 +1,5 @@
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v11';
+const CACHE_NAME = 'freeupper-pwa-v12';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [

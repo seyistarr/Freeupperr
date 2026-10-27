@@ -34,6 +34,7 @@ function setup(options = {}) {
       assert.equal(url, 'https://api.freeupper.com/functions/v1/protected-publishing');
       assert.equal(init.headers.Authorization, 'Bearer user-token');
       const body = JSON.parse(init.body); calls.push(body);
+      if (body.action === 'text') return Response.json({id:draft,status:'published',media:[]});
       if (body.action === 'create') return Response.json({ id: draft, status: 'draft', verification: !!options.verification });
       if (body.action === 'sign') return Response.json(signed(body.slot));
       if (body.action === 'register') return Response.json({ status: 'ready', asset_id: 'registry-' + body.slot, ...options.registration });
@@ -79,7 +80,7 @@ test('excluded and unauthenticated accounts cannot create drafts or upload', asy
 test('invalid audience, mixed media, empty files, and oversize media fail before draft creation', async () => {
   const s = setup();
   const large = new File([new Uint8Array(50 * 1024 * 1024 + 1)], 'large.jpg', { type: 'image/jpeg' });
-  for (const extra of [{ audience: 'public' }, { media: [] }, { media: [{ type: 'image', protectedFile: large }] },
+  for (const extra of [{ audience: 'public' }, { media: [], title:'', content:'' }, { media: [{ type: 'image', protectedFile: large }] },
     { media: [{ type: 'image', protectedFile: new File([], 'empty.jpg', { type: 'image/jpeg' }) }] }]) await assert.rejects(s.publish(extra));
   assert.equal(s.calls.length, 0); assert.equal(s.uploads.length, 0);
 });
@@ -102,6 +103,11 @@ test('registration failure stops publish; lost publish responses recover without
 
 test('stale temporary readiness cannot publish or fall back to public upload', async () => {
   const s = setup({ verification: true });
-  await assert.rejects(s.publish({ audience: 'only_me' }), /not enabled/);
+  await assert.rejects(s.publish({ audience: 'only_me' }), /unavailable/);
   assert.equal(s.calls.length, 0);
+});
+
+test('restricted text publishes atomically without Cloudinary or public-upload fallbacks',async()=>{
+ const s=setup();const result=await s.publish({media:[],content:'Private text',audience:'only_me'});
+ assert.equal(result.status,'published');assert.equal(s.calls.length,1);assert.equal(s.calls[0].action,'text');assert.equal(s.calls[0].visibility,'only_me');assert.equal(s.uploads.length,0);
 });
