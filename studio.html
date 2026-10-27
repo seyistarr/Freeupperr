@@ -2537,6 +2537,84 @@ async function resolveCarouselFrameDims(result, item) {
   return (W && H) ? { w: W, h: H } : null;
 }
 
+// Restricted Studio publishing never calls the unsigned public uploader.
+async function publishProtectedStudioPost(audience) {
+  const button = document.getElementById('publishBtn');
+  let postId = null;
+  let published = false;
+  button.disabled = true;
+  try {
+    if (!S.media || S.textPost || S.attachedSound || S.textOverlays.length ||
+        (S.mediaFiles && S.mediaFiles.some(item => item.textOverlays?.length))) {
+      throw new Error('Protected beta supports plain photos and videos only; remove effects, music, or text layers.');
+    }
+    const files = S.mediaFiles?.length > 1 ? S.mediaFiles.map(item => item.blob) : [S.media.blob];
+    if (files.some(f => !(f instanceof Blob))) throw new Error('Media is unavailable');
+    const types = files.map(() => S.media.type === 'video' ? 'video' : 'image');
+    const { data: sessionData } = await window.sb.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) throw new Error('Sign in again to publish');
+    const { data: beta, error: betaError } = await window.sb.rpc('protected_studio_beta_status');
+    if (betaError || !beta?.approved || !beta?.ready) throw new Error('Protected publishing beta is not enabled for this account');
+    const endpoint = 'https://api.freeupper.com/functions/v1/protected-publishing';
+    async function action(body) {
+      const res = await fetch(endpoint, { method: 'POST', headers: {
+        Authorization: 'Bearer ' + token, 'Content-Type': 'application/json'
+      }, body: JSON.stringify(body), cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Protected publishing request failed');
+      return data;
+    }
+    const visibility = audience === 'private' ? 'only_me' : audience;
+    const caption = document.getElementById('detCaption').value.trim();
+    const created = await action({action:'create', visibility, media_types:types,
+      fields:{source:'studio', title:caption.slice(0,100), content:caption,
+        tags:S.tags.slice(), commentsHidden:document.getElementById('hideComments').checked}});
+    postId = created.id;
+    if (!postId) throw new Error('Draft creation failed');
+    showScreen('scProgress');
+    document.getElementById('progActive').style.display = 'flex';
+    document.getElementById('progSuccess').style.display = 'none';
+    renderPostThumb(document.getElementById('progPreview'));
+    renderPostThumb(document.getElementById('progPreview2'));
+    for (let i=0;i<files.length;i++) {
+      setProgress(Math.round(i/files.length*80), 'Uploading protected media…', 'Only approved viewers will have access');
+      const signed = await action({action:'sign', post_id:postId, slot:i});
+      const form = new FormData();
+      for (const key of ['api_key','timestamp','folder','public_id','type','overwrite','signature'])
+        if (signed[key] !== undefined) form.append(key, String(signed[key]));
+      form.append('file', files[i]);
+      const resource = types[i];
+      const uploadedResponse = await fetch('https://api.cloudinary.com/v1_1/' +
+        encodeURIComponent(signed.cloud_name) + '/' + resource + '/upload',
+        {method:'POST',body:form});
+      const uploaded = await uploadedResponse.json().catch(() => ({}));
+      if (!uploadedResponse.ok || !uploaded.asset_id || !uploaded.public_id)
+        throw new Error('Authenticated upload failed');
+      await action({action:'register',post_id:postId,slot:i,public_id:uploaded.public_id,
+        asset_id:uploaded.asset_id,resource_type:resource});
+    }
+    setProgress(90,'Publishing…','Finalizing your protected post');
+    await action({action:'publish',post_id:postId});
+    published = true;
+    setProgress(100,'Done!','');
+    document.getElementById('progActive').style.display='none';
+    document.getElementById('progSuccess').style.display='flex';
+  } catch(err) {
+    if (postId && !published) {
+      try {
+        const {data:sd}=await window.sb.auth.getSession();
+        await fetch('https://api.freeupper.com/functions/v1/protected-publishing',{
+          method:'POST',headers:{Authorization:'Bearer '+sd.session.access_token,
+          'Content-Type':'application/json'},
+          body:JSON.stringify({action:'cancel',post_id:postId})});
+      } catch (_) { /* cleanup worker handles pending uploads */ }
+    }
+    showToast(err.message || 'Protected publishing failed');
+    showScreen('scPost');
+  } finally { button.disabled=false; }
+}
+
 async function publishPost() {
   const user = getCurrentUser();
   if (!user || !user.isLoggedIn) {
@@ -2550,7 +2628,7 @@ async function publishPost() {
   // authenticated-upload and publishing flow is integrated and verified.
   const selectedAudience = document.getElementById('studioAudience')?.value || 'public';
   if (selectedAudience !== 'public') {
-    showToast('Protected publishing is not ready yet. No media was uploaded.');
+    await publishProtectedStudioPost(selectedAudience);
     return;
   }
   if (!window.PostsAPI || typeof window.PostsAPI.createPost !== 'function') { showToast('System not ready, please refresh'); return; }
