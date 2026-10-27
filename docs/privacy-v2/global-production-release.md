@@ -83,3 +83,40 @@ update privacy_v2_private.release_control set restricted_enabled=false where sin
 Production `/__migration/health` reads current release capabilities from Supabase
 and reports whether the read was verified. It does not expose secrets or account
 metadata. Normal Public routes and the API gateway retain their existing paths.
+
+## Verified production receipt — 2026-10-27
+
+The global release is active. `restricted_enabled`, `delivery_verified`, and
+`publishing_verified` are true. Delivery and publishing capabilities are true;
+legacy conversion is false. The temporary verification window remains disabled.
+The applied migrations are `20261027174801_global_privacy_release` and
+`20261027180427_retired_post_metadata_boundary`.
+
+Validation: 147 automated checks passed locally with no skips; GitHub CI passed.
+The one-use production workflow audit passed 186 real checks using the four
+specified accounts' genuine Supabase Auth sessions. @firstuser successfully
+published protected image and text posts outside the historical allowlist.
+Actual owner/mutual/unrelated/signed-out metadata and media access, cross-owner
+signing/audience-change/deletion denial, authenticated video/poster delivery,
+normal deletion/restoration, permanent metadata/media denial and cancellation
+passed. One-way-follower Mutuals denial is covered by the automated database
+matrix; the actual four-account graph had mutual and unrelated relationships.
+No interactive browser acceptance run is claimed beyond the owner's previously
+reported real-user results.
+
+The production operator/replay guards returned 403/409. Deployed Create, Studio,
+publisher and recovery-page sources matched main. Both production health
+endpoints returned 200; web health reported `releaseVerified=true` and
+`restrictedAudiencesEnabled=true`. Audience Coming Soon labels are absent.
+
+All five original verification cleanup reservations completed, with real expired
+Cloudinary downloads returning 401 and deleted originals returning 404. The five
+new live-audit posts were permanently retired and their new sessions revoked.
+Their five upload reservations (four actual assets and one cancelled empty
+reservation) remain queued until the normal signature-expiry cutoff, last
+`2026-10-27T19:17:58.953603Z`; the five-minute cron processes them afterward.
+These pending safety-window reservations are not reported as remote deletion
+successes. No test post remains visible to normal readers.
+
+Edge versions verified for this release: protected-publishing 12,
+protected-media 4, protected-release-audit 3, all with JWT verification enabled.
