@@ -68,6 +68,36 @@ export default async function handler(req, res) {
     ? rawDescription
     : 'Discover this post on FreeUpper.';
   const img = post.media_type === 'video' ? origin + '/api/post-preview?image=video&code=' + encodeURIComponent(code) : (post.media_type === 'text' || (!post.media_url && !post.thumbnail_url)) ? origin + '/api/post-text-og?code=' + encodeURIComponent(code) + (type === 'video' ? '&style=video' : '') : (safeImage(post.thumbnail_url) || safeImage(post.media_url) || SITE + '/freeupper.png');
+  let videoSchema = '';
+  if (type === 'video' && post.media_type === 'video') {
+    try {
+      const videoResponse = await fetch(API + '/rest/v1/rpc/get_public_video_seo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + KEY },
+        body: JSON.stringify({ p_code: code })
+      });
+      if (videoResponse.ok) {
+        const data = await videoResponse.json();
+        const video = Array.isArray(data) ? data[0] : data;
+        if (video?.published_at) {
+          const schema = {
+            '@context': 'https://schema.org',
+            '@type': 'VideoObject',
+            name: title,
+            description: clean(post.description || post.content || title, 3000),
+            thumbnailUrl: [safeImage(video.public_thumbnail_url) || img],
+            uploadDate: video.published_at,
+            url
+          };
+          if (safeImage(video.public_video_url)) schema.contentUrl = safeImage(video.public_video_url);
+          videoSchema = '<script type="application/ld+json">' +
+            JSON.stringify(schema).replace(/</g, '\\u003c') + '</script>';
+        }
+      }
+    } catch (error) {
+      console.error('Public video SEO metadata unavailable', error);
+    }
+  }
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} • FreeUpper</title><link rel="canonical" href="${esc(url)}">
 <meta name="description" content="${esc(description)}">
@@ -76,7 +106,7 @@ export default async function handler(req, res) {
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(img)}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${esc(img)}">
-<link rel="manifest" href="/manifest.webmanifest">\n<meta name="theme-color" content="#2e1065">\n<meta name="robots" content="index,follow">
+<link rel="manifest" href="/manifest.webmanifest">\n<meta name="theme-color" content="#2e1065">\n<meta name="robots" content="index,follow">\n${videoSchema}
 </head><body><main><article><h1>${esc(title)}</h1><p>${esc(clean(post.content || post.description || post.title || '', 3000))}</p><a href="${esc(destination)}">View post on FreeUpper</a></article></main>
 <script>location.replace(${JSON.stringify(destination)})</script></body></html>`;
   res.setHeader('Content-Type','text/html; charset=utf-8');
