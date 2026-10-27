@@ -208,6 +208,7 @@
                   </div>
                 </div>
                 ${mh}
+                ${window.buildPublishedLinkCard ? window.buildPublishedLinkCard(p) : ''}
                 <div style="padding:0 16px;">
                   ${th}
                   <div class="post-actions-row" style="position:relative;">
