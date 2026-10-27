@@ -90,3 +90,13 @@ handler scaffold. This implementation starts from newer main and retains both la
 Privacy V2 changes. The previous lockfile disagreed with package.json (Vercel 60
 versus 32 and missing Cloudinary); dependencies were reconciled with the locked
 Vercel major while adding pinned Wrangler/Miniflare for reproducible Workers checks.
+
+## Temporary production verification
+
+The separate, expiring verification lane is documented in
+[production-verification-mode.md](../docs/privacy-v2/production-verification-mode.md).
+Publishers use their existing freeupper.com sessions; no Codex sign-in is needed.
+The database enforces the three account IDs and per-post markers. General release
+flags and legacy conversion remain off. Owners identify and retire their test
+posts at `/privacy-verification.html`; cleanup remains available after expiry.
+Automated fixtures do not count as authenticated production acceptance.

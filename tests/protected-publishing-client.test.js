@@ -21,7 +21,7 @@ function setup(options = {}) {
       throw Error(type);
     } },
     window: { sb: { auth: { getSession: async () => ({ data: { session: options.guest ? null : { access_token: 'user-token' } } }) },
-      rpc: async name => { assert.equal(name, 'protected_studio_beta_status'); return { data: { approved: !options.excluded, ready: true } }; } } },
+      rpc: async name => { assert.equal(name, 'protected_studio_beta_status'); return { data: { approved: !options.excluded, ready: true, mode: options.verification ? 'verification' : 'production' } }; } } },
     fetch: async (url, init) => {
       assert.equal(init.cache, 'no-store');
       if (url.startsWith('https://api.cloudinary.com/')) {
@@ -34,7 +34,7 @@ function setup(options = {}) {
       assert.equal(url, 'https://api.freeupper.com/functions/v1/protected-publishing');
       assert.equal(init.headers.Authorization, 'Bearer user-token');
       const body = JSON.parse(init.body); calls.push(body);
-      if (body.action === 'create') return Response.json({ id: draft, status: 'draft' });
+      if (body.action === 'create') return Response.json({ id: draft, status: 'draft', verification: !!options.verification });
       if (body.action === 'sign') return Response.json(signed(body.slot));
       if (body.action === 'register') return Response.json({ status: 'ready', asset_id: 'registry-' + body.slot, ...options.registration });
       if (body.action === 'publish') {
@@ -98,4 +98,11 @@ test('registration failure stops publish; lost publish responses recover without
   assert.ok(!recovered.calls.some(c => c.action === 'cancel'));
   const unknown = setup({ lostResponse: true, lostStatus: true }); await assert.rejects(unknown.publish());
   assert.ok(!unknown.calls.some(c => c.action === 'cancel'), 'unknown commit state must not be cancelled');
+});
+
+test('verification readiness explicitly marks create requests without changing the chosen audience', async () => {
+  const s = setup({ verification: true });
+  await s.publish({ audience: 'only_me' });
+  assert.equal(s.calls[0].verification, true);
+  assert.equal(s.calls[0].visibility, 'only_me');
 });

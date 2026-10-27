@@ -1,5 +1,10 @@
 # Controlled production beta — 2026-10-27
 
+Historical report for commit `4c222d9`. The later
+[temporary verification lane](production-verification-mode.md) resolves the
+no-verification-lane blocker. General release and actual authenticated production
+acceptance remain separate and unpassed.
+
 Status: implementation deployed with release activation **blocked**, not verified.
 Base: GitHub main `39be8c9288deecf5b8da990a426b978e634484c1`.
 

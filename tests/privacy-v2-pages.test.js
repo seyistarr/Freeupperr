@@ -75,3 +75,17 @@ test('registry-backed post normalization ignores legacy public URLs while existi
   assert.equal(publicPost.protectedMedia, false);
   assert.equal(publicPost.mediaUrl, row.media_url); assert.equal(publicPost.thumbnailUrl, row.thumbnail_url);
 });
+
+test('Studio focus/readiness rechecks never silently switch a restricted selection to Public', async () => {
+  const code = extract(studio, 'async function refreshStudioAudienceAccess()', "window.addEventListener('focus'");
+  for (const approved of [true, false]) {
+    const select = { value: 'friends', options: ['public', 'followers', 'friends', 'private'].map(value => ({ value })) };
+    const context = { document: { getElementById: id => id === 'studioAudience' ? select : {} },
+      window: { sb: { auth: { getSession: async () => ({ data: { session: { user: { id: 'owner' } } } }) },
+        rpc: async () => ({ data: { approved, ready: approved, mode: 'verification' } }) } } };
+    vm.createContext(context); vm.runInContext(code, context);
+    await context.refreshStudioAudienceAccess();
+    assert.equal(select.value, 'friends');
+    assert.equal(select.options.find(option => option.value === 'friends').disabled, !approved);
+  }
+});

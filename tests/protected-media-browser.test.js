@@ -26,7 +26,7 @@ test('browser decodes private images/videos/posters and rejects cross-session de
       let session = {access_token:'owner-fixture'};
       let authCallback;
       window.sb = {auth:{getSession:async()=>({data:{session}}),onAuthStateChange:fn=>{authCallback=fn;}},
-        rpc:async()=>({data:{approved:true,ready:true}})};
+        rpc:async()=>({data:{approved:true,ready:true,mode:'verification'}})};
       const nativeFetch = window.fetch.bind(window);
       window.fetch = (url,init) => nativeFetch(url.startsWith('https://api.cloudinary.com/') ? '/fixture-upload' :
         url.startsWith('https://api.freeupper.com/') ? '/fixture-publish' : url, init);
@@ -76,7 +76,7 @@ test('browser decodes private images/videos/posters and rejects cross-session de
     if (url.pathname === '/report') { reportResolve(JSON.parse(body)); return send(200, 'application/json', '{}'); }
     if (url.pathname === '/fixture-publish') {
       const data = JSON.parse(body); calls.push(data.action);
-      if (data.action === 'create') return send(201, 'application/json', JSON.stringify({id,status:'draft'}));
+      if (data.action === 'create') return data.verification === true ? send(201, 'application/json', JSON.stringify({id,status:'draft',verification:true})) : send(400,'application/json','{}');
       if (data.action === 'sign') return send(200, 'application/json', JSON.stringify({cloud_name:'duzyf1kda',api_key:'fixture',type:'authenticated',overwrite:false,
         timestamp:1234567890,folder:'freeupper-protected-v2/'+owner,public_id:'asset_'+String(data.slot).padStart(32,'0'),signature:'fixture'}));
       if (data.action === 'register') return send(201, 'application/json', JSON.stringify({status:'ready',asset_id:id}));

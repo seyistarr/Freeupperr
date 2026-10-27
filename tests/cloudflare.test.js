@@ -28,7 +28,7 @@ test('crawler metadata cannot enter a shared cache', async () => {
 
 const origin = process.env.FREEUPPER_TEST_ORIGIN;
 test('Workers runtime static assets, routes and privacy boundaries', { skip: !origin }, async () => {
-  for (const path of ['/', '/profile.html', '/video.html', '/chat.html', '/create.html', '/manifest.webmanifest', '/service-worker.js', '/firebase-messaging-sw.js']) {
+  for (const path of ['/', '/profile.html', '/video.html', '/chat.html', '/create.html', '/studio.html', '/privacy-verification.html', '/privacy-verification.js', '/manifest.webmanifest', '/service-worker.js', '/firebase-messaging-sw.js']) {
     const response = await fetch(origin + path);
     assert.equal(response.status, 200, path);
     const text = await response.text();
@@ -44,7 +44,7 @@ test('Workers runtime static assets, routes and privacy boundaries', { skip: !or
     assert.match(response.headers.get('Cache-Control'), /no-store/);
     assert.equal(response.headers.get('Vary'), 'Authorization');
   }
-  for (const path of ['/api/unknown', '/api/profile-seo-privacy.js', '/api/post-media.js', '/lib/protected-media/production-delivery-gate.js', '/wrangler.jsonc', '/package.json', '/.env', '/cloudflare/worker.js', '/p/bad!', '/v/bad!']) {
+  for (const path of ['/api/unknown', '/api/profile-seo-privacy.js', '/api/post-media.js', '/lib/protected-media/production-delivery-gate.js', '/wrangler.jsonc', '/package.json', '/.env', '/cloudflare/worker.js', '/supabase/functions/protected-publishing/index.ts', '/supabase/functions/protected-media/index.ts', '/p/bad!', '/v/bad!']) {
     assert.equal((await fetch(origin + path)).status, 404, path);
   }
   const response = await fetch(origin + '/p/abcdef', { method: 'POST' });

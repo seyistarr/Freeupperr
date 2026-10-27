@@ -16,7 +16,7 @@
 <script src="global.js"></script>
 <script src="auth.js"></script>
 <script src="posts.js"></script>
-<script src="privacy-v2-composer.js"></script>
+<script src="privacy-v2-composer.js?v=verification-1"></script>
 <script src="mentions.js"></script>
 <script src="sounds.js"></script>
 <script src="video-render.js"></script>
@@ -2758,7 +2758,8 @@ async function refreshStudioAudienceAccess() {
   const note = document.getElementById('studioAudienceNote');
   if (!select || !note) return;
   for (const opt of select.options) if (opt.value !== 'public') opt.disabled = true;
-  select.value = 'public';
+  // Preserve a restricted selection while rechecking access. Resetting it to
+  // Public on focus could send an intended private file to the public uploader.
   note.textContent = 'Checking protected publishing availability…';
   try {
     if (!window.sb) throw Error('Auth unavailable');
@@ -2777,7 +2778,9 @@ async function refreshStudioAudienceAccess() {
       opt.textContent = opt.value === 'followers' ? 'Followers' :
         opt.value === 'friends' ? 'Mutuals' : 'Only Me';
     }
-    note.textContent = 'Protected publishing beta — only authorized viewers can access restricted posts.';
+    note.textContent = data.mode === 'verification'
+      ? 'Temporary verification only: posts expire within 24 hours. Manage them at /privacy-verification.html.'
+      : 'Protected publishing beta — only authorized viewers can access restricted posts.';
   } catch (_) { note.textContent = 'Restricted publishing is currently unavailable.'; }
 }
 window.addEventListener('focus', () => { refreshStudioAudienceAccess().catch(() => {}); });
