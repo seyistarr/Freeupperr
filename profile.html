@@ -630,6 +630,12 @@
             border: none;
         }
         .grid-card:active { transform: scale(.97); }
+        /* Lightweight placeholders preserve the existing profile grid geometry. */
+        .profile-grid-skeleton { pointer-events: none; }
+        .profile-grid-skeleton .grid-card { animation: sklPulse 1.3s ease-in-out infinite; }
+        .profile-grid-skeleton .grid-card:nth-child(2n) { animation-delay: .18s; }
+        .profile-grid-skeleton .grid-card:nth-child(3n) { animation-delay: .36s; }
+
         .grid-card img {
             width: 100%;
             height: 100%;
@@ -3614,6 +3620,7 @@
                     case 'market': renderMarket(container, marketItems); break;
                 }
 
+                container.dataset.profileRendered = targetUserId || '';
                 if (tab === 'posts' || tab === 'love' || tab === 'share' || tab === 'star') {
                     requestAnimationFrame(function() { forceVideoThumbnails(container); });
                 }
@@ -3822,7 +3829,18 @@
                 document.getElementById('panel-' + tab).classList.add('active');
                 activeTab = tab;
                 if (viewerIsBlockedByPrivacy) return;
-                if (!_secondaryDataLoaded) return;
+                var panel = document.getElementById('panel-' + tab);
+                if (!_secondaryDataLoaded) {
+                    if (panel && !panel.hasChildNodes()) {
+                        panel.innerHTML = '<div class="grid-3 profile-grid-skeleton" aria-label="Loading posts">' +
+                            Array.from({ length: 9 }, function() { return '<div class="grid-card" aria-hidden="true"></div>'; }).join('') +
+                            '</div>';
+                    }
+                    return;
+                }
+                // Keep already-rendered grids in place when moving between tabs.
+                // Interaction handlers can still call renderTab to refresh changed data.
+                if (panel && panel.dataset.profileRendered === targetUserId && panel.hasChildNodes()) return;
                 renderTab(tab);
             };
 
