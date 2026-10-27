@@ -4482,7 +4482,7 @@
         [data-theme="dark"] .fu-site-footer {
             background: #0f0f0f;
         }
-    </style>
+                .published-link-card{display:flex;align-items:center;gap:12px;margin:12px 16px;padding:10px 12px;border:1.5px solid var(--brd);border-radius:14px;background:var(--inp);color:var(--text);text-decoration:none;min-width:0;overflow:hidden}\n            .published-link-card .plc-logo{width:36px;height:36px;object-fit:cover;border-radius:8px;flex-shrink:0}\n            .published-link-card .plc-text{display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden}\n            .published-link-card .plc-host{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n            .published-link-card .plc-title{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n            .published-link-card .plc-desc{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n</style>
 <style>
         /* Keep the home feed concealed while an incoming post link resolves. */
         html.fu-post-deep-link-pending body {
@@ -5190,6 +5190,48 @@
                     <button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm">Show more</button>`;
             }
 
+            // Link cards share the Create Post composer's compact visual language.
+            const postLinkMetaCache = new Map();
+            function buildPublishedLinkCard(post) {
+                const source = [post.content, post.title, post.description].filter(Boolean).join(' ');
+                const match = source.match(/https?:\/\/[^\s<>"']+/i);
+                if (!match) return '';
+                let url;
+                try { url = new URL(match[0].replace(/[.,!?;:]+$/, '')); if (!['http:', 'https:'].includes(url.protocol)) return ''; }
+                catch (_) { return ''; }
+                const host = url.hostname.replace(/^www\./, '');
+                const safe = s => escapeHtml(String(s)).replace(/"/g, '&quot;');
+                const favicon = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64';
+                return '<a class="published-link-card" data-link-url="' + safe(url.href) + '" href="' + safe(url.href) + '" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">' +
+                    '<img class="plc-logo" src="' + safe(favicon) + '" alt="" loading="lazy">' +
+                    '<span class="plc-text"><span class="plc-host">' + safe(host) + '</span><span class="plc-title"></span><span class="plc-desc">' + safe(url.href) + '</span></span></a>';
+            }
+            function hydratePublishedLinkCards(root = document) {
+                root.querySelectorAll('.published-link-card:not([data-hydrated])').forEach(card => {
+                    card.dataset.hydrated = '1';
+                    const url = card.dataset.linkUrl;
+                    const apply = meta => {
+                        if (!card.isConnected) return;
+                        const title = card.querySelector('.plc-title');
+                        const desc = card.querySelector('.plc-desc');
+                        if (title) { title.textContent = meta.title || ''; title.style.display = meta.title ? '' : 'none'; }
+                        if (desc) desc.textContent = meta.description || url;
+                        if (meta.logo) {
+                            try { const logo = new URL(meta.logo); if (logo.protocol === 'https:') card.querySelector('.plc-logo').src = logo.href; } catch (_) {}
+                        }
+                    };
+                    if (!postLinkMetaCache.has(url)) {
+                        postLinkMetaCache.set(url, fetch('https://api.microlink.io/?url=' + encodeURIComponent(url))
+                            .then(r => { if (!r.ok) throw new Error('Metadata unavailable'); return r.json(); })
+                            .then(j => ({ title: j.data?.title || '', description: j.data?.description || '', logo: j.data?.logo?.url || j.data?.image?.url || '' }))
+                            .catch(() => ({})));
+                    }
+                    postLinkMetaCache.get(url).then(apply);
+                });
+            }
+            window.buildPublishedLinkCard = buildPublishedLinkCard;
+            window.hydratePublishedLinkCards = hydratePublishedLinkCards;
+            new MutationObserver(() => hydratePublishedLinkCards()).observe(document.documentElement, { childList: true, subtree: true });
             function formatCount(n) {
                 n = Number(n) || 0;
                 if (n < 1000) return String(n);
@@ -8335,6 +8377,7 @@
                           ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
                           ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true, mentions: post.mentions })}</div>` : ''}
                         </div>` : ''}
+                        ${buildPublishedLinkCard(post)}
                         <div class="post-actions-row" style="max-width:100%;padding:0 4px;" data-post-reactions="${post.id}">
                           ${buildReactionButton(post.id)}
                           <span class="comment-btn ${post.commentsHidden?'comments-off':''}">${post.commentsHidden?svgCommentOff():svgComment()}<span class="comment-count" id="comments-count-${post.id}">${formatCount(0)}</span></span>
