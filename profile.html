@@ -3445,15 +3445,10 @@
                         getUserMarketItems(targetId)
                     ];
 
-                    if (isOwnerLocal && user && user.isLoggedIn) {
-                        promises.push(getUserLikes(targetId).catch(function() { return []; }));
-                        promises.push(getUserBookmarks(targetId).catch(function(err) { return { loadError: err }; }));
-                        promises.push(getUserReposts(targetId).catch(function(err) { return { loadError: err }; }));
-                    } else {
-                        promises.push(Promise.resolve([]));
-                        promises.push(Promise.resolve([]));
-                        promises.push(Promise.resolve([]));
-                    }
+                    // The database applies each tab's audience policy to these queries.
+                    promises.push(getUserLikes(targetId).catch(function() { return []; }));
+                    promises.push(getUserBookmarks(targetId).catch(function(err) { return { loadError: err }; }));
+                    promises.push(getUserReposts(targetId).catch(function(err) { return { loadError: err }; }));
 
                     if (!isOwnerLocal && user && user.isLoggedIn) {
                         promises.push(getRelationship(user.id, targetId).catch(function() {
@@ -3688,16 +3683,7 @@
             }
 
             function renderLove(container, userPosts, likedIds) {
-                var likedPosts = userPosts.filter(function(p) { return likedIds.indexOf(p.id) !== -1; });
-                if (!likedPosts.length) {
-                    container.innerHTML =
-                        '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div><h3>No liked posts</h3><p>Posts you love will appear here.</p></div>';
-                    return;
-                }
-                likedPosts.sort(function(a, b) { return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date); });
-                container.innerHTML = '<div class="grid-3">' +
-                    likedPosts.map(function(p) { return buildGridLoveCard(p); }).join('') +
-                    '</div>';
+                renderProfileCollection(container, likedIds, 'love');
             }
 
             // Reuse resolved collection posts across Saved/Reposts tab switches.
@@ -3738,7 +3724,8 @@
             }
             function renderProfileCollection(container, ids, type) {
                 var isSaved = type === 'star';
-                var error = isSaved ? _profileBookmarksError : _profileRepostsError;
+                var isLikes = type === 'love';
+                var error = isSaved ? _profileBookmarksError : (isLikes ? null : _profileRepostsError);
                 if (error) {
                     container.innerHTML = '<div class="empty-state"><h3>Could not load ' + (isSaved ? 'saved posts' : 'reposts') + '</h3><p>Please try again later.</p></div>';
                     return;
