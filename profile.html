@@ -2244,7 +2244,7 @@
         </div>
         <div class="fs-pages-track" id="fsPagesTrack">
             <div class="fs-page" id="fsPage0">
-                <div id="privateFollowRequests" style="padding:0 16px;overflow-y:auto;max-height:42vh;flex-shrink:0"></div>
+                
                 <div class="fs-search" id="fsSearchWrap0"><input type="text" id="fsSearch0" placeholder="Search followers…" oninput="filterUsersPage(0)"></div>
                 <div id="fsLoading0" style="display:none;flex-direction:column;gap:0;overflow:hidden"></div>
                 <div class="fs-list" id="fsList0" onscroll="onFollowScrollPage(0)">
@@ -2977,10 +2977,10 @@
             async function fetchFollowers(userId) {
                 var result = await window.sb
                     .from('follows')
-                    .select('follower_id, profiles:follower_id (id, freeupper_id, username, display_username, display_name, avatar_url, verified)')
+                    .select('follower_id,status, profiles:follower_id (id, freeupper_id, username, display_username, display_name, avatar_url, verified)')
                     .eq('following_id', userId);
                 if (result.error) return [];
-                return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
+                return result.data.map(function(f) { return f.profiles ? Object.assign({}, f.profiles, {followStatus:f.status}) : null; }).filter(function(p) { return p; });
             }
 
             async function fetchFollowing(userId) {
@@ -3512,7 +3512,7 @@
                         targetUser._tabAllowed[key] = !tabResults[idx].error && tabResults[idx].data === true;
                     });
                     applyPrivacyAndTabs(targetUser, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, rel.iFollowThem);
-                    if (isOwnerLocal && targetUser.is_private) loadPrivateFollowRequests().catch(console.error);
+                    
                 } catch (err) {
                     console.error('Secondary load error:', err);
                 }
@@ -4808,7 +4808,7 @@
                 var followers = await fetchFollowers(userId);
                 var following = await fetchFollowing(userId);
                 var followingIds = new Set(following.map(function(u) { return u.id; }));
-                var friends = followers.filter(function(u) { return followingIds.has(u.id); });
+                var friends = followers.filter(function(u) { return u.followStatus === 'active' && followingIds.has(u.id); });
                 var current = getCurrentUser();
                 var suggestions = [];
                 if (isOwner && current && current.isLoggedIn) {
@@ -4862,6 +4862,7 @@
                         handle: '@' + (u.display_username || u.username || ''),
                         avatar: u.avatar_url || '',
                         verified: u.verified || false,
+                        followStatus: u.followStatus || 'active',
                         isFollowing: false,
                         isMutual: false
                     };
@@ -4894,7 +4895,7 @@
             }
 
             function tabTap(idx) {
-                if (idx === 0) loadPrivateFollowRequests().catch(console.error);
+                
                 idx = Math.max(0, Math.min(idx, 3));
                 _fwPageIdx = idx;
                 var tabs = ['followers', 'following', 'friends', 'suggestions'];
@@ -5011,6 +5012,9 @@
                         '</div>';
                 }
                 if (_fwCurTab === 'followers') {
+                    if (isOwner && targetUser && targetUser.is_private && u.followStatus === 'pending') {
+                        return '<button class="u-btn" ' + d + ' data-action="approve-request" ' + tp + '>Approve</button>';
+                    }
                     var isMutual = followModalData?.following.some(function(f) { return f.id === u.id; }) || false;
                     if (isMutual) return '<button class="u-btn friends" ' + d + ' data-action="unfriend" ' + tp + ' data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</button>';
                     return '<button class="u-btn follow-back" ' + d + ' data-action="follow-back" ' + tp + '>Follow Back</button>';
@@ -5032,7 +5036,18 @@
                 if (!user) return;
                 window.AuthUser.requireAuth(async function() {
                     try {
-                        if (action === 'follow-back' || action === 'toggle-follow') {
+                        if (action === 'approve-request') {
+                            btn.disabled = true;
+                            var resolved = await window.sb.rpc('resolve_private_follow_request', {p_follower_id:user.id,p_approve:true});
+                            if (resolved.error) throw resolved.error;
+                            followModalData = await fetchFollowLists(targetUserId);
+                            _fwBuildListFromCache(0);
+                            _fwApplyFilter();
+                            _fwRenderVisible();
+                            var updatedCounts = await fetchFollowCounts(targetUserId);
+                            document.getElementById('statFollowers').textContent = fmtNum(updatedCounts.followers);
+                            await renderActionRow();
+                        } else if (action === 'follow-back' || action === 'toggle-follow') {
                             var newState = await toggleFollow(user.id);
                             btn.textContent = newState ? 'Following' : 'Follow';
                             btn.className = 'u-btn' + (newState ? ' following' : '');
