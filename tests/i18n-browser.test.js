@@ -48,6 +48,7 @@ test('browser: picker, persistence, all languages, dynamic UI, UGC isolation, RT
   });
   await page.goto(origin+'/settings.html');await page.evaluate(()=>window.FreeUpperI18n.ready);
   await page.evaluate(()=>{window.pickLang('fr','French','🇫🇷');});
+  await page.locator('#langConfirmOv').waitFor({state:'visible'});
   assert.ok(await page.locator('#langConfirmOv').isVisible());
   await page.evaluate(()=>window.confirmLangChange());
   assert.equal(await page.evaluate(()=>localStorage.getItem('freeupper_lang')),'fr');

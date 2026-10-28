@@ -1,5 +1,5 @@
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v14';
+const CACHE_NAME = 'freeupper-pwa-v15';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -21,6 +21,8 @@ const URLS_TO_CACHE = [
   './locales/en.json',
   './global.css',
   './global.js',
+  './theme.js',
+  './theme.css',
   './manifest.webmanifest',
   './icon-192.png',      // generated icons
   './icon-512.png',

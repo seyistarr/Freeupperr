@@ -328,9 +328,6 @@
     // ─── INIT ─────────────────────────────────────────────────────────
 
     function init() {
-        document.addEventListener('themeChanged', e => {
-            document.documentElement.setAttribute('data-theme', e.detail.theme);
-        });
 
         function updateNavAvatar() {
             const user = getCurrentUser();

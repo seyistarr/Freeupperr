@@ -16,94 +16,25 @@ window.fuT = window.fuT || function(key, values) { return window.FreeUpperI18n ?
   'use strict';
 
   // ─── CONSTANTS ───────────────────────────────────────────────
-  const THEME_KEY = 'freeupper_theme';
   const USER_KEY = 'freeupper_user_profile';
   const DEFAULT_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
   );
 
-  // ─── THEME ────────────────────────────────────────────────────
-  let currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
-
-  /**
-   * Sync the theme-color meta tag with the current --bg2 CSS variable.
-   * This ensures the browser status bar / address bar matches the current theme.
-   * Wrapped in try/catch so any failure here doesn't break the rest of the script.
-   */
-  function syncThemeColorMeta() {
-    try {
-      const meta = document.getElementById('theme-color-meta') || document.querySelector('meta[name="theme-color"]');
-      if (!meta) return;
-      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-      if (bg) meta.setAttribute('content', bg);
-    } catch (_) {
-      // Silently fail – status bar colour will just stay as-is
-    }
-  }
-
-  /**
-   * Apply a theme by setting data-theme on the root, to localStorage,
-   * update the status bar color, and dispatch events.
-   * @param {string} theme - 'dark' or 'light'
-   */
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    currentTheme = theme;
-    localStorage.setItem(THEME_KEY, theme);
-    // Wait a tick so the new --bg2 value from the [data-theme] CSS block is live before reading it
-    requestAnimationFrame(syncThemeColorMeta);
-    document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme } }));
-    updateThemeButton();
-  }
-
-  // Expose applyTheme globally (used by settings.html toggle)
-  window.applyTheme = applyTheme;
-  window.syncThemeColorMeta = syncThemeColorMeta;
-
-  /**
-   * Toggle between dark and light themes.
-   */
-  window.toggleTheme = function() {
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    applyTheme(newTheme);
-  };
-
-  window.getCurrentTheme = function() {
-    return currentTheme;
-  };
-
+  // The early shared controller owns theme state; global utilities only render controls.
   function updateThemeButton() {
+    const theme = window.getCurrentTheme();
     document.querySelectorAll('.theme-toggle').forEach(btn => {
+      btn.setAttribute('aria-pressed', String(theme === 'dark'));
       const svg = btn.querySelector('svg');
-      if (svg) {
-        if (currentTheme === 'dark') {
-          svg.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
-        } else {
-          svg.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-        }
-      }
+      if (svg) svg.innerHTML = theme === 'dark'
+        ? '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'
+        : '<circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M1 12h2m18 0h2M4.2 4.2l1.4 1.4m12.8 12.8 1.4 1.4M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>';
     });
   }
-
-  // Init theme
-  (function initTheme() {
-    applyTheme(currentTheme);
-    // Synchronous call to set the status bar on first paint (no flash)
-    syncThemeColorMeta();
-
-    window.addEventListener('storage', function(e) {
-      if (e.key === THEME_KEY && e.newValue && e.newValue !== currentTheme) {
-        applyTheme(e.newValue);
-      }
-    });
-
-    document.addEventListener('themeChanged', function(e) {
-      if (e.detail && e.detail.theme) {
-        currentTheme = e.detail.theme;
-        updateThemeButton();
-      }
-    });
-  })();
+  document.addEventListener('themeChanged', updateThemeButton);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', updateThemeButton);
+  else updateThemeButton();
 
   // ─── TOAST ────────────────────────────────────────────────────
   window.showToast = function(msg, type) {
