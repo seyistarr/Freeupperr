@@ -2998,8 +2998,8 @@
 
             async function getRelationship(myId, targetId) {
                 var results = await Promise.all([
-                    window.sb.from('follows').select('id').eq('follower_id', myId).eq('following_id', targetId).maybeSingle(),
-                    window.sb.from('follows').select('id').eq('follower_id', targetId).eq('following_id', myId).maybeSingle()
+                    window.sb.from('follows').select('id,status').eq('follower_id', myId).eq('following_id', targetId).maybeSingle(),
+                    window.sb.from('follows').select('id,status').eq('follower_id', targetId).eq('following_id', myId).maybeSingle()
                 ]);
                 // Private-account post access requires owner approval, not just a follow row.
                 var approved = await window.sb.rpc('privacy_v2_approved_edge', {
@@ -3008,9 +3008,9 @@
                 });
                 return {
                     iFollowThem: !approved.error && approved.data === true,
-                    pending: !!results[0].data && approved.data !== true,
+                    pending: !!results[0].data && results[0].data.status === 'pending',
                     hasRequest: !!results[0].data,
-                    theyFollowMe: !!results[1].data
+                    theyFollowMe: !!results[1].data && results[1].data.status === 'active'
                 };
             }
 
@@ -3862,14 +3862,15 @@
                 try {
                     var result = await window.sb.rpc('toggle_follow_with_notification', {p_target_id:targetUserId});
                     if (result.error) throw result.error;
-                    await updateActionButtons();
+                    btn.textContent = result.data ? (targetUser && targetUser.is_private ? 'Requested' : 'Following') : (targetUser && targetUser.is_private ? 'Request to Follow' : 'Follow');
+                    await renderActionRow();
                     await loadSecondaryData();
                 } catch (err) {
                     console.error('Follow request failed:',err);
                     showToast('Unable to update follow request. Please try again.','r');
                 } finally {
-                    btn.dataset.busy = '0';
-                    btn.disabled = false;
+                    var currentBtn = document.getElementById('followBtn');
+                    if (currentBtn) { currentBtn.dataset.busy = '0'; currentBtn.disabled = false; }
                 }
             };
 
