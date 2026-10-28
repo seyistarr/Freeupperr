@@ -51,6 +51,7 @@
     if (updates.tags !== undefined) payload.tags = updates.tags;
     if (updates.showInSuggestions !== undefined) payload.show_in_suggestions = updates.showInSuggestions;
     if (updates.hiddenTabs !== undefined) payload.hidden_tabs = updates.hiddenTabs;
+    if (updates.tabAudiences !== undefined) payload.tab_audiences = updates.tabAudiences;
     if (updates.city !== undefined) payload.city = updates.city;
     if (updates.hideAllPosts !== undefined) payload.hide_all_posts = updates.hideAllPosts;
 
