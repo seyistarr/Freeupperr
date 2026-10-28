@@ -3,7 +3,7 @@
   'use strict';
   if (window.FUSound) return;
 
-  const VERSION = '2';
+  const VERSION = '3';
   const CACHE = 'fu-sound:';
   const SEEN = 'fu-sound-events:';
   const tones = {
@@ -378,5 +378,8 @@
   });
   window.addEventListener('pageshow', () => { void sync(); });
   window.addEventListener('online', () => { void sync(); });
+  // Older PWA caches may serve auth.js without the explicit bindClient call.
+  // Its defer/body script still creates window.sb before DOMContentLoaded.
+  document.addEventListener('DOMContentLoaded', () => bindClient(window.sb), { once: true });
   bindClient(window.sb);
 })();

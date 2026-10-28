@@ -91,7 +91,7 @@ export async function fixture(options = {}) {
   };
   const badges = { notificationUnreadBadge: { style: {} }, chatUnreadBadge: { style: {} } };
   const document = { visibilityState: 'visible', addEventListener(name, cb) { (listeners[name] ||= []).push(cb); }, getElementById: id => badges[id] };
-  const window = { sb, ...(options.unavailable ? {} : { AudioContext: Audio }),
+  const window = { sb: options.lateClient ? undefined : sb, ...(options.unavailable ? {} : { AudioContext: Audio }),
     addEventListener(name, cb) { (windowListeners[name] ||= []).push(cb); },
     dispatchEvent(event) { windowListeners[event.type]?.forEach(fn => fn(event)); }
   };
@@ -104,6 +104,7 @@ export async function fixture(options = {}) {
   state.sandbox = vm.createContext(sandbox);
   vm.runInContext(options.source || source, state.sandbox);
   state.sound = window.FUSound; state.events = window.FreeUpperSounds; state.badges = badges;
+  state.domReady = () => { window.sb = sb; listeners.DOMContentLoaded?.forEach(fn => fn()); };
   state.storage = storage; state.sessionStorage = sessionStorage;
   state.notification = (type = 'like', id = 'n1', rest = {}) => state.events.notification({ id, type, actor_id: 'bob', receiver_id: 'alice', ...rest }, 'alice');
   await state.flush();

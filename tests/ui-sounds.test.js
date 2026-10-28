@@ -285,8 +285,18 @@ test('diagnostics trace callback receipt, actual play invocation and duplicate/f
 test('sound manager loads before auth/Realtime consumers and auth explicitly binds the existing client', () => {
   for (const file of ['index.html', 'chat.html', 'settings.html', 'notification.html']) {
     const html = readFileSync(file, 'utf8');
-    assert.ok(html.indexOf('/ui-sounds.js?v=2') < html.indexOf('src="auth.js"'), file);
-    assert.match(html, /<script src="\/ui-sounds.js\?v=2" data-fu-sounds><\/script>/);
+    assert.ok(html.indexOf('/ui-sounds.js?v=3') < html.indexOf('src="auth.js"'), file);
+    assert.match(html, /<script src="\/ui-sounds.js\?v=3" data-fu-sounds><\/script>/);
   }
   assert.match(readFileSync('auth.js', 'utf8'), /window\.FreeUpperSounds\.bindClient\(sb\)/);
+});
+
+test('early manager binds at DOM ready with cached legacy auth that only assigns window.sb', async () => {
+  const f = await fixture({ lateClient: true });
+  f.gesture();
+  assert.equal(f.sound.diagnostics().authenticated, false);
+  f.domReady(); await f.flush(); await f.flush();
+  assert.equal(f.sound.diagnostics().authenticated, true);
+  assert.equal(f.sound.diagnostics().preferenceReady, true);
+  assert.equal(await f.sound.play('notify', { preview: true, event: f.tap() }), true);
 });
