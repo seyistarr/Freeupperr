@@ -313,3 +313,11 @@ test('coupled sound consumers bypass pre-upgrade PWA cache entries', () => {
     for (const file of files) assert.ok(html.includes(file + '?v=sounds-v3'), page + ': ' + file);
   }
 });
+
+test('a previously tapped context can resume after a real suspension statechange when the browser allows it', async () => {
+  const f = await fixture(); f.gesture();
+  f.audio.state = 'suspended'; f.audio.onstatechange();
+  assert.equal(f.sound.diagnostics().unlocked, false);
+  assert.equal(await f.sound.play('like'), true);
+  assert.equal(f.sound.diagnostics().unlocked, true);
+});
