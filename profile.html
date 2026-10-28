@@ -2164,7 +2164,7 @@
                 </div>
 
                 <div class="action-row" id="actionRow"></div>
-                <div id="privateFollowRequests" style="margin:12px 0"></div>
+                
 
                 <!-- Tabs -->
                 <div class="profile-tabs" id="tabsBar">
@@ -2244,6 +2244,7 @@
         </div>
         <div class="fs-pages-track" id="fsPagesTrack">
             <div class="fs-page" id="fsPage0">
+                <div id="privateFollowRequests" style="padding:0 16px;overflow-y:auto;max-height:42vh;flex-shrink:0"></div>
                 <div class="fs-search" id="fsSearchWrap0"><input type="text" id="fsSearch0" placeholder="Search followers…" oninput="filterUsersPage(0)"></div>
                 <div id="fsLoading0" style="display:none;flex-direction:column;gap:0;overflow:hidden"></div>
                 <div class="fs-list" id="fsList0" onscroll="onFollowScrollPage(0)">
@@ -3908,7 +3909,8 @@
             }
             async function loadPrivateFollowRequests() {
                 var holder = document.getElementById('privateFollowRequests');
-                if (!holder || !isOwner || !targetUser || !targetUser.is_private) return;
+                if (!holder) return;
+                if (!isOwner || !targetUser || !targetUser.is_private) { holder.innerHTML = ''; return; }
                 var result = await window.sb.from('follows')
                     .select('follower_id,profiles:follower_id(username,display_name)')
                     .eq('following_id',targetUserId).eq('status','pending');
@@ -3920,10 +3922,10 @@
                 holder.innerHTML = rows.length ? '<h3 style="margin-bottom:12px">Follow requests ('+rows.length+')</h3>' +
                     rows.map(function(row) {
                         var name = row.profiles && (row.profiles.display_name || row.profiles.username) || 'FreeUpper user';
-                        return '<div style="display:flex;align-items:center;gap:10px;margin:10px 0">' +
-                            '<span style="flex:1;min-width:0;overflow-wrap:anywhere">'+escapeFollowText(name)+'</span>' +
-                            '<button type="button" class="act-btn act-follow" data-request-id="'+escapeFollowText(row.follower_id)+'" data-approve="true">Approve</button>' +
-                            '<button type="button" class="act-btn" data-request-id="'+escapeFollowText(row.follower_id)+'" data-approve="false">Decline</button></div>';
+                        return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0;padding:8px 0;border-bottom:1px solid var(--brd,#eee)">' +
+                            '<span style="flex:1 1 100%;min-width:0;overflow-wrap:break-word;font-weight:600">'+escapeFollowText(name)+'</span>' +
+                            '<button type="button" style="flex:1;min-width:0" class="act-btn act-follow" data-request-id="'+escapeFollowText(row.follower_id)+'" data-approve="true">Approve</button>' +
+                            '<button type="button" style="flex:1;min-width:0" class="act-btn" data-request-id="'+escapeFollowText(row.follower_id)+'" data-approve="false">Decline</button></div>';
                     }).join('') : '';
             }
             window.resolvePrivateFollowRequest = async function(followerId, approve) {
@@ -4892,6 +4894,7 @@
             }
 
             function tabTap(idx) {
+                if (idx === 0) loadPrivateFollowRequests().catch(console.error);
                 idx = Math.max(0, Math.min(idx, 3));
                 _fwPageIdx = idx;
                 var tabs = ['followers', 'following', 'friends', 'suggestions'];
