@@ -155,7 +155,8 @@
     }
 
     function formatDate(iso) {
-        const d = new Date(iso);
+        const d = window.FreeUpperTime.parseTimestamp(iso);
+        if (!d) return '';
         const now = new Date();
         const diff = (now - d) / 1000;
         if (diff < 60) return 'Just now';
@@ -166,12 +167,13 @@
     }
 
     function formatLastSeen(ts) {
-        if (!ts) return 'Last seen recently';
-        const diffMin = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+        const parsed = window.FreeUpperTime.parseTimestamp(ts);
+        if (!parsed) return 'Last seen recently';
+        const diffMin = Math.floor((Date.now() - parsed.getTime()) / 60000);
         if (diffMin < 1) return 'Last seen just now';
         if (diffMin < 60) return `Last seen ${diffMin}m ago`;
         if (diffMin < 1440) return `Last seen ${Math.floor(diffMin / 60)}h ago`;
-        return `Last seen ${new Date(ts).toLocaleDateString()}`;
+        return `Last seen ${parsed.toLocaleDateString()}`;
     }
 
     function getCurrentUser() {
@@ -598,7 +600,7 @@
             : (lbViewOnce ? new Date(Date.now() + 30 * 1000) : null);
 
         document.getElementById('lbUserName').textContent = authorName || '';
-        document.getElementById('lbTimestamp').textContent = createdAt ? new Date(createdAt).toLocaleString() : '';
+        document.getElementById('lbTimestamp').textContent = window.FreeUpperTime.formatLocalTime(createdAt);
 
         const msg = messages.find(m => m.id === msgId);
         const isMine = msg && msg.sender_id === currentUserId;
@@ -1471,9 +1473,9 @@
         let lastDate = null;
 
         messages.forEach(msg => {
-            const msgDate = new Date(msg.created_at);
-            const dateKey = msgDate.toDateString();
-            if (dateKey !== lastDate) {
+            const msgDate = window.FreeUpperTime.parseTimestamp(msg.created_at);
+            const dateKey = msgDate ? msgDate.toDateString() : null;
+            if (msgDate && dateKey !== lastDate) {
                 lastDate = dateKey;
                 const now = new Date();
                 const isToday = dateKey === now.toDateString();

@@ -119,15 +119,16 @@
   }
   function formatCount(n) { return fmtNum(n); }
   function formatRelativeTime(iso) {
-    if (!iso) return '';
-    const now = Date.now(), then = new Date(iso).getTime();
+    const parsed = window.FreeUpperTime.parseTimestamp(iso);
+    if (!parsed) return '';
+    const now = Date.now(), then = parsed.getTime();
     const diff = Math.floor((now - then) / 1000);
     if (diff < 60) return 'Just now';
     if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
     if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-    if (diff < 172800) return 'Yesterday';
+    if (window.FreeUpperTime.localDayDifference(parsed) === 1) return 'Yesterday';
     if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
-    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
   function truncateName(s, n) { s = s || ''; n = n || 22; return s.length > n ? s.slice(0, n - 1) + '…' : s; }
   function linkifyContent(text, mentions) {

@@ -52,21 +52,21 @@
     }
 
     function formatRelativeTime(iso) {
-        const then = new Date(iso).getTime();
+        const parsed = window.FreeUpperTime.parseTimestamp(iso);
+        if (!parsed) return '';
+        const then = parsed.getTime();
         const diff = Math.floor((Date.now() - then) / 1000);
         if (diff < 60) return 'Just now';
         if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
         if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-        if (diff < 172800) return 'Yesterday';
+        if (window.FreeUpperTime.localDayDifference(parsed) === 1) return 'Yesterday';
         if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
-        return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
 
     function dateBucket(iso) {
-        const d = new Date(iso);
-        const now = new Date();
-        const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
-        const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+        const diffDays = window.FreeUpperTime.localDayDifference(iso);
+        if (diffDays === null) return 'Earlier';
         if (diffDays === 0) return 'Today';
         if (diffDays === 1) return 'Yesterday';
         if (diffDays < 7) return 'This Week';

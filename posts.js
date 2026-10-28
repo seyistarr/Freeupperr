@@ -186,7 +186,7 @@
   }
 
   function safeDate(value) {
-    if (!value) return new Date().toISOString();
+    if (!value) return null; // Missing server event times must not look newly created.
     return value;
   }
 

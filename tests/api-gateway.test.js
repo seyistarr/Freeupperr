@@ -124,3 +124,15 @@ test('frontend and API deployments own separate Worker names, commands and domai
   assert.deepEqual(web.routes.map(r => r.pattern), ['freeupper.com', 'www.freeupper.com']);
   assert.deepEqual(api.routes.map(r => r.pattern), ['api.freeupper.com']);
 });
+
+test('gateway transports UTC event timestamps without local-time conversion', async () => {
+  const body = JSON.stringify({ created_at: '2026-11-01T06:30:00.000Z' });
+  const upstreamBody = '[{"created_at":"2026-11-01T06:30:00+00:00"}]';
+  const response = await handle(req('/rest/v1/messages', {
+    method: 'POST', body, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt('authenticated') }
+  }), env, async (url, init) => {
+    assert.equal(await new Response(init.body).text(), body);
+    return new Response(upstreamBody, { headers: { 'Content-Type': 'application/json' } });
+  });
+  assert.equal(await response.text(), upstreamBody);
+});
