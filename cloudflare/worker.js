@@ -54,6 +54,18 @@ export default {
       } else if (path === '/sitemap-profiles.xml') handler = sitemap;
       else if (path === '/sitemap-posts.xml') handler = postSitemap;
     } catch { return unavailable(400, 'Invalid URL'); }
+    // Profile previews deliberately exclude private accounts. Human navigation
+    // must reach the app, whose public identity RPC and viewer-specific reads
+    // render the header/lock and enforce access to posts independently.
+    if (handler === profilePreview && path !== '/api/profile-preview' &&
+        !/facebookexternalhit|Facebot|WhatsApp|Twitterbot|TelegramBot|Discordbot|Slackbot|LinkedInBot|Pinterestbot|Googlebot|bingbot|Applebot|SkypeUriPreview|Embedly|Iframely|crawler|spider|bot|preview/i.test(request.headers.get('User-Agent') || '')) {
+      if (!['GET', 'HEAD'].includes(request.method)) return unavailable(405, 'Method not allowed', { Allow: 'GET, HEAD' });
+      const asset = await env.ASSETS.fetch(new Request(new URL('/profile.html', url), request));
+      const response = new Response(asset.body, asset);
+      response.headers.set('Cache-Control', 'private, no-store');
+      response.headers.set('Vary', 'User-Agent');
+      return response;
+    }
     if (handler) {
       if (!['GET', 'HEAD'].includes(request.method)) return unavailable(405, 'Method not allowed', { Allow: 'GET, HEAD' });
       try { return await invoke(handler, request, query); }

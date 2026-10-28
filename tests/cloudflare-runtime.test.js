@@ -14,6 +14,12 @@ test('Workers public previews and WASM images preserve privacy', { skip: !bundle
   let privateProfile = false;
   let eligible = false;
   const mf = new Miniflare(convertV4MiniflareOptions({ name: 'freeupper-test', modules, compatibilityDate: '2026-10-22', compatibilityFlags: ['nodejs_compat'],
+    serviceBindings: { ASSETS: request => {
+      assert.equal(new URL(request.url).pathname, '/profile.html');
+      return new Response(request.method === 'HEAD' ? null : '<html>Profile app</html>', {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      });
+    } },
     outboundService: async request => {
       const url = new URL(request.url);
       if (url.origin === 'https://api.freeupper.com' && url.pathname === '/functions/v1/protected-media') {
@@ -47,9 +53,22 @@ test('Workers public previews and WASM images preserve privacy', { skip: !bundle
     assert.doesNotMatch(html, /person@example.com/);
     assert.match(response.headers.get('X-Robots-Tag'), /noindex/);
     response = await request('/u/FU_TEST', { 'User-Agent': 'Mozilla/5.0' });
-    assert.equal(response.status, 302);
-    assert.equal(response.headers.get('Location'), '/profile.html?freeupper_id=FU_TEST');
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), '<html>Profile app</html>');
     privateProfile = true;
+    for (const path of ['/@aliyaanae', '/@aliyaanae/', '/u/FU_TEST']) {
+      response = await request(path, { 'User-Agent': 'Mozilla/5.0' });
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get('Content-Type'), /text\/html/);
+      assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+      assert.equal(response.headers.get('Vary'), 'User-Agent');
+      assert.equal(await response.text(), '<html>Profile app</html>');
+      response = await mf.dispatchFetch('https://example.test' + path, { method: 'HEAD' });
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), '');
+      response = await mf.dispatchFetch('https://example.test' + path, { method: 'POST' });
+      assert.equal(response.status, 405);
+    }
     assert.equal((await request('/u/FU_TEST')).status, 404);
     assert.equal((await request('/api/profile-og?freeupper_id=FU_TEST')).status, 404);
     privateProfile = false; eligible = true;
