@@ -2164,6 +2164,7 @@
                 </div>
 
                 <div class="action-row" id="actionRow"></div>
+                <div id="privateFollowRequests" style="margin:12px 0"></div>
 
                 <!-- Tabs -->
                 <div class="profile-tabs" id="tabsBar">
@@ -3007,6 +3008,8 @@
                 });
                 return {
                     iFollowThem: !approved.error && approved.data === true,
+                    pending: !!results[0].data && approved.data !== true,
+                    hasRequest: !!results[0].data,
                     theyFollowMe: !!results[1].data
                 };
             }
@@ -3506,6 +3509,7 @@
                         targetUser._tabAllowed[key] = !tabResults[idx].error && tabResults[idx].data === true;
                     });
                     applyPrivacyAndTabs(targetUser, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, rel.iFollowThem);
+                    if (isOwnerLocal && targetUser.is_private) loadPrivateFollowRequests().catch(console.error);
                 } catch (err) {
                     console.error('Secondary load error:', err);
                 }
@@ -3840,55 +3844,78 @@
                 }
                 var rel = { iFollowThem: false, theyFollowMe: false };
                 try { rel = await getRelationship(user.id, targetUserId); } catch (e) {}
-                var label = rel.iFollowThem && rel.theyFollowMe ? 'Friends' : rel.iFollowThem ? 'Following' : rel.theyFollowMe ? 'Follow Back' : 'Follow';
+                var label = rel.pending ? 'Requested' : (rel.iFollowThem && rel.theyFollowMe ? 'Friends' : rel.iFollowThem ? 'Following' : rel.theyFollowMe ? 'Follow Back' : (targetUser && targetUser.is_private ? 'Request to Follow' : 'Follow'));
                 var cls = rel.iFollowThem && rel.theyFollowMe ? 'act-follow friends' : rel.iFollowThem ? 'act-follow fstate' : 'act-follow';
                 row.innerHTML =
-                    '<button class="act-btn ' + cls + '" id="followBtn" data-following="' + rel.iFollowThem + '">' + label + '</button>' +
+                    '<button class="act-btn ' + cls + '" id="followBtn" data-following="' + (rel.iFollowThem || rel.pending) + '">' + label + '</button>' +
                     '<button class="act-btn act-msg" onclick="window.location.href=\'chat.html?uid=' + targetUserId + '\'" data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;>Message</button>';
                 document.getElementById('followBtn').addEventListener('click', handleFollow);
             }
 
             window.handleFollow = async function() {
                 var user = getCurrentUser();
-                if (!user || !user.isLoggedIn) { showToast(window.fuT('Please sign in to follow'), 'o'); return; }
+                if (!user || !user.isLoggedIn) { showToast('Please sign in to follow', 'o'); return; }
                 var btn = document.getElementById('followBtn');
                 if (!btn || btn.dataset.busy === '1') return;
-                var wasFollowing = btn.dataset.following === 'true';
                 btn.dataset.busy = '1';
-                btn.style.pointerEvents = 'none';
-                btn.style.opacity = '.65';
-                var followersEl = document.getElementById('statFollowers');
-                var currentCount = parseFollowerCount(followersEl.textContent);
-                var optimisticCount = wasFollowing ? Math.max(0, currentCount - 1) : currentCount + 1;
-                followersEl.textContent = fmtNum(optimisticCount);
-                followersEl.classList.add('cnt-bounce');
-                setTimeout(function() { followersEl.classList.remove('cnt-bounce'); }, 350);
-                btn.textContent = wasFollowing ? 'Follow' : 'Following';
-                btn.className = 'act-btn ' + (wasFollowing ? 'act-follow' : 'act-follow fstate');
-                btn.dataset.following = String(!wasFollowing);
+                btn.disabled = true;
                 try {
-                    var newState = await toggleFollow(targetUserId);
-                    var rel = await getRelationship(user.id, targetUserId);
-                    var label = rel.iFollowThem && rel.theyFollowMe ? 'Friends' : rel.iFollowThem ? 'Following' : rel.theyFollowMe ? 'Follow Back' : 'Follow';
-                    var cls = rel.iFollowThem && rel.theyFollowMe ? 'act-follow friends' : rel.iFollowThem ? 'act-follow fstate' : 'act-follow';
-                    btn.textContent = label;
-                    btn.className = 'act-btn ' + cls;
-                    btn.dataset.following = String(rel.iFollowThem);
-                    followModalData = null;
-                    var toastMsg = rel.iFollowThem && rel.theyFollowMe ? 'You are now friends' : newState ? 'Following ✓' : 'Unfollowed';
-                    showToast(toastMsg, newState ? 'g' : 'o');
+                    var result = await window.sb.rpc('toggle_follow_with_notification', {p_target_id:targetUserId});
+                    if (result.error) throw result.error;
+                    await updateActionButtons();
+                    await loadSecondaryData();
                 } catch (err) {
-                    followersEl.textContent = fmtNum(currentCount);
-                    btn.textContent = wasFollowing ? 'Following' : 'Follow';
-                    btn.className = 'act-btn ' + (wasFollowing ? 'act-follow fstate' : 'act-follow');
-                    btn.dataset.following = String(wasFollowing);
-                    showToast(err.message || 'Failed to follow', 'r');
+                    console.error('Follow request failed:',err);
+                    showToast('Unable to update follow request. Please try again.','r');
                 } finally {
                     btn.dataset.busy = '0';
-                    btn.style.pointerEvents = '';
-                    btn.style.opacity = '';
+                    btn.disabled = false;
                 }
             };
+
+            function escapeFollowText(value) {
+                return String(value || '').replace(/[&<>"']/g,function(ch) {
+                    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+                });
+            }
+            async function loadPrivateFollowRequests() {
+                var holder = document.getElementById('privateFollowRequests');
+                if (!holder || !isOwner || !targetUser || !targetUser.is_private) return;
+                var result = await window.sb.from('follows')
+                    .select('follower_id,profiles:follower_id(username,display_name)')
+                    .eq('following_id',targetUserId).eq('status','pending');
+                if (result.error) {
+                    holder.textContent = 'Unable to load follow requests.';
+                    return;
+                }
+                var rows = result.data || [];
+                holder.innerHTML = rows.length ? '<h3 style="margin-bottom:12px">Follow requests ('+rows.length+')</h3>' +
+                    rows.map(function(row) {
+                        var name = row.profiles && (row.profiles.display_name || row.profiles.username) || 'FreeUpper user';
+                        return '<div style="display:flex;align-items:center;gap:10px;margin:10px 0">' +
+                            '<span style="flex:1;min-width:0;overflow-wrap:anywhere">'+escapeFollowText(name)+'</span>' +
+                            '<button type="button" class="act-btn act-follow" data-request-id="'+escapeFollowText(row.follower_id)+'" data-approve="true">Approve</button>' +
+                            '<button type="button" class="act-btn" data-request-id="'+escapeFollowText(row.follower_id)+'" data-approve="false">Decline</button></div>';
+                    }).join('') : '';
+            }
+            window.resolvePrivateFollowRequest = async function(followerId, approve) {
+                var result = await window.sb.rpc('resolve_private_follow_request',{
+                    p_follower_id:followerId,p_approve:approve
+                });
+                if (result.error) {
+                    showToast('Could not update follow request.','r');
+                    return;
+                }
+                await loadPrivateFollowRequests();
+                await loadSecondaryData();
+            };
+            document.getElementById('privateFollowRequests').addEventListener('click',function(event) {
+                var btn=event.target.closest('button[data-request-id]');
+                if (!btn || btn.disabled) return;
+                btn.disabled=true;
+                window.resolvePrivateFollowRequest(btn.dataset.requestId,btn.dataset.approve==='true')
+                    .finally(function(){btn.disabled=false;});
+            });
 
             // ─── TABS SWITCH ──────────────────────────────────────────
             window.switchTab = function(el, tab) {
