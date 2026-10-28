@@ -2649,7 +2649,7 @@
             <span class="fs-title" data-i18n="Profile Tabs">Profile Tabs</span>
             <button class="fs-x" onclick="closeFS('tabVisibilityModal')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
-        <div style="padding:10px clamp(14px,5vw,24px) 4px;font-size:13px;color:var(--muted);flex-shrink:0" data-i18n="Choose which tabs other people can see on your profile. Your Content tab is always visible.">Choose which tabs other people can see on your profile. Your Content tab is always visible.</div>
+        <div style="padding:10px clamp(14px,5vw,24px) 4px;font-size:13px;color:var(--muted);flex-shrink:0" data-i18n="Choose who can see each tab on your profile. Your Content tab keeps its own privacy settings.">Choose which tabs other people can see on your profile. Your Content tab is always visible.</div>
         <div class="tab-vis-list" id="tabVisList"></div>
     </div>
 
@@ -2906,71 +2906,62 @@
                 { key: 'market', label: 'Market', icon: '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>' }
             ];
             var _hiddenTabs = [];
-
-            window.openTabVisibilityModal = function() {
+            var _tabAudiences = {};
+            var TAB_AUDIENCE_OPTIONS = [
+                ['public', 'Public'],
+                ['followers', 'Followers'],
+                ['mutuals', 'Mutuals (Friends)'],
+                ['only_me', 'Only Me']
+            ];
+            function tabAudience(key) {
+                if (_tabAudiences[key]) return _tabAudiences[key];
+                if (_hiddenTabs.indexOf(key) !== -1 || key === 'star') return 'only_me';
+                return 'public';
+            }
+            window.openTabVisibilityModal = async function() {
                 var user = getCurrentUser();
-                if (!user) {
-                    showToast(window.fuT('Please sign in to manage tabs'), 'o');
-                    return;
-                }
-                sb.from('profiles')
-                    .select('hidden_tabs')
-                    .eq('id', user.id)
-                    .single()
-                    .then(function(res) {
-                        if (!res.error && res.data) {
-                            _hiddenTabs = res.data.hidden_tabs || [];
-                        } else {
-                            _hiddenTabs = [];
-                        }
-                        renderTabVisList();
-                        openFS('tabVisibilityModal');
-                    })
-                    .catch(function() {
-                        _hiddenTabs = [];
-                        renderTabVisList();
-                        openFS('tabVisibilityModal');
-                    });
+                if (!user) { showToast('Please sign in to manage tabs', 'o'); return; }
+                try {
+                    var res = await sb.from('profiles').select('hidden_tabs,tab_audiences').eq('id',user.id).single();
+                    if (res.error) throw res.error;
+                    _hiddenTabs = res.data.hidden_tabs || [];
+                    _tabAudiences = res.data.tab_audiences || {};
+                    renderTabVisList();
+                    openFS('tabVisibilityModal');
+                } catch (err) { showToast(err.message,'r'); }
             };
-
             function renderTabVisList() {
                 var el = document.getElementById('tabVisList');
-                if (!el) {
-                    console.error('tabVisList element not found');
-                    return;
-                }
+                if (!el) return;
                 el.innerHTML = TAB_DEFS.map(function(t) {
-                    var hidden = _hiddenTabs.indexOf(t.key) !== -1;
+                    var current = tabAudience(t.key);
                     return '<div class="tab-vis-item">' +
                         '<div class="r-icon">' + t.icon + '</div>' +
                         '<div class="r-text"><div class="r-title">' + t.label +
-                        '</div><div class="r-sub">' + (hidden ? 'Hidden from others' : 'Visible to others') +
+                        '</div><div class="r-sub">' + (TAB_AUDIENCE_OPTIONS.find(function(o){return o[0]===current;}) || ['','Only Me'])[1] +
                         '</div></div>' +
-                        '<label class="toggle"><input type="checkbox" ' + (hidden ? '' : 'checked') +
-                        ' onchange="toggleTabVisibility(\'' + t.key + '\', this.checked)"><div class="track"></div></label>' +
-                        '</div>';
+                        '<select aria-label="' + t.label + ' audience" onchange="setTabAudience(\'' + t.key + '\',this.value)" ' +
+                        'style="max-width:150px;min-width:116px;padding:10px 6px;border:1px solid var(--brd);border-radius:12px;background:var(--bg);color:var(--txt);font-size:13px">' +
+                        TAB_AUDIENCE_OPTIONS.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===current?' selected':'')+'>'+o[1]+'</option>';}).join('') +
+                        '</select></div>';
                 }).join('');
             }
-
-            window.toggleTabVisibility = async function(key, visible) {
-                var previous = _hiddenTabs.slice();
-                var next = visible
-                    ? previous.filter(function(k) { return k !== key; })
-                    : previous.concat(previous.indexOf(key) === -1 ? [key] : []);
-                _hiddenTabs = next;
+            window.setTabAudience = async function(key, audience) {
+                var previous = Object.assign({}, _tabAudiences);
+                var previousHidden = _hiddenTabs.slice();
+                _tabAudiences[key] = audience;
+                _hiddenTabs = _hiddenTabs.filter(function(k){return k!==key;});
+                if (audience==='only_me') _hiddenTabs.push(key);
                 renderTabVisList();
                 try {
-                    await window.SettingsAPI.updateFlags({ hiddenTabs: next });
-                    var sub = document.getElementById('hiddenTabsSub');
-                    if (sub) {
-                        sub.textContent = next.length ? (next.length + ' tab' + (next.length > 1 ?
-                            's' : '') + ' hidden') : 'All tabs visible';
-                    }
-                    // Save silently; the switch and visibility label are the confirmation.
-                } catch (err) {
-                    _hiddenTabs = previous;
+                    await window.SettingsAPI.updateFlags({tabAudiences:_tabAudiences,hiddenTabs:_hiddenTabs});
+                    var sub=document.getElementById('hiddenTabsSub');
+                    if(sub) sub.textContent='Customize who sees each tab';
+                } catch(err) {
+                    _tabAudiences=previous;
+                    _hiddenTabs=previousHidden;
                     renderTabVisList();
-                    showToast(err.message, 'r');
+                    showToast(err.message,'r');
                 }
             };
 
