@@ -12,6 +12,35 @@
   }
   var sb = window.sb;
 
+  function bindSoundToggle() {
+    var toggle = document.getElementById('notificationSoundsToggle');
+    var errorLabel = document.getElementById('notificationSoundsError');
+    if (!toggle) return;
+    function reflect(event) {
+      var state = event.detail;
+      toggle.checked = state.enabled;
+      toggle.disabled = !state.authenticated || !state.ready || state.saving;
+    }
+    window.addEventListener('fu-sound-preference', reflect);
+    if (window.FreeUpperSounds) reflect({ detail: window.FreeUpperSounds.preferenceState() });
+    toggle.addEventListener('change', async function () {
+      var previous = window.FUSound.isEnabled();
+      toggle.disabled = true;
+      errorLabel.textContent = '';
+      try {
+        await window.FUSound.setEnabled(toggle.checked);
+      } catch (_) {
+        toggle.checked = previous;
+        errorLabel.textContent = window.fuT('Could not save notification sounds. Please try again.');
+      } finally {
+        // The manager owns availability after sign-out/account changes.
+        if (window.FreeUpperSounds) reflect({ detail: window.FreeUpperSounds.preferenceState() });
+      }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindSoundToggle);
+  else bindSoundToggle();
+
   // ─── HELPERS ──────────────────────────────────────────────
   function getCurrentUser() {
     if (window.AuthUser && window.AuthUser.getCurrentUser) {

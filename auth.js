@@ -39,6 +39,15 @@
   });
   window.sb = sb;
 
+  // Shared sounds use this authenticated gateway client on every app page.
+  // Loading independently keeps audio support optional and auth initialization intact.
+  if (!document.querySelector('script[data-fu-sounds]')) {
+    const sounds = document.createElement('script');
+    sounds.dataset.fuSounds = '';
+    sounds.src = '/ui-sounds.js?v=1';
+    document.head.appendChild(sounds);
+  }
+
   // ─── CHANGE LISTENERS ──────────────────────────────────────
   const changeListeners = [];
 

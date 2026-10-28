@@ -168,7 +168,7 @@ test('settings cache only changes after a confirmed owner row; switch waits and 
   const pending=new Promise(resolve=>release=resolve);
   const user={id:owner,isLoggedIn:true};
   const window={sb:{from:()=>({update:()=>({eq:()=>({select:()=>({single:()=>pending})})})})},AuthUser:{getCurrentUser:()=>user,updateCurrentUser:()=>cached++}};
-  vm.runInNewContext(source,{window,console,document:{dispatchEvent(){}},CustomEvent:class{}});
+  vm.runInNewContext(source,{window,console,document:{readyState:'complete',getElementById:()=>null,dispatchEvent(){}},CustomEvent:class{}});
   const save=window.SettingsAPI.updateFlags({hideAllPosts:true});
   assert.equal(cached,0); release(result);
   if(result.data){await save;assert.equal(cached,1);}else{await assert.rejects(save);assert.equal(cached,0);}
