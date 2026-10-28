@@ -2953,22 +2953,24 @@
             }
 
             window.toggleTabVisibility = async function(key, visible) {
-                if (visible) {
-                    _hiddenTabs = _hiddenTabs.filter(function(k) { return k !== key; });
-                } else {
-                    if (_hiddenTabs.indexOf(key) === -1) _hiddenTabs.push(key);
-                }
+                var previous = _hiddenTabs.slice();
+                var next = visible
+                    ? previous.filter(function(k) { return k !== key; })
+                    : previous.concat(previous.indexOf(key) === -1 ? [key] : []);
+                _hiddenTabs = next;
+                renderTabVisList();
                 try {
-                    await window.SettingsAPI.updateFlags({ hiddenTabs: _hiddenTabs });
+                    await window.SettingsAPI.updateFlags({ hiddenTabs: next });
                     var sub = document.getElementById('hiddenTabsSub');
                     if (sub) {
-                        sub.textContent = _hiddenTabs.length ? (_hiddenTabs.length + ' tab' + (_hiddenTabs.length > 1 ?
+                        sub.textContent = next.length ? (next.length + ' tab' + (next.length > 1 ?
                             's' : '') + ' hidden') : 'All tabs visible';
                     }
-                    showToast(window.fuT('Tab visibility updated'), 'g');
+                    // Save silently; the switch and visibility label are the confirmation.
                 } catch (err) {
-                    showToast(err.message, 'r');
+                    _hiddenTabs = previous;
                     renderTabVisList();
+                    showToast(err.message, 'r');
                 }
             };
 
