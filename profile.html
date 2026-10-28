@@ -3495,6 +3495,16 @@
                     document.getElementById('fsTabFgCount').textContent = fmtNum(counts.following);
                     document.getElementById('fsTabFrCount').textContent = '';
 
+                    // Resolve tab access on the server; the same RPC enforces followers
+                    // and mutual relationships for guests and signed-in viewers.
+                    var tabKeys = ['love','share','star','market'];
+                    var tabResults = await Promise.all(tabKeys.map(function(key) {
+                        return window.sb.rpc('can_view_profile_tab', {p_owner:targetUserId,p_tab:key});
+                    }));
+                    targetUser._tabAllowed = {};
+                    tabKeys.forEach(function(key,idx) {
+                        targetUser._tabAllowed[key] = !tabResults[idx].error && tabResults[idx].data === true;
+                    });
                     applyPrivacyAndTabs(targetUser, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, rel.iFollowThem);
                 } catch (err) {
                     console.error('Secondary load error:', err);
@@ -3600,7 +3610,7 @@
                 var hiddenTabs = (!isOwner && profile.hidden_tabs) ? profile.hidden_tabs : [];
                 var postsForceHidden = !isOwner && !!profile.hide_all_posts;
                 var optionalTabKeys = ['love', 'share', 'star', 'market'];
-                var allOptionalHidden = optionalTabKeys.every(function(k) { return hiddenTabs.indexOf(k) !== -1; });
+                var allOptionalHidden = optionalTabKeys.every(function(k) { return profile._tabAllowed ? !profile._tabAllowed[k] : hiddenTabs.indexOf(k) !== -1; });
                 var allTabsHidden = !isOwner && !viewerBlocked && postsForceHidden && allOptionalHidden;
 
                 document.getElementById('tabsBar').style.display = allTabsHidden ? 'none' : '';
@@ -3622,7 +3632,7 @@
                 } else {
                     document.querySelectorAll('#tabsBar .tab').forEach(function(tabBtn) {
                         var key = tabBtn.getAttribute('data-tab');
-                        var isHidden = (key === 'posts' ? postsForceHidden : hiddenTabs.indexOf(key) !== -1);
+                        var isHidden = (key === 'posts' ? postsForceHidden : (!isOwner && profile._tabAllowed ? !profile._tabAllowed[key] : hiddenTabs.indexOf(key) !== -1));
                         tabBtn.style.display = isHidden ? 'none' : '';
                         if (isHidden && tabBtn.classList.contains('active')) {
                             var fallback = document.querySelector('#tabsBar .tab:not([style*="display: none"])');
