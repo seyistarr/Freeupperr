@@ -54,8 +54,9 @@
     if (updates.city !== undefined) payload.city = updates.city;
     if (updates.hideAllPosts !== undefined) payload.hide_all_posts = updates.hideAllPosts;
 
-    var { error } = await sb.from('profiles').update(payload).eq('id', user.id);
+    var { data, error } = await sb.from('profiles').update(payload).eq('id', user.id).select('id').single();
     if (error) throw error;
+    if (!data || data.id !== user.id) throw new Error('Settings were not saved. Please try again.');
 
     updateLocalCache(updates);
   }

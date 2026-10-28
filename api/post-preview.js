@@ -187,7 +187,7 @@ async function renderVideoImage(req, res, code) {
     );
     const png = Buffer.from(await new ImageResponse(layout, { width: 800, height: 800 }).arrayBuffer());
     res.setHeader('Content-Type','image/png');
-    res.setHeader('Cache-Control','public, max-age=300, s-maxage=3600');
+    res.setHeader('Cache-Control','no-store');
     return res.status(200).end(png);
   } catch (error) {
     console.error('Video preview image failed', error);
