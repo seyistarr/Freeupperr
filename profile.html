@@ -3010,7 +3010,8 @@
                     iFollowThem: !approved.error && approved.data === true,
                     pending: !!results[0].data && results[0].data.status === 'pending',
                     hasRequest: !!results[0].data,
-                    theyFollowMe: !!results[1].data && results[1].data.status === 'active'
+                    theyFollowMe: !!results[1].data && results[1].data.status === 'active',
+                    incomingPending: !!results[1].data && results[1].data.status === 'pending'
                 };
             }
 
@@ -3844,6 +3845,31 @@
                 }
                 var rel = { iFollowThem: false, theyFollowMe: false };
                 try { rel = await getRelationship(user.id, targetUserId); } catch (e) {}
+                // A private-account owner can approve a request directly from the requester's profile.
+                if (rel.incomingPending && user.id !== targetUserId) {
+                    row.innerHTML = '<button class="act-btn act-follow" id="approveIncomingFollow">Accept Request</button>' +
+                        '<button class="act-btn" id="declineIncomingFollow">Decline</button>';
+                    ['approveIncomingFollow','declineIncomingFollow'].forEach(function(id) {
+                        document.getElementById(id).addEventListener('click',async function() {
+                            var accept = id === 'approveIncomingFollow';
+                            var buttons = row.querySelectorAll('button');
+                            buttons.forEach(function(button){button.disabled=true;});
+                            try {
+                                var outcome=await window.sb.rpc('resolve_private_follow_request',{
+                                    p_follower_id:targetUserId,p_approve:accept
+                                });
+                                if(outcome.error) throw outcome.error;
+                                await renderActionRow();
+                                await loadSecondaryData();
+                            } catch(error) {
+                                console.error('Unable to resolve follow request',error);
+                                showToast('Unable to update request. Please try again.','r');
+                                buttons.forEach(function(button){button.disabled=false;});
+                            }
+                        });
+                    });
+                    return;
+                }
                 var label = rel.pending ? 'Requested' : (rel.iFollowThem && rel.theyFollowMe ? 'Friends' : rel.iFollowThem ? 'Following' : rel.theyFollowMe ? 'Follow Back' : (targetUser && targetUser.is_private ? 'Request to Follow' : 'Follow'));
                 var cls = rel.iFollowThem && rel.theyFollowMe ? 'act-follow friends' : rel.iFollowThem ? 'act-follow fstate' : 'act-follow';
                 row.innerHTML =
