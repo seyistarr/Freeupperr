@@ -2690,7 +2690,7 @@
         messageSubscription = sb.channel('messages-chat')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
                 const newMsg = payload.new;
-                void window.FreeUpperSounds?.message(newMsg, recipient);
+                void window.FreeUpperSounds?.message(newMsg, recipient, 'chat-messages');
                 const isOpenConv = newMsg.conversation_id === selectedConversationId;
 
                 if (isOpenConv) {
@@ -2722,7 +2722,7 @@
                     renderMessages();
                 }
             })
-            .subscribe();
+            .subscribe(status => window.FreeUpperSounds?.channel('chat-messages', status));
     }
 
     async function notifyIncomingMessage(msg) {

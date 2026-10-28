@@ -224,7 +224,7 @@
                 },
                 payload => {
                     if (payload.eventType === 'INSERT') {
-                        window.FreeUpperSounds?.notification(payload.new, recipient);
+                        window.FreeUpperSounds?.notification(payload.new, recipient, 'header-notifications');
                     }
                     /*
                      * Don't trust the event to calculate the count.
@@ -234,6 +234,7 @@
                 }
             )
             .subscribe((status, error) => {
+                window.FreeUpperSounds?.channel('header-notifications', status);
                 if (
                     status === 'CHANNEL_ERROR' ||
                     status === 'TIMED_OUT'
@@ -293,10 +294,11 @@
                     }
 
                     scheduleRefresh();
-                    void window.FreeUpperSounds?.message(payload.new, recipient);
+                    void window.FreeUpperSounds?.message(payload.new, recipient, 'header-messages');
                 }
             )
             .subscribe((status, error) => {
+                window.FreeUpperSounds?.channel('header-messages', status);
                 if (
                     status === 'CHANNEL_ERROR' ||
                     status === 'TIMED_OUT'

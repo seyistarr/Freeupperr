@@ -41,10 +41,12 @@
 
   // Shared sounds use this authenticated gateway client on every app page.
   // Loading independently keeps audio support optional and auth initialization intact.
+  if (window.FreeUpperSounds) window.FreeUpperSounds.bindClient(sb);
   if (!document.querySelector('script[data-fu-sounds]')) {
     const sounds = document.createElement('script');
     sounds.dataset.fuSounds = '';
-    sounds.src = '/ui-sounds.js?v=1';
+    sounds.src = '/ui-sounds.js?v=2';
+    sounds.onload = () => window.FreeUpperSounds?.bindClient(sb);
     document.head.appendChild(sounds);
   }
 
