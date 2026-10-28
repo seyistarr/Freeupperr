@@ -2113,6 +2113,18 @@
         @media (min-width: 1024px) {
             .settings-col { max-width: 680px; }
         }
+        .tab-audience-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;max-width:190px;min-width:125px;padding:10px 12px;border:1px solid var(--brd);border-radius:12px;background:var(--bg);color:var(--txt);font-size:13px;font-weight:600;cursor:pointer}
+        .tab-audience-trigger svg{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2}
+        .tab-audience-overlay{position:fixed;inset:0;z-index:99999;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.65);padding:16px}
+        .tab-audience-overlay.open{display:flex}
+        .tab-audience-sheet{width:100%;max-width:480px;background:var(--bg);color:var(--txt);border:1px solid var(--brd);border-radius:22px;padding:20px 16px max(20px,env(safe-area-inset-bottom));box-shadow:0 20px 60px rgba(0,0,0,.35)}
+        .tab-audience-sheet-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+        .tab-audience-sheet-header h2{font-size:18px;font-weight:800}
+        .tab-audience-close{width:36px;height:36px;border:0;border-radius:50%;background:var(--bg3);color:var(--txt);font-size:26px;cursor:pointer}
+        .tab-audience-choice{width:100%;display:flex;align-items:center;justify-content:space-between;padding:16px 12px;background:transparent;color:var(--txt);border:0;border-bottom:1px solid var(--brd);font-size:16px;text-align:left;cursor:pointer}
+        .tab-audience-choice:last-child{border-bottom:0}
+        .tab-audience-choice.selected{color:var(--p);font-weight:800}
+        .tab-audience-check{font-size:20px;color:var(--p)}
     </style>
 <link rel="stylesheet" href="/js/i18n.css">
 <script>window.fuT = window.fuT || function(key, values) { return window.FreeUpperI18n ? window.FreeUpperI18n.t(key, values) : key; };</script>
@@ -2653,6 +2665,17 @@
         <div class="tab-vis-list" id="tabVisList"></div>
     </div>
 
+    <!-- Audience picker: accessible modal above the Profile Tabs screen -->
+    <div class="tab-audience-overlay" id="tabAudiencePicker" role="dialog" aria-modal="true" aria-labelledby="tabAudiencePickerTitle" onclick="if(event.target===this)closeTabAudiencePicker()">
+        <div class="tab-audience-sheet">
+            <div class="tab-audience-sheet-header">
+                <h2 id="tabAudiencePickerTitle">Who can see this tab?</h2>
+                <button type="button" class="tab-audience-close" aria-label="Close" onclick="closeTabAudiencePicker()">×</button>
+            </div>
+            <div id="tabAudiencePickerChoices"></div>
+        </div>
+    </div>
+
     <!-- ===== SHARED NAV SCRIPTS ===== -->
     <script src="bottom-nav.js" defer></script>
     <script src="side-nav.js" defer></script>
@@ -2940,12 +2963,34 @@
                         '<div class="r-text"><div class="r-title">' + t.label +
                         '</div><div class="r-sub">' + (TAB_AUDIENCE_OPTIONS.find(function(o){return o[0]===current;}) || ['','Only Me'])[1] +
                         '</div></div>' +
-                        '<select aria-label="' + t.label + ' audience" onchange="setTabAudience(\'' + t.key + '\',this.value)" ' +
-                        'style="max-width:150px;min-width:116px;padding:10px 6px;border:1px solid var(--brd);border-radius:12px;background:var(--bg);color:var(--txt);font-size:13px">' +
-                        TAB_AUDIENCE_OPTIONS.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===current?' selected':'')+'>'+o[1]+'</option>';}).join('') +
-                        '</select></div>';
+                        '<button type="button" class="tab-audience-trigger" onclick="openTabAudiencePicker(\'' + t.key + '\')" aria-label="Choose ' + t.label + ' audience">' +
+                        (TAB_AUDIENCE_OPTIONS.find(function(o){return o[0]===current;}) || ['','Only Me'])[1] +
+                        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></div>';
+
                 }).join('');
             }
+            window.openTabAudiencePicker = function(key) {
+                var tab = TAB_DEFS.find(function(t) { return t.key === key; });
+                if (!tab) return;
+                var title = document.getElementById('tabAudiencePickerTitle');
+                var choices = document.getElementById('tabAudiencePickerChoices');
+                title.textContent = 'Who can see ' + tab.label + '?';
+                var current = tabAudience(key);
+                choices.innerHTML = TAB_AUDIENCE_OPTIONS.map(function(option) {
+                    var selected = option[0] === current;
+                    return '<button type="button" class="tab-audience-choice' + (selected ? ' selected' : '') +
+                        '" onclick="chooseTabAudience(\'' + key + '\',\'' + option[0] + '\')">' +
+                        '<span>' + option[1] + '</span><span class="tab-audience-check">' + (selected ? '✓' : '') + '</span></button>';
+                }).join('');
+                document.getElementById('tabAudiencePicker').classList.add('open');
+            };
+            window.closeTabAudiencePicker = function() {
+                document.getElementById('tabAudiencePicker').classList.remove('open');
+            };
+            window.chooseTabAudience = function(key, audience) {
+                closeTabAudiencePicker();
+                setTabAudience(key, audience);
+            };
             window.setTabAudience = async function(key, audience) {
                 var previous = Object.assign({}, _tabAudiences);
                 var previousHidden = _hiddenTabs.slice();
