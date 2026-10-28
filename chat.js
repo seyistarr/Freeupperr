@@ -147,8 +147,11 @@
     }
 
     function formatTime(iso) {
+        if (window.FreeUpperTime) {
+            return window.FreeUpperTime.formatLocalTime(iso, { hour: '2-digit', minute: '2-digit' });
+        }
         const d = new Date(iso);
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
     function formatDate(iso) {
