@@ -2244,7 +2244,7 @@
         </div>
         <div class="fs-pages-track" id="fsPagesTrack">
             <div class="fs-page" id="fsPage0">
-                <div id="privateFollowRequests" style="padding:0 16px;overflow-y:auto;max-height:42vh;flex-shrink:0"></div>
+                
                 <div class="fs-search" id="fsSearchWrap0"><input type="text" id="fsSearch0" placeholder="Search followers…" oninput="filterUsersPage(0)"></div>
                 <div id="fsLoading0" style="display:none;flex-direction:column;gap:0;overflow:hidden"></div>
                 <div class="fs-list" id="fsList0" onscroll="onFollowScrollPage(0)">
@@ -3907,31 +3907,22 @@
                     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
                 });
             }
+            var _fwPendingRequests = [];
             async function loadPrivateFollowRequests() {
-                var holder = document.getElementById('privateFollowRequests');
-                if (!holder) return;
-                if (!isOwner || !targetUser || !targetUser.is_private) { holder.innerHTML = ''; return; }
-                var result = await window.sb.from('follows')
-                    .select('follower_id,profiles:follower_id(id,freeupper_id,username,display_username,display_name,avatar_url,verified)')
-                    .eq('following_id',targetUserId).eq('status','pending');
-                if (result.error) {
-                    holder.textContent = 'Unable to load follow requests.';
-                    return;
+                if (!isOwner || !targetUser || !targetUser.is_private) {
+                    _fwPendingRequests = [];
+                } else {
+                    var result = await window.sb.from('follows')
+                        .select('follower_id,profiles:follower_id(id,freeupper_id,username,display_username,display_name,avatar_url,verified)')
+                        .eq('following_id',targetUserId).eq('status','pending');
+                    if (result.error) { console.warn('Follow requests:',result.error); return; }
+                    _fwPendingRequests = (result.data || []).filter(function(r){return r.profiles;});
                 }
-                var rows = result.data || [];
-                holder.innerHTML = rows.length ? '<h3 style="margin:10px 0 8px;font-size:15px">Follow requests ('+rows.length+')</h3>' +
-                    rows.map(function(row) {
-                        var p = row.profiles || {};
-                        var name = p.display_name || p.username || 'FreeUpper user';
-                        var handle = '@' + (p.display_username || p.username || '');
-                        var href = p.freeupper_id ? '/u/' + encodeURIComponent(p.freeupper_id) : 'profile.html?uid=' + encodeURIComponent(row.follower_id);
-                        var avatar = p.avatar_url ? '<img src="'+escapeFollowText(p.avatar_url)+'" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover">' : '';
-                        return '<div style="display:flex;align-items:center;gap:8px;min-width:0;padding:9px 0;border-bottom:1px solid var(--brd,#eee)">' +
-                            '<a href="'+escapeFollowText(href)+'" style="width:40px;height:40px;flex:0 0 40px;border-radius:50%;overflow:hidden;background:var(--inp,#eee)">'+avatar+'</a>' +
-                            '<a href="'+escapeFollowText(href)+'" style="flex:1;min-width:0;text-decoration:none;color:inherit;overflow:hidden"><div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeFollowText(name)+'</div><div style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeFollowText(handle)+'</div></a>' +
-                            '<button type="button" style="flex:0 0 auto;min-width:0;width:auto;padding:8px 10px;font-size:12px;border-radius:20px" class="act-btn act-follow" data-request-id="'+escapeFollowText(row.follower_id)+'" data-approve="true">Approve</button>' +
-                            '<button type="button" style="flex:0 0 auto;min-width:0;width:auto;padding:8px 10px;font-size:12px;border-radius:20px" class="act-btn" data-request-id="'+escapeFollowText(row.follower_id)+'" data-approve="false">Decline</button></div>';
-                    }).join('') : '';
+                if (_fwPageIdx === 0) {
+                    _fwBuildListFromCache(0);
+                    _fwApplyFilter();
+                    _fwRenderVisible();
+                }
             }
             window.resolvePrivateFollowRequest = async function(followerId, approve) {
                 var result = await window.sb.rpc('resolve_private_follow_request',{
@@ -3941,20 +3932,13 @@
                     showToast('Could not update follow request.','r');
                     return;
                 }
-                await loadPrivateFollowRequests();
-                await loadSecondaryData();
+                _fwPendingRequests = _fwPendingRequests.filter(function(r){return r.follower_id !== followerId;});
                 followModalData = await fetchFollowLists(targetUserId);
                 _fwBuildListFromCache(_fwPageIdx);
                 _fwApplyFilter();
                 _fwRenderVisible();
+                await loadSecondaryData();
             };
-            document.getElementById('privateFollowRequests').addEventListener('click',function(event) {
-                var btn=event.target.closest('button[data-request-id]');
-                if (!btn || btn.disabled) return;
-                btn.disabled=true;
-                window.resolvePrivateFollowRequest(btn.dataset.requestId,btn.dataset.approve==='true')
-                    .finally(function(){btn.disabled=false;});
-            });
 
             // ─── TABS SWITCH ──────────────────────────────────────────
             window.switchTab = function(el, tab) {
@@ -4860,12 +4844,17 @@
                     else if (idx === 2) dataSource = followModalData.friends;
                     else if (idx === 3) dataSource = followModalData.suggestions;
                 }
+                if (idx === 0 && isOwner && targetUser && targetUser.is_private) {
+                    var seen = new Set(dataSource.map(function(u){return u.id;}));
+                    dataSource = _fwPendingRequests.filter(function(r){return !seen.has(r.follower_id);}).map(function(r){return Object.assign({},r.profiles,{_pendingRequest:true});}).concat(dataSource);
+                }
                 _fwList = dataSource.map(function(u) {
                     var href = u.freeupper_id
                         ? '/u/' + encodeURIComponent(u.freeupper_id)
                         : 'profile.html?uid=' + encodeURIComponent(u.id);
                     return {
                         id: u.id,
+                        pendingRequest: !!u._pendingRequest,
                         href: href,
                         displayName: u.display_name || u.username,
                         handle: '@' + (u.display_username || u.username || ''),
@@ -5019,6 +5008,11 @@
                         '<button class="u-btn-sugg-remove" ' + d + ' data-action="remove" ' + tp + '><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
                         '</div>';
                 }
+                if (_fwCurTab === 'followers' && u.pendingRequest) {
+                    return '<div style="display:flex;gap:5px;flex-shrink:0">' +
+                        '<button class="u-btn" style="width:auto;min-width:0;padding:8px 10px;font-size:12px" ' + d + ' data-action="approve-request" ' + tp + '>Approve</button>' +
+                        '<button class="u-btn following" style="width:auto;min-width:0;padding:8px 10px;font-size:12px" ' + d + ' data-action="decline-request" ' + tp + '>Decline</button></div>';
+                }
                 if (_fwCurTab === 'followers') {
                     var isMutual = followModalData?.following.some(function(f) { return f.id === u.id; }) || false;
                     if (isMutual) return '<button class="u-btn friends" ' + d + ' data-action="unfriend" ' + tp + ' data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</button>';
@@ -5041,7 +5035,11 @@
                 if (!user) return;
                 window.AuthUser.requireAuth(async function() {
                     try {
-                        if (action === 'follow-back' || action === 'toggle-follow') {
+                        if (action === 'approve-request' || action === 'decline-request') {
+                            btn.disabled = true;
+                            try { await window.resolvePrivateFollowRequest(user.id, action === 'approve-request'); }
+                            finally { btn.disabled = false; }
+                        } else if (action === 'follow-back' || action === 'toggle-follow') {
                             var newState = await toggleFollow(user.id);
                             btn.textContent = newState ? 'Following' : 'Follow';
                             btn.className = 'u-btn' + (newState ? ' following' : '');
