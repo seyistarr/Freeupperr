@@ -3000,8 +3000,13 @@
                     window.sb.from('follows').select('id').eq('follower_id', myId).eq('following_id', targetId).maybeSingle(),
                     window.sb.from('follows').select('id').eq('follower_id', targetId).eq('following_id', myId).maybeSingle()
                 ]);
+                // Private-account post access requires owner approval, not just a follow row.
+                var approved = await window.sb.rpc('privacy_v2_approved_edge', {
+                    p_follower: myId,
+                    p_following: targetId
+                });
                 return {
-                    iFollowThem: !!results[0].data,
+                    iFollowThem: !approved.error && approved.data === true,
                     theyFollowMe: !!results[1].data
                 };
             }
