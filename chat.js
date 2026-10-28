@@ -2686,9 +2686,11 @@
     function subscribeToMessages() {
         if (messageSubscription) { sb.removeChannel(messageSubscription);
             messageSubscription = null; }
+        const recipient = currentUserId;
         messageSubscription = sb.channel('messages-chat')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
                 const newMsg = payload.new;
+                void window.FreeUpperSounds?.message(newMsg, recipient);
                 const isOpenConv = newMsg.conversation_id === selectedConversationId;
 
                 if (isOpenConv) {

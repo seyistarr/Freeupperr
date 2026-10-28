@@ -209,6 +209,7 @@
             notificationChannel = null;
         }
 
+        const recipient = currentUserId;
         notificationChannel = window.sb
             .channel(
                 `header-notifications-${currentUserId}`
@@ -221,7 +222,10 @@
                     table: 'notifications',
                     filter: `receiver_id=eq.${currentUserId}`
                 },
-                () => {
+                payload => {
+                    if (payload.eventType === 'INSERT') {
+                        window.FreeUpperSounds?.notification(payload.new, recipient);
+                    }
                     /*
                      * Don't trust the event to calculate the count.
                      * Re-read the database.
@@ -266,6 +270,7 @@
          * RLS still determines which events the authenticated
          * client is allowed to receive.
          */
+        const recipient = currentUserId;
         messageChannel = window.sb
             .channel(
                 `header-messages-${currentUserId}`
@@ -288,6 +293,7 @@
                     }
 
                     scheduleRefresh();
+                    void window.FreeUpperSounds?.message(payload.new, recipient);
                 }
             )
             .subscribe((status, error) => {
@@ -447,7 +453,7 @@
         if (!window.sb) return;
 
         window.sb.auth.onAuthStateChange(
-            async (event, session) => {
+            (event, session) => {
 
                 if (
                     event === 'SIGNED_IN' &&
@@ -455,11 +461,15 @@
                 ) {
                     currentUserId = session.user.id;
 
-                    await refreshBadges();
-
-                    subscribeToNotifications();
-                    subscribeToMessages();
-                    subscribeToMessageReads();
+                    // Leave Supabase's auth callback before making SDK queries.
+                    const recipient = currentUserId;
+                    setTimeout(() => {
+                        if (currentUserId !== recipient) return;
+                        refreshBadges();
+                        subscribeToNotifications();
+                        subscribeToMessages();
+                        subscribeToMessageReads();
+                    }, 0);
 
                     return;
                 }

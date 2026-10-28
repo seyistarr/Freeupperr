@@ -395,6 +395,7 @@
     // ─── REALTIME ─────────────────────────────────────────────
     function setupRealtime() {
         if (!currentUser) return;
+        const recipient = currentUser.id;
         realtimeChannel = window.sb
             .channel('notifications-' + currentUser.id)
             .on('postgres_changes', {
@@ -403,6 +404,7 @@
                 table: 'notifications',
                 filter: `receiver_id=eq.${currentUser.id}`
             }, async (payload) => {
+                window.FreeUpperSounds?.notification(payload.new, recipient);
                 const [hydrated] = await hydrate([payload.new]);
                 rawNotifications.unshift(hydrated);
                 renderList();
