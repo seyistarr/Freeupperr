@@ -2949,21 +2949,15 @@
             }
 
             async function fetchProfileByUsername(username) {
-                // Resolve public identity directly for guests as well as signed-in viewers.
-                // Private content access is enforced separately by post/media RLS.
-                var result = await window.sb.from('profiles')
-                    .select('id,freeupper_id,username,display_username,display_name,avatar_url,cover_url,bio,verified,is_private,hide_follower_count,activity_status,created_at')
-                    .ilike('username', username).maybeSingle();
+                // Public identity resolver works for guests without granting anon SELECT on profiles.
+                // Protected posts and media remain governed by their existing authorization rules.
+                var result = await window.sb.rpc('get_public_profile_by_username', { p_username: username });
                 if (result.error) throw result.error;
-                if (!result.data) throw new Error('Profile not found');
-                if (result.data.freeupper_id) {
-                    try {
-                        return await fetchProfileByFreeUpperId(result.data.freeupper_id);
-                    } catch (resolverError) {
-                        console.warn('Public profile resolver unavailable; using visible profile identity:', resolverError);
-                    }
-                }
-                return result.data;
+                var profile = Array.isArray(result.data) ? result.data[0] : result.data;
+                if (!profile) throw new Error('Profile not found');
+                if (!profile.id && profile.profile_id) profile.id = profile.profile_id;
+                if (!profile.id) throw new Error('Profile resolver returned no profile ID');
+                return profile;
             }
 
             async function fetchProfileByUuid(userId) {
