@@ -82,7 +82,7 @@
 
                     <div>
                         <span>✉</span>
-                        <span>Messages</span>
+                        <span data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;&#115;>Messages</span>
                     </div>
                 </div>
 
@@ -184,7 +184,7 @@
 
             allowBtn.addEventListener('click', async () => {
                 allowBtn.disabled = true;
-                allowBtn.textContent = 'Enabling…';
+                allowBtn.textContent = window.fuT('Enabling…');
 
                 const permission =
                     await requestBrowserPermission();

@@ -1,3 +1,11 @@
+window.fuCommentsCount = function(node, count) {
+  if (!node) return;
+  const total = Math.max(0, Number(count) || 0);
+  node.removeAttribute('data-i18n');
+  node.dataset.i18nCount = String(total);
+  node.textContent = window.FreeUpperI18n ? window.FreeUpperI18n.commentsCount(total) : total + (total === 1 ? ' comment' : ' comments');
+};
+window.fuT = window.fuT || function(key, values) { return window.FreeUpperI18n ? window.FreeUpperI18n.t(key, values) : key; };
 // ============================================================
 // GLOBAL UTILITIES – THEME, TOAST, USER CACHE, AUTHOR HELPERS
 // Marketplace helpers: currency, time, badges, listings
@@ -307,7 +315,7 @@
     if (amount == null) return '₦0';
     const num = Number(amount);
     if (isNaN(num)) return '₦0';
-    return '₦' + num.toLocaleString('en-US');
+    return window.FreeUpperI18n ? window.FreeUpperI18n.number(num, {style:'currency',currency:'NGN'}) : '₦' + num.toLocaleString('en-US');
   };
 
   /**

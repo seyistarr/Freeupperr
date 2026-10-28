@@ -377,8 +377,8 @@
         const pv = article.querySelector(`.preview-text-${pid}`), fl = article.querySelector(`.full-text-${pid}`), b = article.querySelector('.read-more-btn');
         if (!pv || !fl) { isTogglingContent = false; return; }
         const beforeTop = article.getBoundingClientRect().top;
-        if (fl.classList.contains('hidden')) { pv.classList.add('hidden'); fl.classList.remove('hidden'); b.textContent = 'Show less'; }
-        else { pv.classList.remove('hidden'); fl.classList.add('hidden'); b.textContent = 'Show more'; }
+        if (fl.classList.contains('hidden')) { pv.classList.add('hidden'); fl.classList.remove('hidden'); b.textContent = window.fuT('Show less'); }
+        else { pv.classList.remove('hidden'); fl.classList.add('hidden'); b.textContent = window.fuT('Show more'); }
         const afterTop = article.getBoundingClientRect().top;
         window.scrollBy(0, afterTop - beforeTop);
         isTogglingContent = false;
@@ -426,7 +426,7 @@
                 <div class="suggested-person-name">${escapeHtml(name)}</div>
                 <div class="suggested-person-username">@${escapeHtml(username)}</div>
                 <div class="suggested-person-bio">${escapeHtml(bio)}</div>
-                <button class="follow-btn rel-none" data-user-id="${p.id}" onclick="toggleSuggestedFollowHandler(event, '${p.id}')">Follow</button>
+                <button class="follow-btn rel-none" data-user-id="${p.id}" onclick="toggleSuggestedFollowHandler(event, '${p.id}')" data-i18n=&#70;&#111;&#108;&#108;&#111;&#119;>Follow</button>
             </div>`;
         }).join('');
         return `<div class="suggested-people-section">
@@ -462,7 +462,7 @@
     }
 
     function goToDiscoverPeople() {
-        window.showToast('Coming soon!');
+        window.showToast(window.fuT('Coming soon!'));
     }
 
     function loadSuggestedPeopleIntoSlot() {

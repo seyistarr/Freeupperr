@@ -128,9 +128,9 @@
     }
     if (overlay.classList.contains('open')) return;
 
-    grid.innerHTML = '<div style="grid-column:span 2;text-align:center;padding:40px 0;color:#999;">Loading…</div>';
+    grid.innerHTML = '<div style="grid-column:span 2;text-align:center;padding:40px 0;color:#999;" data-i18n=&#76;&#111;&#97;&#100;&#105;&#110;&#103;&#8230;>Loading…</div>';
     nextBtn.disabled = true;
-    nextBtn.textContent = 'Next (0)';
+    nextBtn.textContent = window.fuT('Next (0)');
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
 
@@ -195,7 +195,7 @@
         LOG('Onboarding finished:', interestsObj);
       } catch (err) {
         ERR('Failed to save onboarding interests:', err);
-        alert('Something went wrong saving your interests. Please try again.');
+        alert(window.fuT('Something went wrong saving your interests. Please try again.'));
         // Restore the button instead of leaving it stuck on "Saving…"
         updateNextBtn();
       }
@@ -204,7 +204,7 @@
     nextBtn.onclick = () => {
       if (selected.size < MIN_SELECT) return;
       nextBtn.disabled = true;
-      nextBtn.textContent = 'Saving…';
+      nextBtn.textContent = window.fuT('Saving…');
       const interestsObj = {};
       selected.forEach(key => {
         interestsObj[key] = { sources: ['onboarding'], strength: ONBOARDING_STRENGTH };

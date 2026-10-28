@@ -97,7 +97,7 @@
       await updateFlags(updates);
       if (typeof updateNavAvatar === 'function') updateNavAvatar();
       if (typeof closeFS === 'function') closeFS('editProfileModal');
-      if (typeof showToast === 'function') showToast('Profile updated!', 'g');
+      if (typeof showToast === 'function') showToast(window.fuT('Profile updated!'), 'g');
     } catch (err) {
       if (typeof showToast === 'function') showToast(err.message, 'r');
       else console.error(err);

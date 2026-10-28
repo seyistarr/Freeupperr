@@ -100,10 +100,10 @@
     // Pinterest-style sheet (images) or plain feed-style gallery (index.html videos/images)
     if (!o.showSheet) { below.innerHTML = ''; return; }
     let actionsHtml = (o.actions || []).map(a => `<button data-fu-lb-action="${a.id}">${escapeHtml(a.label)}</button>`).join('')
-      || `<button data-fu-lb-action="close">Close</button>`;
+      || `<button data-fu-lb-action="close" data-i18n=&#67;&#108;&#111;&#115;&#101;>Close</button>`;
     let similarHtml = '';
     if (o.similarItems && o.similarItems.length) {
-      similarHtml = `<div class="fu-lb-similar-title">More like this</div>
+      similarHtml = `<div class="fu-lb-similar-title" data-i18n=&#77;&#111;&#114;&#101;&#32;&#108;&#105;&#107;&#101;&#32;&#116;&#104;&#105;&#115;>More like this</div>
         <div class="fu-lb-similar-grid">${o.similarItems.map(s => `<div class="fu-lb-sim-item" data-fu-lb-similar="${s.id}"><img src="${s.thumb}"></div>`).join('')}</div>`;
     }
     below.innerHTML = `<div class="fu-lb-sheet">

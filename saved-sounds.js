@@ -116,7 +116,7 @@
     }
 
     if (activePreviewButton) {
-      activePreviewButton.textContent = '▶';
+      activePreviewButton.textContent = window.fuT('▶');
       activePreviewButton.setAttribute(
         'aria-label',
         'Play sound'
@@ -147,7 +147,7 @@
       if (previewAudio.paused) {
         previewAudio.play()
           .then(() => {
-            button.textContent = 'Ⅱ';
+            button.textContent = window.fuT('Ⅱ');
             button.setAttribute(
               'aria-label',
               'Pause sound'
@@ -159,7 +159,7 @@
       } else {
         previewAudio.pause();
 
-        button.textContent = '▶';
+        button.textContent = window.fuT('▶');
         button.setAttribute(
           'aria-label',
           'Play sound'
@@ -178,7 +178,7 @@
     activePreviewId = sound.id;
     activePreviewButton = button;
 
-    button.textContent = 'Ⅱ';
+    button.textContent = window.fuT('Ⅱ');
     button.setAttribute(
       'aria-label',
       'Pause sound'
@@ -186,7 +186,7 @@
 
     audio.addEventListener('ended', () => {
       if (activePreviewButton === button) {
-        button.textContent = '▶';
+        button.textContent = window.fuT('▶');
         button.setAttribute(
           'aria-label',
           'Play sound'
@@ -200,7 +200,7 @@
 
     audio.addEventListener('error', () => {
       if (activePreviewButton === button) {
-        button.textContent = '▶';
+        button.textContent = window.fuT('▶');
         button.setAttribute(
           'aria-label',
           'Play sound'

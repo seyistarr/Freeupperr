@@ -259,7 +259,7 @@
         return `
             <span class="msg-collapsed" id="${uid}_short">${shortSafe}…</span>
             <span class="msg-expanded hidden" id="${uid}_full">${safe}</span>
-            <button class="see-more-btn" id="${uid}_btn" onclick="toggleMessageExpand('${uid}')">See more</button>
+            <button class="see-more-btn" id="${uid}_btn" onclick="toggleMessageExpand('${uid}')" data-i18n=&#83;&#101;&#101;&#32;&#109;&#111;&#114;&#101;>See more</button>
         `;
     }
 
@@ -411,9 +411,9 @@
                 : '';
             const click = isViewOnce
                 ? (isSender
-                    ? `onclick="event.stopPropagation();showToast('You sent this view-once media.','o')"`
+                    ? `onclick="event.stopPropagation();showToast(window.fuT('You sent this view-once media.'),'o')"`
                     : (isConsumed
-                        ? `onclick="event.stopPropagation();showToast('This media has already been opened','o')"`
+                        ? `onclick="event.stopPropagation();showToast(window.fuT('This media has already been opened'),'o')"`
                         : `onclick="event.stopPropagation();openViewOnceConfirm('${msg.id}', ${i})"`))
                 : `onclick="openMixedMedia('${msg.id}', ${i})"`;
             const cover = isViewOnce
@@ -496,7 +496,7 @@
                 <h3>View once?</h3>
                 <p>This media can only be opened once. After you view it, you won't be able to see it again.</p>
                 <div class="fu-confirm-actions">
-                    <button onclick="document.getElementById('fuViewOnceConfirm').classList.remove('open')">Cancel</button>
+                    <button onclick="document.getElementById('fuViewOnceConfirm').classList.remove('open')" data-i18n=&#67;&#97;&#110;&#99;&#101;&#108;>Cancel</button>
                     <button class="fu-confirm-danger" onclick="confirmViewOnce('${messageId}', ${index})">Open</button>
                 </div>
             </div>`;
@@ -509,10 +509,10 @@
         if (!msg) return;
         const items = (msg.metadata && msg.metadata.media_items) || [];
         const item = items[index];
-        if (!item) { showToast('Media unavailable', 'r'); return; }
+        if (!item) { showToast(window.fuT('Media unavailable'), 'r'); return; }
 
         if (msg.sender_id === currentUserId) {
-            showToast('You sent this view-once media and cannot open it.', 'o');
+            showToast(window.fuT('You sent this view-once media and cannot open it.'), 'o');
             return;
         }
 
@@ -526,7 +526,7 @@
                 if (!viewOnceStateByMsg.has(messageId)) viewOnceStateByMsg.set(messageId, new Set());
                 viewOnceStateByMsg.get(messageId).add(index);
                 renderMessages();
-                showToast('This media has already been opened', 'o');
+                showToast(window.fuT('This media has already been opened'), 'o');
                 return;
             }
             if (!viewOnceStateByMsg.has(messageId)) viewOnceStateByMsg.set(messageId, new Set());
@@ -1065,7 +1065,7 @@
         }
 
         if (matchedFriends.length > 0) {
-            html += `<div class="search-section-header">Friends</div>`;
+            html += `<div class="search-section-header" data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</div>`;
             html += matchedFriends.map(u => {
                 const name = u.display_name || u.username || 'User';
                 const avatar = getAvatar(u);
@@ -1077,7 +1077,7 @@
                                     <div class="conv-name">${escapeHtml(name)} ${badge}</div>
                                     <div class="conv-last-msg" style="color:var(--muted2);">Tap to start chat</div>
                                 </div>
-                                <button class="start-chat-btn" onclick="event.stopPropagation();startConversationWith('${u.id}')">Chat</button>
+                                <button class="start-chat-btn" onclick="event.stopPropagation();startConversationWith('${u.id}')" data-i18n=&#67;&#104;&#97;&#116;>Chat</button>
                             </div>
                         `;
             }).join('');
@@ -1116,11 +1116,11 @@
         if (conv.is_note) {
             chatPartnerName.textContent = conv.note_name || 'My Note';
             chatPartnerAvatar.src = conv.note_avatar || DEFAULT_AVATAR;
-            chatPartnerStatus.textContent = 'Only you can see this';
+            chatPartnerStatus.textContent = window.fuT('Only you can see this');
         } else if (conv.is_group) {
             chatPartnerName.textContent = conv.group_name || 'Group';
             chatPartnerAvatar.src = conv.group_avatar || DEFAULT_AVATAR;
-            chatPartnerStatus.textContent = 'Loading…';
+            chatPartnerStatus.textContent = window.fuT('Loading…');
             populateGroupHeaderSubtitle(conv.id);
         } else {
             chatPartnerName.textContent = other.display_name || other.username || 'User';
@@ -1139,7 +1139,7 @@
 
         renderTypingIndicator(false);
         messagesArea.innerHTML =
-            `<div class="no-messages">${emptyChatIllustration()}<p>Loading…</p></div>`;
+            `<div class="no-messages">${emptyChatIllustration()}<p data-i18n=&#76;&#111;&#97;&#100;&#105;&#110;&#103;&#8230;>Loading…</p></div>`;
 
         let status = { blocked: false, theyBlockedMe: false };
         if (!conv.is_group) {
@@ -1187,7 +1187,7 @@
         if (!conv || conv.is_note) return;
         if (selectedConversationId !== conv.id) return;
         if (typingUsersMap.size > 0) {
-            chatPartnerStatus.textContent = 'Typing…';
+            chatPartnerStatus.textContent = window.fuT('Typing…');
             return;
         }
         if (conv.is_group) {
@@ -1213,7 +1213,7 @@
             if (!label) label = `${members.length} member${members.length !== 1 ? 's' : ''}`;
             if (selectedConversationId === convId) chatPartnerStatus.textContent = label;
         } catch (e) {
-            if (selectedConversationId === convId) chatPartnerStatus.textContent = 'Group chat';
+            if (selectedConversationId === convId) chatPartnerStatus.textContent = window.fuT('Group chat');
         }
     }
 
@@ -1265,7 +1265,7 @@
             markVisibleMessagesRead(convId);
         } catch (err) {
             console.error('loadMessages error:', err);
-            showToast('Failed to load messages', 'r');
+            showToast(window.fuT('Failed to load messages'), 'r');
         }
     }
 
@@ -1818,7 +1818,7 @@
             const p = fuAudioEl.play();
             if (p && p.catch) {
                 p.catch(() => {
-                    showToast('Could not play voice note', 'r');
+                    showToast(window.fuT('Could not play voice note'), 'r');
                     stopCurrentVoice();
                 });
             }
@@ -1877,7 +1877,7 @@
                             <h3>Remove your vote?</h3>
                             <p>This will remove your current vote.</p>
                             <div class="fu-confirm-actions">
-                                <button onclick="window.closeRemoveVoteConfirm()">Cancel</button>
+                                <button onclick="window.closeRemoveVoteConfirm()" data-i18n=&#67;&#97;&#110;&#99;&#101;&#108;>Cancel</button>
                                 <button class="fu-confirm-danger" onclick="window.confirmRemoveVote()">Remove</button>
                             </div>
                         </div>
@@ -2063,7 +2063,7 @@
             await Promise.all(targets.map(id => sb.from('conversations').update({ updated_at: new Date()
                     .toISOString() }).eq('id', id)));
             showToast(`Forwarded to ${targets.length} chat${targets.length > 1 ? 's' : ''}`, 'g');
-        } catch (err) { showToast('Failed to forward', 'r'); }
+        } catch (err) { showToast(window.fuT('Failed to forward'), 'r'); }
     };
 
     let msgSheetTarget = null;
@@ -2196,7 +2196,7 @@
     window.copyMessage = function(msgId) {
         const msg = messages.find(m => m.id === msgId);
         if (msg && msg.text) {
-            navigator.clipboard.writeText(msg.text).then(() => showToast('Copied to clipboard', 'g')).catch(() =>
+            navigator.clipboard.writeText(msg.text).then(() => showToast(window.fuT('Copied to clipboard'), 'g')).catch(() =>
             {});
         }
     };
@@ -2211,7 +2211,7 @@
         input.value = msg.text || '';
         input.dispatchEvent(new Event('input'));
         input.focus();
-        showToast('Editing message — tap send to save', 'p');
+        showToast(window.fuT('Editing message — tap send to save'), 'p');
     };
 
     window.deleteMessage = async function(msgId, scope) {
@@ -2220,23 +2220,23 @@
 
         if (scope === 'everyone') {
             if (msg.sender_id !== currentUserId) return;
-            if (!confirm('Delete this message for everyone?')) return;
+            if (!confirm(window.fuT('Delete this message for everyone?'))) return;
             const { error } = await sb.from('messages').delete().eq('id', msgId);
-            if (error) { showToast('Failed to delete', 'r'); return; }
+            if (error) { showToast(window.fuT('Failed to delete'), 'r'); return; }
             messages = messages.filter(m => m.id !== msgId);
             renderMessages();
-            showToast('Deleted for everyone', 'g');
+            showToast(window.fuT('Deleted for everyone'), 'g');
             return;
         }
 
-        if (!confirm('Delete this message for you?')) return;
+        if (!confirm(window.fuT('Delete this message for you?'))) return;
         const deletedFor = Array.from(new Set([...(msg.deleted_for || []), currentUserId]));
         const { error } = await sb.from('messages').update({ deleted_for: deletedFor }).eq('id', msgId);
-        if (error) { showToast('Failed to delete', 'r'); return; }
+        if (error) { showToast(window.fuT('Failed to delete'), 'r'); return; }
         msg.deleted_for = deletedFor;
         messages = messages.filter(m => !(m.deleted_for || []).includes(currentUserId));
         renderMessages();
-        showToast('Deleted for you', 'g');
+        showToast(window.fuT('Deleted for you'), 'g');
     };
 
     window.addReaction = async function(msgId, emoji, mediaIndex) {
@@ -2264,7 +2264,7 @@
                 if (error) throw error;
             }
             await loadMessages(selectedConversationId);
-        } catch (err) { showToast('Failed to react', 'r'); }
+        } catch (err) { showToast(window.fuT('Failed to react'), 'r'); }
     };
 
     let lpTimer = null;
@@ -2378,7 +2378,7 @@
         else list.delete(currentUserId);
         const arr = Array.from(list);
         const { error } = await sb.from('conversations').update({ pinned_by: arr }).eq('id', convId);
-        if (error) { showToast('Failed to pin', 'r'); return; }
+        if (error) { showToast(window.fuT('Failed to pin'), 'r'); return; }
         conv.pinned_by = arr;
         renderConversations(convSearch.value);
         showToast(nowPinned ? 'Chat pinned' : 'Chat unpinned', 'g');
@@ -2396,7 +2396,7 @@
             .update({ archived_by: arr })
             .eq('id', convId);
         if (error) {
-            showToast('Failed to archive', 'r');
+            showToast(window.fuT('Failed to archive'), 'r');
             return;
         }
         conv.archived_by = arr;
@@ -2405,13 +2405,13 @@
         }
         renderConversations(convSearch.value);
         archivedRowShown = false;
-        showToast('Chat archived', 'g');
+        showToast(window.fuT('Chat archived'), 'g');
     };
 
     window.confirmDeleteConversation = function(convId) {
         const conv = conversations.find(c => c.id === convId);
         if (!conv) return;
-        if (!confirm('Delete this chat? This only removes it from your list.')) return;
+        if (!confirm(window.fuT('Delete this chat? This only removes it from your list.'))) return;
         deleteConversationForMe(convId);
     };
 
@@ -2420,11 +2420,11 @@
         if (!conv) return;
         const hidden = Array.from(new Set([...(conv.hidden_by || []), currentUserId]));
         const { error } = await sb.from('conversations').update({ hidden_by: hidden }).eq('id', convId);
-        if (error) { showToast('Failed to delete chat', 'r'); return; }
+        if (error) { showToast(window.fuT('Failed to delete chat'), 'r'); return; }
         conversations = conversations.filter(c => c.id !== convId);
         if (selectedConversationId === convId) closeChatView();
         renderConversations(convSearch.value);
-        showToast('Chat deleted', 'g');
+        showToast(window.fuT('Chat deleted'), 'g');
     }
 
     convList.addEventListener('touchstart', function(e) {
@@ -2556,7 +2556,7 @@
             (c.archived_by || []).includes(currentUserId)
         );
         if (!conv) {
-            showToast('Conversation not found. Refresh and try again.', 'r');
+            showToast(window.fuT('Conversation not found. Refresh and try again.'), 'r');
             return;
         }
         returnToArchivedAfterChat = true;
@@ -2573,7 +2573,7 @@
     window.unarchiveConversation = async function(convId) {
         const conv = conversations.find(c => c.id === convId);
         if (!conv) {
-            showToast('Conversation not found. Refresh and try again.', 'r');
+            showToast(window.fuT('Conversation not found. Refresh and try again.'), 'r');
             return;
         }
         const arr = (conv.archived_by || []).filter(
@@ -2584,14 +2584,14 @@
             .update({ archived_by: arr })
             .eq('id', convId);
         if (error) {
-            showToast('Failed to unarchive', 'r');
+            showToast(window.fuT('Failed to unarchive'), 'r');
             return;
         }
         conv.archived_by = arr;
         closeArchivedModal();
         archivedRowShown = false;
         renderConversations(convSearch.value);
-        showToast('Chat unarchived', 'g');
+        showToast(window.fuT('Chat unarchived'), 'g');
     };
 
     window.sendMessage = async function() {
@@ -2610,8 +2610,8 @@
                 input.value = '';
                 input.dispatchEvent(new Event('input'));
                 await loadMessages(selectedConversationId);
-                showToast('Message edited', 'g');
-            } catch (err) { showToast('Failed to edit message', 'r'); }
+                showToast(window.fuT('Message edited'), 'g');
+            } catch (err) { showToast(window.fuT('Failed to edit message'), 'r'); }
             return;
         }
 
@@ -3039,11 +3039,11 @@
                 const blob = new Blob(recordedChunks, { type: 'audio/webm' });
                 const durationSecs = Math.floor((Date.now() - recordStartTime) / 1000);
                 try {
-                    showToast('Sending voice note…', 'p');
+                    showToast(window.fuT('Sending voice note…'), 'p');
                     const result = await uploadToCloudinary(blob, 'video');
                     await sendMessageToConv('', 'voice', result.url, null, null, null, durationSecs);
                 } catch (err) {
-                    showToast('Failed to send voice note', 'r');
+                    showToast(window.fuT('Failed to send voice note'), 'r');
                 }
             };
 
@@ -3059,7 +3059,7 @@
             }, 250);
             recAnimFrame = requestAnimationFrame(drawRecWaveform);
         } catch (err) {
-            showToast('Microphone access denied', 'r');
+            showToast(window.fuT('Microphone access denied'), 'r');
         }
     };
 
@@ -3091,7 +3091,7 @@
     window.closePollModal = function() { document.getElementById('pollModal').classList.remove('open'); };
     window.addPollOption = function() {
         const rows = pollOptionsList.querySelectorAll('.opt-row');
-        if (rows.length >= 6) { showToast('Maximum 6 options', 'o'); return; }
+        if (rows.length >= 6) { showToast(window.fuT('Maximum 6 options'), 'o'); return; }
         const row = document.createElement('div');
         row.className = 'opt-row';
         row.innerHTML = `
@@ -3102,10 +3102,10 @@
     };
     window.sendPoll = function() {
         const question = pollQuestion.value.trim();
-        if (!question) { showToast('Please enter a question', 'o'); return; }
+        if (!question) { showToast(window.fuT('Please enter a question'), 'o'); return; }
         const inputs = pollOptionsList.querySelectorAll('.poll-opt-input');
         const options = Array.from(inputs).map(inp => inp.value.trim()).filter(Boolean);
-        if (options.length < 2) { showToast('Please add at least 2 options', 'o'); return; }
+        if (options.length < 2) { showToast(window.fuT('Please add at least 2 options'), 'o'); return; }
         const days = parseInt(document.getElementById('pollDuration').value, 10);
         const expiresAt = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null;
         const pollData = { question: question, options: options.map(text => ({ text, votes: 0 })), totalVotes: 0,
@@ -3139,8 +3139,8 @@
                             <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--p);fill:none;stroke-width:2;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
                         </div>
                         <div class="u-info">
-                            <div class="u-name">New Group</div>
-                            <div class="u-handle">Create a group chat</div>
+                            <div class="u-name" data-i18n=&#78;&#101;&#119;&#32;&#71;&#114;&#111;&#117;&#112;>New Group</div>
+                            <div class="u-handle" data-i18n=&#67;&#114;&#101;&#97;&#116;&#101;&#32;&#97;&#32;&#103;&#114;&#111;&#117;&#112;&#32;&#99;&#104;&#97;&#116;>Create a group chat</div>
                         </div>
                     </div>
                     <div class="u-row" onclick="openOrCreateFreeUpperNote()">
@@ -3148,13 +3148,13 @@
                             <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--p);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                         </div>
                         <div class="u-info">
-                            <div class="u-name">My Note</div>
-                            <div class="u-handle">Message only yourself</div>
+                            <div class="u-name" data-i18n=&#77;&#121;&#32;&#78;&#111;&#116;&#101;>My Note</div>
+                            <div class="u-handle" data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;&#32;&#111;&#110;&#108;&#121;&#32;&#121;&#111;&#117;&#114;&#115;&#101;&#108;&#102;>Message only yourself</div>
                         </div>
                     </div>
                 `;
         if (friendProfiles.length) {
-            html += `<div class="search-section-header">Friends</div>` +
+            html += `<div class="search-section-header" data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</div>` +
                 friendProfiles.map(u => userRowHtml(u, true)).join('');
         } else {
             html +=
@@ -3223,8 +3223,8 @@
                                 <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--p);fill:none;stroke-width:2;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
                             </div>
                             <div class="u-info">
-                                <div class="u-name">New Group</div>
-                                <div class="u-handle">Create a group chat</div>
+                                <div class="u-name" data-i18n=&#78;&#101;&#119;&#32;&#71;&#114;&#111;&#117;&#112;>New Group</div>
+                                <div class="u-handle" data-i18n=&#67;&#114;&#101;&#97;&#116;&#101;&#32;&#97;&#32;&#103;&#114;&#111;&#117;&#112;&#32;&#99;&#104;&#97;&#116;>Create a group chat</div>
                             </div>
                         </div>
                         <div class="u-row" onclick="openOrCreateFreeUpperNote()">
@@ -3232,19 +3232,19 @@
                                 <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--p);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                             </div>
                             <div class="u-info">
-                                <div class="u-name">My Note</div>
-                                <div class="u-handle">Message only yourself</div>
+                                <div class="u-name" data-i18n=&#77;&#121;&#32;&#78;&#111;&#116;&#101;>My Note</div>
+                                <div class="u-handle" data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;&#32;&#111;&#110;&#108;&#121;&#32;&#121;&#111;&#117;&#114;&#115;&#101;&#108;&#102;>Message only yourself</div>
                             </div>
                         </div>
                     `;
             const friendResults = results.filter(u => mutualFollowers.has(u.id));
             const otherResults = results.filter(u => !mutualFollowers.has(u.id));
             if (friendResults.length) {
-                html += `<div class="search-section-header">Friends</div>` + friendResults.map(u => userRowHtml(u,
+                html += `<div class="search-section-header" data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</div>` + friendResults.map(u => userRowHtml(u,
                     true)).join('');
             }
             if (otherResults.length) {
-                html += `<div class="search-section-header">All Users</div>` + otherResults.map(u => userRowHtml(u,
+                html += `<div class="search-section-header" data-i18n=&#65;&#108;&#108;&#32;&#85;&#115;&#101;&#114;&#115;>All Users</div>` + otherResults.map(u => userRowHtml(u,
                     false)).join('');
             }
             resultsContainer.innerHTML = html;
@@ -3300,7 +3300,7 @@
                         .or(`user1_id.eq.${id1},user2_id.eq.${id2}`)
                         .maybeSingle();
                     if (fetchError || !existingConv) {
-                        showToast('Could not find the conversation', 'r');
+                        showToast(window.fuT('Could not find the conversation'), 'r');
                         return;
                     }
                     await loadConversations();
@@ -3335,7 +3335,7 @@
         document.getElementById('createGroupModal').classList.remove('open');
         selectedGroupMembers.clear();
         document.getElementById('groupNameInput').value = '';
-        document.getElementById('createGroupBtn').textContent = 'Create Group (0)';
+        document.getElementById('createGroupBtn').textContent = window.fuT('Create Group (0)');
     };
 
     function renderGroupMemberList(users) {
@@ -3383,7 +3383,7 @@
 
     window.createGroup = async function() {
         const name = document.getElementById('groupNameInput').value.trim();
-        if (!name) { showToast('Please enter a group name', 'o'); return; }
+        if (!name) { showToast(window.fuT('Please enter a group name'), 'o'); return; }
 
         try {
             const conversationId = crypto.randomUUID();
@@ -3428,7 +3428,7 @@
             closeCreateGroupModal();
             await loadConversations();
             selectConversation(conversationId);
-            showToast('Group created', 'g');
+            showToast(window.fuT('Group created'), 'g');
 
         } catch (err) {
             console.error('createGroup error details:', {
@@ -3437,7 +3437,7 @@
                 details: err?.details,
                 hint: err?.hint
             });
-            showToast('Failed to create group', 'r');
+            showToast(window.fuT('Failed to create group'), 'r');
         }
     };
 
@@ -3472,7 +3472,7 @@
             selectConversation(conv.id);
         } catch (err) {
             console.error('note create error:', err);
-            showToast('Failed to open My Note', 'r');
+            showToast(window.fuT('Failed to open My Note'), 'r');
         }
     };
 
@@ -3572,7 +3572,7 @@
             document.getElementById('cpNameText').textContent = conv.note_name || 'My Note';
             document.getElementById('cpEditIcon').style.display = 'inline';
             document.getElementById('cpUploadBadge').classList.remove('hidden');
-            document.getElementById('cpSubtext').textContent = 'Only visible to you';
+            document.getElementById('cpSubtext').textContent = window.fuT('Only visible to you');
             const { count: mediaCount } = await sb.from('messages').select('id', { count: 'exact', head: true })
                 .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document', 'link',
                 'media']);
@@ -3581,7 +3581,7 @@
             document.getElementById('editGroupRow').style.display = 'none';
             document.getElementById('permissionsRow').style.display = 'none';
             document.getElementById('blockRowBtn').style.display = 'none';
-            document.getElementById('reportRowLabel').textContent = 'Report';
+            document.getElementById('reportRowLabel').textContent = window.fuT('Report');
             return;
         }
 
@@ -3611,7 +3611,7 @@
                 (conv.group_description ? ` · ${conv.group_description}` : '');
             document.getElementById('cpMembersLink').textContent = memberCount || 0;
             document.getElementById('cpMediaCount').textContent = mediaCount || 0;
-            document.getElementById('reportRowLabel').textContent = 'Report group';
+            document.getElementById('reportRowLabel').textContent = window.fuT('Report group');
         } else {
             groupRows.forEach(el => el.classList.add('hidden'));
             dmRows.forEach(el => el.classList.remove('hidden'));
@@ -3627,7 +3627,7 @@
                 .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'document', 'link',
                 'media']);
             document.getElementById('cpMediaCount').textContent = mediaCount || 0;
-            document.getElementById('reportRowLabel').textContent = 'Report';
+            document.getElementById('reportRowLabel').textContent = window.fuT('Report');
 
             const blockBtn = document.getElementById('blockRowBtn');
             blockBtn.style.display = 'flex';
@@ -3661,7 +3661,7 @@
             const conv2 = currentConv();
             const field = conv2.is_note ? 'note_avatar' : 'group_avatar';
             try {
-                showToast('Uploading photo…', 'p');
+                showToast(window.fuT('Uploading photo…'), 'p');
                 const result = await uploadToCloudinary(inp.files[0], 'image');
                 const { error } = await sb.from('conversations').update({ [field]: result.url })
                     .eq('id', conv2.id);
@@ -3670,7 +3670,7 @@
                 document.getElementById('cpAvatar').src = result.url;
                 chatPartnerAvatar.src = result.url;
                 renderConversations(convSearch.value);
-                showToast('Photo updated', 'g');
+                showToast(window.fuT('Photo updated'), 'g');
             } catch (err) {
                 showToast('Failed to update avatar: ' + err.message, 'r');
             } finally {
@@ -3700,12 +3700,12 @@
         if (!conv || !newName || newName === currentName) return;
         const field = conv.is_note ? 'note_name' : 'group_name';
         const { error } = await sb.from('conversations').update({ [field]: newName }).eq('id', conv.id);
-        if (error) { showToast('Failed to rename', 'r'); return; }
+        if (error) { showToast(window.fuT('Failed to rename'), 'r'); return; }
         conv[field] = newName;
         document.getElementById('cpNameText').textContent = newName;
         chatPartnerName.textContent = newName;
         renderConversations(convSearch.value);
-        showToast('Name updated', 'g');
+        showToast(window.fuT('Name updated'), 'g');
     };
 
     window.toggleMuteChat = async function(muted) {
@@ -3722,19 +3722,19 @@
     };
 
     window.blockUser = async function(targetUserId) {
-        if (!confirm('Block this user? They will no longer be able to message you, and you will not see their messages.'))
+        if (!confirm(window.fuT('Block this user? They will no longer be able to message you, and you will not see their messages.')))
             return;
         try {
             const { error } = await sb.from('user_blocks').insert({ blocker_id: currentUserId,
             blocked_id: targetUserId });
             if (error) throw error;
-            showToast('User blocked', 'g');
+            showToast(window.fuT('User blocked'), 'g');
             closeChatProfileModal();
             await loadConversations();
             renderConversations(convSearch.value);
         } catch (err) {
-            if (err.code === '23505') { showToast('Already blocked', 'o'); return; }
-            showToast('Failed to block user', 'r');
+            if (err.code === '23505') { showToast(window.fuT('Already blocked'), 'o'); return; }
+            showToast(window.fuT('Failed to block user'), 'r');
         }
     };
 
@@ -3743,9 +3743,9 @@
             const { error } = await sb.from('user_blocks').delete()
                 .eq('blocker_id', currentUserId).eq('blocked_id', targetUserId);
             if (error) throw error;
-            showToast('User unblocked', 'g');
+            showToast(window.fuT('User unblocked'), 'g');
             closeChatProfileModal();
-        } catch (err) { showToast('Failed to unblock user', 'r'); }
+        } catch (err) { showToast(window.fuT('Failed to unblock user'), 'r'); }
     };
 
     async function isUserBlocked(targetUserId) {
@@ -3760,7 +3760,7 @@
         const conv = currentConv();
         if (!conv || !conv.is_group || conv.is_note) return;
         const canEdit = cpIsAdmin || conv.permissions?.edit_group_info === 'everyone';
-        if (!canEdit) { showToast('Only admins can edit this group', 'o'); return; }
+        if (!canEdit) { showToast(window.fuT('Only admins can edit this group'), 'o'); return; }
         document.getElementById('editGroupNameInput').value = conv.group_name || '';
         document.getElementById('editGroupDescInput').value = conv.group_description || '';
         document.getElementById('editGroupInfoScreen').classList.add('open');
@@ -3775,7 +3775,7 @@
         if (!conv) return;
         const newName = document.getElementById('editGroupNameInput').value.trim();
         const newDesc = document.getElementById('editGroupDescInput').value.trim();
-        if (!newName) { showToast('Group name cannot be empty', 'o'); return; }
+        if (!newName) { showToast(window.fuT('Group name cannot be empty'), 'o'); return; }
 
         const oldName = conv.group_name;
         const oldDesc = conv.group_description || '';
@@ -3802,7 +3802,7 @@
             if (oldDesc !== newDesc) {
                 await postSystemMessage(conv.id, `${myName} updated the group description`);
             }
-            showToast('Group updated', 'g');
+            showToast(window.fuT('Group updated'), 'g');
         } catch (err) {
             showToast(err.message || 'Failed to update group', 'r');
         }
@@ -3811,7 +3811,7 @@
     window.openGroupPermissions = async function() {
         const conv = currentConv();
         if (!conv || !conv.is_group || conv.is_note) return;
-        if (!cpIsAdmin) { showToast('Only admins can manage permissions', 'o'); return; }
+        if (!cpIsAdmin) { showToast(window.fuT('Only admins can manage permissions'), 'o'); return; }
 
         const perms = conv.permissions || {};
         const list = document.getElementById('permissionsList');
@@ -3855,7 +3855,7 @@
             conv.permissions = updated;
             openGroupPermissions();
         } catch (err) {
-            showToast('Failed to update permission', 'r');
+            showToast(window.fuT('Failed to update permission'), 'r');
         }
     };
 
@@ -3863,18 +3863,18 @@
         const conv = currentConv();
         if (!conv || !conv.is_group || conv.is_note) return;
         const canAdd = cpIsAdmin || conv.permissions?.add_members === 'everyone';
-        if (!canAdd) { showToast('Only admins can add members here', 'o'); return; }
+        if (!canAdd) { showToast(window.fuT('Only admins can add members here'), 'o'); return; }
 
         amSelectedIds = new Set();
         amAllUsersProfileCache = {};
         amAddAsAdmin = false;
         document.getElementById('amAddAsAdminToggle').checked = false;
         document.getElementById('amAddAsAdminToggle2').checked = false;
-        document.getElementById('amDoneBtn').textContent = 'Add (0)';
+        document.getElementById('amDoneBtn').textContent = window.fuT('Add (0)');
         document.getElementById('amDoneBtn').disabled = true;
         document.getElementById('amAllUsersSearchInput').value = '';
         document.getElementById('amAllUsersList').innerHTML =
-            '<div class="fu-empty-tab">Search for anyone on FreeUpper to add them.</div>';
+            '<div class="fu-empty-tab" data-i18n=&#83;&#101;&#97;&#114;&#99;&#104;&#32;&#102;&#111;&#114;&#32;&#97;&#110;&#121;&#111;&#110;&#101;&#32;&#111;&#110;&#32;&#70;&#114;&#101;&#101;&#85;&#112;&#112;&#101;&#114;&#32;&#116;&#111;&#32;&#97;&#100;&#100;&#32;&#116;&#104;&#101;&#109;&#46;>Search for anyone on FreeUpper to add them.</div>';
         switchAddMembersTab('people');
 
         groupMembersCache = await loadGroupMembers(conv.id);
@@ -3951,7 +3951,7 @@
         const q = value.trim();
         const list = document.getElementById('amAllUsersList');
         if (!q) {
-            list.innerHTML = '<div class="fu-empty-tab">Search for anyone on FreeUpper to add them.</div>';
+            list.innerHTML = '<div class="fu-empty-tab" data-i18n=&#83;&#101;&#97;&#114;&#99;&#104;&#32;&#102;&#111;&#114;&#32;&#97;&#110;&#121;&#111;&#110;&#101;&#32;&#111;&#110;&#32;&#70;&#114;&#101;&#101;&#85;&#112;&#112;&#101;&#114;&#32;&#116;&#111;&#32;&#97;&#100;&#100;&#32;&#116;&#104;&#101;&#109;&#46;>Search for anyone on FreeUpper to add them.</div>';
             return;
         }
         list.innerHTML = Array.from({ length: 3 }).map(() => `
@@ -4012,7 +4012,7 @@
             const { error } = await sb.from('conversation_members').insert(rows);
             if (error) {
                 if (error.code === '23505') {
-                    showToast('One or more selected users are already in this group', 'o');
+                    showToast(window.fuT('One or more selected users are already in this group'), 'o');
                     closeAddMembersScreen();
                     openMembersScreen(conv.id);
                     return;
@@ -4042,7 +4042,7 @@
         if (!conv) return;
         const canInvite = cpIsAdmin || conv.permissions?.invite_via_link === 'everyone';
         if (!canInvite) {
-            document.getElementById('amInviteLinkText').textContent = 'Only admins can generate invite links';
+            document.getElementById('amInviteLinkText').textContent = window.fuT('Only admins can generate invite links');
             document.getElementById('amQrImg').src = '';
             return;
         }
@@ -4064,8 +4064,8 @@
         if (!currentInviteLink) return;
         try {
             await navigator.clipboard.writeText(currentInviteLink);
-            showToast('Link copied', 'g');
-        } catch (err) { showToast('Failed to copy', 'r'); }
+            showToast(window.fuT('Link copied'), 'g');
+        } catch (err) { showToast(window.fuT('Failed to copy'), 'r'); }
     };
 
     window.shareInviteLink = async function() {
@@ -4077,10 +4077,10 @@
                     url: currentInviteLink });
             } else {
                 await navigator.clipboard.writeText(currentInviteLink);
-                showToast('Link copied to clipboard', 'g');
+                showToast(window.fuT('Link copied to clipboard'), 'g');
             }
         } catch (err) {
-            if (err.name !== 'AbortError') showToast('Share failed', 'r');
+            if (err.name !== 'AbortError') showToast(window.fuT('Share failed'), 'r');
         }
     };
 
@@ -4125,7 +4125,7 @@
     window.submitReport = async function() {
         const conv = currentConv();
         if (!conv) return;
-        if (!selectedReportReason) { showToast('Please select a reason', 'o'); return; }
+        if (!selectedReportReason) { showToast(window.fuT('Please select a reason'), 'o'); return; }
         const details = document.getElementById('reportDetailsInput').value.trim();
         try {
             const { error } = await sb.from('chat_reports').insert({
@@ -4137,9 +4137,9 @@
             });
             if (error) throw error;
             closeReportModal();
-            showToast('Report submitted. Thank you.', 'g');
+            showToast(window.fuT('Report submitted. Thank you.'), 'g');
         } catch (err) {
-            showToast('Failed to submit report', 'r');
+            showToast(window.fuT('Failed to submit report'), 'r');
         }
     };
 
@@ -4179,9 +4179,9 @@
             if (badgeEl) badgeEl.classList.toggle('hidden', !(seconds > 0));
 
             closeDisappearingScreen();
-            showToast('Disappearing messages updated', 'g');
+            showToast(window.fuT('Disappearing messages updated'), 'g');
         } catch (err) {
-            showToast('Failed to update setting', 'r');
+            showToast(window.fuT('Failed to update setting'), 'r');
         }
     };
 
@@ -4210,7 +4210,7 @@
             .eq('conversation_id', convId);
         if (memErr) {
             console.error('members fetch error:', memErr);
-            showToast('Failed to load members', 'r');
+            showToast(window.fuT('Failed to load members'), 'r');
             return [];
         }
         const userIds = (memberRows || []).map(m => m.user_id);
@@ -4266,7 +4266,7 @@
             const member = groupMembersCache.find(m => m.user_id === userId);
             const name = member ? getDisplayName(member.profiles || {}) : 'A member';
             await postSystemMessage(conv.id, `${name} was made an admin`);
-            showToast('Member promoted to admin', 'g');
+            showToast(window.fuT('Member promoted to admin'), 'g');
             openMembersScreen(conv.id);
         } catch (err) {
             showToast(err.message || 'Failed to promote member', 'r');
@@ -4284,7 +4284,7 @@
             const member = groupMembersCache.find(m => m.user_id === userId);
             const name = member ? getDisplayName(member.profiles || {}) : 'A member';
             await postSystemMessage(conv.id, `${name} is no longer an admin`);
-            showToast('Admin removed', 'g');
+            showToast(window.fuT('Admin removed'), 'g');
             openMembersScreen(conv.id);
         } catch (err) {
             showToast(err.message || 'Failed to update member', 'r');
@@ -4301,7 +4301,7 @@
             if (error) throw error;
             openMembersScreen(conv.id);
             showToast(`Removed ${name}`, 'g');
-        } catch (err) { showToast('Failed to remove member', 'r'); }
+        } catch (err) { showToast(window.fuT('Failed to remove member'), 'r'); }
     };
 
     window.leaveGroup = async function() {
@@ -4313,10 +4313,10 @@
                 'user_id', currentUserId);
             if (error) throw error;
             closeChatProfileModal();
-            showToast('You left the group', 'g');
+            showToast(window.fuT('You left the group'), 'g');
             closeChatView();
             await loadConversations();
-        } catch (err) { showToast('Failed to leave group', 'r'); }
+        } catch (err) { showToast(window.fuT('Failed to leave group'), 'r'); }
     };
 
     window.openChatThemeModal = function() {
@@ -4390,7 +4390,7 @@
         inp.onchange = async () => {
             if (!inp.files || !inp.files.length) return;
             try {
-                showToast('Uploading wallpaper...', 'p');
+                showToast(window.fuT('Uploading wallpaper...'), 'p');
                 const result = await uploadToCloudinary(inp.files[0], 'image');
                 await setChatWallpaper(result.url);
                 renderWallpaperPresetGrid();
@@ -4404,12 +4404,12 @@
         if (!conv) return;
         const { error } = await sb.from('conversations').update({ theme_url: bg }).eq('id', conv.id);
         if (error) { console.error('wallpaper update error:', error);
-            showToast('Failed to update wallpaper', 'r'); return; }
+            showToast(window.fuT('Failed to update wallpaper'), 'r'); return; }
         conv.theme_url = bg;
         const idx = conversations.findIndex(c => c.id === conv.id);
         if (idx !== -1) conversations[idx].theme_url = bg;
         applyChatBackground(bg);
-        showToast('Wallpaper updated', 'g');
+        showToast(window.fuT('Wallpaper updated'), 'g');
     }
 
     window.openBubbleColorModal = function() {
@@ -4446,12 +4446,12 @@
         const { error } = await sb.from('conversations').update({ bubble_color: updatedMap }).eq('id', conv.id);
         if (error) {
             console.error('bubble color update error:', error);
-            showToast('Failed to save bubble color', 'r');
+            showToast(window.fuT('Failed to save bubble color'), 'r');
             return;
         }
         const idx = conversations.findIndex(c => c.id === conv.id);
         if (idx !== -1) conversations[idx].bubble_color = updatedMap;
-        showToast('Bubble color updated', 'g');
+        showToast(window.fuT('Bubble color updated'), 'g');
     };
 
     function applyBubbleColor(colorId) {
@@ -4479,7 +4479,7 @@
         const conv = currentConv();
         const content = document.getElementById('fuMediaTabContent');
         if (!conv) return;
-        content.innerHTML = `<div class="fu-empty-tab">Loading…</div>`;
+        content.innerHTML = `<div class="fu-empty-tab" data-i18n=&#76;&#111;&#97;&#100;&#105;&#110;&#103;&#8230;>Loading…</div>`;
 
         if (tab === 'media') {
             const { data } = await sb.from('messages').select('id, message_type, media_url, media_urls, metadata')
@@ -4500,7 +4500,7 @@
             });
             content.innerHTML = items.length ?
                 `<div class="fu-media-grid">${items.map(i => `
-                            <div class="fu-media-cell" onclick="${i.vo ? `showToast('View-once media','o')` : (i.type === 'image' ? `openImage('${i.url}')` : `openVideo('${i.url}')`)}">
+                            <div class="fu-media-cell" onclick="${i.vo ? `showToast(window.fuT('View-once media'),'o')` : (i.type === 'image' ? `openImage('${i.url}')` : `openVideo('${i.url}')`)}">
                                 ${i.type === 'image' ? `<img src="${i.url}" loading="lazy">` : `<video src="${i.url}" preload="metadata"></video><span class="dur"><i class="ri-play-fill"></i></span>`}
                                 ${i.vo ? '<span class="dur" style="left:6px;right:auto;">🔒</span>' : ''}
                             </div>`).join('')}</div>` :
@@ -4588,7 +4588,7 @@
         const nowPinning = conv.pinned_message_id !== msgId;
         const newVal = nowPinning ? msgId : null;
         const { error } = await sb.from('conversations').update({ pinned_message_id: newVal }).eq('id', conv.id);
-        if (error) { showToast('Failed to pin message', 'r'); return; }
+        if (error) { showToast(window.fuT('Failed to pin message'), 'r'); return; }
         conv.pinned_message_id = newVal;
         renderPinnedBar();
         showToast(nowPinning ? 'Message pinned' : 'Message unpinned', 'g');
@@ -4627,7 +4627,7 @@
     window.openFuGroupPreviewScreen = async function(groupId) {
         document.getElementById('fuGroupPreviewScreen').classList.add('open');
         const body = document.getElementById('fuGroupPreviewBody');
-        body.innerHTML = '<div class="fu-empty-tab">Loading…</div>';
+        body.innerHTML = '<div class="fu-empty-tab" data-i18n=&#76;&#111;&#97;&#100;&#105;&#110;&#103;&#8230;>Loading…</div>';
 
         const { data: member } = await sb.from('conversation_members')
             .select('id').eq('conversation_id', groupId).eq('user_id', currentUserId).maybeSingle();
@@ -4669,7 +4669,7 @@
             closeFuGroupPreviewScreen();
             await loadConversations();
             selectConversation(groupId);
-            showToast('Joined group', 'g');
+            showToast(window.fuT('Joined group'), 'g');
         } catch (err) {
             showToast(err.message || 'Failed to join group', 'r');
         }
@@ -4702,7 +4702,7 @@
                         <p>Choose a conversation from the list or start a new one.</p>
                     </div>
                 `;
-        chatPartnerName.textContent = 'Select a conversation';
+        chatPartnerName.textContent = window.fuT('Select a conversation');
         chatPartnerAvatar.src = '';
         chatPartnerStatus.textContent = '';
         if (messageInputArea.dataset.defaultHtml) {
@@ -5037,8 +5037,8 @@
         else window.open(u, '_blank', 'noopener,noreferrer');
     };
     window.brCopy = async function() {
-        try { await navigator.clipboard.writeText(brCurrentUrl); showToast('Link copied', 'g'); }
-        catch (e) { showToast('Failed to copy', 'r'); }
+        try { await navigator.clipboard.writeText(brCurrentUrl); showToast(window.fuT('Link copied'), 'g'); }
+        catch (e) { showToast(window.fuT('Failed to copy'), 'r'); }
     };
     window.brShare = async function() {
         try { if (navigator.share) await navigator.share({ url: brCurrentUrl }); else window.brCopy(); } catch (e) {}
@@ -5088,7 +5088,7 @@
     }
 
     async function renderDocumentInto(container, src, ext) {
-        container.innerHTML = '<div class="doc-msg">Loading…</div>';
+        container.innerHTML = '<div class="doc-msg" data-i18n=&#76;&#111;&#97;&#100;&#105;&#110;&#103;&#8230;>Loading…</div>';
         const url = typeof src === 'string' ? src : '';
         try {
             if (ext === 'pdf') {
@@ -5200,15 +5200,15 @@
         const modal = document.getElementById('attachModal');
         if (!modal) {
             console.error('FreeUpper: #attachModal was not found.');
-            showToast('Attachment menu is unavailable', 'r');
+            showToast(window.fuT('Attachment menu is unavailable'), 'r');
             return;
         }
         if (!selectedConversationId) {
-            showToast('Open a chat first', 'o');
+            showToast(window.fuT('Open a chat first'), 'o');
             return;
         }
         if (isBlockedConversation || !canSendMessages) {
-            showToast('You cannot send attachments in this chat', 'o');
+            showToast(window.fuT('You cannot send attachments in this chat'), 'o');
             return;
         }
         modal.classList.add('open');
@@ -5468,7 +5468,7 @@
     }
 
     window.openGroupSearch = function() {
-        if (!selectedConversationId) { showToast('Open a chat first', 'o'); return; }
+        if (!selectedConversationId) { showToast(window.fuT('Open a chat first'), 'o'); return; }
         if (byId('fuProfileScreen').classList.contains('open')) closeChatProfileModal();
         chatSearch = { open: true, term: '', matchIds: [], idx: -1 };
         byId('chatView').classList.add('searching');
@@ -5579,7 +5579,7 @@
         const voters = {};
         (voteRows || []).forEach(v => { voters[v.user_id] = v.option_index; });
         const ids = Object.keys(voters);
-        if (!ids.length) { showToast('No votes yet', 'p'); return; }
+        if (!ids.length) { showToast(window.fuT('No votes yet'), 'p'); return; }
         const { data } = await sb.from('profiles').select('id, display_name, username, avatar_url').in('id', ids);
         const pm = {};
         (data || []).forEach(p => { pm[p.id] = p; });
@@ -5632,7 +5632,7 @@
     async function initChat() {
         const user = getCurrentUser();
         if (!user || !user.isLoggedIn) {
-            showToast('Please sign in to view messages', 'o');
+            showToast(window.fuT('Please sign in to view messages'), 'o');
             if (window.AuthUser && window.AuthUser.openModal) {
                 window.AuthUser.openModal('signup', () => { window.location.reload(); });
             }
@@ -5678,17 +5678,17 @@
                 const { data, error } = await sb.rpc('join_group_via_code', { p_invite_code: code });
                 if (error) throw error;
                 if (data.status === 'joined') {
-                    showToast('You joined the group!', 'g');
+                    showToast(window.fuT('You joined the group!'), 'g');
                     const myName = getDisplayName(currentUserProfile || {}) || 'A member';
                     await postSystemMessage(data.conversation_id, `${myName} joined the group`);
                     await loadConversations();
                     selectConversation(data.conversation_id);
                 } else if (data.status === 'already_member') {
-                    showToast('You are already in this group', 'o');
+                    showToast(window.fuT('You are already in this group'), 'o');
                     await loadConversations();
                     selectConversation(data.conversation_id);
                 } else if (data.status === 'pending_approval') {
-                    showToast('Join request sent — waiting for admin approval', 'p');
+                    showToast(window.fuT('Join request sent — waiting for admin approval'), 'p');
                 }
                 window.history.replaceState({}, '', '/chat.html');
             } catch (err) {
@@ -5710,7 +5710,7 @@
                     if (loaded) {
                         await selectConversation(loaded.id);
                     } else {
-                        showToast('Conversation not found', 'o');
+                        showToast(window.fuT('Conversation not found'), 'o');
                     }
                 }
                 history.replaceState({}, '', window.location.pathname);

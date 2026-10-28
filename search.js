@@ -112,6 +112,7 @@
   }
   function fmtNum(n) {
     n = Number(n) || 0;
+                if (window.FreeUpperI18n) return window.FreeUpperI18n.number(n, { notation: 'compact', maximumFractionDigits: 1 });
     if (n < 1000) return String(n);
     if (n < 1e6) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
     if (n < 1e9) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'm';
@@ -330,7 +331,7 @@
     const me = getCurrentUser();
     if (!me.isLoggedIn) {
       if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
-      else showToast('Please sign in to follow', 'o');
+      else showToast(window.fuT('Please sign in to follow'), 'o');
       return { ok: false, following: false };
     }
     if (userId === me.id) return { ok: false, following: false };
@@ -674,9 +675,9 @@
   async function _openPost(id) {
     let p = _getPost(id);
     if (!p) p = await fetchPostById(id);
-    if (!p) { showToast('Post not found', 'r'); return; }
+    if (!p) { showToast(window.fuT('Post not found'), 'r'); return; }
     const items = getMediaItems(p);
-    if (!items.length) { showToast('No media to show', 'o'); return; }
+    if (!items.length) { showToast(window.fuT('No media to show'), 'o'); return; }
     openGalleryLightbox(items, 0, p.id);
   }
 
@@ -763,7 +764,7 @@
     _lbFeedIndex = -1;
   }
   function goToNextLightboxPost() {
-    if (_lbFeedIndex < 0 || _lbFeedIndex >= _lbFeedList.length - 1) { showToast('No more videos'); return; }
+    if (_lbFeedIndex < 0 || _lbFeedIndex >= _lbFeedList.length - 1) { showToast(window.fuT('No more videos')); return; }
     const next = _lbFeedList[_lbFeedIndex + 1];
     openGalleryLightbox(getMediaItems(next), 0, next.id);
   }
@@ -789,7 +790,7 @@
           <div style="flex-shrink:0;">${buildFollowButton(post.user_id, da)}</div>
         </div>
         ${captionHtml ? `<div class="lightbox-caption-text" id="lightboxCaptionText">${captionHtml}</div>
-        <button type="button" class="lightbox-caption-seemore">See more</button>` : ''}
+        <button type="button" class="lightbox-caption-seemore" data-i18n=&#83;&#101;&#101;&#32;&#109;&#111;&#114;&#101;>See more</button>` : ''}
       </div>`;
   }
 
@@ -1177,7 +1178,7 @@
     });
     haptic(10);
     const me = getCurrentUser();
-    if (!me.isLoggedIn) { showToast('Please sign in to like', 'o'); return; }
+    if (!me.isLoggedIn) { showToast(window.fuT('Please sign in to like'), 'o'); return; }
     pendingLikes.add(postId);
     try {
       const { liked, count } = await window.PostsAPI.toggleLike(postId);
@@ -1203,7 +1204,7 @@
     const me = getCurrentUser();
     if (!me.isLoggedIn) {
       if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
-      else showToast('Please sign in to bookmark', 'o');
+      else showToast(window.fuT('Please sign in to bookmark'), 'o');
       return;
     }
     pendingBookmarks.add(postId);
@@ -1242,7 +1243,7 @@
   function handleShareAction(action) {
     if (!sharePostId) return;
     const post = _getPost(sharePostId);
-    if (!post) { showToast('Post not found'); return; }
+    if (!post) { showToast(window.fuT('Post not found')); return; }
     const url = `${window.location.origin}${window.location.pathname}?post=${sharePostId}`;
     const title = post.title || 'FreeUpper post';
     if (action === 'notinterested') {
@@ -1252,7 +1253,7 @@
         const article = el.closest('.tpost, .pcard, .sq-item, .vid-card');
         if (article) article.style.display = 'none';
       });
-      showToast('Post removed from your feed');
+      showToast(window.fuT('Post removed from your feed'));
       return;
     }
     function record() {
@@ -1267,13 +1268,13 @@
     }
     if (action === 'copy') {
       record();
-      copyTextToClipboard(url).then(() => { showToast('Link copied'); closeShareModal(); }).catch(() => closeShareModal());
+      copyTextToClipboard(url).then(() => { showToast(window.fuT('Link copied')); closeShareModal(); }).catch(() => closeShareModal());
       return;
     }
     if (action === 'native') {
       record();
       if (navigator.share) navigator.share({ title, text: title, url }).catch(() => {});
-      else copyTextToClipboard(url).then(() => showToast('Link copied'));
+      else copyTextToClipboard(url).then(() => showToast(window.fuT('Link copied')));
       closeShareModal();
     }
   }
@@ -1290,7 +1291,7 @@
     if (!input || !title || !removeBtn) return;
     input.value = '';
     updateRepostCharCount();
-    title.textContent = 'Repost';
+    title.textContent = window.fuT('Repost');
     removeBtn.style.display = 'none';
     if (post) {
       const author = getAuthor(post.profiles || post.profile);
@@ -1418,7 +1419,7 @@
           </div>
           <div class="comment-text${il?' collapsed':''}" data-cid="${c.id}">${renderedMsg}${editedTagHtml}</div>
           ${commentMediaHtml}
-          ${il?`<button class="comment-show-more">Show more</button>`:''}
+          ${il?`<button class="comment-show-more" data-i18n=&#83;&#104;&#111;&#119;&#32;&#109;&#111;&#114;&#101;>Show more</button>`:''}
           <div class="comment-meta">
             <span class="comment-time">${formatRelativeTime(c.time)}</span>
             <button class="comment-reply-btn" data-post-id="${postId}">Reply</button>
@@ -1457,7 +1458,7 @@
           </div>
           <div class="comment-text reply-text${il?' collapsed':''}" data-cid="${r.id}">${mn}${renderedMsg}${editedTagHtml}</div>
           ${replyMediaHtml}
-          ${il?`<button class="comment-show-more">Show more</button>`:''}
+          ${il?`<button class="comment-show-more" data-i18n=&#83;&#104;&#111;&#119;&#32;&#109;&#111;&#114;&#101;>Show more</button>`:''}
           <div class="reply-meta">
             <span class="reply-time">${formatRelativeTime(r.time)}</span>
             <button class="reply-reply-btn" data-post-id="${postId}">Reply</button>
@@ -1609,7 +1610,7 @@
           <div>${buildFollowButton(post.user_id, da)}</div>
         </div>
         ${captionHtml ? `<div class="lb-sheet-caption clamp4" id="lbSheetCaption">${captionHtml}</div>
-        <button type="button" class="lb-sheet-seemore" id="lbSheetSeeMore">See more</button>` : ''}
+        <button type="button" class="lb-sheet-seemore" id="lbSheetSeeMore" data-i18n=&#83;&#101;&#101;&#32;&#109;&#111;&#114;&#101;>See more</button>` : ''}
         <div class="lb-sheet-meta-row">
           <span class="lb-sheet-views">${svgEye()}${formatCount(post.views||0)} views</span>
           <span class="lb-sheet-date">${formatRelativeTime(post.created_at)}</span>
@@ -1624,8 +1625,8 @@
     if (!overlay) return;
     let post = _getPost(postId);
     if (!post) post = await fetchPostById(postId);
-    if (!post) { showToast('Post not found', 'r'); return; }
-    if (post.commentsHidden) { showToast('Comments are turned off for this post', 'o'); return; }
+    if (!post) { showToast(window.fuT('Post not found'), 'r'); return; }
+    if (post.commentsHidden) { showToast(window.fuT('Comments are turned off for this post'), 'o'); return; }
     _lightboxCommentsPostId = postId;
     _lightboxReplyTarget = null;
     overlay.classList.add('open');
@@ -1649,8 +1650,8 @@
           if (cap.scrollHeight > cap.clientHeight + 2) {
             more.style.display = 'block';
             more.onclick = () => {
-              if (cap.classList.contains('clamp4')) { cap.classList.remove('clamp4'); more.textContent = 'See less'; }
-              else { cap.classList.add('clamp4'); more.textContent = 'See more'; }
+              if (cap.classList.contains('clamp4')) { cap.classList.remove('clamp4'); more.textContent = window.fuT('See less'); }
+              else { cap.classList.add('clamp4'); more.textContent = window.fuT('See more'); }
             };
           } else more.style.display = 'none';
         }
@@ -1678,7 +1679,7 @@
     const ta = document.getElementById('lightbox-comment-textarea');
     if (!ta || !_lightboxCommentsPostId) return;
     const message = ta.value.trim();
-    if (!message && !lightboxCommentMedia) return showToast('Reply cannot be empty.');
+    if (!message && !lightboxCommentMedia) return showToast(window.fuT('Reply cannot be empty.'));
     const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
     const pi = _lightboxReplyTarget;
     const postId = _lightboxCommentsPostId;
@@ -1686,7 +1687,7 @@
     try {
       let imageUrl = '';
       if (mediaFile) {
-        showToast('Uploading media...');
+        showToast(window.fuT('Uploading media...'));
         imageUrl = await window.AuthUser.uploadCommentMedia(mediaFile, () => {}) || '';
         if (!imageUrl) throw new Error('Media upload failed.');
       }
@@ -1776,9 +1777,9 @@
   }
   function handleCommentMediaSelect(file, kind) {
     if (!file) return;
-    if (file.type === 'image/gif') { showToast('GIFs not supported here', 'o'); return; }
-    if (!isSupportedCommentMediaType(file)) { showToast('Choose a JPG, PNG or WebP image', 'o'); return; }
-    if (file.size > COMMENT_MEDIA_MAX_BYTES) { showToast('Media must be under 10MB', 'o'); return; }
+    if (file.type === 'image/gif') { showToast(window.fuT('GIFs not supported here'), 'o'); return; }
+    if (!isSupportedCommentMediaType(file)) { showToast(window.fuT('Choose a JPG, PNG or WebP image'), 'o'); return; }
+    if (file.size > COMMENT_MEDIA_MAX_BYTES) { showToast(window.fuT('Media must be under 10MB'), 'o'); return; }
     const url = URL.createObjectURL(file);
     if (kind === 'lightbox') {
       if (lightboxCommentMedia && lightboxCommentMedia.url) URL.revokeObjectURL(lightboxCommentMedia.url);
@@ -1831,7 +1832,7 @@
     if (!p || !p.profiles) p = await fetchPostById(postId);
     if (!p) return;
     const items = getMediaItems(p);
-    if (!items.length) { showToast('No media to show', 'o'); return; }
+    if (!items.length) { showToast(window.fuT('No media to show'), 'o'); return; }
     openGalleryLightbox(items, 0, p.id);
   }
   function openProfileSafe(e, id) {
@@ -2084,7 +2085,7 @@
         <button class="back" onclick="Search.exitHashtagMode()">${ICON.back}</button>
         <div class="box">${ICON.hashtag}</div>
         <div class="title-block"><h1>#${escapeHtml(currentHashtag)}</h1><div class="cnt" id="hashtagCount"></div></div>
-        <div class="side-actions"><button class="follow-btn rel-follow" id="hashtagFollowBtn">Follow</button><button class="icon-btn">${svgShare()}</button></div>
+        <div class="side-actions"><button class="follow-btn rel-follow" id="hashtagFollowBtn" data-i18n=&#70;&#111;&#108;&#108;&#111;&#119;>Follow</button><button class="icon-btn">${svgShare()}</button></div>
       </div>
       <div class="subtabs" id="hashtagSubtabs">
         <button data-view="top" class="active" onclick="Search._setHashtagView('top')">${ICON.trendUp}Top</button>
@@ -2224,14 +2225,14 @@
     if (rqSubmit) rqSubmit.addEventListener('click', async () => {
       if (!repostQuoteTargetId) return;
       const quote = document.getElementById('repostQuoteInput').value.trim();
-      if (!(window.AuthUser && window.AuthUser.requireAuth)) { showToast('Please sign in', 'o'); return; }
+      if (!(window.AuthUser && window.AuthUser.requireAuth)) { showToast(window.fuT('Please sign in'), 'o'); return; }
       window.AuthUser.requireAuth(async () => {
         try {
           const result = await window.PostsAPI.toggleRepostAPI(repostQuoteTargetId, quote);
           const post = _getPost(repostQuoteTargetId);
           if (post && typeof result.count === 'number') post.repostCount = result.count;
           await refreshFooterForPost(repostQuoteTargetId);
-          showToast('Reposted');
+          showToast(window.fuT('Reposted'));
           closeRepostQuoteModal();
         } catch (err) { showToast(err.message, 'r'); }
       });

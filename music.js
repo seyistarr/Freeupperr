@@ -239,12 +239,12 @@
         }
 
         if (!sound.audioUrl) {
-            showToast('Preview not available for this sound');
+            showToast(window.fuT('Preview not available for this sound'));
             return;
         }
 
         audioEl.src = sound.audioUrl;
-        audioEl.play().catch(() => showToast('Could not play sound'));
+        audioEl.play().catch(() => showToast(window.fuT('Could not play sound')));
 
         const mpArt = document.getElementById('mpArt');
         const mpTitle = document.getElementById('mpTitle');
@@ -288,26 +288,26 @@
 
     async function toggleSave(soundId) {
         const user = getCurrentUser();
-        if (!user || !user.isLoggedIn) { showToast('Please sign in to save sounds'); return; }
+        if (!user || !user.isLoggedIn) { showToast(window.fuT('Please sign in to save sounds')); return; }
 
         const wasSaved = state.savedIds.has(soundId);
         try {
             if (wasSaved) {
                 await SoundsAPI.unsaveSound(soundId);
                 state.savedIds.delete(soundId);
-                showToast('Removed from saved sounds');
+                showToast(window.fuT('Removed from saved sounds'));
                 if (state.activeTab === 'saved') {
                     state.sounds = state.sounds.filter(s => s.id !== soundId);
                 }
             } else {
                 await SoundsAPI.saveSound(soundId);
                 state.savedIds.add(soundId);
-                showToast('Sound saved ✓');
+                showToast(window.fuT('Sound saved ✓'));
             }
             renderSoundList(state.sounds);
         } catch (e) {
             console.error('toggleSave error:', e);
-            showToast('Could not update saved sounds');
+            showToast(window.fuT('Could not update saved sounds'));
         }
     }
 

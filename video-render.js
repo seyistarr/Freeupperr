@@ -310,7 +310,7 @@
         if (!labelEl) return;
         const meta = await getSoundMetaForPost(post);
         if (!meta) {
-            labelEl.textContent = 'Original sound';
+            labelEl.textContent = window.fuT('Original sound');
             return;
         }
         labelEl.textContent = meta.creatorHandle

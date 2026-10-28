@@ -26,7 +26,7 @@
   function formatLocalTime(value, options) {
     const date = parseTimestamp(value);
     if (!date) return '';
-    return new Intl.DateTimeFormat(undefined, options || {
+    return new Intl.DateTimeFormat(root.FreeUpperI18n?.language === 'en' ? 'en-GB' : root.FreeUpperI18n?.language, options || {
       dateStyle: 'medium', timeStyle: 'short'
     }).format(date);
   }
@@ -37,7 +37,7 @@
     const abs = Math.abs(seconds);
     const unit = abs < 60 ? 'second' : abs < 3600 ? 'minute' : abs < 86400 ? 'hour' : 'day';
     const divisor = unit === 'second' ? 1 : unit === 'minute' ? 60 : unit === 'hour' ? 3600 : 86400;
-    return new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' }).format(Math.round(seconds / divisor), unit);
+    return new Intl.RelativeTimeFormat(root.FreeUpperI18n?.language === 'en' ? 'en-GB' : root.FreeUpperI18n?.language, { numeric: 'auto' }).format(Math.round(seconds / divisor), unit);
   }
   root.FreeUpperTime = Object.freeze({ deviceTimeZone, parseTimestamp, localDayDifference, formatLocalTime, formatRelativeTime });
 })(typeof window !== 'undefined' ? window : globalThis);

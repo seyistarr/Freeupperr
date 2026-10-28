@@ -107,7 +107,7 @@
 
         if (error) {
             console.error('fetchNotifications error:', error);
-            showToast('Could not load notifications');
+            showToast(window.fuT('Could not load notifications'));
             return [];
         }
         return data || [];
@@ -238,7 +238,7 @@
 
         let bodyExtra = '';
         if (g.post_id && !g.post) {
-            bodyExtra = `<div class="notif-unavailable">This post is no longer available</div>`;
+            bodyExtra = `<div class="notif-unavailable" data-i18n=&#84;&#104;&#105;&#115;&#32;&#112;&#111;&#115;&#116;&#32;&#105;&#115;&#32;&#110;&#111;&#32;&#108;&#111;&#110;&#103;&#101;&#114;&#32;&#97;&#118;&#97;&#105;&#108;&#97;&#98;&#108;&#101;>This post is no longer available</div>`;
         } else if (preview) {
             bodyExtra = `<div class="notif-preview">${escapeHtml(preview)}</div>`;
         }
@@ -377,9 +377,9 @@
 
         if (error) {
             console.error('markAllRead error:', error);
-            showToast('Could not mark all as read');
+            showToast(window.fuT('Could not mark all as read'));
         } else {
-            showToast('All caught up');
+            showToast(window.fuT('All caught up'));
         }
     }
     window.markAllRead = markAllRead;
@@ -406,7 +406,7 @@
                 const [hydrated] = await hydrate([payload.new]);
                 rawNotifications.unshift(hydrated);
                 renderList();
-                showToast('New notification');
+                showToast(window.fuT('New notification'));
             })
             .subscribe();
     }
@@ -417,7 +417,7 @@
         currentUser = getCurrentUser();
 
         if (!currentUser || !currentUser.isLoggedIn) {
-            showToast('Please sign in to view notifications');
+            showToast(window.fuT('Please sign in to view notifications'));
             if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signin');
             return;
         }

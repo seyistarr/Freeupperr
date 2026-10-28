@@ -17,7 +17,7 @@ sw = sw.replace(/const CACHE_NAME = '([^']+)'/, (_, version) => `const CACHE_NAM
 sw = sw.replace("  if (event.request.headers.has('Authorization')) return;", "  if (/^\\/(?:u|p|v)(?:\\/|$)/.test(url.pathname) || url.pathname.startsWith('/@') || (url.pathname === '/sitemap-profiles.xml' || url.pathname === '/sitemap-posts.xml')) return;\n  if (event.request.headers.has('Authorization')) return;");
 sw = sw.replace('          cache.put(event.request, responseClone);', "          if (!/no-store|private/.test(response.headers.get('Cache-Control') || '')) return cache.put(event.request, responseClone);");
 await writeFile(swFile, sw);
-for (const dir of ['assets', 'themes', 'js']) await cp(dir, new URL('public/' + dir, output), { recursive: true });
+for (const dir of ['assets', 'themes', 'js', 'locales']) await cp(dir, new URL('public/' + dir, output), { recursive: true });
 await writeFile(new URL('public/_headers', output), `/manifest.webmanifest\n  Content-Type: application/manifest+json\n  Cache-Control: public, max-age=0, must-revalidate\n/service-worker.js\n  Cache-Control: no-cache\n  Service-Worker-Allowed: /\n/firebase-messaging-sw.js\n  Cache-Control: no-cache\n  Service-Worker-Allowed: /\n/*\n  X-Content-Type-Options: nosniff\n`);
 // This is the existing browser-public anon key, never a service-role credential.
 const auth = await readFile('auth.js', 'utf8');

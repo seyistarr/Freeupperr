@@ -112,13 +112,13 @@
             <a href="${item.href}" class="side-btn${isActive ? ' active' : ''}" data-side-key="${item.key}">
               <img class="side-av" data-side-avatar src="" alt=""
                    onerror="this.style.display='none'">
-              <span>${item.label}</span>
+              <span data-i18n="${item.label}">${item.label}</span>
             </a>`;
         }
         return `
           <a href="${item.href}" class="side-btn${isActive ? ' active' : ''}" data-side-key="${item.key}">
             <svg viewBox="0 0 24 24">${item.svg}</svg>
-            <span>${item.label}</span>
+            <span data-i18n="${item.label}">${item.label}</span>
             ${badgeHtml}
           </a>`;
       }).join('');

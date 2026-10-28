@@ -104,13 +104,13 @@
             <a href="${item.href}" class="nav-item${isActive ? ' active' : ''}" data-nav-key="${item.key}">
               <img class="nav-av" data-nav-avatar src="" alt=""
                    onerror="this.style.background='linear-gradient(135deg,#1a1035,#3b1a6b)'">
-              <span>${item.label}</span>
+              <span data-i18n="${item.label}">${item.label}</span>
             </a>`;
         }
         return `
           <a href="${item.href}" class="nav-item${isActive ? ' active' : ''}" data-nav-key="${item.key}">
             <svg viewBox="0 0 24 24">${item.svg}</svg>
-            <span>${item.label}</span>
+            <span data-i18n="${item.label}">${item.label}</span>
           </a>`;
       }).join('');
 
