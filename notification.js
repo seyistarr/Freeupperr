@@ -404,13 +404,13 @@
                 table: 'notifications',
                 filter: `receiver_id=eq.${currentUser.id}`
             }, async (payload) => {
-                window.FreeUpperSounds?.notification(payload.new, recipient);
+                window.FreeUpperSounds?.notification(payload.new, recipient, 'notification-center');
                 const [hydrated] = await hydrate([payload.new]);
                 rawNotifications.unshift(hydrated);
                 renderList();
                 showToast(window.fuT('New notification'));
             })
-            .subscribe();
+            .subscribe(status => window.FreeUpperSounds?.channel('notification-center', status));
     }
 
     // ─── INIT ─────────────────────────────────────────────────

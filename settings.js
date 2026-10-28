@@ -16,13 +16,52 @@
     var toggle = document.getElementById('notificationSoundsToggle');
     var errorLabel = document.getElementById('notificationSoundsError');
     if (!toggle) return;
+    var testButton = document.getElementById('notificationTestSound');
+    var testResult = document.getElementById('notificationTestResult');
+    var diagnosticsLabel = document.getElementById('notificationSoundDiagnostics');
+    var preferenceSyncError = false;
+    function showDiagnostics() {
+      if (diagnosticsLabel && window.FUSound) {
+        diagnosticsLabel.textContent = JSON.stringify(window.FUSound.diagnostics(), null, 2);
+      }
+    }
     function reflect(event) {
       var state = event.detail;
       toggle.checked = state.enabled;
       toggle.disabled = !state.authenticated || !state.ready || state.saving;
+      if (testButton) testButton.disabled = !state.authenticated;
+      if (window.FUSound?.diagnostics().preferenceStatus === 'error') {
+        preferenceSyncError = true;
+        errorLabel.textContent = window.fuT('Sound preference could not be synchronized. Automatic sounds are paused. Test sound still checks audio directly.');
+      } else if (preferenceSyncError && state.ready) {
+        preferenceSyncError = false;
+        errorLabel.textContent = '';
+      }
+      showDiagnostics();
     }
     window.addEventListener('fu-sound-preference', reflect);
+    window.addEventListener('fu-sound-diagnostics', showDiagnostics);
     if (window.FreeUpperSounds) reflect({ detail: window.FreeUpperSounds.preferenceState() });
+    if (testResult) testResult.textContent = window.FUSound
+      ? 'Tap Test sound to check audio independently of notifications.'
+      : 'Sound manager did not load. Reopen this page while online.';
+    if (testButton) testButton.addEventListener('click', function (event) {
+      // Keep this call in the original tap: no settings fetch or Realtime wait.
+      var playback = window.FUSound.play('notify', { preview: true, event: event });
+      testButton.disabled = true;
+      testResult.textContent = 'Testing audio…';
+      playback.then(function (scheduled) {
+        var status = window.FUSound.diagnostics();
+        testResult.textContent = scheduled
+          ? 'Sound scheduled. If you heard it, audio works; silent notifications point to the event path. If you heard nothing, check device audio/output. This test does not use Realtime.'
+          : 'Test sound was not scheduled: ' + (status.lastPlay?.reason || 'audio unavailable') + '. See the diagnostics below.';
+      }).catch(function () {
+        testResult.textContent = 'Audio test failed. See the diagnostics below.';
+      }).finally(function () {
+        testButton.disabled = !window.FreeUpperSounds.preferenceState().authenticated;
+        showDiagnostics();
+      });
+    });
     toggle.addEventListener('change', async function () {
       var previous = window.FUSound.isEnabled();
       toggle.disabled = true;

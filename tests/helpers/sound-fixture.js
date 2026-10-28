@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 export const source = readFileSync('ui-sounds.js', 'utf8');
 export async function fixture(options = {}) {
   const listeners = {}, windowListeners = {}, rows = options.rows || new Map();
+  const sessionStorage = options.sessionStorage || new Map();
   let authCallback, now = 10000, failWrite = false, conflict = null, queryGate = null;
   const frequencies = [], gains = [], channels = [];
   const storage = options.storage || new Map();
@@ -15,11 +16,12 @@ export async function fixture(options = {}) {
     async login(uid) { state.uid = uid; authCallback('SIGNED_IN', { user: { id: uid } }); await delay(10); },
     async logout() { state.uid = null; authCallback('SIGNED_OUT', null); await delay(10); },
     gesture() { listeners.pointerdown?.forEach(fn => fn({ isTrusted: true })); },
+    tap() { return { isTrusted: true }; },
     async visibility(value) { document.visibilityState = value; listeners.visibilitychange?.forEach(fn => fn()); await delay(10); }
   };
   class Audio {
-    constructor() { this.state = options.blocked ? 'suspended' : 'running'; this.currentTime = 0; this.sampleRate = 44100; state.audio = this; }
-    resume() { if (options.blocked) return Promise.reject(Error('NotAllowedError')); this.state = 'running'; return Promise.resolve(); }
+    constructor() { this.state = options.blocked || options.hangingResume ? 'suspended' : 'running'; this.currentTime = 0; this.sampleRate = 44100; state.audio = this; }
+    resume() { if (options.hangingResume) return new Promise(() => {}); if (options.blocked) return Promise.reject(Error('NotAllowedError')); this.state = 'running'; return Promise.resolve(); }
     createBuffer() { return {}; }
     createBufferSource() { return { connect() {}, disconnect() {}, start() {} }; }
     createOscillator() { return { frequency: { setValueAtTime(f) { frequencies.push(f); } }, connect() {}, disconnect() {}, start() {}, stop() {} }; }
@@ -35,7 +37,7 @@ export async function fixture(options = {}) {
   const sb = {
     auth: {
       onAuthStateChange(cb) { authCallback = cb; return { data: { subscription: { unsubscribe() {} } } }; },
-      getSession: async () => ({ data: { session: state.uid ? { user: { id: state.uid, is_anonymous: options.anonymous } } : null } }),
+      getSession: async () => { if (options.sessionGate) await options.sessionGate; return ({ data: { session: state.uid ? { user: { id: state.uid, is_anonymous: options.anonymous } } : null } }); },
       getUser: async () => ({ data: { user: state.uid ? { id: state.uid } : null } })
     },
     channel(name) {
@@ -45,6 +47,7 @@ export async function fixture(options = {}) {
       if (name === 'get_unread_message_count') return { data: 4 };
       const key = state.uid;
       if (queryGate) await queryGate('user_settings', name);
+      if (name === 'get_user_settings' && options.preferenceError) return { error: Error('offline') };
       if (name === 'get_user_settings') return { data: structuredClone(rows.get(key) || { user_id: key, notification_settings: {} }) };
       if (failWrite) { failWrite = false; return { error: Error('offline') }; }
       if (conflict) { const fn = conflict; conflict = null; fn(rows, key); }
@@ -94,14 +97,14 @@ export async function fixture(options = {}) {
   };
   const sandbox = { window, document, navigator: {}, console, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } },
     Date: class extends Date { static now() { return now; } },
-    setTimeout, clearTimeout, localStorage: {
+    setTimeout, clearTimeout, sessionStorage: { getItem: key => sessionStorage.get(key) ?? null, setItem: (key, val) => sessionStorage.set(key, val), removeItem: key => sessionStorage.delete(key) }, localStorage: {
       getItem: key => storage.get(key) ?? null, setItem: (key, val) => storage.set(key, val)
     }
   };
   state.sandbox = vm.createContext(sandbox);
-  vm.runInContext(source, state.sandbox);
+  vm.runInContext(options.source || source, state.sandbox);
   state.sound = window.FUSound; state.events = window.FreeUpperSounds; state.badges = badges;
-  state.storage = storage;
+  state.storage = storage; state.sessionStorage = sessionStorage;
   state.notification = (type = 'like', id = 'n1', rest = {}) => state.events.notification({ id, type, actor_id: 'bob', receiver_id: 'alice', ...rest }, 'alice');
   await state.flush();
   return state;

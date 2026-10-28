@@ -28,7 +28,7 @@ test('crawler metadata cannot enter a shared cache', async () => {
 
 const origin = process.env.FREEUPPER_TEST_ORIGIN;
 test('Workers runtime static assets, routes and privacy boundaries', { skip: !origin }, async () => {
-  for (const path of ['/', '/js/freeupper-time.js', '/profile.html', '/video.html', '/chat.html', '/create.html', '/studio.html', '/privacy-verification.html', '/privacy-verification.js', '/recently-deleted.html', '/recently-deleted.js', '/ui-sounds.js?v=1', '/manifest.webmanifest', '/service-worker.js', '/firebase-messaging-sw.js']) {
+  for (const path of ['/', '/js/freeupper-time.js', '/profile.html', '/video.html', '/chat.html', '/create.html', '/studio.html', '/privacy-verification.html', '/privacy-verification.js', '/recently-deleted.html', '/recently-deleted.js', '/ui-sounds.js?v=2', '/manifest.webmanifest', '/service-worker.js', '/firebase-messaging-sw.js']) {
     const response = await fetch(origin + path);
     assert.equal(response.status, 200, path);
     const text = await response.text();

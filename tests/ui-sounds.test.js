@@ -213,3 +213,80 @@ test('homepage hooks only INSERT notifications and uses the existing three subsc
   callback({ eventType: 'INSERT', new: { id: 'insert', receiver_id: 'alice', actor_id: 'bob', type: 'follow' } }); await f.flush();
   assert.deepEqual(f.frequencies, [523, 659, 1047]);
 });
+
+test('a trusted tap before async auth completes unlocks audio for the first eligible event', async () => {
+  let release; const sessionGate = new Promise(resolve => { release = resolve; });
+  const f = await fixture({ sessionGate });
+  f.gesture();
+  assert.equal(f.sound.diagnostics().contextState, 'running');
+  assert.equal(f.sound.diagnostics().authenticated, false);
+  assert.equal(await f.sound.play(), false, 'no anonymous playback');
+  release(); await f.flush(); await f.flush();
+  assert.equal(f.sound.diagnostics().unlocked, true);
+  f.notification(); await f.flush();
+  assert.deepEqual(f.frequencies, [880, 1320]);
+});
+
+test('rejected resume never reports audio as unlocked', async () => {
+  const f = await fixture({ blocked: true }); f.gesture(); await f.flush();
+  assert.equal(f.sound.diagnostics().contextState, 'suspended');
+  assert.equal(f.sound.diagnostics().unlocked, false);
+  assert.equal(f.sound.diagnostics().unlockError, 'resume-rejected');
+  assert.equal(await f.sound.play('notify', { preview: true, event: f.tap() }), false);
+  assert.equal(f.sound.diagnostics().lastPlay.reason, 'resume-rejected');
+});
+
+test('Test sound isolates audio from disabled or failed preference sync without changing the preference', async () => {
+  for (const options of [{ rows: saved({ sound: false }) }, { preferenceError: true }]) {
+    const f = await fixture(options);
+    const enabled = f.sound.isEnabled();
+    assert.equal(await f.sound.play('notify', { preview: true, event: f.tap() }), true);
+    assert.deepEqual(f.frequencies, [660, 880]);
+    assert.equal(f.sound.isEnabled(), enabled);
+    assert.equal(f.sound.diagnostics().lastPlay.source, 'test-button');
+    f.advance();
+    assert.equal(await f.sound.play(), false);
+    assert.equal(f.sound.diagnostics().lastPlay.reason, options.preferenceError ? 'preference-sync-error' : 'preference-off');
+  }
+});
+
+test('Test sound has a bounded result when iOS resume never settles', async () => {
+  const f = await fixture({ hangingResume: true });
+  assert.equal(await f.sound.play('notify', { preview: true, event: f.tap() }), false);
+  assert.equal(f.sound.diagnostics().contextState, 'suspended');
+  assert.equal(f.sound.diagnostics().lastPlay.reason, 'context-not-running');
+});
+
+test('a blocked audio attempt does not poison cross-page duplicate suppression', async () => {
+  const f = await fixture({ blocked: true }); f.gesture(); f.notification(); await f.flush();
+  assert.equal(f.storage.has('fu-sound-events:alice'), false);
+  const next = await fixture({ storage: f.storage }); next.gesture(); next.notification(); await next.flush();
+  assert.deepEqual(next.frequencies, [880, 1320]);
+});
+
+test('diagnostics trace callback receipt, actual play invocation and duplicate/filter suppression without private data', async () => {
+  const f = await fixture(); f.gesture();
+  f.notification(); await f.flush();
+  assert.equal(f.sound.diagnostics().lastEvent.reason, 'play-invoked');
+  assert.equal(f.sound.diagnostics().playInvocations, 1);
+  f.notification(); await f.flush();
+  assert.equal(f.sound.diagnostics().lastEvent.reason, 'duplicate-memory');
+  assert.equal(f.sound.diagnostics().playInvocations, 1);
+  await f.events.message({ id: 'secret-message-id', sender_id: 'alice', text: 'private message' }, 'alice', 'chat-messages');
+  assert.equal(f.sound.diagnostics().lastEvent.reason, 'own-message');
+  const text = JSON.stringify(f.sound.diagnostics());
+  assert.ok(!/alice|secret-message-id|private message|access_token/.test(text));
+  const next = await fixture({ sessionStorage: f.sessionStorage });
+  assert.equal(next.sound.diagnostics().previousPage.lastEvent.reason, 'own-message');
+  await next.login('bob');
+  assert.equal(next.sound.diagnostics().previousPage, null);
+});
+
+test('sound manager loads before auth/Realtime consumers and auth explicitly binds the existing client', () => {
+  for (const file of ['index.html', 'chat.html', 'settings.html', 'notification.html']) {
+    const html = readFileSync(file, 'utf8');
+    assert.ok(html.indexOf('/ui-sounds.js?v=2') < html.indexOf('src="auth.js"'), file);
+    assert.match(html, /<script src="\/ui-sounds.js\?v=2" data-fu-sounds><\/script>/);
+  }
+  assert.match(readFileSync('auth.js', 'utf8'), /window\.FreeUpperSounds\.bindClient\(sb\)/);
+});
