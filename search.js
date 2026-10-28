@@ -635,7 +635,7 @@
     const state = relationshipState(u.id);
     const btn = state === 'self' ? '' : `<button class="follow-btn rel-${state}" data-user-id="${u.id}" onclick="toggleFollowHandler(event,'${u.id}')">${relLabel(state)}</button>`;
     const showBadge = u.verified_status && u.verified_status !== 'none' && u.verified_status !== 'pending';
-    return `<div class="user-row" onclick="window.Router.openProfile('${u.id}')">
+    return `<div class="user-row" onclick="window.location.href='/profile.html?uid='+encodeURIComponent('${u.id}')">
       <div class="av"><img src="${u.avatar_url||''}" onerror="this.style.display='none'">${showBadge?`<span class="vb">${ICON.check}</span>`:''}</div>
       <div class="info">
         <div class="name-line">${escapeHtml(u.display_name||u.username||'')}</div>
