@@ -182,14 +182,10 @@
         return;
       }
 
-      // Public profile URL
-      // Resolve the public username without changing the existing RPC signature.
-      const { data: publicProfile, error: publicError } = await window.sb
-        .from('profiles')
-        .select('username')
-        .eq('id', userId)
-        .maybeSingle();
-      const username = !publicError && publicProfile && String(publicProfile.username || '').trim();
+      // Resolve the public username through the restricted public-profile RPC.
+      // Never depend on direct SELECT access to the protected profiles table.
+      // The existing identity resolver may already return the username.
+      const username = String(profile.username || '').trim();
       if (username && /^[A-Za-z0-9_.]+$/.test(username)) {
         window.location.href = '/@' + encodeURIComponent(username);
       } else {
