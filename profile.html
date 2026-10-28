@@ -3290,6 +3290,21 @@
                         throw new Error('Profile could not be resolved');
                     }
 
+                    // The public profile resolver omits hidden_tabs; fetch it explicitly
+                    // so visitors and guests see the owner's saved tab visibility.
+                    if (!Array.isArray(profile.hidden_tabs)) {
+                        try {
+                            var tabsResult = await window.sb.from('profiles')
+                                .select('hidden_tabs').eq('id', profile.id).maybeSingle();
+                            profile.hidden_tabs = (!tabsResult.error && tabsResult.data &&
+                                Array.isArray(tabsResult.data.hidden_tabs))
+                                ? tabsResult.data.hidden_tabs : [];
+                        } catch (tabsError) {
+                            console.warn('Could not load profile tab visibility:', tabsError);
+                            profile.hidden_tabs = [];
+                        }
+                    }
+
                     targetUser = profile;
                     targetUserId = profile.id;
 
