@@ -9,6 +9,7 @@
   let theme = valid(read()) ? read() : 'dark';
   let ready = false;
   let timer;
+  let colorAnimations = [];
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   root.classList.add('theme-initializing');
 
@@ -24,18 +25,57 @@
       try { localStorage.setItem(key, next); } catch (_) {}
     }
     if (root.getAttribute('data-theme') === next && theme === next) return;
-    if (ready && !motion.matches) {
+    // Pin text/icon colors to explicit endpoints while backgrounds and borders
+    // use CSS transitions. Animating inherited color on every descendant with
+    // CSS would restart child transitions on each parent animation frame.
+    const animate = ready && !motion.matches;
+    const properties = ['color', 'fill', 'stroke'];
+    const nodes = animate && typeof root.animate === 'function'
+      ? [root, ...document.querySelectorAll('body, body *')]
+      : [];
+    const before = nodes.map(node => {
+      const style = getComputedStyle(node);
+      return properties.map(property => style[property]);
+    });
+    colorAnimations.forEach(animation => animation.cancel());
+    colorAnimations = [];
+    if (animate) {
       root.classList.add('theme-changing');
       // Install the transition rules before changing the target colors.
       void root.offsetWidth;
       clearTimeout(timer);
-      timer = setTimeout(() => root.classList.remove('theme-changing'), 280);
+      timer = setTimeout(() => {
+        root.classList.remove('theme-changing');
+        colorAnimations = [];
+      }, 280);
     }
     theme = next;
     root.setAttribute('data-theme', next);
     root.style.colorScheme = next;
     root.style.backgroundColor = next === 'dark' ? '#000000' : '#ffffff';
     syncThemeColorMeta();
+    // Read every target before starting animations: inherited values must all
+    // resolve against the new theme, rather than an ancestor's animated color.
+    const after = nodes.map(node => {
+      const style = getComputedStyle(node);
+      return properties.map(property => style[property]);
+    });
+    const startTime = nodes.length ? document.timeline.currentTime : null;
+    nodes.forEach((node, index) => {
+      const from = {}, to = {};
+      properties.forEach((property, part) => {
+        if (before[index][part] !== after[index][part]) {
+          from[property] = before[index][part];
+          to[property] = after[index][part];
+        }
+      });
+      if (!Object.keys(to).length) return;
+      const animation = node.animate([from, to], {
+        duration: 225, easing: 'cubic-bezier(.4, 0, .2, 1)'
+      });
+      animation.startTime = startTime;
+      colorAnimations.push(animation);
+    });
     document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: next } }));
   }
   window.applyTheme = applyTheme;
@@ -63,6 +103,11 @@
     }));
   }, { once: true });
   motion.addEventListener('change', () => {
-    if (motion.matches) { clearTimeout(timer); root.classList.remove('theme-changing'); }
+    if (motion.matches) {
+      clearTimeout(timer);
+      colorAnimations.forEach(animation => animation.cancel());
+      colorAnimations = [];
+      root.classList.remove('theme-changing');
+    }
   });
 })();

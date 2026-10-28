@@ -17,7 +17,7 @@ test('every theme page initializes before styles; only the shared controller wri
   const settings = await readFile('settings.html','utf8');
   assert.ok(settings.includes("window.applyTheme(on ? 'dark' : 'light')"));
   const sw = await readFile('service-worker.js','utf8');
-  assert.ok(sw.includes("'./theme.js'")); assert.ok(sw.includes("'./theme.css'"));
+  assert.ok(sw.includes("'./theme.js?v=2'")); assert.ok(sw.includes("'./theme.css?v=2'"));
 });
 
 test('controller handles unavailable storage and ignores repeated or invalid updates', async () => {
@@ -55,7 +55,7 @@ for (const engine of ['chromium', 'webkit']) {
         let body = await readFile('.'+path, 'utf8');
         if (path.endsWith('.html')) {
           // Render actual page surfaces without backend requests, account writes or unrelated scripts.
-          body = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, match => match.includes('src="/theme.js"') ? match : '');
+          body = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, match => match.includes('src="/theme.js?v=2"') ? match : '');
           body = body.replace(/<link\b[^>]*https:[^>]*>/gi,'');
         }
         res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html');
@@ -89,6 +89,8 @@ for (const engine of ['chromium', 'webkit']) {
       await page.waitForTimeout(350);
       assert.deepEqual(await page.evaluate(() => events),['light','dark','light','dark']);
       assert.equal(await page.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(0, 0, 0)');
+      assert.equal(await page.locator('.settings-header .title').evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
+      assert.equal(await page.locator('.settings-header .back-btn svg').evaluate(el=>getComputedStyle(el).stroke),'rgb(255, 255, 255)');
       assert.equal(navigations,0); assert.equal(await page.evaluate(()=>marker),true);
       const second = await context.newPage(); await second.goto(origin+'/chat.html');
       await page.evaluate(()=>applyTheme('light'));
@@ -99,7 +101,7 @@ for (const engine of ['chromium', 'webkit']) {
       // Capture the theme synchronously immediately after the blocking head controller.
       await context.route('**/*.html',async route=>{
         const response = await route.fetch();
-        const body = (await response.text()).replace('<script src="/theme.js"></script>','<script src="/theme.js"></script><script>window.initialTheme=document.documentElement.dataset.theme;window.initialTransitions=document.documentElement.classList.contains("theme-initializing");</script>');
+        const body = (await response.text()).replace('<script src="/theme.js?v=2"></script>','<script src="/theme.js?v=2"></script><script>window.initialTheme=document.documentElement.dataset.theme;window.initialTransitions=document.documentElement.classList.contains("theme-initializing");</script>');
         await route.fulfill({response,body});
       });
       for (const path of pages) {

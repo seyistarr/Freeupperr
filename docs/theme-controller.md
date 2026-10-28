@@ -20,7 +20,10 @@ retain the old implementation after documents updated.
 
 `theme.css` suppresses startup transitions and coordinates background, text,
 border, fill and stroke colors over 225ms with natural easing during a switch.
-The temporary rules never include layout or position properties. Reduced motion
+Surface colors use CSS transitions; text and SVG colors use synchronized Web
+Animations endpoints. This prevents inherited child colors from restarting
+transitions on every parent animation frame. The temporary rules never include
+layout or position properties. Reduced motion
 turns transitions off. Shared global asset URLs are versioned to avoid mixing the
 new controller with an old active service worker's cached global.js; the precache
 version also advances and includes the new theme assets. Normal PWA activation
