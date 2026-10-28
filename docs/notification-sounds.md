@@ -106,3 +106,8 @@ activation and the manager's non-silent generated PCM using OfflineAudioContext.
 DOM-ready binding also supports an early sound script alongside a cached older
 `auth.js` that only assigns `window.sb`. A regression test models this PWA upgrade
 path; script version 3/cache v20 invalidate the intermediate release.
+
+The four updated documents also version their coupled auth/settings/Realtime
+consumer URLs (`?v=sounds-v3`). This bypasses cache-first entries from the old
+worker immediately, before cache v20 activates. The theme fixture accepts these
+versioned script URLs while preserving its isolated backend stubs.

@@ -285,7 +285,7 @@ test('diagnostics trace callback receipt, actual play invocation and duplicate/f
 test('sound manager loads before auth/Realtime consumers and auth explicitly binds the existing client', () => {
   for (const file of ['index.html', 'chat.html', 'settings.html', 'notification.html']) {
     const html = readFileSync(file, 'utf8');
-    assert.ok(html.indexOf('/ui-sounds.js?v=3') < html.indexOf('src="auth.js"'), file);
+    assert.ok(html.indexOf('/ui-sounds.js?v=3') < html.indexOf('src="auth.js'), file);
     assert.match(html, /<script src="\/ui-sounds.js\?v=3" data-fu-sounds><\/script>/);
   }
   assert.match(readFileSync('auth.js', 'utf8'), /window\.FreeUpperSounds\.bindClient\(sb\)/);
@@ -299,4 +299,17 @@ test('early manager binds at DOM ready with cached legacy auth that only assigns
   assert.equal(f.sound.diagnostics().authenticated, true);
   assert.equal(f.sound.diagnostics().preferenceReady, true);
   assert.equal(await f.sound.play('notify', { preview: true, event: f.tap() }), true);
+});
+
+
+test('coupled sound consumers bypass pre-upgrade PWA cache entries', () => {
+  for (const [page, files] of Object.entries({
+    'index.html': ['auth.js', 'header-badges.js'],
+    'chat.html': ['auth.js', 'settings.js', 'chat.js'],
+    'settings.html': ['auth.js', 'settings.js'],
+    'notification.html': ['auth.js', 'notification.js']
+  })) {
+    const html = readFileSync(page, 'utf8');
+    for (const file of files) assert.ok(html.includes(file + '?v=sounds-v3'), page + ': ' + file);
+  }
 });

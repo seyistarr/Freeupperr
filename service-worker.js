@@ -11,7 +11,7 @@ const URLS_TO_CACHE = [
   './settings.html',
   './video.html',
   './chat.html',
-  './chat.js',
+  './chat.js?v=sounds-v3',
   './ui-sounds.js?v=3',
   './js/freeupper-time.js',
   './js/freeupper-i18n.js',

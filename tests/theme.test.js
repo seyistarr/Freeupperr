@@ -117,8 +117,8 @@ for (const engine of ['chromium', 'webkit']) {
       await page.evaluate(()=>{localStorage.setItem('freeupper_theme','light');window.dispatchEvent(new Event('pageshow'));});
       assert.equal(await page.evaluate(()=>getCurrentTheme()),'light');
       await context.route('**/settings.html?interactive', async route => route.fulfill({contentType:'text/html',body:await readFile('settings.html','utf8')}));
-      await context.route('**/auth.js', route => route.fulfill({contentType:'text/javascript',body:''}));
-      await context.route('**/settings.js', route => route.fulfill({contentType:'text/javascript',body:'window.SettingsAPI={listBlockedUsers:async()=>[]};'}));
+      await context.route('**/auth.js*', route => route.fulfill({contentType:'text/javascript',body:''}));
+      await context.route('**/settings.js*', route => route.fulfill({contentType:'text/javascript',body:'window.SettingsAPI={listBlockedUsers:async()=>[]};'}));
       await page.goto(origin+'/settings.html?interactive');
       await page.waitForFunction(()=>typeof window.toggleDark==='function');
       await page.evaluate(()=>toggleDark(true));
