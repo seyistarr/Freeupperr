@@ -1,6 +1,6 @@
 # Notification sounds
 
-`ui-sounds.js?v=2` loads early in the homepage, chat, notification center and
+`ui-sounds.js?v=3` loads early in the homepage, chat, notification center and
 Settings documents. `auth.js` explicitly binds its existing authenticated gateway
 client; other pages retain the dynamic-loader fallback. It does not create another Supabase client or any Realtime subscriptions.
 The homepage header, chat INSERT handler and notification-center INSERT handler
@@ -59,7 +59,7 @@ iOS Safari and installed PWAs may require another tap after an OS interruption;
 silent mode, output volume, OS audio policy and device settings remain authoritative.
 Firebase background push uses the browser/OS notification sound and is independent
 of this in-page preference. No physical iPhone/PWA/Android acceptance is claimed
-by desktop Chromium tests. Service-worker cache is bumped to v19; existing
+by desktop Chromium tests. Service-worker cache is bumped to v20; existing
 installations receive it through their normal service-worker update lifecycle.
 
 
@@ -78,7 +78,7 @@ even after the saved preference became ready. The old asynchronous loader also
 allowed consumers/early interactions to precede the sound manager. We have not
 attributed this user's physical-device silence to a particular defect.
 
-Version 2 captures silent unlock gestures before auth, waits for a confirmed
+Version 3 captures silent unlock gestures before auth, waits for a confirmed
 running context, retains that initial unlock when the session arrives, and bounds
 resume waits. An explicit Test sound button calls `FUSound.play` in the trusted
 click handler, with no network await, and uses the same oscillator/gain synthesis
@@ -102,3 +102,12 @@ Realtime), or audible test with silent notifications (inspect callback/channel/
 filter/sync diagnostics). No physical iPhone Safari, installed PWA or Android
 verification is claimed. Desktop Chromium tests verify the actual button's trusted
 activation and the manager's non-silent generated PCM using OfflineAudioContext.
+
+DOM-ready binding also supports an early sound script alongside a cached older
+`auth.js` that only assigns `window.sb`. A regression test models this PWA upgrade
+path; script version 3/cache v20 invalidate the intermediate release.
+
+The four updated documents also version their coupled auth/settings/Realtime
+consumer URLs (`?v=sounds-v3`). This bypasses cache-first entries from the old
+worker immediately, before cache v20 activates. The theme fixture accepts these
+versioned script URLs while preserving its isolated backend stubs.

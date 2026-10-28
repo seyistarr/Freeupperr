@@ -3,7 +3,7 @@
   'use strict';
   if (window.FUSound) return;
 
-  const VERSION = '2';
+  const VERSION = '3';
   const CACHE = 'fu-sound:';
   const SEEN = 'fu-sound-events:';
   const tones = {
@@ -175,11 +175,15 @@
         const attempt = unlock(options.event);
         if (ctx.state !== 'running') await boundedResume(attempt);
       } else {
-        if (!unlocked) return playResult(type, source, 'interaction-required');
+        if (!gestureSeen) return playResult(type, source, 'interaction-required');
         if (ctx.state !== 'running') {
           unlocked = false;
-          await boundedResume(ctx.resume());
+          await boundedResume(Promise.resolve(ctx.resume()).catch(() => {
+            debug.unlockError = 'resume-rejected';
+            return false;
+          }));
           unlocked = gestureSeen && ctx.state === 'running';
+          if (unlocked) debug.unlockError = null;
         }
       }
       if (owner !== epoch) return playResult(type, source, 'account-changed');
@@ -378,5 +382,8 @@
   });
   window.addEventListener('pageshow', () => { void sync(); });
   window.addEventListener('online', () => { void sync(); });
+  // Older PWA caches may serve auth.js without the explicit bindClient call.
+  // Its defer/body script still creates window.sb before DOMContentLoaded.
+  document.addEventListener('DOMContentLoaded', () => bindClient(window.sb), { once: true });
   bindClient(window.sb);
 })();

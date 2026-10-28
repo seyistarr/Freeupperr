@@ -45,7 +45,7 @@
   if (!document.querySelector('script[data-fu-sounds]')) {
     const sounds = document.createElement('script');
     sounds.dataset.fuSounds = '';
-    sounds.src = '/ui-sounds.js?v=2';
+    sounds.src = '/ui-sounds.js?v=3';
     sounds.onload = () => window.FreeUpperSounds?.bindClient(sb);
     document.head.appendChild(sounds);
   }
