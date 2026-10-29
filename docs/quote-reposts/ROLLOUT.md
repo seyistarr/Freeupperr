@@ -51,3 +51,15 @@ Pre-activation checks: origin/main and eight live asset hashes match 7f0d2fd; mi
 Correction to the earlier Cloudflare record: the final successful deployment for GitHub run 40880487427 is a4a98434-17e8-4868-acec-03932003ac74, version 9245fe25-c9dd-4001-83ef-4af3c9fc401a, as confirmed by its deploy-production job log and Cloudflare API. The earlier recorded version was superseded by that same approved commit's completed deployment; no asset drift was found.
 
 Client gate is being deployed true while server publishing stays false. Production authenticated quote/engagement/deletion UI tests remain pending: the browser connector reports not connected. No privileged impersonation or fabricated authenticated tests will be used.
+
+## Gates enabled; authenticated quote verification pending
+
+Application commit: b70866b2bfd9a618bd201fd740ef0aa931f85e65. GitHub Actions run 40930191272 succeeded: full suite 240 passed, zero failed, two skipped; separate workerd suite eight passed. Focused local suite 26 passed; native PostgreSQL 17 concurrency suite passed.
+
+Cloudflare deployment db1ca67a-8fd5-42e5-8009-137889a42179, version 720ac3c4-49fe-40fa-84e8-dda834d42057, 100% traffic. Eight asset byte comparisons and site/gateway/feed probes passed with client true/server false before the server update.
+
+After deployment verification, the approved conditional server UPDATE enabled publishing only for singleton schema version 1 with reads enabled, expected migration current and no counter discrepancies. Database and live gateway capability checks now confirm readEnabled=true and publishingEnabled=true. Counter drift remains zero; quote rows were zero at that checkpoint. No production quote has yet been created by this tool session.
+
+Additional live negative checks before activation: anonymous quote publication rejected (HTTP 401, SQLSTATE 42501); ten existing restricted/hidden/private-account target previews returned null. This does not substitute for authenticated follower/mutual/owner production testing.
+
+The feature gates are enabled, but final production quote end-to-end sign-off is pending. Requested a controlled quote URL from the user's authorized test accounts because no authenticated controllable browser is connected. Unique A/B IDs, engagement isolation, feed/profile quote rendering and deletion/privacy transitions are covered by automated synthetic tests, not yet confirmed on a real production quote. Do not report those live tests as passed. If a critical test fails, immediately close publishing using the reviewed disable procedure and retain authored data.

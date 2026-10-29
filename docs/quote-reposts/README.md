@@ -1,6 +1,6 @@
 # Quote repost Phase 2 — review package
 
-Status: the user approved rollout on 2026-10-29. Production migration `20261029131137_quote_reposts` is applied and verified. Final client/server activation is in progress. See [`ROLLOUT.md`](ROLLOUT.md) for the current deployment, verification and activation state. No staging project was used.
+Status: the user approved rollout on 2026-10-29. Production migration `20261029131137_quote_reposts` is applied and verified. Both publishing gates are enabled; authenticated production quote end-to-end verification remains pending. See [`ROLLOUT.md`](ROLLOUT.md) for the current deployment, verification and activation state. No staging project was used.
 
 ## Audited production architecture
 
