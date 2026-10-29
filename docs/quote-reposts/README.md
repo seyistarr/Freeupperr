@@ -1,6 +1,6 @@
 # Quote repost Phase 2 — review package
 
-Status: prepared on `main`, based on Phase 1 commit `1e23f93`. Production SQL has **not** been executed. Neither publishing gate is enabled. No staging project was used. Do not push this implementation to `main` until the migration has been approved and verified: the existing GitHub workflow automatically deploys web changes on pushes.
+Status: the user approved rollout on 2026-10-29. Production migration `20261029131137_quote_reposts` is applied and verified. Both publishing gates remain disabled. See [`ROLLOUT.md`](ROLLOUT.md) for the current deployment, verification and activation state. No staging project was used.
 
 ## Audited production architecture
 
@@ -95,7 +95,7 @@ After quotes exist, use [`disable.REVIEW.sql`](disable.REVIEW.sql) to stop publi
 
 ## Outstanding risks and readiness
 
-- **Ready for migration review, not activated production rollout.** Production schema/gateway/end-to-end verification is intentionally pending approval.
+- **Migration applied and verified; quote publishing is not activated.** Compatible deployment and authenticated production smoke tests must pass before activation. See `ROLLOUT.md`.
 - The active live schema contains migrations absent from this repo. Re-audit drift before DDL; the migration checks both counter-RPC hashes and existing repost triggers, and no existing policies are overwritten.
 - Profile privacy/block changes reconcile all referenced roots in this initial implementation. The current dataset is small; profile/block-heavy workloads should be measured before a large rollout. Post reference and plain-row lookups are indexed.
 - Multi-row deletion/privacy changes can contend with quote creation; PostgreSQL rolls deadlocks/serialization errors back, and quote creation retries with the same ID. A surfaced retry exhaustion is an error, not a partially published quote.

@@ -1,5 +1,7 @@
 # Phase 2 verification results
 
+These are the preparation-stage results. The subsequently approved production migration and rollout state are recorded in [`ROLLOUT.md`](ROLLOUT.md).
+
 Date: 2026-10-29. Baseline: `1e23f93`. All database writes below occurred only in disposable local fixtures. Production access was limited to read-only schema/catalog/counter/advisor queries and a read-only vector-conversion probe. No staging queries, production migration, application push or deployment, or publishing activation occurred.
 
 ## Results
