@@ -3140,6 +3140,19 @@
                     } else {
                         mediaHtml = buildVideoTag(post.mediaUrl);
                     }
+                } else if (!opts.forceNavigate && (post.quotedPostId || post.quoted_post_id)) {
+                    // Authored quote tiles only; leave the existing Reposts tab intact.
+                    var q = post.quotedPost;
+                    var available = q && !q.unavailable && !q.is_hidden && !q.is_deleted && q.visibility === 'public' && !q.protectedMedia;
+                    var quoteText = available ? (q.content || q.title || '') : 'This post is unavailable';
+                    var quoteMedia = available && (q.media || []).find(function(m) {
+                        return !m.protected && !m.assetId && (m.type === 'image' || m.type === 'video');
+                    });
+                    var quoteThumb = quoteMedia ? (quoteMedia.type === 'video' ? quoteMedia.thumbnailUrl : quoteMedia.url) : '';
+                    try { quoteThumb = /^https?:$/.test(new URL(quoteThumb).protocol) ? quoteThumb : ''; } catch (_) { quoteThumb = ''; }
+                    mediaHtml = quoteThumb
+                        ? '<img src="' + escapeHtml(quoteThumb) + '" alt="Quoted post media" loading="lazy">'
+                        : '<div class="no-media"><div><small>Quote</small><br>' + escapeHtml(post.title || post.content || '') + '<br>' + escapeHtml(quoteText) + '</div></div>';
                 } else {
                     mediaHtml = '<div class="no-media">' + escapeHtml(post.title) + '</div>';
                 }

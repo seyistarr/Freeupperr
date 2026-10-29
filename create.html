@@ -1958,6 +1958,16 @@
 .clc-title{font-size:14px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .clc-desc{font-size:12px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .clc-x{position:absolute;top:6px;right:8px;border:none;background:none;font-size:18px;color:var(--muted);cursor:pointer}
+
+/* Phase 1 quote previews; scoped cards preserve existing post media layouts. */
+.fu-quote-card{display:block;margin:10px 16px 4px;padding:12px;border:1px solid var(--brd);border-radius:14px;background:var(--bg);color:var(--text);text-decoration:none;overflow:hidden}
+.fu-quote-head{display:flex;align-items:center;gap:6px;min-width:0;font-size:.82rem;margin-bottom:6px}
+.fu-quote-head img{width:20px;height:20px;object-fit:cover;border-radius:50%}
+.fu-quote-head strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fu-quote-meta,.fu-quote-status{color:var(--muted);font-size:.85rem}
+.fu-quote-text{white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.fu-quote-media{display:block;width:100%;max-height:220px;object-fit:contain;margin-top:8px}
+#composerQuoteCard .fu-quote-card{margin:12px 0}
 </style>
 <link rel="stylesheet" href="/js/i18n.css">
 <script>window.fuT = window.fuT || function(key, values) { return window.FreeUpperI18n ? window.FreeUpperI18n.t(key, values) : key; };</script>
@@ -2008,7 +2018,7 @@
 <div class="mention-textarea-wrap"><div class="mention-backdrop" id="postTitleBackdrop" aria-hidden="true"></div><input class="form-inp mention-textarea" id="postTitle" type="text" placeholder="Free to say what's on your mind?" maxlength="100" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Title"></div>
 <span class="char-c" id="postTitleCount" style="display:none"></span>
 <div class="mention-textarea-wrap"><div class="mention-backdrop" id="postContentBackdrop" aria-hidden="true"></div><textarea class="form-inp mention-textarea" id="postContent" placeholder="What's on your mind? Use @ to mention, # for hashtags" rows="4" aria-label="Content"></textarea></div>
-<div class="hashtag-suggestions" id="hashtagSuggestions" role="listbox"></div><div class="image-scroll" id="postImageGrid" role="list"></div><div id="composerLinkCard"></div>
+<div class="hashtag-suggestions" id="hashtagSuggestions" role="listbox"></div><div class="image-scroll" id="postImageGrid" role="list"></div><div id="composerLinkCard"></div><div id="composerQuoteCard" aria-live="polite"></div>
 <div class="composer-count"><span class="char-c" id="postContentCount">0/10,000</span></div>
 <div class="fmt-toolbar" role="toolbar" aria-label="Text formatting"><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('bold')" title="Bold">B</button><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('italic')" title="Italic">I</button><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('underline')" title="Underline">U</button><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('mono')" title="Monospace">S</button><button type="button" class="fmt-btn" onclick="applyUnicodeFormat('normal')" title="Remove formatting">Aa</button><span class="fmt-divider"></span><button type="button" class="fmt-btn" onclick="insertBullet()" title="List"><svg viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M3 6h2M3 12h2M3 18h2"/></svg></button><button type="button" class="fmt-btn" onclick="insertLink()" title="Link"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l2-2"/></svg></button><button type="button" class="fmt-btn" onclick="document.getElementById('postFileInput').click()" title="Add image or video"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 16-6-6L4 21"/></svg></button><button type="button" class="fmt-btn" onclick="toggleEmojiRow()" title="Emoji"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14q4 5 8 0M9 9h.1M15 9h.1"/></svg></button><span class="fmt-divider"></span><button type="button" class="fmt-btn" onclick="insertAtCursor('@')" title="Mention">@</button><button type="button" class="fmt-btn" onclick="insertAtCursor('#')" title="Hashtag">#</button></div>
 <div class="emoji-row" id="emojiRow"><button type="button" onclick="insertAtCursor('😂')">😂</button><button type="button" onclick="insertAtCursor('🔥')">🔥</button><button type="button" onclick="insertAtCursor('❤️')">❤️</button><button type="button" onclick="insertAtCursor('😍')">😍</button><button type="button" onclick="insertAtCursor('🙏')">🙏</button><button type="button" onclick="insertAtCursor('🎉')">🎉</button><button type="button" onclick="insertAtCursor('😎')">😎</button><button type="button" onclick="insertAtCursor('💯')">💯</button></div>
@@ -3820,6 +3830,9 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
         // ──────────────────────────────────────────────────────────────
 
         async function submitPost() {
+            if (composerQuoteMode || new URLSearchParams(location.search).has('quote') || state.quotedPost) {
+                showToast(window.fuT('Quote publishing is not available yet'), 'o'); return;
+            }
             if (!window.PostsAPI || typeof window.PostsAPI.createPost !== 'function') {
                 showToast(window.fuT('System not ready. Please refresh.'), 'r');
                 return;
@@ -4339,6 +4352,53 @@ function removeComposerLink() {
 document.getElementById('postContent')?.addEventListener('input', renderComposerLinkCard);
 window.removeComposerLink = removeComposerLink;
 window.renderComposerLinkCard = renderComposerLinkCard;
+
+// Phase 1: preview only. Never send a quote or silently publish a normal post.
+let composerQuoteMode = new URLSearchParams(location.search).has('quote');
+state.quotedPost = null;
+function removeComposerQuote() {
+    composerQuoteMode = false; state.quotedPost = null;
+    document.getElementById('composerQuoteCard').replaceChildren();
+    const url = new URL(location.href); url.searchParams.delete('quote');
+    history.replaceState({}, '', url.pathname + url.search + url.hash);
+    const btn = document.getElementById('postSubmitBtn'); btn.disabled = false;
+    btn.querySelector('.btn-text').textContent = 'Publish Post';
+    document.getElementById('postContent').placeholder = "What's on your mind? Use @ to mention, # for hashtags";
+}
+window.removeComposerQuote = removeComposerQuote;
+async function initQuoteFromUrl() {
+    if (!composerQuoteMode) return;
+    const box = document.getElementById('composerQuoteCard');
+    const btn = document.getElementById('postSubmitBtn'); btn.disabled = true;
+    btn.querySelector('.btn-text').textContent = 'Quote publishing coming soon';
+    box.innerHTML = '<div class="fu-quote-card"><p class="fu-quote-status" role="status" id="composerQuoteStatus">Loading quoted post…</p><div id="composerQuotePreview"></div><p class="fu-quote-status">Quote publishing is not available yet.</p><button type="button" onclick="removeComposerQuote()">Remove quote</button></div>';
+    const status = document.getElementById('composerQuoteStatus');
+    try {
+        const id = new URLSearchParams(location.search).get('quote');
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '')) throw new Error('Unavailable');
+        const post = await window.PostsAPI.loadPostById(id);
+        if (!composerQuoteMode) return;
+        if (!post || post.visibility !== 'public' || post.is_hidden || post.is_deleted || post.protectedMedia || (post.media || []).some(m => m.protected)) throw new Error('Unavailable');
+        state.quotedPost = post;
+        const p = post.profile || {};
+        const preview = document.getElementById('composerQuotePreview');
+        const head = document.createElement('strong'); head.textContent = p.display_name || p.username || 'Anonymous'; preview.append(head);
+        const text = document.createElement('div'); text.className = 'fu-quote-text'; text.textContent = [post.title, post.content].filter(Boolean).join('\n'); preview.append(text);
+        const media = (post.media || []).find(m => !m.protected && !m.assetId && (m.type === 'image' || m.type === 'video'));
+        const thumb = media && (media.type === 'video' ? media.thumbnailUrl : media.url);
+        if (thumb) {
+            const url = new URL(thumb);
+            if (/^https?:$/.test(url.protocol)) { const img = document.createElement('img'); img.className = 'fu-quote-media'; img.alt = 'Quoted post media'; img.src = url.href; preview.append(img); }
+        }
+        status.textContent = 'Quoting';
+        const audience = document.getElementById('postAudience'); audience.value = 'public'; syncAudienceLabel();
+        document.getElementById('postContent').placeholder = 'Add a comment…';
+    } catch (_) { if (composerQuoteMode) status.textContent = 'This post is unavailable or cannot be quoted'; }
+}
+// PostsAPI is a deferred dependency; wait for DOMContentLoaded before loading.
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initQuoteFromUrl, { once: true });
+else initQuoteFromUrl();
+
 </script>
 </body>
 </html>

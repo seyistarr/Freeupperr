@@ -4481,6 +4481,17 @@
         .published-link-card .plc-host{font-size:12px;font-weight:700;color:var(--muted)}
         .published-link-card .plc-title{font-size:14px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .published-link-card .plc-desc{font-size:12px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all}
+
+/* Phase 1 quote previews; scoped cards preserve existing post media layouts. */
+.fu-quote-card{display:block;margin:10px 16px 4px;padding:12px;border:1px solid var(--brd);border-radius:14px;background:var(--bg);color:var(--text);text-decoration:none;overflow:hidden}
+.fu-quote-head{display:flex;align-items:center;gap:6px;min-width:0;font-size:.82rem;margin-bottom:6px}
+.fu-quote-head img{width:20px;height:20px;object-fit:cover;border-radius:50%}
+.fu-quote-head strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fu-quote-meta,.fu-quote-status{color:var(--muted);font-size:.85rem}
+.fu-quote-text{white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.fu-quote-media{display:block;width:100%;max-height:220px;object-fit:contain;margin-top:8px}
+.fu-repost-choice{display:flex;align-items:center;gap:14px;width:100%;padding:14px 12px;border:0;border-radius:12px;background:transparent;color:var(--text);font:inherit;font-weight:700;text-align:left;cursor:pointer}
+.fu-repost-choice:hover,.fu-repost-choice:focus-visible{background:var(--pdim)}
 </style>
 <style>
         /* Keep the home feed concealed while an incoming post link resolves. */
@@ -4728,6 +4739,16 @@
         </div>
     </div>
 
+    <!-- Home / For You repost menu. Legacy Explore sheet is preserved. -->
+    <div id="homeRepostOverlay" class="repost-modal-overlay" inert>
+      <div class="repost-sheet" role="dialog" aria-modal="true" aria-label="Repost options">
+        <div class="repost-sheet-body">
+          <button type="button" id="homeRepostDo" class="fu-repost-choice"><i class="ri-repeat-2-line" aria-hidden="true"></i><span id="homeRepostLabel">Repost</span></button>
+          <button type="button" id="homeRepostQuote" class="fu-repost-choice"><i class="ri-edit-2-line" aria-hidden="true"></i>Quote</button>
+          <button type="button" id="homeRepostCancel" class="fu-repost-choice">Cancel</button>
+        </div>
+      </div>
+    </div>
     <!-- ===== REPOST QUOTE MODAL ===== -->
     <div id="repostQuoteOverlay" class="repost-modal-overlay">
         <div class="repost-sheet" id="repostQuoteSheet">
@@ -6728,7 +6749,7 @@
                 if (rs.length === 1) label = escapeHtml(firstUser.display_name || firstUser.username);
                 else if (rs.length === 2) label = `${escapeHtml(rs[0].user.display_name)} and ${escapeHtml(rs[1].user.display_name)}`;
                 else label = `${escapeHtml(rs[0].user.display_name)} +${rs.length - 1} others`;
-                const quoteHtml = (rs.length === 1 && rs[0].comment && rs[0].comment.trim())
+                const quoteHtml = (uiPage !== 'home' && rs.length === 1 && rs[0].comment && rs[0].comment.trim())
                     ? `<div class="repost-quote">${escapeHtml(rs[0].comment)}</div>` : '';
                 return `
                     <div class="repost-banner" data-post-id="${p.id}">
@@ -6899,7 +6920,72 @@
 
             window.closeRepostQuoteModal = closeRepostQuoteModal;
 
+
+            // Home / For You menu. Explore retains its independent legacy sheet above.
+            let homeRepostTarget = null;
+            let homeRepostFocus = null;
+            let homeRepostHadScrollLock = false;
+            const pendingHomeReposts = new Set();
+            function closeHomeRepostMenu() {
+                const overlay = document.getElementById('homeRepostOverlay');
+                if (!overlay.classList.contains('open')) return;
+                overlay.classList.remove('open');
+                overlay.inert = true;
+                if (!homeRepostHadScrollLock) unlockBodyScroll();
+                homeRepostTarget = null;
+                homeRepostFocus?.focus();
+            }
+            function openHomeRepostMenu(btn, postId) {
+                homeRepostTarget = postId; homeRepostFocus = btn;
+                const post = allPosts.find(p => p.id === postId);
+                const cu = getCurrentUser();
+                const mine = post?.myRepost || getFeedContext(postId)?.repost?.items?.some(r => r.user.id === cu?.id);
+                document.getElementById('homeRepostLabel').textContent = mine ? 'Undo repost' : 'Repost';
+                homeRepostHadScrollLock = document.body.style.position === 'fixed';
+                if (!homeRepostHadScrollLock) lockBodyScroll();
+                document.getElementById('homeRepostOverlay').inert = false;
+                document.getElementById('homeRepostOverlay').classList.add('open');
+                document.getElementById('homeRepostDo').focus();
+            }
+            document.getElementById('homeRepostCancel').addEventListener('click', closeHomeRepostMenu);
+            document.getElementById('homeRepostOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeHomeRepostMenu(); });
+            document.getElementById('homeRepostOverlay').addEventListener('keydown', e => {
+                if (e.key === 'Escape') { e.stopPropagation(); closeHomeRepostMenu(); }
+                if (e.key === 'Tab') {
+                    const buttons = [...e.currentTarget.querySelectorAll('button')];
+                    const next = (buttons.indexOf(document.activeElement) + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
+                    e.preventDefault(); buttons[next].focus();
+                }
+            });
+            document.getElementById('homeRepostDo').addEventListener('click', () => {
+                const id = homeRepostTarget;
+                if (!id || pendingHomeReposts.has(id)) return;
+                closeHomeRepostMenu();
+                if (!window.AuthUser?.requireAuth) { showToast(window.fuT('Please sign in to repost'), 'o'); return; }
+                window.AuthUser.requireAuth(async () => {
+                    if (pendingHomeReposts.has(id)) return;
+                    pendingHomeReposts.add(id);
+                    try {
+                        const result = await window.PostsAPI.toggleRepostAPI(id, '');
+                        const post = allPosts.find(p => p.id === id);
+                        if (post) { post.myRepost = !!result.reposted; if (typeof result.count === 'number') post.repostCount = result.count; }
+                        window.IndexInteractions?.notify(id, result.reposted ? 'repost' : 'unrepost');
+                        await reloadPosts(); renderUI();
+                        showToast(window.fuT(result.reposted ? 'Reposted' : 'Repost removed'));
+                    } catch (err) { showToast(err.message, 'r'); }
+                    finally { pendingHomeReposts.delete(id); }
+                });
+            });
+            document.getElementById('homeRepostQuote').addEventListener('click', () => {
+                const id = homeRepostTarget;
+                if (!id) return;
+                closeHomeRepostMenu();
+                if (!window.AuthUser?.requireAuth) { showToast(window.fuT('Please sign in to repost'), 'o'); return; }
+                window.AuthUser.requireAuth(() => { window.location.href = 'create.html?quote=' + encodeURIComponent(id); });
+            });
+
             function triggerRepostFromFeed(btn, postId) {
+                if (uiPage === 'home' || (uiPage === 'single-post-explore' && window._fullscreenReturnPage === 'home')) { openHomeRepostMenu(btn, postId); return; }
                 haptic(10);
                 btn.classList.add('spinning');
                 btn.style.pointerEvents = 'none';
@@ -7023,6 +7109,32 @@
                     newState === 'follow-back' ? 'Unfollowed' : 'Unfollowed';
                 showToast(toastMsg);
             };
+
+
+            function buildQuotedPostCard(post) {
+                if (!post || !(post.quotedPostId || post.quoted_post_id)) return '';
+                const q = post.quotedPost;
+                if (!q || q.unavailable || q.is_hidden || q.is_deleted || q.visibility !== 'public' || q.protectedMedia) {
+                    return '<div class="fu-quote-card fu-quote-status">This post is unavailable</div>';
+                }
+                const p = q.profile || {};
+                const safeUrl = value => { try { const u = new URL(value); return /^https?:$/.test(u.protocol) ? escapeHtml(u.href) : ''; } catch (_) { return ''; } };
+                const media = (q.media || []).find(m => !m.protected && !m.assetId && (m.type === 'image' || m.type === 'video'));
+                const thumb = media ? safeUrl(media.type === 'video' ? media.thumbnailUrl : media.url) : '';
+                const avatar = safeUrl(p.avatar_url);
+                return `<a class="fu-quote-card" href="index.html?post=${encodeURIComponent(q.id)}" data-fu-quote>
+                    <div class="fu-quote-head">${avatar ? `<img src="${avatar}" alt="">` : ''}<strong>${escapeHtml(p.display_name || p.username || 'Anonymous')}</strong><span class="fu-quote-meta">${escapeHtml(p.username ? '@' + p.username : '')}</span></div>
+                    <div class="fu-quote-text">${escapeHtml([q.title, q.content].filter(Boolean).join('\n'))}</div>
+                    ${thumb ? `<img class="fu-quote-media" src="${thumb}" alt="Quoted post media" loading="lazy">` : ''}
+                </a>`;
+            }
+            // Stop feed delegation before it opens the outer authored post.
+            document.addEventListener('click', e => {
+                const card = e.target.closest?.('[data-fu-quote]');
+                if (!card) return;
+                e.preventDefault(); e.stopPropagation();
+                window.location.href = card.href;
+            }, true);
 
             // ─── ACTIONS ROW ──────────────────────────────────────────────────
             function buildActionsRow(p) {
@@ -8383,6 +8495,7 @@
                           ${post.description?`<p class="text-sm leading-relaxed mt-1" style="white-space:pre-wrap;color:var(--muted);">${escapeHtml(post.description)}</p>`:''}
                           ${post.content && post.content.trim() ? `<div class="mt-1">${buildContentBlockHTML(post.id, post.content, hasMedia, { noPreview: true, mentions: post.mentions })}</div>` : ''}
                         </div>` : ''}
+                        ${window._fullscreenReturnPage === 'home' ? buildQuotedPostCard(post) : ''}
                         ${buildPublishedLinkCard(post)}
                         <div class="post-actions-row" style="max-width:100%;padding:0 4px;" data-post-reactions="${post.id}">
                           ${buildReactionButton(post.id)}
@@ -9447,6 +9560,7 @@
             window.renderPostTitle = renderPostTitle;
             window.buildContentBlockHTML = buildContentBlockHTML;
             window.buildActionsRow = buildActionsRow;
+            window.buildQuotedPostCard = buildQuotedPostCard;
             window.truncateName = truncateName;
             window.formatRelativeTime = formatRelativeTime;
             window.initPlayers = initPlayers;

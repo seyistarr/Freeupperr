@@ -208,6 +208,7 @@
                   </div>
                 </div>
                 ${mh}
+                ${window.buildQuotedPostCard ? window.buildQuotedPostCard(p) : ''}
                 ${window.buildPublishedLinkCard ? window.buildPublishedLinkCard(p) : ''}
                 <div style="padding:0 16px;">
                   ${th}
