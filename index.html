@@ -7128,13 +7128,101 @@
                     ${thumb ? `<img class="fu-quote-media" src="${thumb}" alt="Quoted post media" loading="lazy">` : ''}
                 </a>`;
             }
+            // Quote navigation stays in this document: deep-link startup hides the body.
+            let quoteNavigationPending = false;
+            let quoteNavigationActive = !!(history.state?.fuQuoteView || history.state?.fuQuoteReturn);
+            let quoteNavigationVersion = 0;
+            let restoringQuoteNavigation = false;
+
+            function quoteNavigationSnapshot() {
+                return {
+                    postId: uiPage === 'single-post-explore' ? currentPostId : null,
+                    page: uiPage === 'single-post-explore' ? (window._fullscreenReturnPage || 'home') : uiPage,
+                    scroll: window.scrollY,
+                    detailScroll: document.getElementById('explore-fullscreen')?.scrollTop || 0,
+                    fromProfile: !!window._openedFromProfile
+                };
+            }
+
+            async function loadQuoteNavigationPost(id) {
+                // Fetch the complete original through the existing authorized API, not the embed.
+                const post = await window.PostsAPI.loadPostById(id);
+                if (!post || post.is_hidden || post.is_deleted) throw new Error('This post is unavailable or private');
+                const remember = list => {
+                    const index = list.findIndex(p => p.id === id);
+                    if (index < 0) list.unshift(post); else list[index] = post;
+                };
+                remember(allPosts);
+                if (appData.posts !== allPosts) remember(appData.posts);
+                return post;
+            }
+
+            async function renderQuoteNavigationPost(id, page) {
+                // Opening a detail from another detail must not replace the feed's scroll lock.
+                const lockedScroll = _lockedScrollY;
+                const homeScroll = tabScrollPositions.home;
+                const nested = uiPage === 'single-post-explore';
+                window._openedFromProfile = false;
+                await openExplorePost(id, page);
+                if (nested) {
+                    _lockedScrollY = lockedScroll;
+                    document.body.style.top = `-${lockedScroll}px`;
+                    tabScrollPositions.home = homeScroll;
+                }
+            }
+
             // Stop feed delegation before it opens the outer authored post.
-            document.addEventListener('click', e => {
+            document.addEventListener('click', async e => {
                 const card = e.target.closest?.('[data-fu-quote]');
                 if (!card) return;
+                // Keep standard new-tab gestures available on the real fallback link.
+                if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) { e.stopPropagation(); return; }
                 e.preventDefault(); e.stopPropagation();
-                window.location.href = card.href;
+                if (quoteNavigationPending) return;
+                const id = new URL(card.href, location.href).searchParams.get('post');
+                if (!id || (uiPage === 'single-post-explore' && currentPostId === id)) return;
+                const source = quoteNavigationSnapshot();
+                const version = ++quoteNavigationVersion;
+                quoteNavigationPending = true;
+                card.setAttribute('aria-busy', 'true');
+                try {
+                    await loadQuoteNavigationPost(id);
+                    if (version !== quoteNavigationVersion) return;
+                    history.replaceState({ ...history.state, fuQuoteReturn: source }, '', location.href);
+                    history.pushState({ fuQuoteView: { postId: id, page: source.page } }, '', card.href);
+                    quoteNavigationActive = true;
+                    await renderQuoteNavigationPost(id, source.page);
+                } catch (error) {
+                    showToast(window.fuT('This post is unavailable or private'));
+                } finally {
+                    quoteNavigationPending = false;
+                    card.removeAttribute('aria-busy');
+                }
             }, true);
+
+            window.addEventListener('popstate', async e => {
+                const version = ++quoteNavigationVersion;
+                if (!quoteNavigationActive) return;
+                const target = e.state?.fuQuoteReturn || e.state?.fuQuoteView;
+                if (!target) return;
+                restoringQuoteNavigation = true;
+                try {
+                    if (target.postId) {
+                        await loadQuoteNavigationPost(target.postId);
+                        if (version !== quoteNavigationVersion) return;
+                        await renderQuoteNavigationPost(target.postId, target.page);
+                        window._openedFromProfile = !!target.fromProfile;
+                        document.getElementById('explore-fullscreen').scrollTop = target.detailScroll || 0;
+                    } else {
+                        closeExploreFullscreen();
+                        window.scrollTo(0, target.scroll || 0);
+                    }
+                } catch (error) {
+                    showToast(window.fuT('This post is unavailable or private'));
+                } finally {
+                    if (version === quoteNavigationVersion) restoringQuoteNavigation = false;
+                }
+            });
 
             // ─── ACTIONS ROW ──────────────────────────────────────────────────
             function buildActionsRow(p) {
@@ -8656,6 +8744,10 @@
 
             // ─── closeExploreFullscreen ────────────────────────────────────────
             function closeExploreFullscreen() {
+                if (quoteNavigationActive && history.state?.fuQuoteView && !restoringQuoteNavigation) {
+                    history.back();
+                    return;
+                }
                 if (window.IndexRender && typeof window.IndexRender.resume === 'function') {
                     window.IndexRender.resume();
                 }
