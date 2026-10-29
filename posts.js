@@ -85,6 +85,54 @@
     return;
   }
   const sb = window.sb;
+  // Quote reads are opt-in. Video keeps its existing query path; Explore keeps its renderer.
+  const quoteUIEnabled = !!window.document?.querySelector('script[data-fu-quotes]');
+  // Release step only: change after production migration verification and approval.
+  const QUOTE_PUBLISHING_REVIEWED = false;
+  const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let quoteCapabilityPromise = null;
+  async function getQuoteCapabilities(refresh = false) {
+    if (!quoteUIEnabled) return { schemaVersion: 0, readEnabled: false, publishingEnabled: false };
+    if (refresh || !quoteCapabilityPromise) {
+      quoteCapabilityPromise = Promise.resolve(sb.rpc('quote_repost_status')).then(({ data, error }) =>
+        !error && data?.schemaVersion === 1 ? data : { schemaVersion: 0, readEnabled: false, publishingEnabled: false }
+      ).catch(() => ({ schemaVersion: 0, readEnabled: false, publishingEnabled: false }));
+    }
+    return quoteCapabilityPromise;
+  }
+  async function canPublishQuote() {
+    if (!QUOTE_PUBLISHING_REVIEWED || !quoteUIEnabled) return false;
+    return !!(await getQuoteCapabilities(true)).publishingEnabled;
+  }
+  function mapQuotedPost(row) {
+    if (!row || row.visibility !== 'public' || row.is_hidden || row.is_deleted) return null;
+    const media = normalizeMedia(row);
+    if (media.some(m => m.protected)) return null;
+    return { id: row.id, user_id: row.user_id, profile: normalizeProfile(row.profiles),
+      title: row.title || '', content: row.content || '', visibility: 'public',
+      timestamp: safeDate(row.created_at), media, unavailable: false };
+  }
+  async function loadQuotablePost(postId) {
+    if (!quoteUIEnabled || !UUID_PATTERN.test(postId || '')) return null;
+    const { data, error } = await sb.rpc('get_quotable_post', { p_post_id: postId });
+    if (error) return null; // Missing migration, denied target, or network error: fail closed.
+    return mapQuotedPost(data);
+  }
+  async function enrichQuotePosts(posts) {
+    if (!quoteUIEnabled) return posts;
+    const ids = posts.filter(p => p.isQuote && p.quotedPostId).map(p => p.id);
+    // Bound the batch and never recursively map the embedded post as a feed post.
+    for (let start = 0; start < ids.length; start += 100) {
+      let result;
+      try { result = await sb.rpc('load_quote_references', { p_post_ids: ids.slice(start, start + 100) }); }
+      catch (_) { continue; }
+      const { data, error } = result;
+      if (error) continue; // Outer authored post remains visible with an unavailable embed.
+      const originals = new Map((data || []).map(row => [row.post_id, mapQuotedPost(row.original)]));
+      posts.forEach(post => { if (originals.get(post.id)) post.quotedPost = originals.get(post.id); });
+    }
+    return posts;
+  }
 
   // ===================================================================
   // CONFIG
@@ -459,16 +507,22 @@
     const postIds = rows.map(row => row.id);
     const interaction = await loadInteractionState(postIds, user?.id || null);
 
-    return rows
+    const mapped = rows
       .map(row => {
         const myRepost = interaction.repostMap.get(row.id) || null;
-        return mapPost(row, {
+        const post = mapPost(row, {
           likedByMe: interaction.likedIds.has(row.id),
           bookmarkedByMe: interaction.bookmarkedIds.has(row.id),
           myRepost
         });
+        if (quoteUIEnabled && post) Object.assign(post, {
+          isQuote: row.is_quote === true, quotedPostId: row.quoted_post_id || null,
+          quotedPost: row.is_quote ? { unavailable: true } : null
+        });
+        return post;
       })
       .filter(Boolean);
+    return enrichQuotePosts(mapped);
   }
 
   // ===================================================================
@@ -1326,11 +1380,26 @@
     }
 
 
-    const { data, error } = await sb
-      .from('posts')
-      .insert(payload)
-      .select(POST_SELECT)
-      .single();
+    let data, error;
+    if (fields.quotedPostId != null) {
+      if (!await canPublishQuote()) throw new Error('Quote publishing is not available yet');
+      if (!UUID_PATTERN.test(fields.quotedPostId) || !UUID_PATTERN.test(fields.quotePostId || '')) {
+        throw new Error('Invalid quote request');
+      }
+      // The normal post INSERT payload and select are unchanged. Quotes use the
+      // reviewed RPC, which revalidates the original and preserves existing RLS.
+      const { user_id, ...quoteFields } = payload;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        ({ data, error } = await sb.rpc('create_quote_post', {
+          p_post_id: fields.quotePostId, p_quoted_post_id: fields.quotedPostId, p_fields: quoteFields
+        }));
+        if (!error || !['40001', '40P01'].includes(error.code) || attempt === 2) break;
+        await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+      }
+      if (Array.isArray(data)) data = data[0];
+    } else {
+      ({ data, error } = await sb.from('posts').insert(payload).select(POST_SELECT).single());
+    }
 
     if (error) throw error;
 
@@ -1343,6 +1412,7 @@
       }
     }
 
+    if (fields.quotedPostId != null) return (await loadPostById(data.id)) || mapPost(data);
     return mapPost(data, { likedByMe: false, bookmarkedByMe: false, myRepost: null });
   }
 
@@ -1549,6 +1619,9 @@
     loadPostById,
     loadPostPreview,
     createPost,
+    getQuoteCapabilities,
+    canPublishQuote,
+    loadQuotablePost,
     deletePost,
     editPost,
 

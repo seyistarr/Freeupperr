@@ -48,7 +48,7 @@
     </script>
     <script src="auth.js">
     </script>
-    <script src="posts.js">
+    <script src="posts.js" data-fu-quotes>
     </script>
     <script src="listings.js">
     </script>
@@ -3830,8 +3830,18 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
         // ──────────────────────────────────────────────────────────────
 
         async function submitPost() {
+            if (state.quoteSubmitting || state.quoteSubmitted) return;
+            const quoting = composerQuoteMode || new URLSearchParams(location.search).has('quote') || state.quotedPost;
+            if (!quoting) return submitPostBody();
+            state.quoteSubmitting = true;
+            try { return await submitPostBody(); }
+            finally { state.quoteSubmitting = false; }
+        }
+        async function submitPostBody() {
             if (composerQuoteMode || new URLSearchParams(location.search).has('quote') || state.quotedPost) {
-                showToast(window.fuT('Quote publishing is not available yet'), 'o'); return;
+                if (!state.quotedPost || !await window.PostsAPI?.canPublishQuote()) {
+                    showToast(window.fuT('Quote publishing is not available yet'), 'o'); return;
+                }
             }
             if (!window.PostsAPI || typeof window.PostsAPI.createPost !== 'function') {
                 showToast(window.fuT('System not ready. Please refresh.'), 'r');
@@ -3850,6 +3860,9 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
             const linkCount=(content.match(/https?:\/\/\S+/gi)||[]).length+state.postMedia.filter(m=>/^(youtube_|external_)/.test(m.public_id||'')).length;
             if(linkCount>1){showToast(window.fuT('Only one link per post'),'o');return;}
 
+            if (state.quotedPost && audience !== 'public') {
+                showToast(window.fuT('Quote posts must be Public'), 'o'); return;
+            }
             if (audience !== 'public') {
                 if (!window.FreeUpperProtectedPublish) {
                     showToast(window.fuT('Protected publishing is not ready'), 'r');
@@ -3884,7 +3897,7 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
                 showToast(window.fuT('Remove protected files before publishing publicly'), 'o');
                 return;
             }
-            if (!title && !content && state.postMedia.length === 0) {
+            if (!title && !content && state.postMedia.length === 0 && !state.quotedPost) {
                 showToast(window.fuT('Please add a title, content or media'), 'o');
                 return;
             }
@@ -3950,8 +3963,12 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
                     mentions: mentions,
                     commentsHidden: hideComments,
                     source: 'composer',
+                    ...(state.quotedPost ? { quotedPostId: state.quotedPost.id, quotePostId: state.quoteRequestId } : {}),
                     imageEmbedding: imageEmbedding
                 });
+
+                const publishedQuote = !!state.quotedPost;
+                if (publishedQuote) state.quoteSubmitted = true;
 
                 // Notify mentions
                 if (result.id && mentions.length > 0) {
@@ -3980,10 +3997,10 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
 
                 showToast(window.fuT('Post published! 🎉'), 'g');
                 btn.classList.remove('loading');
-                btn.disabled = false;
+                btn.disabled = publishedQuote;
 
                 setTimeout(() => {
-                    window.location.href = 'index.html?refresh=' + Date.now();
+                    window.location.href = publishedQuote ? 'index.html?post=' + encodeURIComponent(result.id) : 'index.html?refresh=' + Date.now();
                 }, 500);
 
             } catch (err) {
@@ -4353,11 +4370,12 @@ document.getElementById('postContent')?.addEventListener('input', renderComposer
 window.removeComposerLink = removeComposerLink;
 window.renderComposerLinkCard = renderComposerLinkCard;
 
-// Phase 1: preview only. Never send a quote or silently publish a normal post.
+// Quote composer: publication requires both the reviewed client and the server release gate.
 let composerQuoteMode = new URLSearchParams(location.search).has('quote');
 state.quotedPost = null;
 function removeComposerQuote() {
-    composerQuoteMode = false; state.quotedPost = null;
+    if (state.quoteSubmitting || state.quoteSubmitted) return;
+    composerQuoteMode = false; state.quotedPost = null; state.quoteRequestId = null;
     document.getElementById('composerQuoteCard').replaceChildren();
     const url = new URL(location.href); url.searchParams.delete('quote');
     history.replaceState({}, '', url.pathname + url.search + url.hash);
@@ -4371,15 +4389,16 @@ async function initQuoteFromUrl() {
     const box = document.getElementById('composerQuoteCard');
     const btn = document.getElementById('postSubmitBtn'); btn.disabled = true;
     btn.querySelector('.btn-text').textContent = 'Quote publishing coming soon';
-    box.innerHTML = '<div class="fu-quote-card"><p class="fu-quote-status" role="status" id="composerQuoteStatus">Loading quoted post…</p><div id="composerQuotePreview"></div><p class="fu-quote-status">Quote publishing is not available yet.</p><button type="button" onclick="removeComposerQuote()">Remove quote</button></div>';
+    box.innerHTML = '<div class="fu-quote-card"><p class="fu-quote-status" role="status" id="composerQuoteStatus">Loading quoted post…</p><div id="composerQuotePreview"></div><p class="fu-quote-status" id="composerQuoteHelp">Quote publishing is not available yet.</p><button type="button" onclick="removeComposerQuote()">Remove quote</button></div>';
     const status = document.getElementById('composerQuoteStatus');
     try {
         const id = new URLSearchParams(location.search).get('quote');
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '')) throw new Error('Unavailable');
-        const post = await window.PostsAPI.loadPostById(id);
+        const post = await window.PostsAPI.loadQuotablePost(id);
         if (!composerQuoteMode) return;
         if (!post || post.visibility !== 'public' || post.is_hidden || post.is_deleted || post.protectedMedia || (post.media || []).some(m => m.protected)) throw new Error('Unavailable');
         state.quotedPost = post;
+        state.quoteRequestId = crypto.randomUUID();
         const p = post.profile || {};
         const preview = document.getElementById('composerQuotePreview');
         const head = document.createElement('strong'); head.textContent = p.display_name || p.username || 'Anonymous'; preview.append(head);
@@ -4393,6 +4412,11 @@ async function initQuoteFromUrl() {
         status.textContent = 'Quoting';
         const audience = document.getElementById('postAudience'); audience.value = 'public'; syncAudienceLabel();
         document.getElementById('postContent').placeholder = 'Add a comment…';
+        const ready = await window.PostsAPI.canPublishQuote();
+        if (!composerQuoteMode) return;
+        btn.disabled = !ready;
+        btn.querySelector('.btn-text').textContent = ready ? 'Publish Quote' : 'Quote publishing coming soon';
+        if (ready) document.getElementById('composerQuoteHelp').textContent = 'Your quote will be a separate post.';
     } catch (_) { if (composerQuoteMode) status.textContent = 'This post is unavailable or cannot be quoted'; }
 }
 // PostsAPI is a deferred dependency; wait for DOMContentLoaded before loading.

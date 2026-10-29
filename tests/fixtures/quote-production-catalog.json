@@ -1,0 +1,713 @@
+{
+  "audit_date": "2026-10-29",
+  "project_ref": "jmjtqidirpmnegzvmiaq",
+  "functions": [
+    {
+      "schema": "public",
+      "proname": "delete_post",
+      "signature": "delete_post(uuid)",
+      "security_definer": true,
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.delete_post(p_post_id uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nBEGIN\n IF auth.uid() IS NULL OR NOT EXISTS(SELECT 1 FROM public.posts WHERE id=p_post_id AND user_id=auth.uid()) THEN\n  RAISE EXCEPTION 'Post not found or not owned' USING ERRCODE='42501';\n END IF;\n UPDATE public.posts SET is_deleted=true,is_hidden=true WHERE id=p_post_id AND user_id=auth.uid();\nEND $function$\n"
+    },
+    {
+      "schema": "public",
+      "proname": "is_blocked_between",
+      "signature": "is_blocked_between(uuid,uuid)",
+      "security_definer": true,
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.is_blocked_between(p_user_a uuid, p_user_b uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n    SELECT EXISTS (\r\n        SELECT 1\r\n        FROM public.blocks b\r\n        WHERE\r\n            (b.blocker_id = p_user_a AND b.blocked_id = p_user_b)\r\n            OR\r\n            (b.blocker_id = p_user_b AND b.blocked_id = p_user_a)\r\n    );\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "proname": "permanent_post_readable",
+      "signature": "permanent_post_readable(uuid,uuid)",
+      "security_definer": true,
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.permanent_post_readable(p_post uuid, p_owner uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n SELECT auth.uid() IS NOT NULL AND NOT EXISTS(\n SELECT 1 FROM privacy_v2_private.post_deletions d WHERE d.post_id=p_post\n AND d.owner_id=auth.uid() AND p_owner=auth.uid() AND d.permanent)\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "proname": "permanently_delete_post",
+      "signature": "permanently_delete_post(uuid)",
+      "security_definer": true,
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.permanently_delete_post(p_post_id uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nBEGIN\n IF auth.uid() IS NULL OR NOT EXISTS(SELECT 1 FROM public.posts WHERE id=p_post_id AND user_id=auth.uid()) THEN\n  RAISE EXCEPTION 'Post not found or not owned' USING ERRCODE='42501';\n END IF;\n DELETE FROM public.posts WHERE id=p_post_id AND user_id=auth.uid();\nEND $function$\n"
+    },
+    {
+      "schema": "public",
+      "proname": "privacy_v2_approved_edge",
+      "signature": "privacy_v2_approved_edge(uuid,uuid)",
+      "security_definer": true,
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.privacy_v2_approved_edge(p_follower uuid, p_following uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n select auth.uid() is not null\n and auth.uid() in (p_follower,p_following)\n and privacy_v2_private.approved_edge(p_follower,p_following);\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "proname": "restore_post",
+      "signature": "restore_post(uuid)",
+      "security_definer": true,
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.restore_post(p_post_id uuid)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nBEGIN\n IF auth.uid() IS NULL OR NOT EXISTS(SELECT 1 FROM public.posts WHERE id=p_post_id AND user_id=auth.uid() AND is_deleted IS TRUE) THEN\n  RAISE EXCEPTION 'Post not found or not owned' USING ERRCODE='42501';\n END IF;\n UPDATE public.posts SET is_deleted=false WHERE id=p_post_id AND user_id=auth.uid();\n RETURN true;\nEND $function$\n"
+    },
+    {
+      "schema": "public",
+      "proname": "toggle_repost",
+      "signature": "toggle_repost(uuid,uuid,text)",
+      "security_definer": true,
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.toggle_repost(p_post_id uuid, p_user_id uuid, p_comment text DEFAULT ''::text)\n RETURNS TABLE(reposted boolean, count integer, out_comment text, out_time timestamp with time zone)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\nDECLARE v_exists boolean; v_count integer; v_time timestamptz;\nBEGIN\n IF auth.uid() IS NULL OR auth.uid() IS DISTINCT FROM p_user_id THEN\n  RAISE EXCEPTION 'Not authorized' USING ERRCODE = '42501';\n END IF;\n SELECT EXISTS(SELECT 1 FROM public.reposts r WHERE r.post_id=p_post_id AND r.user_id=p_user_id) INTO v_exists;\n IF v_exists THEN\n  DELETE FROM public.reposts r WHERE r.post_id=p_post_id AND r.user_id=p_user_id;\n  UPDATE public.posts p SET repost_count=greatest(0,coalesce(p.repost_count,0)-1) WHERE p.id=p_post_id RETURNING p.repost_count INTO v_count;\n  RETURN QUERY SELECT false,v_count,''::text,null::timestamptz;\n ELSE\n  v_time:=now();\n  INSERT INTO public.reposts(post_id,user_id,comment,created_at) VALUES(p_post_id,p_user_id,coalesce(p_comment,''),v_time);\n  UPDATE public.posts p SET repost_count=coalesce(p.repost_count,0)+1 WHERE p.id=p_post_id RETURNING p.repost_count INTO v_count;\n  RETURN QUERY SELECT true,v_count,coalesce(p_comment,''),v_time;\n END IF;\nEND $function$\n"
+    },
+    {
+      "schema": "public",
+      "proname": "toggle_repost",
+      "signature": "toggle_repost(uuid,text)",
+      "security_definer": true,
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.toggle_repost(p_post_id uuid, p_comment text DEFAULT ''::text)\n RETURNS TABLE(reposted boolean, new_count integer, repost_comment text, reposted_at timestamp with time zone)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\r\ndeclare\r\n  v_user_id uuid := auth.uid();\r\n  v_exists boolean;\r\n  v_count integer;\r\nbegin\r\n  if v_user_id is null then\r\n    raise exception 'Not authenticated';\r\n  end if;\r\n\r\n  if not exists (select 1 from posts where id = p_post_id) then\r\n    raise exception 'Post not found';\r\n  end if;\r\n\r\n  select exists(\r\n    select 1 from reposts where post_id = p_post_id and user_id = v_user_id\r\n  ) into v_exists;\r\n\r\n  if v_exists then\r\n    delete from reposts where post_id = p_post_id and user_id = v_user_id;\r\n    update posts set repost_count = greatest(0, repost_count - 1) where id = p_post_id returning repost_count into v_count;\r\n    return query select false, v_count, ''::text, null::timestamptz;\r\n  else\r\n    insert into reposts (post_id, user_id, comment) values (p_post_id, v_user_id, coalesce(p_comment, ''));\r\n    update posts set repost_count = repost_count + 1 where id = p_post_id returning repost_count into v_count;\r\n    return query select true, v_count, coalesce(p_comment, ''), now();\r\n  end if;\r\nend;\r\n$function$\n"
+    },
+    {
+      "schema": "public",
+      "proname": "verification_post_readable",
+      "signature": "verification_post_readable(uuid,uuid)",
+      "security_definer": true,
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.verification_post_readable(p_post uuid, p_owner uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n SELECT auth.uid() IS NOT NULL AND (NOT EXISTS(SELECT 1 FROM privacy_v2_private.verification_posts WHERE post_id=p_post)\n   OR privacy_v2_private.verification_post_active(p_post,p_owner))\n$function$\n"
+    },
+    {
+      "proname": "approved_edge",
+      "signature": "privacy_v2_private.approved_edge(uuid,uuid)",
+      "prosecdef": true,
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION privacy_v2_private.approved_edge(p_follower uuid, p_following uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n select p_follower is not null and p_following is not null and exists(\n select 1 from public.follows f\n join public.profiles p on p.id=f.following_id\n join privacy_v2_private.follow_approvals a on a.follower_id=f.follower_id and a.following_id=f.following_id\n where f.follower_id=p_follower and f.following_id=p_following\n and f.status='active' and p.suspended=false\n and (p.is_private=false or a.approval_kind='owner')\n );\n$function$\n"
+    },
+    {
+      "proname": "author_not_suspended",
+      "signature": "privacy_v2_private.author_not_suspended(uuid)",
+      "prosecdef": true,
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION privacy_v2_private.author_not_suspended(p_user_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$ SELECT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = p_user_id AND p.suspended IS FALSE) $function$\n"
+    },
+    {
+      "proname": "protected_post_retirement_guard",
+      "signature": "privacy_v2_private.protected_post_retirement_guard()",
+      "prosecdef": true,
+      "proacl": "{postgres=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION privacy_v2_private.protected_post_retirement_guard()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nDECLARE protected boolean; d privacy_v2_private.post_deletions%rowtype;\nBEGIN\n SELECT EXISTS(SELECT 1 FROM privacy_v2_private.protected_post_origins WHERE post_id=OLD.id AND owner_id=OLD.user_id) INTO protected;\n IF TG_OP='DELETE' THEN\n  IF NOT protected THEN RETURN OLD; END IF;\n  INSERT INTO privacy_v2_private.post_deletions(post_id,owner_id,purge_after,permanent,previous_state,previous_hidden)\n   VALUES(OLD.id,OLD.user_id,now(),true,OLD.publishing_state,OLD.is_hidden)\n   ON CONFLICT(post_id) DO UPDATE SET permanent=true,purge_after=now();\n  UPDATE public.posts SET is_deleted=true,is_hidden=true,publishing_state='failed' WHERE id=OLD.id;\n  RETURN NULL;\n END IF;\n SELECT * INTO d FROM privacy_v2_private.post_deletions WHERE post_id=OLD.id FOR UPDATE;\n IF OLD.is_deleted IS TRUE AND NEW.is_deleted IS DISTINCT FROM TRUE THEN\n  IF d.post_id IS NULL OR d.permanent OR d.purge_after<=now()\n    OR EXISTS(SELECT 1 FROM privacy_v2_private.verification_posts WHERE post_id=OLD.id)\n    OR (protected AND EXISTS(SELECT 1 FROM public.post_media_assets WHERE post_id=OLD.id AND status<>'ready')) THEN\n   RAISE EXCEPTION 'Post cannot be restored' USING ERRCODE='23514';\n  END IF;\n  NEW.publishing_state:=d.previous_state; NEW.is_hidden:=d.previous_hidden; NEW.deleted_at:=NULL;\n  DELETE FROM privacy_v2_private.post_deletions WHERE post_id=OLD.id;\n  RETURN NEW;\n END IF;\n IF NEW.is_deleted IS TRUE OR (protected AND NEW.publishing_state='failed' AND NEW.is_hidden IS TRUE) THEN\n  INSERT INTO privacy_v2_private.post_deletions(post_id,owner_id,purge_after,permanent,previous_state,previous_hidden)\n   VALUES(OLD.id,OLD.user_id,now()+interval '7 days',NEW.publishing_state='failed',OLD.publishing_state,coalesce(OLD.is_hidden,false))\n   ON CONFLICT(post_id) DO UPDATE SET permanent=post_deletions.permanent OR excluded.permanent;\n  SELECT * INTO d FROM privacy_v2_private.post_deletions WHERE post_id=OLD.id;\n  NEW.is_deleted:=true; NEW.is_hidden:=true; NEW.deleted_at:=d.deleted_at;\n  IF protected AND d.permanent THEN\n   NEW.publishing_state:='failed';\n   PERFORM privacy_v2_private.queue_protected_retirement(OLD.id,OLD.user_id);\n  END IF;\n END IF;\n RETURN NEW;\nEND $function$\n"
+    },
+    {
+      "proname": "verification_owner_active",
+      "signature": "privacy_v2_private.verification_owner_active(uuid)",
+      "prosecdef": true,
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION privacy_v2_private.verification_owner_active(p_owner uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$ SELECT false $function$\n"
+    },
+    {
+      "proname": "verification_post_active",
+      "signature": "privacy_v2_private.verification_post_active(uuid,uuid)",
+      "prosecdef": true,
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION privacy_v2_private.verification_post_active(p_post uuid, p_owner uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n SELECT privacy_v2_private.verification_owner_active(p_owner)\n AND EXISTS(SELECT 1 FROM privacy_v2_private.verification_posts\n   WHERE post_id=p_post AND owner_id=p_owner AND retired_at IS NULL AND expires_at>now())\n$function$\n"
+    }
+  ],
+  "policies": [
+    {
+      "schemaname": "public",
+      "tablename": "blocks",
+      "policyname": "blocks_owner_manage",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}",
+      "cmd": "ALL",
+      "qual": "(auth.uid() = blocker_id)",
+      "with_check": "(auth.uid() = blocker_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "follows",
+      "policyname": "follows_owner_write",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}",
+      "cmd": "ALL",
+      "qual": "(auth.uid() = follower_id)",
+      "with_check": "(auth.uid() = follower_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "follows",
+      "policyname": "follows_public_select",
+      "permissive": "PERMISSIVE",
+      "roles": "{anon,authenticated}",
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "Admins can delete posts",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "DELETE",
+      "qual": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.is_admin = true))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "Enable delete for users based on user_id",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "DELETE",
+      "qual": "(auth.uid() = user_id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "Enable insert for authenticated users",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "(auth.uid() = user_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "Enable update for users based on user_id",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "UPDATE",
+      "qual": "(auth.uid() = user_id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "Users can delete own posts",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "DELETE",
+      "qual": "(auth.uid() = user_id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "Users can insert own posts",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "(auth.uid() = user_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "Users can manage own posts",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "ALL",
+      "qual": "(auth.uid() = user_id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "Users can update own posts",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "UPDATE",
+      "qual": "(auth.uid() = user_id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "hide_all_posts_owner_visibility_gate",
+      "permissive": "RESTRICTIVE",
+      "roles": "{anon,authenticated}",
+      "cmd": "SELECT",
+      "qual": "((( SELECT auth.uid() AS uid) = user_id) OR (NOT (EXISTS ( SELECT 1\n   FROM profiles author\n  WHERE ((author.id = posts.user_id) AND (COALESCE(author.hide_all_posts, false) = true))))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "privacy_v2_anonymous_public_post_read_boundary",
+      "permissive": "RESTRICTIVE",
+      "roles": "{anon}",
+      "cmd": "SELECT",
+      "qual": "((publishing_state = 'published'::text) AND (visibility = 'public'::text) AND (is_deleted IS FALSE) AND (is_hidden IS FALSE) AND (EXISTS ( SELECT 1\n   FROM profiles author\n  WHERE ((author.id = posts.user_id) AND (author.is_private IS FALSE) AND privacy_v2_private.author_not_suspended(author.id)))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "privacy_v2_permanent_retirement_boundary",
+      "permissive": "RESTRICTIVE",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "permanent_post_readable(id, user_id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "privacy_v2_post_select_baseline",
+      "permissive": "PERMISSIVE",
+      "roles": "{anon,authenticated}",
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "privacy_v2_restricted_post_read_boundary",
+      "permissive": "RESTRICTIVE",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "(((auth.uid() IS NOT NULL) AND (auth.uid() = user_id)) OR ((publishing_state = 'published'::text) AND (is_deleted IS FALSE) AND (is_hidden IS FALSE) AND (EXISTS ( SELECT 1\n   FROM profiles author\n  WHERE ((author.id = posts.user_id) AND privacy_v2_private.author_not_suspended(author.id) AND (((posts.visibility = 'public'::text) AND ((author.is_private IS FALSE) OR ((auth.uid() IS NOT NULL) AND privacy_v2_approved_edge(auth.uid(), posts.user_id)))) OR ((posts.visibility = 'followers'::text) AND (auth.uid() IS NOT NULL) AND privacy_v2_approved_edge(auth.uid(), posts.user_id)) OR ((posts.visibility = 'friends'::text) AND (auth.uid() IS NOT NULL) AND privacy_v2_approved_edge(auth.uid(), posts.user_id) AND privacy_v2_approved_edge(posts.user_id, auth.uid()))))))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "posts",
+      "policyname": "privacy_v2_verification_lifetime",
+      "permissive": "RESTRICTIVE",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "verification_post_readable(id, user_id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "profiles",
+      "policyname": "Admins can update any profile",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "UPDATE",
+      "qual": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.is_admin = true))))",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "profiles",
+      "policyname": "profiles_owner_delete",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}",
+      "cmd": "DELETE",
+      "qual": "(auth.uid() = id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "profiles",
+      "policyname": "profiles_owner_insert",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}",
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "(auth.uid() = id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "profiles",
+      "policyname": "profiles_owner_update",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}",
+      "cmd": "UPDATE",
+      "qual": "(auth.uid() = id)",
+      "with_check": "(auth.uid() = id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "profiles",
+      "policyname": "profiles_public_select",
+      "permissive": "PERMISSIVE",
+      "roles": "{anon,authenticated}",
+      "cmd": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "reposts",
+      "policyname": "Users can repost/unrepost",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "ALL",
+      "qual": "(auth.uid() = user_id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "reposts",
+      "policyname": "privacy_v2_parent_post_boundary",
+      "permissive": "RESTRICTIVE",
+      "roles": "{anon,authenticated}",
+      "cmd": "ALL",
+      "qual": "((post_id IS NULL) OR (EXISTS ( SELECT 1\n   FROM posts p\n  WHERE ((p.id = reposts.post_id) AND (p.is_deleted IS FALSE) AND (p.is_hidden IS FALSE)))))",
+      "with_check": "((post_id IS NULL) OR (EXISTS ( SELECT 1\n   FROM posts p\n  WHERE ((p.id = reposts.post_id) AND (p.is_deleted IS FALSE) AND (p.is_hidden IS FALSE)))))"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "reposts",
+      "policyname": "profile_hidden_reposts_read_gate",
+      "permissive": "RESTRICTIVE",
+      "roles": "{anon,authenticated}",
+      "cmd": "SELECT",
+      "qual": "can_view_profile_tab(user_id, 'share'::text)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "reposts",
+      "policyname": "reposts_delete_own",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "DELETE",
+      "qual": "(auth.uid() = user_id)",
+      "with_check": null
+    },
+    {
+      "schemaname": "public",
+      "tablename": "reposts",
+      "policyname": "reposts_insert_own",
+      "permissive": "PERMISSIVE",
+      "roles": "{public}",
+      "cmd": "INSERT",
+      "qual": null,
+      "with_check": "(auth.uid() = user_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "reposts",
+      "policyname": "reposts_select_own_authenticated",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "(( SELECT auth.uid() AS uid) = user_id)",
+      "with_check": null
+    }
+  ],
+  "triggers": [
+    {
+      "schema": "public",
+      "table_name": "comment_likes",
+      "tgname": "trg_notify_comment_like",
+      "definition": "CREATE TRIGGER trg_notify_comment_like AFTER INSERT ON public.comment_likes FOR EACH ROW EXECUTE FUNCTION notify_comment_like()",
+      "function_name": "notify_comment_like()"
+    },
+    {
+      "schema": "public",
+      "table_name": "comments",
+      "tgname": "trg_notify_new_comment",
+      "definition": "CREATE TRIGGER trg_notify_new_comment AFTER INSERT ON public.comments FOR EACH ROW EXECUTE FUNCTION notify_new_comment()",
+      "function_name": "notify_new_comment()"
+    },
+    {
+      "schema": "public",
+      "table_name": "conversations",
+      "tgname": "trigger_conversation_updated_at",
+      "definition": "CREATE TRIGGER trigger_conversation_updated_at BEFORE UPDATE ON public.conversations FOR EACH ROW EXECUTE FUNCTION update_conversation_updated_at()",
+      "function_name": "update_conversation_updated_at()"
+    },
+    {
+      "schema": "public",
+      "table_name": "follows",
+      "tgname": "privacy_v2_enforce_private_follow_request",
+      "definition": "CREATE TRIGGER privacy_v2_enforce_private_follow_request BEFORE INSERT OR UPDATE OF status, following_id, follower_id ON public.follows FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.enforce_private_follow_request()",
+      "function_name": "privacy_v2_private.enforce_private_follow_request()"
+    },
+    {
+      "schema": "public",
+      "table_name": "follows",
+      "tgname": "privacy_v2_sync_follow_approval",
+      "definition": "CREATE TRIGGER privacy_v2_sync_follow_approval AFTER INSERT OR DELETE OR UPDATE OF follower_id, following_id, status ON public.follows FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.sync_follow_approval()",
+      "function_name": "privacy_v2_private.sync_follow_approval()"
+    },
+    {
+      "schema": "public",
+      "table_name": "market_categories",
+      "tgname": "update_market_categories_updated_at",
+      "definition": "CREATE TRIGGER update_market_categories_updated_at BEFORE UPDATE ON public.market_categories FOR EACH ROW EXECUTE FUNCTION update_market_categories_updated_at()",
+      "function_name": "update_market_categories_updated_at()"
+    },
+    {
+      "schema": "public",
+      "table_name": "market_items",
+      "tgname": "update_market_items_updated_at",
+      "definition": "CREATE TRIGGER update_market_items_updated_at BEFORE UPDATE ON public.market_items FOR EACH ROW EXECUTE FUNCTION update_market_categories_updated_at()",
+      "function_name": "update_market_categories_updated_at()"
+    },
+    {
+      "schema": "public",
+      "table_name": "market_subcategories",
+      "tgname": "update_market_subcategories_updated_at",
+      "definition": "CREATE TRIGGER update_market_subcategories_updated_at BEFORE UPDATE ON public.market_subcategories FOR EACH ROW EXECUTE FUNCTION update_market_categories_updated_at()",
+      "function_name": "update_market_categories_updated_at()"
+    },
+    {
+      "schema": "public",
+      "table_name": "messages",
+      "tgname": "trg_notify_new_message",
+      "definition": "CREATE TRIGGER trg_notify_new_message AFTER INSERT ON public.messages FOR EACH ROW EXECUTE FUNCTION notify_new_message()",
+      "function_name": "notify_new_message()"
+    },
+    {
+      "schema": "public",
+      "table_name": "messages",
+      "tgname": "trg_set_message_expiry",
+      "definition": "CREATE TRIGGER trg_set_message_expiry BEFORE INSERT ON public.messages FOR EACH ROW EXECUTE FUNCTION set_message_expiry()",
+      "function_name": "set_message_expiry()"
+    },
+    {
+      "schema": "public",
+      "table_name": "messages",
+      "tgname": "trigger_update_conversation_last_message",
+      "definition": "CREATE TRIGGER trigger_update_conversation_last_message AFTER INSERT ON public.messages FOR EACH ROW EXECUTE FUNCTION update_conversation_last_message()",
+      "function_name": "update_conversation_last_message()"
+    },
+    {
+      "schema": "public",
+      "table_name": "notifications",
+      "tgname": "privacy_v2_notification_boundary",
+      "definition": "CREATE TRIGGER privacy_v2_notification_boundary BEFORE INSERT OR UPDATE ON public.notifications FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.restricted_notification_guard()",
+      "function_name": "privacy_v2_private.restricted_notification_guard()"
+    },
+    {
+      "schema": "public",
+      "table_name": "notifications",
+      "tgname": "trg_notify_social_notification",
+      "definition": "CREATE TRIGGER trg_notify_social_notification AFTER INSERT ON public.notifications FOR EACH ROW EXECUTE FUNCTION notify_new_social_notification()",
+      "function_name": "notify_new_social_notification()"
+    },
+    {
+      "schema": "public",
+      "table_name": "post_likes",
+      "tgname": "trg_notify_post_like",
+      "definition": "CREATE TRIGGER trg_notify_post_like AFTER INSERT ON public.post_likes FOR EACH ROW EXECUTE FUNCTION notify_post_like()",
+      "function_name": "notify_post_like()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "freeupper_public_only_guard_trigger",
+      "definition": "CREATE TRIGGER freeupper_public_only_guard_trigger BEFORE INSERT OR UPDATE OF visibility ON public.posts FOR EACH ROW EXECUTE FUNCTION freeupper_public_only_guard()",
+      "function_name": "freeupper_public_only_guard()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "privacy_v2_00_retirement_guard",
+      "definition": "CREATE TRIGGER privacy_v2_00_retirement_guard BEFORE DELETE OR UPDATE ON public.posts FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.protected_post_retirement_guard()",
+      "function_name": "privacy_v2_private.protected_post_retirement_guard()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "privacy_v2_controlled_publisher_guard",
+      "definition": "CREATE TRIGGER privacy_v2_controlled_publisher_guard BEFORE INSERT OR UPDATE OF visibility, publishing_state, is_hidden ON public.posts FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.enforce_test_publisher_on_post()",
+      "function_name": "privacy_v2_private.enforce_test_publisher_on_post()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "privacy_v2_guard_protected_publisher_allowlist",
+      "definition": "CREATE TRIGGER privacy_v2_guard_protected_publisher_allowlist BEFORE INSERT OR UPDATE OF visibility, user_id ON public.posts FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.guard_protected_publisher_allowlist()",
+      "function_name": "privacy_v2_private.guard_protected_publisher_allowlist()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "privacy_v2_protected_metadata_guard",
+      "definition": "CREATE TRIGGER privacy_v2_protected_metadata_guard BEFORE UPDATE ON public.posts FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.protected_metadata_guard()",
+      "function_name": "privacy_v2_private.protected_metadata_guard()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "privacy_v2_protected_origin_owner_guard",
+      "definition": "CREATE TRIGGER privacy_v2_protected_origin_owner_guard BEFORE INSERT OR UPDATE ON public.posts FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.enforce_protected_origin_owner()",
+      "function_name": "privacy_v2_private.enforce_protected_origin_owner()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "privacy_v2_protected_post_media_guard",
+      "definition": "CREATE TRIGGER privacy_v2_protected_post_media_guard BEFORE INSERT OR UPDATE ON public.posts FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.guard_protected_post_media()",
+      "function_name": "privacy_v2_private.guard_protected_post_media()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "privacy_v2_restricted_release_gate",
+      "definition": "CREATE TRIGGER privacy_v2_restricted_release_gate BEFORE INSERT OR UPDATE ON public.posts FOR EACH ROW EXECUTE FUNCTION privacy_v2_private.enforce_restricted_release_gate()",
+      "function_name": "privacy_v2_private.enforce_restricted_release_gate()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "trg_create_post_short_link",
+      "definition": "CREATE TRIGGER trg_create_post_short_link AFTER INSERT ON public.posts FOR EACH ROW EXECUTE FUNCTION create_post_short_link_on_insert()",
+      "function_name": "create_post_short_link_on_insert()"
+    },
+    {
+      "schema": "public",
+      "table_name": "posts",
+      "tgname": "trg_sync_sound_usage",
+      "definition": "CREATE TRIGGER trg_sync_sound_usage AFTER INSERT OR DELETE OR UPDATE OF sound_id ON public.posts FOR EACH ROW EXECUTE FUNCTION sync_sound_usage()",
+      "function_name": "sync_sound_usage()"
+    },
+    {
+      "schema": "public",
+      "table_name": "profiles",
+      "tgname": "trg_protect_profile_privileged_columns",
+      "definition": "CREATE TRIGGER trg_protect_profile_privileged_columns BEFORE INSERT OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION protect_profile_identity_fields()",
+      "function_name": "protect_profile_identity_fields()"
+    },
+    {
+      "schema": "public",
+      "table_name": "profiles",
+      "tgname": "update_profiles_updated_at",
+      "definition": "CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at()",
+      "function_name": "update_updated_at()"
+    },
+    {
+      "schema": "public",
+      "table_name": "reactions",
+      "tgname": "update_post_likes_trigger",
+      "definition": "CREATE TRIGGER update_post_likes_trigger AFTER INSERT OR DELETE ON public.reactions FOR EACH ROW EXECUTE FUNCTION update_post_likes_count()",
+      "function_name": "update_post_likes_count()"
+    },
+    {
+      "schema": "public",
+      "table_name": "reposts",
+      "tgname": "trg_notify_repost",
+      "definition": "CREATE TRIGGER trg_notify_repost AFTER INSERT ON public.reposts FOR EACH ROW EXECUTE FUNCTION notify_repost()",
+      "function_name": "notify_repost()"
+    },
+    {
+      "schema": "public",
+      "table_name": "reposts",
+      "tgname": "trg_repost_word_limit",
+      "definition": "CREATE TRIGGER trg_repost_word_limit BEFORE INSERT OR UPDATE ON public.reposts FOR EACH ROW WHEN (((new.comment IS NOT NULL) AND (new.comment <> ''::text))) EXECUTE FUNCTION check_repost_word_limit()",
+      "function_name": "check_repost_word_limit()"
+    },
+    {
+      "schema": "public",
+      "table_name": "user_settings",
+      "tgname": "update_user_settings_updated_at",
+      "definition": "CREATE TRIGGER update_user_settings_updated_at BEFORE UPDATE ON public.user_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()",
+      "function_name": "update_updated_at_column()"
+    },
+    {
+      "schema": "public",
+      "table_name": "verification_requests",
+      "tgname": "trg_verification_approval",
+      "definition": "CREATE TRIGGER trg_verification_approval AFTER UPDATE ON public.verification_requests FOR EACH ROW EXECUTE FUNCTION apply_verification_approval()",
+      "function_name": "apply_verification_approval()"
+    },
+    {
+      "schema": "public",
+      "table_name": "verification_requests",
+      "tgname": "update_verification_requests_updated_at",
+      "definition": "CREATE TRIGGER update_verification_requests_updated_at BEFORE UPDATE ON public.verification_requests FOR EACH ROW EXECUTE FUNCTION update_updated_at()",
+      "function_name": "update_updated_at()"
+    }
+  ],
+  "constraints": [
+    {
+      "table_name": "profiles",
+      "conname": "profiles_addable_by_check",
+      "definition": "CHECK ((addable_by = ANY (ARRAY['everyone'::text, 'friends_only'::text, 'nobody'::text])))"
+    },
+    {
+      "table_name": "profiles",
+      "conname": "profiles_id_fkey",
+      "definition": "FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "profiles",
+      "conname": "profiles_pkey",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "profiles",
+      "conname": "profiles_username_key",
+      "definition": "UNIQUE (username)"
+    },
+    {
+      "table_name": "follows",
+      "conname": "follows_follower_id_fkey",
+      "definition": "FOREIGN KEY (follower_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "follows",
+      "conname": "follows_follower_id_following_id_key",
+      "definition": "UNIQUE (follower_id, following_id)"
+    },
+    {
+      "table_name": "follows",
+      "conname": "follows_following_id_fkey",
+      "definition": "FOREIGN KEY (following_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "follows",
+      "conname": "follows_pkey",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "posts",
+      "conname": "posts_pkey",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "posts",
+      "conname": "posts_sound_id_fkey",
+      "definition": "FOREIGN KEY (sound_id) REFERENCES sounds(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "posts",
+      "conname": "posts_source_check",
+      "definition": "CHECK ((source = ANY (ARRAY['composer'::text, 'studio'::text])))"
+    },
+    {
+      "table_name": "posts",
+      "conname": "posts_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "posts",
+      "conname": "privacy_v2_publishing_state_allowed",
+      "definition": "CHECK ((publishing_state = ANY (ARRAY['draft'::text, 'published'::text, 'failed'::text])))"
+    },
+    {
+      "table_name": "reposts",
+      "conname": "reposts_pkey",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "reposts",
+      "conname": "reposts_post_id_fkey",
+      "definition": "FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "reposts",
+      "conname": "reposts_post_id_user_id_key",
+      "definition": "UNIQUE (post_id, user_id)"
+    },
+    {
+      "table_name": "reposts",
+      "conname": "reposts_unique",
+      "definition": "UNIQUE (user_id, post_id)"
+    },
+    {
+      "table_name": "reposts",
+      "conname": "reposts_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    }
+  ]
+}
