@@ -33,7 +33,7 @@ test('quote links retain the document, original identity, themes and return hist
    window.renderPostTitle=s=>s;window.buildContentBlockHTML=(id,s)=>s;
    window.buildReactionButton=id=>`<button data-like="${id}">Like</button>`;window.repostCountBadge=p=>`<button data-repost="${p.id}">Repost</button>`;window.bookmarkIcon=()=>'';window.registerPostView=id=>views.push(id);
   },{theme,image});
-  await page.addScriptTag({content:`let allPosts=[B],appData={posts:[B]},uiPage='home',currentPostId=null,_lockedScrollY=0,tabScrollPositions={home:0},videoObserver=null,exploreReplyTarget=null,expandedThreads=new Map(),bottomNavHidden=false;\n${lock}\n${builder}\n${renderer}\n${open}\n${close}\n${navigation}\ndocument.getElementById('quote').innerHTML=buildQuotedPostCard(B);`});
+  await page.addScriptTag({content:`const profileDetailEmbedded=false;let allPosts=[B],appData={posts:[B]},uiPage='home',currentPostId=null,_lockedScrollY=0,tabScrollPositions={home:0},videoObserver=null,exploreReplyTarget=null,expandedThreads=new Map(),bottomNavHidden=false;\n${lock}\n${builder}\n${renderer}\n${open}\n${close}\n${navigation}\ndocument.getElementById('quote').innerHTML=buildQuotedPostCard(B);`});
   if(detail)await page.evaluate(()=>{allPosts.push(A);openExplorePost('B','home');});
  }
  for(const theme of ['light','dark'])for(const image of [false,true])await t.test(`${theme}, ${image?'image':'text-only'} quote: pending, detail, back and forward`,async()=>{

@@ -6667,6 +6667,7 @@
                         await window.sb.from('follows').insert({ follower_id: user.id, following_id: userId });
                         followingSet.add(userId);
                     }
+                    if (profileDetailEmbedded) profileDetailMessage('fu-profile-detail-follow', {userId});
                     return !currently;
                 } catch (err) {
                     showToast(err.message, 'r');
@@ -8683,6 +8684,7 @@
                 requestAnimationFrame(() => {
                     initPlayers(fc);
                     setTimeout(() => {
+                        if (profileDetailEmbedded && !profileDetailVisible) return;
                         const vid = fc.querySelector('.ig-video-wrap video, .video-container video, .media-scroll-row video');
                         if (vid) {
                             const resumePlayback = () => {
@@ -8748,6 +8750,7 @@
                     history.back();
                     return;
                 }
+                if (profileDetailEmbedded) { profileDetailMessage('fu-profile-detail-back'); return; }
                 if (window.IndexRender && typeof window.IndexRender.resume === 'function') {
                     window.IndexRender.resume();
                 }
@@ -9604,18 +9607,25 @@
                         renderUI();
                         await openExplorePost(postIdParam, 'home');
                         document.documentElement.classList.remove('fu-post-deep-link-pending');
+                        profileDetailMessage('fu-profile-detail-ready', {available:true});
                     } else {
                         renderUI();
                         document.documentElement.classList.remove('fu-post-deep-link-pending');
                         showToast(window.fuT('This post is unavailable or private'));
+                        profileDetailMessage('fu-profile-detail-ready', {available:false});
                     }
                 } else if (productIdParam) {
                     uiPage = 'market';
-                    renderUI();
-                    setTimeout(() => {
-                        window.openProductModal(productIdParam);
-                        history.replaceState({}, '', window.location.pathname);
-                    }, 500);
+                    if (!profileDetailEmbedded) renderUI();
+                    if (profileDetailEmbedded) {
+                        const available = await window.openProfileListing(productIdParam);
+                        profileDetailMessage('fu-profile-detail-ready', {available});
+                    } else {
+                        setTimeout(() => {
+                            window.openProductModal(productIdParam);
+                            history.replaceState({}, '', window.location.pathname);
+                        }, 500);
+                    }
                 } else {
                     renderUI();
                 }
@@ -9630,6 +9640,36 @@
                 const footer = document.getElementById('fu-site-footer');
                 if (footer) footer.style.display = 'none';
                  }
+
+            // Profile retains its own document; this opt-in bridge reuses this renderer.
+            const profileDetailEmbedded = window.parent !== window && new URLSearchParams(location.search).get('from') === 'profile-overlay';
+            let profileDetailVisible = true;
+            function profileDetailMessage(type, data = {}) {
+                if (profileDetailEmbedded) window.parent.postMessage({ type, ...data }, location.origin);
+            }
+            function publishProfileDetailState(event) {
+                profileDetailMessage('fu-profile-detail-state', { interaction:event?.detail || null, posts: allPosts.map(p => ({
+                    id:p.id, views:p.views, reactions:p.reactions, comments:p.comments,
+                    shareCount:p.shareCount, bookmarkCount:p.bookmarkCount, repostCount:p.repostCount,
+                    likedByMe:p.likedByMe, myRepost:p.myRepost
+                })) });
+            }
+            if (profileDetailEmbedded) {
+                window.addEventListener('message', e => {
+                    if (e.origin !== location.origin || e.source !== window.parent || e.data?.type !== 'fu-profile-detail-visibility') return;
+                    profileDetailVisible = !!e.data.visible;
+                    if (e.data.theme === 'light' || e.data.theme === 'dark') document.documentElement.dataset.theme = e.data.theme;
+                    if (!e.data.visible) { pauseAllVideos(); window.IndexRender?.pause(); publishProfileDetailState(); }
+                });
+                window.IndexInteractions?.on('interaction', publishProfileDetailState);
+            }
+
+            if (profileDetailEmbedded) document.getElementById('productModal').addEventListener('click', e => {
+                if (e.target.closest('[onclick="closeProductModal()"]')) {
+                    e.preventDefault(); e.stopImmediatePropagation();
+                    profileDetailMessage('fu-profile-detail-back');
+                }
+            }, true);
 
             // ─── EXPOSE GLOBALLY ──────────────────────────────────────────────
             window.getCurrentUser = getCurrentUser;
@@ -9699,8 +9739,12 @@
             window.openGalleryLightbox = openGalleryLightbox;
             window.closeLightbox = closeLightbox;
 
-            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-            else init();
+            const initializePage = profileDetailEmbedded ? () => init().catch(error => {
+                console.warn('Profile detail could not load:', error);
+                profileDetailMessage('fu-profile-detail-ready', {available:false});
+            }) : init;
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initializePage);
+            else initializePage();
 
         })();
     </script>

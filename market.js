@@ -112,10 +112,12 @@
         }
     }
 
-    async function loadMarketListings() {
+    async function loadMarketListings(listingId) {
         if (!window.ListingsAPI) return;
         try {
-            const result = await window.ListingsAPI.getListings({ status: 'active', limit: 100 });
+            const result = listingId
+                ? { data: [await window.ListingsAPI.getListing(listingId)].filter(item => item?.status === 'active') }
+                : await window.ListingsAPI.getListings({ status: 'active', limit: 100 });
             marketListings = result.data.map(item => {
                 let images = [];
                 if (Array.isArray(item.images)) {
@@ -704,6 +706,13 @@
     window.triggerMarketRefresh = triggerMarketRefresh;
     window.selectMarketCategory = selectMarketCategory;
     window.selectMarketSubcategory = selectMarketSubcategory;
+    // Explicit readiness for the retained Profile detail view; no timer or new renderer.
+    window.openProfileListing = async function(id) {
+        await loadMarketListings(id);
+        if (!marketListings.some(p => p.id === id)) return false;
+        openProductModal(id);
+        return true;
+    };
     window.openProductModal = openProductModal;
     window.closeProductModal = closeProductModal;
     window.shareCurrentProduct = shareCurrentProduct;

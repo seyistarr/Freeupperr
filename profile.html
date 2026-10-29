@@ -2583,6 +2583,7 @@
     <script src="/posts.js" data-fu-quotes></script>
     <script src="/protected-media-client.js"></script>
     <script src="/listings.js"></script>
+    <script src="/profile-detail.js"></script>
     <script src="/settings.js"></script>
     <script src="/bottom-nav.js" defer></script>
     <script src="/side-nav.js" defer></script>
@@ -2669,32 +2670,54 @@
             }
 
             // ─── NAVIGATION ────────────────────────────────────────────
-            window.openPostFromGrid = function(postId) {
-                var returnUrl = window.location.href;
-                try {
-                    sessionStorage.setItem('fu_return_url', returnUrl);
-                    sessionStorage.setItem('fu_return_scroll', String(document.getElementById('mainScroll').scrollTop));
-                    sessionStorage.setItem('fu_return_tab', activeTab);
-                } catch (e) {}
-                window.location.href = 'index.html?post=' + postId + '&from=profile&ret=' + encodeURIComponent(returnUrl);
-            };
-
-            window.openMarketFromGrid = function(productId) {
-                var returnUrl = window.location.href;
-                try {
-                    sessionStorage.setItem('fu_return_url', returnUrl);
-                    sessionStorage.setItem('fu_return_scroll', String(document.getElementById('mainScroll').scrollTop));
-                    sessionStorage.setItem('fu_return_tab', activeTab);
-                } catch (e) {}
-                window.location.href = 'index.html?product=' + productId + '&from=profile&ret=' + encodeURIComponent(returnUrl);
-            };
+            var profileDetailNavigation = window.createProfileDetailNavigation({
+                sync: function(state) {
+                    // Patch loaded objects without rebuilding grids or restarting pagination.
+                    (state.posts || []).forEach(function(post) {
+                        [allPosts, _profileUserPosts].forEach(function(list) {
+                            var cached = list.find(function(p) { return p.id === post.id; });
+                            if (cached) Object.assign(cached, post);
+                        });
+                        var cached = _collectionPostCache.get(post.id);
+                        if (cached) Object.assign(cached, post);
+                        document.querySelectorAll('[data-profile-post="' + CSS.escape(post.id) + '"] .grid-stat span').forEach(function(el) { el.textContent = fmtNum(post.views || 0); });
+                    });
+                    var change = state.interaction;
+                    if (!isOwner || !change) return;
+                    var groups = [
+                        {tab:'love', ids:likedPostIds, add:'like', remove:'unlike'},
+                        {tab:'share', ids:repostedPostIds, add:'repost', remove:'unrepost'},
+                        {tab:'star', ids:bookmarkedPostIds, add:'bookmark', remove:'unbookmark'}
+                    ];
+                    groups.forEach(function(group) {
+                        if (change.type !== group.add && change.type !== group.remove) return;
+                        var index = group.ids.indexOf(change.postId);
+                        var panel = document.getElementById('panel-' + group.tab);
+                        if (change.type === group.remove) {
+                            if (index >= 0) group.ids.splice(index,1);
+                            panel.querySelector('[data-profile-post="' + CSS.escape(change.postId) + '"]')?.remove();
+                        } else if (index < 0) {
+                            group.ids.push(change.postId);
+                            var post = _collectionPostCache.get(change.postId) || allPosts.find(function(p) { return p.id === change.postId; });
+                            if (post && panel.querySelector('.grid-3')) panel.querySelector('.grid-3').insertAdjacentHTML('beforeend',buildGridPostCard(post,{forceNavigate:true}));
+                        }
+                        panel.dataset.profileRendered = '';
+                    });
+                },
+                followChanged: function(userId) {
+                    // Only changed relationships require fresh server authorization/counts.
+                    if (userId === targetUserId) { renderActionRow(); loadAndRenderSecondaryData(); }
+                }
+            });
+            window.openPostFromGrid = function(postId) { profileDetailNavigation.open('post',postId); };
+            window.openMarketFromGrid = function(productId) { profileDetailNavigation.open('product',productId); };
 
             function restoreProfileReturnState() {
                 try {
                     var savedTab = sessionStorage.getItem('fu_return_tab');
                     var savedScroll = sessionStorage.getItem('fu_return_scroll');
                     var savedUrl = sessionStorage.getItem('fu_return_url');
-                    if (savedUrl && savedUrl.indexOf(window.location.pathname) !== -1) {
+                    if (savedUrl && new URL(savedUrl, location.href).href === location.href) {
                         if (savedTab) {
                             var tabBtn = document.querySelector('.tab[data-tab="' + savedTab + '"]');
                             if (tabBtn) switchTab(tabBtn, savedTab);
@@ -3168,7 +3191,7 @@
 
                 var tapAction = "openPostFromGrid('" + post.id + "')";
 
-                return '<div class="grid-card" onclick="' + tapAction + '">' +
+                return '<div class="grid-card" data-profile-post="' + escapeHtml(post.id) + '" onclick="' + tapAction + '">' +
                     mediaHtml +
                     topPill +
                     '<div class="grid-stat"><svg width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>' + fmtNum(post.views || 0) + '</span></div>' +
@@ -3207,7 +3230,7 @@
 
                 var tapAction = "openPostFromGrid('" + post.id + "')";
 
-                return '<div class="grid-card" onclick="' + tapAction + '">' +
+                return '<div class="grid-card" data-profile-post="' + escapeHtml(post.id) + '" onclick="' + tapAction + '">' +
                     mediaHtml +
                     '<div class="grid-stat"><svg width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>' + fmtNum(post.views || 0) + '</span></div>' +
                     '</div>';
@@ -5471,6 +5494,7 @@
                     }
                     await renderProfile();
                     restoreProfileReturnState();
+                    profileDetailNavigation.restore();
 
                     if (typeof window.setupProfileSync === 'function') {
                         window.setupProfileSync(function() {
@@ -5487,7 +5511,8 @@
                         avatarModal.addEventListener('open', initAvatarGrid);
                     }
 
-                    window.addEventListener('popstate', function() {
+                    window.addEventListener('popstate', function(e) {
+                        if (profileDetailNavigation.popstate(e)) return;
                         if (!window.__freeupperProfileLoading) renderProfile();
                     });
 
