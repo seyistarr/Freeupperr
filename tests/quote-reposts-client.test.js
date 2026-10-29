@@ -7,8 +7,13 @@ const contracts=JSON.parse(await readFile(new URL('./fixtures/quote-legacy-contr
 const outer=(n=200)=>({id:id(n),user_id:id(6),title:'Quote',content:'Comment',is_quote:true,quoted_post_id:id(100),visibility:'public',is_hidden:false,publishing_state:'published',repost_count:2,like_count:3,comment_count:4,share_count:5,bookmark_count:6,views:7});
 const original={id:id(100),user_id:id(1),title:'Original',content:'Original content',visibility:'public',profiles:{id:id(1),username:'author'},media:[{type:'video',url:'https://example.com/movie.mp4',thumbnailUrl:'https://example.com/poster.jpg'}]};
 
-test('checked-in client gate blocks publishing even if server is enabled',async()=>{
+test('closed client gate blocks publishing even if server is enabled',async()=>{
  const f=postsFixture();assert.equal(await f.api.canPublishQuote(),false);
+ await assert.rejects(f.api.createPost({quotedPostId:id(100),quotePostId:id(200)}),/not available/);
+ assert(!f.calls.some(c=>c.rpc==='create_quote_post'));
+});
+test('reviewed client still requires the server publishing gate',async()=>{
+ const f=postsFixture({approved:true,publishingEnabled:false});assert.equal(await f.api.canPublishQuote(),false);
  await assert.rejects(f.api.createPost({quotedPostId:id(100),quotePostId:id(200)}),/not available/);
  assert(!f.calls.some(c=>c.rpc==='create_quote_post'));
 });

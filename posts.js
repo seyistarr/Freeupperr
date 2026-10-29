@@ -88,7 +88,7 @@
   // Quote reads are opt-in. Video keeps its existing query path; Explore keeps its renderer.
   const quoteUIEnabled = !!window.document?.querySelector('script[data-fu-quotes]');
   // Release step only: change after production migration verification and approval.
-  const QUOTE_PUBLISHING_REVIEWED = false;
+  const QUOTE_PUBLISHING_REVIEWED = true;
   const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let quoteCapabilityPromise = null;
   async function getQuoteCapabilities(refresh = false) {

@@ -2,7 +2,7 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 export const source=await readFile(new URL('../../posts.js',import.meta.url),'utf8');
 export const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
-export function postsFixture({enabled=true,approved=false,rows=[],originals=new Map(),missing=false,referenceFailure=false}={}) {
+export function postsFixture({enabled=true,approved=false,rows=[],originals=new Map(),missing=false,referenceFailure=false,publishingEnabled=true}={}) {
  const calls=[];let writes=0;let transientFailures=0;
  const apiRows=rows;const sb={
   auth:{getUser:async()=>({data:{user:{id:id(6)}}})},
@@ -20,7 +20,7 @@ export function postsFixture({enabled=true,approved=false,rows=[],originals=new 
   async rpc(name,args){
    calls.push({rpc:name,args});
    if(missing)return {error:{code:'PGRST202',message:'Function not found'}};
-   if(name==='quote_repost_status')return {data:{schemaVersion:1,readEnabled:true,publishingEnabled:true}};
+   if(name==='quote_repost_status')return {data:{schemaVersion:1,readEnabled:true,publishingEnabled}};
    if(name==='get_quotable_post')return {data:originals.get(args.p_post_id)||null};
    if(name==='load_quote_references'){
     if(referenceFailure)throw Error('network unavailable');
@@ -38,6 +38,6 @@ export function postsFixture({enabled=true,approved=false,rows=[],originals=new 
   }
  };
  const context={window:{sb,document:{querySelector:()=>enabled?{}:null}},console:{log(){},warn(){},error(){}},setTimeout,clearTimeout,crypto:globalThis.crypto};
- vm.createContext(context);vm.runInContext(approved?source.replace('const QUOTE_PUBLISHING_REVIEWED = false','const QUOTE_PUBLISHING_REVIEWED = true'):source,context);
+ vm.createContext(context);vm.runInContext(source.replace(/const QUOTE_PUBLISHING_REVIEWED = (?:true|false)/, 'const QUOTE_PUBLISHING_REVIEWED = '+approved),context);
  return {api:context.window.PostsAPI,calls,rows:apiRows,get writes(){return writes;},retry(n){transientFailures=n;}};
 }

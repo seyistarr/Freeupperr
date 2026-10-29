@@ -1,6 +1,6 @@
 # Quote repost Phase 2 — review package
 
-Status: the user approved rollout on 2026-10-29. Production migration `20261029131137_quote_reposts` is applied and verified. Both publishing gates remain disabled. See [`ROLLOUT.md`](ROLLOUT.md) for the current deployment, verification and activation state. No staging project was used.
+Status: the user approved rollout on 2026-10-29. Production migration `20261029131137_quote_reposts` is applied and verified. Final client/server activation is in progress. See [`ROLLOUT.md`](ROLLOUT.md) for the current deployment, verification and activation state. No staging project was used.
 
 ## Audited production architecture
 
@@ -58,7 +58,7 @@ Delete, restore, hard delete, hidden/published changes, public/private authors, 
 - `create.html`: uses the server-approved preview; prepares quote-only/text/media submission with the stable request ID, duplicate-submit lock, error feedback and navigation to the **new post's URL**. Normal post submission and restricted publishing retain their existing paths. Removing a quote preserves typed text and unrelated URL parameters.
 - `index.html` and `profile.html`: opt into hydration and recognize the hard-deleted-reference marker. Phase 1 menu and quote-card layouts remain in place. `foryou.js` already renders the Phase 1 quote card and its independent outer engagement row; it requires no additional edit.
 - **`video.html` and `explore.js` are byte-for-byte unchanged.** Their file hashes and legacy repost/media/view contracts are regression-tested. The video page does not opt into quote hydration. Explore keeps its existing rendering and interaction handlers; shared Home data may contain additive quote properties that it ignores.
-- The checked-in **`QUOTE_PUBLISHING_REVIEWED = false`** client constant prevents activation even if someone toggles the server gate prematurely. The proposed migration separately defaults server publication to false.
+- The reviewed `QUOTE_PUBLISHING_REVIEWED` client constant and independent server gate must both permit publication. The proposed migration separately defaults server publication to false.
 
 ## Verification and tests
 
@@ -95,7 +95,7 @@ After quotes exist, use [`disable.REVIEW.sql`](disable.REVIEW.sql) to stop publi
 
 ## Outstanding risks and readiness
 
-- **Migration applied and verified; quote publishing is not activated.** Compatible deployment and authenticated production smoke tests must pass before activation. See `ROLLOUT.md`.
+- **Migration applied and verified; prerequisite production smoke tests accepted.** Final activation and quote end-to-end verification are recorded separately. See `ROLLOUT.md`.
 - The active live schema contains migrations absent from this repo. Re-audit drift before DDL; the migration checks both counter-RPC hashes and existing repost triggers, and no existing policies are overwritten.
 - Profile privacy/block changes reconcile all referenced roots in this initial implementation. The current dataset is small; profile/block-heavy workloads should be measured before a large rollout. Post reference and plain-row lookups are indexed.
 - Multi-row deletion/privacy changes can contend with quote creation; PostgreSQL rolls deadlocks/serialization errors back, and quote creation retries with the same ID. A surfaced retry exhaustion is an error, not a partially published quote.
