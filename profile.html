@@ -2580,10 +2580,10 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/global.js?v=theme-v1"></script>
     <script src="/auth.js"></script>
-    <script src="/posts.js" data-fu-quotes></script>
+    <script src="/posts.js?v=profile-cache-v1" data-fu-quotes></script>
     <script src="/protected-media-client.js"></script>
     <script src="/listings.js"></script>
-    <script src="/profile-detail.js?v=2"></script>
+    <script src="/profile-detail.js?v=3"></script>
     <script src="/settings.js"></script>
     <script src="/bottom-nav.js" defer></script>
     <script src="/side-nav.js" defer></script>
@@ -2670,7 +2670,18 @@
             }
 
             // ─── NAVIGATION ────────────────────────────────────────────
+            var _profileSessionViewer;
+            function profileLocalViewerScope() { var u=getCurrentUser();return u && u.isLoggedIn ? u.id : 'guest'; }
+            function profileViewerScope() { return _profileSessionViewer ?? profileLocalViewerScope(); }
             var profileDetailNavigation = window.createProfileDetailNavigation({
+                getViewer: profileViewerScope,
+                getPost: function(id) {if(_profileViewer!==profileViewerScope() || viewerIsBlockedByPrivacy)return null;return _collectionPostCache.get(id) || allPosts.find(function(p){return p.id===id;}) || _profileUserPosts.find(function(p){return p.id===id;});},
+                loadPost: function(id) {return window.PostsAPI.loadPostById(id,{requireLive:true});},
+                revoke: function(id) {
+                    _collectionPostCache.delete(id);
+                    [allPosts,_profileUserPosts].forEach(function(list){var i=list.findIndex(function(p){return p.id===id;});if(i>=0)list.splice(i,1);});
+                    document.querySelectorAll('[data-profile-post="'+CSS.escape(id)+'"]').forEach(function(el){el.remove();});
+                },
                 sync: function(state) {
                     // Patch loaded objects without rebuilding grids or restarting pagination.
                     (state.posts || []).forEach(function(post) {
@@ -2778,6 +2789,20 @@
             var _profileLoadedOnce = false;
             var _profileCounts = { followers: 0, following: 0 };
             var _secondaryDataLoaded = false;
+            var _profileViewer = profileViewerScope(), _profileScopeVersion = 0, _profileRefreshQueued = false;
+            function profileViewerUpdated() {
+                var next=profileViewerScope();
+                if(next===_profileViewer){
+                    if(_profileRefreshQueued && !window.__freeupperProfileLoading && profileLocalViewerScope()===next){_profileRefreshQueued=false;renderProfile();}
+                    return;
+                }
+                _profileViewer=next;++_profileScopeVersion;profileDetailNavigation.resetViewer();
+                allPosts=[];_profileUserPosts=[];_collectionPostCache.clear();_collectionPostRequests.clear();
+                viewerIsBlockedByPrivacy=true;_secondaryDataLoaded=false;
+                document.querySelectorAll('.panel').forEach(function(el){el.innerHTML='';delete el.dataset.profileRendered;el.dataset.collectionRequest=String(Number(el.dataset.collectionRequest || 0)+1);});
+                _profileRefreshQueued=true;
+                if(!window.__freeupperProfileLoading && profileLocalViewerScope()===next){_profileRefreshQueued=false;renderProfile();}
+            }
 
             var _fwPageIdx = 0;
             var _fwPageState = [
@@ -3312,6 +3337,7 @@
             async function renderProfile() {
                 if (window.__freeupperProfileLoading) return;
                 window.__freeupperProfileLoading = true;
+                var scopeVersion=_profileScopeVersion;
 
                 if (!_profileLoadedOnce) showProfileSkeleton();
 
@@ -3357,6 +3383,7 @@
                         }
                     }
 
+                    if(scopeVersion!==_profileScopeVersion)return;
                     targetUser = profile;
                     targetUserId = profile.id;
 
@@ -3395,6 +3422,7 @@
                         return;
                     }
 
+                    if(scopeVersion!==_profileScopeVersion)return;
                     renderProfileIdentity(profile);
                     _profileLoadedOnce = true;
                     hideProfileSkeleton();
@@ -3407,6 +3435,7 @@
                     showToast(err && err.message ? err.message : 'Failed to load profile', 'r');
                 } finally {
                     window.__freeupperProfileLoading = false;
+                    if(_profileRefreshQueued && profileLocalViewerScope()===profileViewerScope()){_profileRefreshQueued=false;renderProfile();}
                 }
             }
 
@@ -3477,15 +3506,18 @@
                     document.getElementById('actionRow').innerHTML = '';
                 }
 
-                document.getElementById('statPosts').textContent = window.fuT('—');
-                document.getElementById('statFollowers').textContent = window.fuT('—');
-                document.getElementById('statFollowing').textContent = window.fuT('—');
+                if (!_secondaryDataLoaded) {
+                    document.getElementById('statPosts').textContent = window.fuT('—');
+                    document.getElementById('statFollowers').textContent = window.fuT('—');
+                    document.getElementById('statFollowing').textContent = window.fuT('—');
+                }
             }
 
             // ─── SECONDARY DATA LOAD ──────────────────────────────────
             async function loadAndRenderSecondaryData() {
                 var user = getCurrentUser();
                 var targetId = targetUserId;
+                var scopeVersion=_profileScopeVersion;
                 var isOwnerLocal = isOwner;
 
                 try {
@@ -3511,6 +3543,7 @@
                     }
 
                     var results = await Promise.all(promises);
+                    if(scopeVersion!==_profileScopeVersion)return;
                     var counts = results[0] || { followers: 0, following: 0 };
                     var userPosts = results[1] || [];
                     var marketItems = results[2] || [];
@@ -3548,11 +3581,13 @@
                     var tabResults = await Promise.all(tabKeys.map(function(key) {
                         return window.sb.rpc('can_view_profile_tab', {p_owner:targetUserId,p_tab:key});
                     }));
+                    if(scopeVersion!==_profileScopeVersion)return;
                     targetUser._tabAllowed = {};
                     tabKeys.forEach(function(key,idx) {
                         targetUser._tabAllowed[key] = !tabResults[idx].error && tabResults[idx].data === true;
                     });
                     applyPrivacyAndTabs(targetUser, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, rel.iFollowThem);
+                    profileDetailNavigation.warm();
                     if (isOwnerLocal && targetUser.is_private) loadPrivateFollowRequests().catch(console.error);
                 } catch (err) {
                     console.error('Secondary load error:', err);
@@ -3581,9 +3616,11 @@
                 document.getElementById('verifiedBadge').classList.add('hidden');
                 document.getElementById('onlineDot').style.display = 'none';
 
-                document.getElementById('statPosts').textContent = window.fuT('—');
-                document.getElementById('statFollowers').textContent = window.fuT('—');
-                document.getElementById('statFollowing').textContent = window.fuT('—');
+                if (!_secondaryDataLoaded) {
+                    document.getElementById('statPosts').textContent = window.fuT('—');
+                    document.getElementById('statFollowers').textContent = window.fuT('—');
+                    document.getElementById('statFollowing').textContent = window.fuT('—');
+                }
                 ['statPostsBox', 'statFollowersBox', 'statFollowingBox'].forEach(function(id) {
                     var el = document.getElementById(id);
                     if (el) { el.onclick = null; el.classList.add('locked'); }
@@ -3755,6 +3792,7 @@
                 return posts;
             }
             async function loadProfileCollectionPosts(ids) {
+                var scopeVersion=_profileScopeVersion;
                 var found = getCachedCollectionPosts(ids);
                 var foundIds = new Set(found.map(function(p) { return p.id; }));
                 var missingIds = ids.filter(function(id) { return !foundIds.has(id); });
@@ -3764,10 +3802,10 @@
                             var request = Promise.resolve().then(function() {
                                 return window.PostsAPI.loadPostById(id);
                             }).then(function(post) {
-                                if (post) _collectionPostCache.set(id, post);
+                                if (post && scopeVersion===_profileScopeVersion) _collectionPostCache.set(id, post);
                             }).catch(function(err) {
                                 console.warn('Profile collection post unavailable:', id, err);
-                            }).finally(function() { _collectionPostRequests.delete(id); });
+                            }).finally(function() { if(_collectionPostRequests.get(id)===request)_collectionPostRequests.delete(id); });
                             _collectionPostRequests.set(id, request);
                         }
                         return _collectionPostRequests.get(id);
@@ -5479,7 +5517,13 @@
                         function(payload) {
                             var updated = payload.new;
                             if (updated.id === targetUserId) {
+                                var privacyChanged=['is_private','suspended','hide_all_posts'].some(function(key){return targetUser && !!targetUser[key]!==!!updated[key];});
                                 targetUser = updated;
+                                if(privacyChanged){
+                                    viewerIsBlockedByPrivacy=true;++_profileScopeVersion;allPosts=[];_profileUserPosts=[];_collectionPostCache.clear();_collectionPostRequests.clear();
+                                    document.querySelectorAll('.panel').forEach(function(el){el.replaceChildren();delete el.dataset.profileRendered;el.dataset.collectionRequest=String(Number(el.dataset.collectionRequest || 0)+1);});
+                                    profileDetailNavigation.invalidate();loadAndRenderSecondaryData();
+                                }
                                 renderProfileIdentity(updated);
                             }
                         })
@@ -5492,19 +5536,21 @@
                     if (!window.AuthUser) {
                         await new Promise(function(resolve) { setTimeout(resolve, 300); });
                     }
+                    if (typeof window.setupProfileSync === 'function') {
+                        window.setupProfileSync(profileViewerUpdated);
+                    }
+
+                    document.addEventListener('userRefreshed', profileViewerUpdated);
+                    window.AuthUser?.onChange?.(profileViewerUpdated);
+                    window.sb?.auth?.onAuthStateChange?.((_event,session)=>{
+                        _profileSessionViewer=session?.user?.id || 'guest';
+                        profileViewerUpdated();
+                    });
                     await renderProfile();
+                    profileDetailNavigation.warm();
                     restoreProfileReturnState();
                     profileDetailNavigation.restore();
 
-                    if (typeof window.setupProfileSync === 'function') {
-                        window.setupProfileSync(function() {
-                            if (!window.__freeupperProfileLoading) renderProfile();
-                        });
-                    }
-
-                    document.addEventListener('userRefreshed', function() {
-                        if (!window.__freeupperProfileLoading) renderProfile();
-                    });
 
                     var avatarModal = document.getElementById('avatarModal');
                     if (avatarModal) {

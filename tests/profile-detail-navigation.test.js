@@ -50,6 +50,7 @@ test('retained Profile detail navigation across tabs, media, profiles and histor
    document.getElementById('mainScroll').scrollTop=623;
    window.savedNode=document.querySelector('#panel-'+tab+' .loaded');
   },{owner,theme,tab});
+  await page.evaluate(()=>{window.profileViewerScope=()=>isOwner?'self':'other';const create=window.createProfileDetailNavigation;window.createProfileDetailNavigation=options=>create({...options,getPost:undefined,getViewer:undefined,loadPost:undefined});});
   await page.addScriptTag({content:adapter+"window.addEventListener('popstate',e=>{if(!profileDetailNavigation.popstate(e))refreshes++});"});
  }
  async function open(kind,id){await page.evaluate(({kind,id})=>kind==='product'?openMarketFromGrid(id):openPostFromGrid(id),{kind,id});}

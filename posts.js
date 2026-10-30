@@ -591,14 +591,14 @@
   // ===================================================================
   // LOAD SINGLE POST
   // ===================================================================
-  async function loadPostById(postId) {
+  async function loadPostById(postId, options = {}) {
     if (!postId) return null;
 
-    const { data, error } = await sb
-      .from('posts')
-      .select(POST_SELECT)
-      .eq('id', postId)
-      .single();
+    let query = sb.from('posts').select(POST_SELECT).eq('id', postId);
+    // Profile caches must not revive an owner's deleted/hidden/draft rows.
+    // Existing consumers retain the original query unless they explicitly opt in.
+    if (options.requireLive) query = query.eq('is_deleted', false).eq('is_hidden', false).eq('publishing_state', 'published');
+    const { data, error } = await query.single();
 
     if (error || !data) {
       console.warn('loadPostById: post not found', postId);

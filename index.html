@@ -6700,6 +6700,12 @@
 
             // ─── POSTS ──────────────────────────────────────────────────────
             async function reloadPosts() {
+                if (profileDetailShell) {
+                    // Detail actions already receive authoritative RPC counters; retain their post.
+                    const post=allPosts.find(p=>p.id===currentPostId);
+                    if(post)document.querySelectorAll('[data-repost-btn]').forEach(el=>el.classList.toggle('reposted',!!post.myRepost));
+                    return allPosts;
+                }
                 try {
                     const feedItems = await window.PostsAPI.loadFeedWithReposts(0, 20, 'composer');
                     const filtered = feedItems.filter(entry => {
@@ -9341,10 +9347,11 @@
                 if (typeof registerCurrentUserInDirectory === 'function') {
                     registerCurrentUserInDirectory();
                 }
-                await reloadData();
+                if (!profileDetailShell) await reloadData();
+                else await Promise.all([loadFollows(),loadBookmarks(),loadShares()]);
 
                 const _cu = getCurrentUser();
-                if (_cu && _cu.isLoggedIn && window.FreeUpperFeed) {
+                if (!profileDetailShell && _cu && _cu.isLoggedIn && window.FreeUpperFeed) {
                     window.FreeUpperFeed.loadInitial({ userId: _cu.id, source: 'composer', limit: 20 })
                         .then(() => {
                             if (window.FreeUpperFeed.needsOnboarding() && window.FreeUpperOnboarding) {
@@ -9356,7 +9363,7 @@
 
                 if (window.AuthUser && window.AuthUser.onChange) {
                     window.AuthUser.onChange(async (user) => {
-                        if (user && user.isLoggedIn && window.FreeUpperFeed) {
+                        if (!profileDetailShell && user && user.isLoggedIn && window.FreeUpperFeed) {
                             await window.FreeUpperFeed.loadProfile(user.id);
                             if (window.FreeUpperFeed.needsOnboarding() && window.FreeUpperOnboarding) {
                                 window.FreeUpperOnboarding.showOnboarding();
@@ -9365,7 +9372,7 @@
                     });
                 }
 
-                setupRealtime();
+                if (!profileDetailShell) setupRealtime();
 
                 const globalComment = document.getElementById('global-comment-textarea');
                 if (globalComment && window.Mentions) {
@@ -9584,7 +9591,7 @@
                         .subscribe();
                 }
 
-                window.loadSuggestedPeopleIntoSlot?.();
+                if (!profileDetailShell) window.loadSuggestedPeopleIntoSlot?.();
 
                 const urlParams = new URLSearchParams(window.location.search);
                 const postIdParam = urlParams.get('post');
@@ -9592,7 +9599,9 @@
                 const fromProfile = urlParams.get('from') === 'profile';
                 window._openedFromProfile = fromProfile;
 
-                if (postIdParam) {
+                if (profileDetailShell) {
+                    profileDetailMessage('fu-profile-detail-boot');
+                } else if (postIdParam) {
                     // Shared posts may not be in the first feed page; fetch the exact post.
                     let sharedPost = allPosts.find(p => String(p.id) === postIdParam);
                     if (!sharedPost && window.PostsAPI?.loadPostById) {
@@ -9643,6 +9652,7 @@
 
             // Profile retains its own document; this opt-in bridge reuses this renderer.
             const profileDetailEmbedded = window.parent !== window && new URLSearchParams(location.search).get('from') === 'profile-overlay';
+            const profileDetailShell = profileDetailEmbedded && new URLSearchParams(location.search).get('profileShell') === '1';
             let profileDetailVisible = true;
             function profileDetailMessage(type, data = {}) {
                 if (profileDetailEmbedded) window.parent.postMessage({ type, ...data }, location.origin);
@@ -9662,6 +9672,57 @@
                     if (!e.data.visible) { pauseAllVideos(); window.IndexRender?.pause(); publishProfileDetailState(); }
                 });
                 window.IndexInteractions?.on('interaction', publishProfileDetailState);
+            }
+
+            // The retained Profile supplies already-authorized mapped posts, never raw HTML.
+            if (profileDetailShell) {
+                let revision=0;
+                const scope=()=>{const u=getCurrentUser();return u?.isLoggedIn?u.id:'guest';};
+                const put=post=>{
+                    post=structuredClone(post);post.reactions={like:post.reactions?.like ?? post.likes ?? 0};
+                    const i=allPosts.findIndex(p=>p.id===post.id);if(i<0)allPosts.push(post);else allPosts[i]=post;
+                    appData.posts=allPosts;
+                    if(post.bookmarkedByMe)bookmarksSet.add(post.id);else bookmarksSet.delete(post.id);
+                    return post;
+                };
+                const content=p=>JSON.stringify([p.title,p.content,p.description,p.media,p.profile,p.commentsHidden,p.quotedPost]);
+                window.ProfilePostRenderer={
+                    get revision(){return revision;},
+                    open(post,viewer){
+                        if(viewer!==scope() || !post?.id || !post.profile || post.is_hidden || post.is_deleted)return false;
+                        const previous=allPosts.find(p=>p.id===post.id);
+                        put(post);
+                        if(currentPostId===post.id && previous && content(previous)===content(post))return true;
+                        pauseAllVideos();
+                        const container=document.getElementById('explore-fullscreen-content');
+                        container.replaceWith(container.cloneNode(false));
+                        quoteNavigationActive=false;++quoteNavigationVersion;
+                        openExplorePost(post.id,'home').catch(error=>{
+                            console.warn('Cached Profile detail could not render:',error);
+                            if(currentPostId!==post.id)return;
+                            this.clear();profileDetailMessage('fu-profile-detail-ready',{available:false});
+                        });
+                        return document.querySelector('.single-post-container')?.dataset.postId===post.id;
+                    },
+                    refresh(post,viewer,expectedRevision=revision){
+                        if(viewer!==scope() || expectedRevision!==revision)return;
+                        const previous=allPosts.find(p=>p.id===post.id);
+                        if(!previous)return;
+                        if(content(previous)!==content(post)){this.open(post,viewer);return;}
+                        put(post);updateReactionsUI(post.id);updateCommentCount(post.id);
+                        const root=document.getElementById('explore-fullscreen-content');
+                        root.querySelectorAll('.share-count').forEach(el=>el.textContent=formatCount(post.shareCount || 0));
+                        root.querySelectorAll('.bookmark-count').forEach(el=>el.textContent=formatCount(post.bookmarkCount || 0));
+                        root.querySelectorAll('.repost-count-num').forEach(el=>el.textContent=formatCount(post.repostCount || 0));
+                        root.querySelectorAll('[data-repost-btn]').forEach(el=>el.classList.toggle('reposted',!!post.myRepost));
+                        root.querySelectorAll('.bookmark-badge').forEach(el=>{
+                            el.classList.toggle('bookmarked',!!post.bookmarkedByMe);
+                            const icon=el.querySelector('svg');if(icon)icon.outerHTML=bookmarkIcon(!!post.bookmarkedByMe);
+                        });
+                    },
+                    clear(){pauseAllVideos();allPosts=[];appData.posts=[];currentPostId=null;document.getElementById('explore-fullscreen-content').replaceChildren();}
+                };
+                window.IndexInteractions?.on('interaction',()=>{++revision;});
             }
 
             if (profileDetailEmbedded) document.getElementById('productModal').addEventListener('click', e => {
