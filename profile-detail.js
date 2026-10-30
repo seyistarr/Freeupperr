@@ -14,11 +14,28 @@
         overlay.setAttribute('aria-label', 'Content detail');
         overlay.innerHTML = '<div class="profile-detail-status"><button type="button" aria-label="Back to profile">← Back</button><p role="status">Loading…</p></div>';
         const style = document.createElement('style');
-        style.textContent = '#profileDetail{position:fixed;inset:0;z-index:20000;background:var(--bg);color:var(--text)}#profileDetail[hidden]{display:none}#profileDetail iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg);visibility:hidden}.profile-detail-status{padding:calc(env(safe-area-inset-top,0px) + 16px) 20px calc(env(safe-area-inset-bottom,0px) + 16px)}.profile-detail-status button{background:var(--bg3);color:var(--text);border:1px solid var(--brd);border-radius:20px;padding:10px 16px;cursor:pointer}';
+        style.textContent = `
+            #profileDetail{position:fixed;inset:0;z-index:20000;background:transparent;color:var(--text)}
+            #profileDetail[data-state="ready"]{background:var(--bg)}
+            #profileDetail[hidden]{display:none}
+            #profileDetail iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg);visibility:hidden}
+            .profile-detail-status{position:absolute;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;max-width:440px;margin:0 auto;padding:16px;display:flex;align-items:center;gap:16px;border:1px solid var(--brd);border-radius:16px;background:var(--bg3);color:var(--text);box-shadow:0 8px 30px rgba(0,0,0,.18)}
+            .profile-detail-status[hidden]{display:none}
+            .profile-detail-status p{margin:0;font-size:14px;line-height:1.4}
+            .profile-detail-status button{flex-shrink:0;background:var(--bg3);color:var(--text);border:1px solid var(--brd);border-radius:20px;padding:10px 16px;cursor:pointer}
+        `;
         document.head.appendChild(style);
         document.body.appendChild(overlay);
         const status = overlay.querySelector('.profile-detail-status');
         let frame = null, current = null, currentDetail = null, ready = false, failed = false, scroll = 0, focus = null;
+        function paint() {
+            const available = ready && !failed;
+            // Keep Profile visible until the existing renderer has meaningful content.
+            overlay.dataset.state = available ? 'ready' : failed ? 'error' : 'loading';
+            overlay.setAttribute('aria-busy', String(!ready && !failed));
+            status.hidden = available;
+            frame.style.visibility = available ? 'visible' : 'hidden';
+        }
         function sendVisibility(visible) {
             frame?.contentWindow?.postMessage({type:'fu-profile-detail-visibility',visible,theme:document.documentElement.dataset.theme},location.origin);
         }
@@ -39,14 +56,13 @@
                 frame.addEventListener('error', event => {
                     if (event.currentTarget !== frame) return;
                     failed = true;
-                    status.hidden = false;
+                    paint();
                     status.querySelector('p').textContent = 'Could not load this content. Go back and try again.';
                 });
                 overlay.appendChild(frame);
             }
-            status.hidden = ready && !failed;
+            paint();
             status.querySelector('p').textContent = failed ? 'This content is unavailable or private.' : 'Loading…';
-            frame.style.visibility = ready && !failed ? 'visible' : 'hidden';
             sendVisibility(true);
             if (!ready || failed) status.querySelector('button').focus();
         }
