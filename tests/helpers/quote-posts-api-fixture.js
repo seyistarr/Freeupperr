@@ -2,7 +2,7 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 export const source=await readFile(new URL('../../posts.js',import.meta.url),'utf8');
 export const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
-export function postsFixture({enabled=true,approved=false,rows=[],originals=new Map(),missing=false,referenceFailure=false,publishingEnabled=true}={}) {
+export function postsFixture({enabled=true,approved=false,rows=[],originals=new Map(),missing=false,referenceFailure=false,publishingEnabled=true,readError=null}={}) {
  const calls=[];let writes=0;let transientFailures=0;
  const apiRows=rows;const sb={
   auth:{getUser:async()=>({data:{user:{id:id(6)}}})},
@@ -12,6 +12,7 @@ export function postsFixture({enabled=true,approved=false,rows=[],originals=new 
     insert(v){action='insert';payload=v;return q;},single(){one=true;return q;},maybeSingle(){one=true;return q;},
     async then(resolve,reject){try{
      if(table!=='posts')return resolve({data:[]});
+     if(action==='select' && readError)return resolve({data:null,error:readError});
      if(action==='insert'){writes++;const row={...payload,id:id(700),created_at:'2026-10-29T00:00:00Z',profiles:{id:id(6),username:'quoter'}};apiRows.push(row);return resolve({data:row});}
      let data=apiRows.filter(r=>filters.every(([k,v])=>r[k]===v));return resolve({data:one?data[0]||null:data});
     }catch(e){reject(e);}}

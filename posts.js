@@ -599,6 +599,8 @@
     // Existing consumers retain the original query unless they explicitly opt in.
     if (options.requireLive) query = query.eq('is_deleted', false).eq('is_hidden', false).eq('publishing_state', 'published');
     const { data, error } = await query.single();
+    // A failed connection is not evidence that a cached Profile card was deleted.
+    if (options.requireLive && error && error.code !== 'PGRST116') throw error;
 
     if (error || !data) {
       console.warn('loadPostById: post not found', postId);

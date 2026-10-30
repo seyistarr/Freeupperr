@@ -87,3 +87,11 @@ test('Profile live refresh excludes deleted, hidden and draft rows while legacy 
   assert.equal((await f.api.loadPostById(row.id)).id,row.id);
  }
 });
+
+test('Profile refresh preserves network errors for retry instead of treating them as deletions',async()=>{
+ const f=postsFixture({enabled:false,readError:{code:'NETWORK',message:'Offline'}});
+ await assert.rejects(f.api.loadPostById(postId(90),{requireLive:true}),e=>e.code==='NETWORK');
+ assert.equal(await f.api.loadPostById(postId(90)),null);
+ const denied=postsFixture({enabled:false,readError:{code:'PGRST116',message:'No visible row'}});
+ assert.equal(await denied.api.loadPostById(postId(90),{requireLive:true}),null);
+});
