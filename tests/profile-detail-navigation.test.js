@@ -135,6 +135,16 @@ test('retained Profile detail navigation across tabs, media, profiles and histor
   assert((await page.frameLocator('#profileDetail iframe').locator('body').evaluate(()=>pauses))>0);
   assert.equal(await page.evaluate(()=>refreshes),0);
  });
+ await t.test('profile switching rebases detail history and Back belongs to the selected profile',async()=>{
+  await setup('self','dark','posts');
+  await page.evaluate(()=>{history.pushState({},'', '/profile.html?uid=second');profileDetailNavigation.setProfile();});
+  await open('post','image');await ready();
+  assert.equal(new URL(page.url()).searchParams.get('uid'),'second');
+  assert.equal(await page.evaluate(()=>new URL(history.state.fuProfileDetail.profile).searchParams.get('uid')),'second');
+  await page.goBack();await page.waitForFunction(()=>document.getElementById('profileDetail').hidden);
+  assert.equal(new URL(page.url()).searchParams.get('uid'),'second');
+  assert.equal(await page.evaluate(()=>refreshes),0);
+ });
  assert.deepEqual(errors,[]);
  }finally{await browser.close();await new Promise(r=>server.close(r));}
 });

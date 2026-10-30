@@ -2579,11 +2579,12 @@
     <!-- ===== SCRIPTS ===== -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/global.js?v=theme-v1"></script>
-    <script src="/auth.js"></script>
+    <script src="/auth.js?v=profile-identity-v1"></script>
     <script src="/posts.js?v=profile-cache-v2" data-fu-quotes></script>
     <script src="/protected-media-client.js"></script>
     <script src="/listings.js"></script>
-    <script src="/profile-detail.js?v=3"></script>
+    <script src="/profile-detail.js?v=4"></script>
+    <script src="/profile-cache.js?v=1"></script>
     <script src="/settings.js"></script>
     <script src="/bottom-nav.js" defer></script>
     <script src="/side-nav.js" defer></script>
@@ -2787,17 +2788,27 @@
             var _sugOffset = 0;
             var _profileUserPosts = [];
             var _profileLoadedOnce = false;
+            var profileCache = window.createProfileCache();
+            profileCache.scope(profileViewerScope());
+            var _profileNavigationId = 0, _profileRestore = null;
             var _profileCounts = { followers: 0, following: 0 };
             var _secondaryDataLoaded = false;
             var _profileViewer = profileViewerScope(), _profileScopeVersion = 0, _profileRefreshQueued = false;
             function profileViewerUpdated() {
                 var next=profileViewerScope();
+                var local=profileLocalViewerScope();
+                if(next!==local)next='pending:'+next+':'+local;
                 if(next===_profileViewer){
                     if(_profileRefreshQueued && !window.__freeupperProfileLoading && profileLocalViewerScope()===next){_profileRefreshQueued=false;renderProfile();}
                     return;
                 }
                 _profileViewer=next;++_profileScopeVersion;profileDetailNavigation.resetViewer();
+                profileCache.scope(next);_profileRestore=null;followModalData=null;targetUser=null;targetUserId=null;
+                document.getElementById('profileAvatar').src=getAvatar(null);
                 allPosts=[];_profileUserPosts=[];_collectionPostCache.clear();_collectionPostRequests.clear();
+                likedPostIds=[];bookmarkedPostIds=[];repostedPostIds=[];marketItemsCache=[];
+                savedMarketItemsCache=[];savedMarketLoaded=false;marketSubView='mine';
+                _fwList=[];_fwFiltered=[];_fwPendingRequests=[];_fwRefreshing=false;
                 viewerIsBlockedByPrivacy=true;_secondaryDataLoaded=false;
                 document.querySelectorAll('#statPosts,#statFollowers,#statFollowing').forEach(function(el){el.textContent='—';});
                 document.querySelectorAll('.panel').forEach(function(el){el.innerHTML='';delete el.dataset.profileRendered;el.dataset.collectionRequest=String(Number(el.dataset.collectionRequest || 0)+1);});
@@ -3010,7 +3021,7 @@
             }
 
             async function fetchProfileByUuid(userId) {
-                var result = await window.sb.from('profiles').select('id, freeupper_id, username, display_username, display_name, avatar_url, bio, verified, is_private, created_at').eq('id', userId).maybeSingle();
+                var result = await window.sb.from('profiles').select('id, freeupper_id, username, display_username, display_name, avatar_url, cover_url, bio, tags, verified, is_private, hide_all_posts, hide_follower_count, hidden_tabs, activity_status, created_at').eq('id', userId).maybeSingle();
                 if (result.error) throw result.error;
                 return result.data;
             }
@@ -3334,9 +3345,143 @@
                 return window.sb;
             }
 
+            // Retain panel nodes (including media and pagination) by immutable owner ID.
+            function profileContentKey() {
+                return JSON.stringify([targetUser, _profileUserPosts, likedPostIds, bookmarkedPostIds,
+                    repostedPostIds, marketItemsCache, _profileCounts, viewerIsBlockedByPrivacy]);
+            }
+            function retainProfile() {
+                if (!targetUserId || !_secondaryDataLoaded) return;
+                var entry = profileCache.put(targetUser, false);
+                entry.view = {
+                    key: profileContentKey(), tab: activeTab,
+                    scroll: document.getElementById('mainScroll').scrollTop,
+                    nodes: Array.from(document.querySelectorAll('.panel')).map(function(el) {
+                        return { id: el.id, nodes: Array.from(el.childNodes), className: el.className, rendered: el.dataset.profileRendered };
+                    }),
+                    posts: _profileUserPosts, likes: likedPostIds,
+                    bookmarks: bookmarkedPostIds, reposts: repostedPostIds, market: marketItemsCache,
+                    counts: _profileCounts, blocked: viewerIsBlockedByPrivacy,
+                    loadedAt: Date.now()
+                };
+            }
+            function setProfileScroll(top) {
+                var main=document.getElementById('mainScroll');
+                var behavior=main.style.scrollBehavior;
+                main.style.scrollBehavior='auto';main.scrollTop=top;main.style.scrollBehavior=behavior;
+            }
+            function restoreProfilePanels() {
+                var view = _profileRestore;
+                if (!view) return;
+                if (view.key === profileContentKey()) {
+                    view.nodes.forEach(function(saved) {
+                        // Optional collections can contain other authors' protected posts;
+                        // their existing loader must authorize them again.
+                        if(saved.id !== 'panel-posts')return;
+                        var panel = document.getElementById(saved.id);
+                        panel.replaceChildren.apply(panel, saved.nodes);
+                        panel.className = saved.className;
+                        if(saved.rendered) panel.dataset.profileRendered = saved.rendered;
+                    });
+                }
+                setProfileScroll(view.scroll);
+                _profileRestore = null;
+            }
+            function navigateProfile(href, push) {
+                if(profileLocalViewerScope()!==profileViewerScope()){profileViewerUpdated();return;}
+                retainProfile();
+                if (push !== false) history.pushState({}, '', href);
+                ++_profileScopeVersion;
+                ++_profileNavigationId;
+                window.__freeupperProfileLoading = false;
+                profileDetailNavigation.setProfile();
+                closeFS('followModal');
+                document.querySelectorAll('.mfs.open,.mco.open').forEach(function(el){el.classList.remove('open');});
+                document.body.style.overflow = '';
+                followModalData = null; _fwList = []; _fwFiltered = []; _fwRefreshing = false;
+                _fwPendingRequests = []; _lastKnownFriendsCount = 0; _lastKnownSuggestionsCount = 0;
+                _fwPageState.forEach(function(page){page.list=[];page.query='';page.loaded=false;});
+                var info = getTargetUserFromUrl();
+                var viewer = getCurrentUser();
+                if (!info && viewer && viewer.isLoggedIn) info = {type:'uuid',value:viewer.id};
+                var entry = profileCache.resolve(info);
+                targetUser = entry ? Object.assign({}, entry.profile) : null;
+                targetUserId = targetUser ? targetUser.id : null;
+                isOwner = !!(viewer && viewer.isLoggedIn && viewer.id === targetUserId);
+                _profileRestore = entry && entry.view || null;
+                activeTab = _profileRestore ? _profileRestore.tab : 'posts';
+                allPosts=[]; _profileUserPosts=[]; likedPostIds=[];bookmarkedPostIds=[];repostedPostIds=[];
+                marketItemsCache=[];savedMarketItemsCache=[];savedMarketLoaded=false;
+                _collectionPostCache.clear();_collectionPostRequests.clear();
+                _secondaryDataLoaded=false;viewerIsBlockedByPrivacy=true;
+                document.querySelectorAll('.panel').forEach(function(el){
+                    el.replaceChildren();delete el.dataset.profileRendered;
+                    el.dataset.collectionRequest=String(Number(el.dataset.collectionRequest || 0)+1);
+                    el.classList.toggle('active', el.id==='panel-'+activeTab);
+                });
+                document.querySelectorAll('#tabsBar .tab').forEach(function(el){el.classList.toggle('active',el.dataset.tab===activeTab);el.style.display='';});
+                document.getElementById('tabsBar').style.display='';
+                document.getElementById('tabsBar').classList.remove('frozen-tabs');
+                document.getElementById('statPostsBox').onclick=openPostsModal;
+                ['statPostsBox','statFollowersBox','statFollowingBox'].forEach(function(id){document.getElementById(id).classList.remove('locked');});
+                setProfileScroll(0);
+                _profileLoadedOnce=!!targetUser;
+                if (targetUser) renderProfileIdentity(targetUser);
+                else {
+                    document.getElementById('profileAvatar').src=getAvatar(null);
+                    document.getElementById('profileCover').removeAttribute('src');
+                    document.getElementById('profileCover').style.display='none';
+                    showProfileSkeleton();
+                }
+                // The viewer's own fresh view needs no permission round trip. All other
+                // retained content stays detached until the server revalidates it.
+                if (isOwner && activeTab==='posts' && _profileRestore && Date.now()-_profileRestore.loadedAt<30000) {
+                    var view=_profileRestore;
+                    _profileUserPosts=view.posts;allPosts=view.posts.slice();likedPostIds=view.likes;
+                    bookmarkedPostIds=view.bookmarks;repostedPostIds=view.reposts;marketItemsCache=view.market;
+                    _profileCounts=view.counts;viewerIsBlockedByPrivacy=view.blocked;_secondaryDataLoaded=true;
+                    document.getElementById('statFollowersBox').onclick=function(){openFollowModal('followers');};
+                    document.getElementById('statFollowingBox').onclick=function(){openFollowModal('following');};
+                    document.getElementById('statPostsBox').onclick=openPostsModal;
+                    renderProfileIdentity(targetUser);
+                    document.getElementById('statPosts').textContent=fmtNum(view.posts.length);
+                    document.getElementById('statFollowers').textContent=fmtNum(view.counts.followers);
+                    document.getElementById('statFollowing').textContent=fmtNum(view.counts.following);
+                    restoreProfilePanels();
+                    profileDetailNavigation.restore();
+                    return;
+                }
+                if (entry && entry.view) {
+                    document.getElementById('statPosts').textContent=fmtNum(entry.view.posts.length);
+                    document.getElementById('statFollowers').textContent=fmtNum(entry.view.counts.followers);
+                    document.getElementById('statFollowing').textContent=fmtNum(entry.view.counts.following);
+                }
+                if (!entry || !entry.view) document.getElementById('panel-'+activeTab).innerHTML=buildGridSkeleton();
+                renderProfile();
+            }
+            window.openFollowProfile = function(index) {
+                var selected = _fwFiltered[index];
+                if (!selected || !selected.id) return;
+                profileCache.put({id:selected.id,display_name:selected.displayName,username:(selected.handle || '').replace(/^@/,''),avatar_url:selected.avatar},false);
+                navigateProfile('/profile.html?uid='+encodeURIComponent(selected.id), true);
+            };
+            window.ProfileNavigation = {
+                open: function(id) { navigateProfile(String(id).startsWith('FU') ? '/u/'+encodeURIComponent(id) : '/profile.html?uid='+encodeURIComponent(id), true); },
+                prefetch: function(id) {
+                    var entry=profileCache.get(id);
+                    if(profileCache.fresh(entry))return;
+                    profileCache.request(id, function(){return fetchProfileByUuid(id);}).then(function(profile){if(profile)profileCache.put(profile,true);}).catch(function(){});
+                }
+            };
+            document.addEventListener('pointerover', function(e) {
+                var row=e.target.closest('[data-profile-id]');
+                if(row) window.ProfileNavigation.prefetch(row.dataset.profileId);
+            });
+
             // ─── RENDER PROFILE ────────────────────────────────────────
             async function renderProfile() {
-                if (window.__freeupperProfileLoading) return;
+                if(profileLocalViewerScope()!==profileViewerScope()){_profileRefreshQueued=true;return;}
+                var navigationId = ++_profileNavigationId;
                 window.__freeupperProfileLoading = true;
                 var scopeVersion=_profileScopeVersion;
 
@@ -3357,13 +3502,14 @@
                         }
                     }
 
-                    if (targetInfo.type === 'username') {
-                        profile = await fetchProfileByUsername(targetInfo.value);
-                    } else if (targetInfo.type === 'freeupper_id') {
-                        profile = await fetchProfileByFreeUpperId(targetInfo.value);
-                    } else if (targetInfo.type === 'uuid') {
-                        profile = await fetchProfileByUuid(targetInfo.value);
-                    }
+                    var entry = profileCache.resolve(targetInfo);
+                    profile = await profileCache.request(entry ? entry.profile.id : targetInfo.type + ':' + targetInfo.value, function() {
+                        if (entry && profileCache.fresh(entry) && user && user.id === entry.profile.id) return entry.profile;
+                        if (targetInfo.type === 'username') return fetchProfileByUsername(targetInfo.value);
+                        if (targetInfo.type === 'freeupper_id') return fetchProfileByFreeUpperId(targetInfo.value);
+                        return fetchProfileByUuid(targetInfo.value);
+                    });
+                    if(scopeVersion!==_profileScopeVersion || navigationId!==_profileNavigationId)return;
 
                     if (!profile || !profile.id) {
                         throw new Error('Profile could not be resolved');
@@ -3385,6 +3531,7 @@
                     }
 
                     if(scopeVersion!==_profileScopeVersion)return;
+                    profileCache.put(profile, true);
                     targetUser = profile;
                     targetUserId = profile.id;
 
@@ -3410,6 +3557,7 @@
                         theyBlockedMe = results[1];
                     }
 
+                    if(scopeVersion!==_profileScopeVersion || navigationId!==_profileNavigationId)return;
                     if (iBlockedThem) {
                         _profileLoadedOnce = true;
                         hideProfileSkeleton();
@@ -3430,11 +3578,15 @@
                     loadAndRenderSecondaryData();
 
                 } catch (err) {
+                    if(scopeVersion!==_profileScopeVersion || navigationId!==_profileNavigationId)return;
                     console.error('[Profile] Failed to render profile:', err);
                     _profileLoadedOnce = true;
                     hideProfileSkeleton();
+                    document.getElementById('actionRow').innerHTML='';
+                    document.getElementById('panel-'+activeTab).innerHTML='<div class="empty-state"><h3>Profile unavailable</h3><p>'+escapeHtml(err && err.message || 'Failed to load profile')+'</p></div>';
                     showToast(err && err.message ? err.message : 'Failed to load profile', 'r');
                 } finally {
+                    if(navigationId!==_profileNavigationId)return;
                     window.__freeupperProfileLoading = false;
                     if(_profileRefreshQueued && profileLocalViewerScope()===profileViewerScope()){_profileRefreshQueued=false;renderProfile();}
                 }
@@ -3445,7 +3597,7 @@
                 hideProfileSkeleton();
                 _profileLoadedOnce = true;
 
-                var avatarSrc = getAvatar(profile);
+                var avatarSrc = getAvatar({avatar_url: profile.avatar_url});
                 document.getElementById('profileAvatar').src = avatarSrc;
                 document.getElementById('editAv').src = avatarSrc;
                 document.getElementById('qrAvatar').src = avatarSrc;
@@ -3522,6 +3674,7 @@
                 var isOwnerLocal = isOwner;
 
                 try {
+                    var results = await profileCache.request('secondary:'+targetId, async function() {
                     var promises = [
                         fetchFollowCounts(targetId),
                         (window.PostsAPI && window.PostsAPI.loadPostsByUserId)
@@ -3543,8 +3696,9 @@
                         promises.push(Promise.resolve({ iFollowThem: false, theyFollowMe: false }));
                     }
 
-                    var results = await Promise.all(promises);
-                    if(scopeVersion!==_profileScopeVersion)return;
+                    return Promise.all(promises);
+                    });
+                    if(scopeVersion!==_profileScopeVersion || !results)return;
                     var counts = results[0] || { followers: 0, following: 0 };
                     var userPosts = results[1] || [];
                     var marketItems = results[2] || [];
@@ -3567,8 +3721,6 @@
                     bookmarkedPostIds = bookmarkedIds;
                     marketItemsCache = marketItems;
                     _profileCounts = counts;
-                    _secondaryDataLoaded = true;
-
                     document.getElementById('statPosts').textContent = fmtNum(userPosts.length);
                     document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
                     document.getElementById('statFollowing').textContent = fmtNum(counts.following);
@@ -3580,15 +3732,18 @@
                     // and mutual relationships for guests and signed-in viewers.
                     var tabKeys = ['love','share','star','market'];
                     var tabResults = await Promise.all(tabKeys.map(function(key) {
-                        return window.sb.rpc('can_view_profile_tab', {p_owner:targetUserId,p_tab:key});
+                        return window.sb.rpc('can_view_profile_tab', {p_owner:targetId,p_tab:key});
                     }));
                     if(scopeVersion!==_profileScopeVersion)return;
+                    _secondaryDataLoaded = true;
                     targetUser._tabAllowed = {};
                     tabKeys.forEach(function(key,idx) {
                         targetUser._tabAllowed[key] = !tabResults[idx].error && tabResults[idx].data === true;
                     });
                     applyPrivacyAndTabs(targetUser, counts, userPosts, likedIds, bookmarkedIds, repostedIds, marketItems, rel.iFollowThem);
+                    restoreProfilePanels();
                     profileDetailNavigation.warm();
+                    profileDetailNavigation.restore();
                     if (isOwnerLocal && targetUser.is_private) loadPrivateFollowRequests().catch(console.error);
                 } catch (err) {
                     console.error('Secondary load error:', err);
@@ -3872,6 +4027,7 @@
             }
 
             function renderMarket(container, marketItems) {
+                var scopeVersion = _profileScopeVersion;
                 marketItemsCache = marketItems;
                 var subtabsHtml = isOwner ?
                     '<div class="market-subtabs">' +
@@ -3883,10 +4039,12 @@
                     if (!savedMarketLoaded) {
                         container.innerHTML = subtabsHtml + '<div class="grid-2" style="min-height:120px"></div>';
                         window.ListingsAPI.getSavedListings({ limit: 100 }).then(function(items) {
+                            if(scopeVersion!==_profileScopeVersion)return;
                             savedMarketItemsCache = items || [];
                             savedMarketLoaded = true;
                             renderMarket(container, marketItems);
                         }).catch(function(err) {
+                            if(scopeVersion!==_profileScopeVersion)return;
                             savedMarketLoaded = true;
                             showToast(err.message || 'Failed to load saved items', 'r');
                             renderMarket(container, marketItems);
@@ -3925,8 +4083,10 @@
                         '<button class="act-btn act-msg" onclick="showToast(\'Please sign in to message\',\'o\')" data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;>Message</button>';
                     return;
                 }
+                var scopeVersion = _profileScopeVersion;
                 var rel = { iFollowThem: false, theyFollowMe: false };
                 try { rel = await getRelationship(user.id, targetUserId); } catch (e) {}
+                if(scopeVersion!==_profileScopeVersion)return;
                 // A private-account owner can approve a request directly from the requester's profile.
                 if (rel.incomingPending && user.id !== targetUserId) {
                     row.innerHTML = '<button class="act-btn act-follow" id="approveIncomingFollow">Accept Request</button>' +
@@ -3989,12 +4149,14 @@
             }
             var _fwPendingRequests = [];
             async function loadPrivateFollowRequests() {
+                var scopeVersion = _profileScopeVersion;
                 if (!isOwner || !targetUser || !targetUser.is_private) {
                     _fwPendingRequests = [];
                 } else {
                     var result = await window.sb.from('follows')
                         .select('follower_id,profiles:follower_id(id,freeupper_id,username,display_username,display_name,avatar_url,verified)')
                         .eq('following_id',targetUserId).eq('status','pending');
+                    if(scopeVersion!==_profileScopeVersion)return;
                     if (result.error) { console.warn('Follow requests:',result.error); return; }
                     _fwPendingRequests = (result.data || []).filter(function(r){return r.profiles;});
                 }
@@ -4435,12 +4597,14 @@
             };
 
             window.skipCoverCrop = async function() {
+                var scopeVersion=_profileScopeVersion;
                 if (!cropOriginalFile) { closeFS('coverCropModal'); return; }
                 var file = cropOriginalFile;
                 closeFS('coverCropModal');
                 try {
                     showToast(window.fuT('Uploading cover photo…'), 'p');
                     var url = await window.AuthUser.uploadCoverPhoto(file);
+                    if(scopeVersion!==_profileScopeVersion)return;
                     var coverEl = document.getElementById('profileCover');
                     if (coverEl && url) { coverEl.src = url;
                         coverEl.style.display = 'block'; }
@@ -4528,6 +4692,7 @@
                 cropOriginalFile = null; };
 
             window.confirmCoverCrop = function() {
+                var scopeVersion=_profileScopeVersion;
                 var out = document.createElement('canvas');
                 var OUT_W = 1500,
                     OUT_H = 500;
@@ -4547,6 +4712,7 @@
                     try {
                         showToast(window.fuT('Uploading cover photo…'), 'p');
                         var url = await window.AuthUser.uploadCoverPhoto(file);
+                        if(scopeVersion!==_profileScopeVersion)return;
                         var coverEl = document.getElementById('profileCover');
                         if (coverEl && url) { coverEl.src = url;
                             coverEl.style.display = 'block'; }
@@ -4928,6 +5094,7 @@
                     var seen = new Set(dataSource.map(function(u){return u.id;}));
                     dataSource = _fwPendingRequests.filter(function(r){return !seen.has(r.follower_id);}).map(function(r){return Object.assign({},r.profiles,{_pendingRequest:true});}).concat(dataSource);
                 }
+                dataSource.forEach(function(u) { profileCache.put(u, false); });
                 _fwList = dataSource.map(function(u) {
                     var href = u.freeupper_id
                         ? '/u/' + encodeURIComponent(u.freeupper_id)
@@ -4956,7 +5123,10 @@
                 if (!needsRefresh) return;
                 _fwRefreshing = true;
                 try {
-                    followModalData = await fetchFollowLists(targetUserId);
+                    var scopeVersion = _profileScopeVersion;
+                    var freshLists = await fetchFollowLists(targetUserId);
+                    if(scopeVersion!==_profileScopeVersion)return;
+                    followModalData = freshLists;
                     if (followModalData.friends.length > 0) _lastKnownFriendsCount = followModalData.friends.length;
                     if (followModalData.suggestions.length > 0) _lastKnownSuggestionsCount = followModalData.suggestions.length;
                     if (_fwPageIdx === idx) {
@@ -5051,8 +5221,8 @@
                     if (isSugg) {
                         var srcLbl = u.source || 'People you may know';
                         html += '<div class="u-row u-row-suggestion" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;padding:0 clamp(14px,5vw,24px)">' +
-                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="window.location.href=\'' + rowHref + '\'">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
-                            '<div class="u-info" onclick="window.location.href=\'' + rowHref + '\'" style="cursor:pointer">' +
+                            '<div class="u-av" data-profile-id="' + u.id + '" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="openFollowProfile(' + i + ')">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-info" data-profile-id="' + u.id + '" onclick="openFollowProfile(' + i + ')" style="cursor:pointer">' +
                             '<div class="u-name truncate-1">' + truncateName(u.displayName, 24) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + truncateName(u.handle || '', 18) + '</div>' +
                             '<div class="u-sugg-src">' + srcLbl + '</div>' +
@@ -5064,8 +5234,8 @@
                     } else {
                         var actionHtml = _fwRowAction(u, i);
                         html += '<div class="u-row" data-row-idx="' + i + '" style="position:absolute;top:' + top + 'px;left:0;right:0;height:' + rowH + 'px;box-sizing:border-box;display:flex;align-items:center;gap:14px;padding:0 clamp(14px,5vw,24px)">' +
-                            '<div class="u-av" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="window.location.href=\'' + rowHref + '\'">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
-                            '<div class="u-info" onclick="window.location.href=\'' + rowHref + '\'" style="cursor:pointer">' +
+                            '<div class="u-av" data-profile-id="' + u.id + '" style="background:var(--bg4);flex-shrink:0;cursor:pointer" onclick="openFollowProfile(' + i + ')">' + (u.avatar ? '<img src="' + u.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '') + '</div>' +
+                            '<div class="u-info" data-profile-id="' + u.id + '" onclick="openFollowProfile(' + i + ')" style="cursor:pointer">' +
                             '<div class="u-name truncate-1">' + truncateName(u.displayName, 24) + (u.verified ? '<span class="mini-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
                             '<div class="u-handle">' + truncateName(u.handle || '', 18) + '</div>' +
                             '</div>' +
@@ -5107,6 +5277,7 @@
             }
 
             window._fwTap = function(btn) {
+                var scopeVersion=_profileScopeVersion;
                 if (event) event.stopPropagation();
                 if (btn.classList.contains('pending')) return;
                 var action = btn.getAttribute('data-action') || 'toggle-follow';
@@ -5121,31 +5292,37 @@
                             finally { btn.disabled = false; }
                         } else if (action === 'follow-back' || action === 'toggle-follow') {
                             var newState = await toggleFollow(user.id);
+                            if(scopeVersion!==_profileScopeVersion)return;
                             btn.textContent = newState ? 'Following' : 'Follow';
                             btn.className = 'u-btn' + (newState ? ' following' : '');
                             btn.setAttribute('data-action', newState ? 'unfollow' : 'follow-back');
                             showToast(newState ? 'Following ✓' : 'Unfollowed');
                             followModalData = null;
                             var counts = await fetchFollowCounts(targetUserId);
+                            if(scopeVersion!==_profileScopeVersion)return;
                             document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
                             document.getElementById('statFollowing').textContent = fmtNum(counts.following);
                             openFollowModal(_fwCurTab);
                         } else if (action === 'unfollow') {
                             await toggleFollow(user.id);
+                            if(scopeVersion!==_profileScopeVersion)return;
                             btn.textContent = window.fuT('Follow');
                             btn.className = 'u-btn';
                             btn.setAttribute('data-action', 'follow-back');
                             showToast(window.fuT('Unfollowed'));
                             followModalData = null;
                             var counts2 = await fetchFollowCounts(targetUserId);
+                            if(scopeVersion!==_profileScopeVersion)return;
                             document.getElementById('statFollowers').textContent = fmtNum(counts2.followers);
                             document.getElementById('statFollowing').textContent = fmtNum(counts2.following);
                             openFollowModal(_fwCurTab);
                         } else if (action === 'unfriend') {
                             await toggleFollow(user.id);
+                            if(scopeVersion!==_profileScopeVersion)return;
                             showToast(window.fuT('Unfriended'));
                             followModalData = null;
                             var counts3 = await fetchFollowCounts(targetUserId);
+                            if(scopeVersion!==_profileScopeVersion)return;
                             document.getElementById('statFollowers').textContent = fmtNum(counts3.followers);
                             document.getElementById('statFollowing').textContent = fmtNum(counts3.following);
                             openFollowModal(_fwCurTab);
@@ -5154,12 +5331,14 @@
                             if (me) {
                                 await window.sb.from('dismissed_suggestions')
                                     .upsert({ user_id: me.id, dismissed_user_id: user.id }, { onConflict: 'user_id,dismissed_user_id' });
+                                if(scopeVersion!==_profileScopeVersion)return;
                             }
                             _fwList = _fwList.filter(function(u) { return u.id !== user.id; });
                             followModalData.suggestions = followModalData.suggestions.filter(function(u) { return u.id !== user.id; });
                             _sugOffset++;
                             try {
                                 var more = await window.sb.rpc('get_suggestions', { p_limit: 1, p_offset: _sugOffset });
+                                if(scopeVersion!==_profileScopeVersion)return;
                                 if (!more.error && more.data && more.data.length) {
                                     var nu = more.data[0];
                                     var mapped = {
@@ -5197,12 +5376,14 @@
             };
 
             window.loadMoreSuggestions = async function() {
+                var scopeVersion=_profileScopeVersion;
                 var btn = document.getElementById('sugShowMoreBtn');
                 if (btn) { btn.textContent = window.fuT('Loading…');
                     btn.disabled = true; }
                 _sugOffset += 10;
                 try {
                     var more = await window.sb.rpc('get_suggestions', { p_limit: 10, p_offset: _sugOffset });
+                    if(scopeVersion!==_profileScopeVersion)return;
                     if (!more.error && more.data && more.data.length) {
                         more.data.forEach(function(nu) {
                             var mapped = {
@@ -5254,6 +5435,7 @@
 
             // ─── FOLLOW MODAL OPENER ──────────────────────────────────
             window.openFollowModal = async function(tab) {
+                var scopeVersion = _profileScopeVersion;
                 tab = tab || 'followers';
                 if (!isOwner && targetUser && targetUser.hide_follower_count) {
                     openFS('followModal');
@@ -5267,7 +5449,9 @@
                 }
                 if (!followModalData) {
                     try {
-                        followModalData = await fetchFollowListsWithRetry(targetUserId);
+                        var freshLists = await fetchFollowListsWithRetry(targetUserId);
+                        if(scopeVersion!==_profileScopeVersion)return;
+                        followModalData = freshLists;
                         var friendsCount = followModalData.friends.length;
                         if (friendsCount > 0) _lastKnownFriendsCount = friendsCount;
                         if (followModalData.suggestions.length > 0) _lastKnownSuggestionsCount = followModalData.suggestions.length;
@@ -5521,6 +5705,7 @@
                                 var privacyChanged=['is_private','suspended','hide_all_posts'].some(function(key){return targetUser && !!targetUser[key]!==!!updated[key];});
                                 targetUser = updated;
                                 if(privacyChanged){
+                                    profileCache.clear();_profileRestore=null;
                                     viewerIsBlockedByPrivacy=true;++_profileScopeVersion;allPosts=[];_profileUserPosts=[];_collectionPostCache.clear();_collectionPostRequests.clear();
                                     document.querySelectorAll('.panel').forEach(function(el){el.replaceChildren();delete el.dataset.profileRendered;el.dataset.collectionRequest=String(Number(el.dataset.collectionRequest || 0)+1);});
                                     profileDetailNavigation.invalidate();loadAndRenderSecondaryData();
@@ -5560,13 +5745,21 @@
 
                     window.addEventListener('popstate', function(e) {
                         if (profileDetailNavigation.popstate(e)) return;
-                        if (!window.__freeupperProfileLoading) renderProfile();
+                        navigateProfile(null, false);
                     });
 
                     setupProfileRealtime();
 
-                    document.addEventListener('profileUpdated', function() {
+                    document.addEventListener('profileUpdated', function(event) {
                         followModalData = null;
+                        var viewer = event.detail && event.detail.user;
+                        var entry = viewer && profileCache.get(viewer.id);
+                        if (entry) {entry.loadedAt=0;delete entry.view;}
+                        if (viewer && isOwner && viewer.id===targetUserId) {
+                            targetUser=Object.assign({},targetUser,{avatar_url:viewer.avatar,cover_url:viewer.coverUrl,
+                                display_name:viewer.displayName,username:viewer.username,bio:viewer.bio});
+                            renderProfileIdentity(targetUser);
+                        }
                     });
 
                 } catch (err) {

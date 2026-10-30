@@ -136,12 +136,17 @@
    *   - a public FreeUpper ID (e.g. "FUA107621FDE21") → navigates directly
    *   - an internal Supabase UUID → resolved to a FreeUpper ID first
    *
-   * Always performs a real navigation to /u/<FreeUpperID> so the
-   * Vercel rewrite can serve profile.html.
+   * A mounted Profile handles this in place; other pages navigate to the
+   * public profile URL through the existing server rewrite.
    */
   async function openProfile(userId) {
     if (!userId) {
       console.warn('Router.openProfile: No userId provided');
+      return;
+    }
+
+    if (window.ProfileNavigation) {
+      window.ProfileNavigation.open(userId);
       return;
     }
 

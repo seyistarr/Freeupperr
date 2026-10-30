@@ -157,6 +157,17 @@
         window.addEventListener('message',message);
         return {
             open,warm,resetViewer,
+            setProfile() {
+                // Profile-to-profile navigation retains this document and renderer,
+                // but details and history must now belong to the new profile URL.
+                ++version;requests.clear();cache.clear();sendVisibility(false);
+                frame?.contentWindow?.ProfilePostRenderer?.clear();
+                current=null;currentDetail=null;rendered=null;ready=false;failed=false;
+                overlay.hidden=true;main.inert=false;
+                base.href=location.href;
+                base.searchParams.delete('profilePost');
+                base.searchParams.delete('profileProduct');
+            },
             invalidate(id=currentDetail?.id) {
                 ++version;requests.clear();cache.clear();if(!id)return;cache.set(id,null);rendered=null;
                 frame?.contentWindow?.ProfilePostRenderer?.clear();ready=false;failed=false;

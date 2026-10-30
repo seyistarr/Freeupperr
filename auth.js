@@ -95,7 +95,7 @@
   }
 
   function updateAvatarEls(src) {
-    const els = document.querySelectorAll('.side-av, .nav-av, #profileAvatar, #editAv, #qrAvatar');
+    const els = document.querySelectorAll('.side-av, .nav-av');
     for (let i = 0; i < els.length; i++) {
       if (els[i]) els[i].src = src;
     }
