@@ -588,6 +588,20 @@
     return mapPostsWithInteractionState(data || []);
   }
 
+  // One authorized profile page and its exact RLS-filtered count in one query.
+  // Errors must remain errors: an offline response is not a successful empty grid.
+  async function loadProfilePage(userId, {offset = 0, limit = 24} = {}) {
+    if (!userId) throw new Error('Missing profile owner');
+    offset = normalizeOffset(offset); limit = normalizeLimit(limit);
+    const {data, count, error} = await sb.from('posts').select(POST_SELECT, {count: 'exact'})
+      .eq('user_id', userId).eq('is_deleted', false).eq('is_hidden', false)
+      .eq('publishing_state', 'published').order('created_at', {ascending: false})
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    if (typeof count !== 'number') throw new Error('Profile post count unavailable');
+    return {posts: await mapPostsWithInteractionState(data || []), total: count};
+  }
+
   // ===================================================================
   // LOAD SINGLE POST
   // ===================================================================
@@ -1618,6 +1632,7 @@
 
     // Posts
     loadPostsByUserId,
+    loadProfilePage,
     loadPostById,
     loadPostPreview,
     createPost,

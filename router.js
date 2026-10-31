@@ -145,6 +145,8 @@
       return;
     }
 
+    if(String(userId)===getCurrentUser().id && window.FreeUpperProfileShell?.request('profile'))return;
+
     if (window.ProfileNavigation) {
       window.ProfileNavigation.open(userId, profileData);
       return;

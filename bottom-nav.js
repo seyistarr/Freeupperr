@@ -73,6 +73,17 @@
     return { avatar: '' };
   }
 
+  let shellLoading=null;
+  function loadProfileShell() {
+    if(window.FreeUpperProfileShell)return Promise.resolve(window.FreeUpperProfileShell);
+    if(!shellLoading)shellLoading=new Promise((resolve,reject)=>{
+      const script=document.createElement('script');script.src='/profile-shell.js?v=1';
+      script.onload=()=>resolve(window.FreeUpperProfileShell);script.onerror=()=>{shellLoading=null;reject(new Error('Profile navigation unavailable'));};
+      document.head.appendChild(script);
+    });
+    return shellLoading;
+  }
+
   class BottomNav extends HTMLElement {
     connectedCallback() {
       if (this._built) return;
@@ -80,6 +91,25 @@
       this._badges = {};
       this.render();
       this.updateAvatar();
+      try{if(window.parent!==window && window.parent.FreeUpperProfileShell)window.FreeUpperProfileShell=window.parent.FreeUpperProfileShell;}catch(_){}
+      // Native anchors remain the fallback for guests, modified clicks, and
+      // environments without authenticated session support.
+      this.addEventListener('click',event=>{
+        const link=event.target.closest('[data-nav-key]');
+        const key=link?.dataset.navKey;
+        if(!['home','profile'].includes(key) || event.defaultPrevented || event.button>0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+        if(!getUser()?.isLoggedIn || !window.sb?.auth?.getSession)return;
+        const shell=window.FreeUpperProfileShell;
+        if(shell?.request(key)){event.preventDefault();return;}
+        if(!shell){
+          event.preventDefault();
+          loadProfileShell().then(next=>{if(!next?.request(key))window.location.href=link.href;}).catch(()=>{window.location.href=link.href;});
+        }
+      });
+      const start=()=>{if(getUser()?.isLoggedIn && window.sb?.auth?.getSession)loadProfileShell().catch(()=>{});};
+      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+      document.addEventListener('profileUpdated',start);
+      window.AuthUser?.onChange?.(start);
 
       // Keep avatar in sync when profile/theme changes elsewhere on the page
       document.addEventListener('profileUpdated', () => this.updateAvatar());

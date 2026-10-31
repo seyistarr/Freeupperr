@@ -65,3 +65,5 @@ export async function profileHarness({guest=false,pwa=false}={}){
  await page.waitForFunction(()=>document.getElementById('statPosts').textContent==='1');
  return {page,errors,documents:()=>documents,close:async()=>{await browser.close();await new Promise(r=>server.close(r));}};
 }
+
+export const profileFixtureParts={html,cache,bootstrap,main,worker};

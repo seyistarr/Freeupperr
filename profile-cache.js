@@ -2,6 +2,14 @@
 // Aliases are lookup hints only; every entry is owned by an immutable user ID.
 (function(root) {
     'use strict';
+    // Owner-only memory snapshots have a short offline lease and require the
+    // same verified, unexpired session. Foreign collections always revalidate.
+    root.profileSnapshotAllowed = function(snapshot, session, now) {
+        now=now || Date.now();
+        return !!snapshot && !!session && snapshot.ownerId===session.viewer &&
+            snapshot.authorizedAt>0 && now-snapshot.authorizedAt>=0 && now-snapshot.authorizedAt<300000 &&
+            session.expiresAt>now;
+    };
     root.createProfileCache = function(options) {
         options = options || {};
         var limit = options.limit || 20, ttl = options.ttl || 60000;
@@ -27,8 +35,8 @@
             if (complete) entry.loadedAt = Date.now();
             entries.set(profile.id, entry);
             while(entries.size>limit){
-                var disposable=Array.from(entries).find(function(pair){return pair[0]!==profile.id && !pair[1].view && !pair[1].modalViews && !pair[1].mutation && !pair[1].active;});
-                if(!disposable)disposable=Array.from(entries).find(function(pair){return pair[0]!==profile.id && !pair[1].active;});
+                var disposable=Array.from(entries).find(function(pair){return pair[0]!==profile.id && !pair[1].view && !pair[1].modalViews && !pair[1].mutation && !pair[1].active && !pair[1].ownerSummary;});
+                if(!disposable)disposable=Array.from(entries).find(function(pair){return pair[0]!==profile.id && !pair[1].active && !pair[1].ownerSummary;});
                 entries.delete(disposable?disposable[0]:entries.keys().next().value);
             }
             return entry;
