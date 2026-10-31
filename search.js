@@ -635,7 +635,7 @@
     const state = relationshipState(u.id);
     const btn = state === 'self' ? '' : `<button class="follow-btn rel-${state}" data-user-id="${u.id}" onclick="toggleFollowHandler(event,'${u.id}')">${relLabel(state)}</button>`;
     const showBadge = u.verified_status && u.verified_status !== 'none' && u.verified_status !== 'pending';
-    return `<div class="user-row" onclick="window.location.href='/profile.html?uid='+encodeURIComponent('${u.id}')">
+    return `<div class="user-row" onclick="(window.FreeUpperScreen?.navigationWindow || window).location.href='/profile.html?uid='+encodeURIComponent('${u.id}')">
       <div class="av"><img src="${u.avatar_url||''}" onerror="this.style.display='none'">${showBadge?`<span class="vb">${ICON.check}</span>`:''}</div>
       <div class="info">
         <div class="name-line">${escapeHtml(u.display_name||u.username||'')}</div>
@@ -1950,6 +1950,7 @@
   }
 
   async function renderDiscovery() {
+    if(window.FreeUpperScreen?.isDisposed())return;
     ++_searchReqToken;
     showNormalHeader(true);
     if (!currentQuery && !hashtagMode) showTabs(false);
@@ -1992,10 +1993,12 @@
     if (photos.length) html += `<div class="discovery-block"><div class="section-title">${ICON.photo}Trending Photos</div>${renderSquareGrid(photos, false)}</div>`;
     if (market.length) html += `<div class="discovery-block"><div class="section-title">${ICON.market}Trending Marketplace</div><div class="sugg-scroll">${market.map(m => `<div style="flex-shrink:0;width:132px;cursor:pointer;" onclick="window.Router.openListing('${m.id}')"><div style="width:132px;height:132px;border-radius:16px;overflow:hidden;background:#eee;"><img src="${(m.images&&m.images[0]&&m.images[0].url)||''}" style="width:100%;height:100%;object-fit:cover;"></div><div style="font-size:14px;font-weight:800;margin-top:7px;color:var(--p);">₦${Number(m.price||0).toLocaleString()}</div><div style="font-size:12px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(m.title||'')}</div></div>`).join('')}</div></div>`;
     c.innerHTML = html || (recentHtml + emptyState('Nothing to discover yet'));
+    window.FreeUpperScreen?.ready();
   }
 
   // ★ FIX: load-more must not clobber the token of an in-flight fresh search.
   async function renderSearchResults(q, replace = true) {
+    if(window.FreeUpperScreen?.isDisposed())return;
     showNormalHeader(true); showTabs(true); renderTabsBar();
     const container = document.getElementById('resultsContainer');
     const tabForCall = currentTab;
@@ -2066,6 +2069,7 @@
     createSentinel();
     if (!ts.hasMore) showEndResults(); else showLoadMoreIdle();
     startInfiniteScroll();
+    window.FreeUpperScreen?.ready();
   }
 
   function openHashtag(tag) {
@@ -2140,6 +2144,7 @@
     createSentinel();
     if (!ts.hasMore) showEndResults(); else showLoadMoreIdle();
     startInfiniteScroll();
+    window.FreeUpperScreen?.ready();
   }
 
   function switchTab(tab) {
@@ -2300,6 +2305,42 @@
     reloadFollowSets: () => loadFollowSets(true) // ★ FIX: expose manual refresh
   };
 
+  // Retained Search owns its query/results; the shell never re-runs init.
+  const searchSnapshot = window.FreeUpperScreen?.takeSnapshot();
+  window.FreeUpperScreen?.register({
+    snapshot() {
+      const controls = {currentTab,currentQuery,hashtagMode,currentHashtag,hashtagSort,hashtagView,scroll:document.getElementById('mainScroll').scrollTop};
+      const container = document.getElementById('resultsContainer');
+      if (container.querySelector('.center-loading')) return {controls};
+      return {controls, paging, html:container.innerHTML, posts:[..._postStore], following:[...followingSet], followers:[...followerSet], bookmarks:[...bookmarksSet], header:document.getElementById('hashtagHeader').innerHTML};
+    },
+    dispose() { clearTimeout(searchDebounce); ++_searchReqToken; disconnectObserver(); _postStore.clear(); }
+  });
+  function restoreSearch(snapshot) {
+    if (!snapshot?.controls) return false;
+    const c=snapshot.controls;
+    currentTab=c.currentTab;currentQuery=c.currentQuery;hashtagMode=c.hashtagMode;
+    currentHashtag=c.currentHashtag;hashtagSort=c.hashtagSort;hashtagView=c.hashtagView;
+    document.getElementById('searchInput').value=currentQuery;
+    document.getElementById('clearBtn').classList.toggle('show',!!currentQuery);
+    if (snapshot.html === undefined) {
+      if (hashtagMode) { showNormalHeader(false);showTabs(false);renderHashtagHeaderShell();loadHashtagResults(true); }
+      else if (currentQuery) renderSearchResults(currentQuery,true);
+      else renderDiscovery();
+    } else {
+      Object.assign(paging,snapshot.paging);
+      for (const [id,post] of snapshot.posts) _postStore.set(id,post);
+      followingSet=new Set(snapshot.following);followerSet=new Set(snapshot.followers);bookmarksSet=new Set(snapshot.bookmarks);followSetsLoaded=true;
+      showNormalHeader(!hashtagMode);showTabs(!!currentQuery && !hashtagMode);renderTabsBar();
+      const header=document.getElementById('hashtagHeader');header.innerHTML=snapshot.header;header.style.display=hashtagMode?'block':'none';
+      document.getElementById('resultsContainer').innerHTML=snapshot.html;
+      if (currentQuery || hashtagMode) { createSentinel();startInfiniteScroll(); }
+      window.FreeUpperScreen?.ready();
+    }
+    requestAnimationFrame(()=>{document.getElementById('mainScroll').scrollTop=c.scroll;});
+    return true;
+  }
+
   // ─── INIT ────────────────────────────────────────────────
   function init() {
     document.getElementById('searchIcon').innerHTML = ICON.search;
@@ -2321,7 +2362,8 @@
     const tagParam = params.get('tag') || params.get('hashtag');
     const queryParam = params.get('q');
     showTabs(false);
-    if (tagParam) enterHashtagMode(tagParam);
+    if (restoreSearch(searchSnapshot)) {}
+    else if (tagParam) enterHashtagMode(tagParam);
     else if (queryParam) { document.getElementById('searchInput').value = queryParam; runSearch(queryParam); }
     else renderDiscovery();
     const main = document.getElementById('mainScroll');

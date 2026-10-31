@@ -16,6 +16,9 @@
 
 (() => {
     'use strict';
+    // Profile's retained post renderer has no independent notification surface.
+    if(window.frameElement && new URLSearchParams(location.search).get('profileShell')==='1')return;
+    const screenVisible=()=>!window.FreeUpperScreen || window.FreeUpperScreen.isActive();
 
     const MAX_BADGE_NUMBER = 99;
 
@@ -131,6 +134,7 @@
     ========================================================= */
 
     async function refreshBadges() {
+        if(!screenVisible())return;
         if (!currentUserId || !window.sb) {
             return;
         }
@@ -200,6 +204,7 @@
     ========================================================= */
 
     function subscribeToNotifications() {
+        if(!screenVisible())return;
         if (!window.sb || !currentUserId) {
             return;
         }
@@ -254,6 +259,7 @@
     ========================================================= */
 
     function subscribeToMessages() {
+        if(!screenVisible())return;
         if (!window.sb || !currentUserId) {
             return;
         }
@@ -318,6 +324,7 @@
     ========================================================= */
 
     function subscribeToMessageReads() {
+        if(!screenVisible())return;
         if (!window.sb || !currentUserId) {
             return;
         }
@@ -531,6 +538,11 @@
         listenForAuthChanges();
     }
 
+    window.FreeUpperScreen?.register({
+        suspend(){clearTimeout(refreshTimer);refreshAgain=false;cleanupRealtime();},
+        resume(){refreshBadges();subscribeToNotifications();subscribeToMessages();subscribeToMessageReads();},
+        dispose:cleanupRealtime
+    });
     start();
 
 

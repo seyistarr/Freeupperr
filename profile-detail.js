@@ -86,6 +86,7 @@
             frame.style.visibility = available ? 'visible' : 'hidden';
         }
         function sendVisibility(visible) {
+            try{const screen=frame?.contentWindow?.FreeUpperScreen;if(visible && (!window.FreeUpperScreen || window.FreeUpperScreen.isActive()))screen?.resume();else screen?.suspend();}catch(_){}
             frame?.contentWindow?.postMessage({type:'fu-profile-detail-visibility',visible,theme:document.documentElement.dataset.theme},location.origin);
         }
         function show(detail, retry = false) {

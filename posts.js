@@ -1535,7 +1535,7 @@
     if (typeof callback === 'function') {
       allCallbacks.push(callback);
     }
-    if (allChannel) return;
+    if (allChannel || window.FreeUpperScreen && !window.FreeUpperScreen.isActive()) return;
 
     allChannel = sb.channel('freeupper-live');
 
@@ -1579,7 +1579,7 @@
     if (typeof callback === 'function') {
       repostCallbacks.push(callback);
     }
-    if (repostChannel) return;
+    if (repostChannel || window.FreeUpperScreen && !window.FreeUpperScreen.isActive()) return;
 
     repostChannel = sb
       .channel('posts_reposts_changes')
@@ -1676,6 +1676,15 @@
     // NEW: visual similarity
     findSimilarPosts
   };
+
+  window.FreeUpperScreen?.register({
+    suspend() {
+      if(repostChannel){sb.removeChannel(repostChannel);repostChannel=null;}
+      if(allChannel){sb.removeChannel(allChannel);allChannel=null;}
+    },
+    resume() { if(allCallbacks.length)subscribeToAll();if(repostCallbacks.length)subscribe(); },
+    dispose:unsubscribe
+  });
 
   console.log('✅ FreeUpper PostsAPI v4.2.0 loaded — comment image_url support enabled.');
 })();

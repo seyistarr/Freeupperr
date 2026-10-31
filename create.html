@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+    <script src="/js/screen-lifecycle.js?v=1"></script>
     <meta name="theme-color" id="theme-color-meta" content="#000000">
     <script src="/theme.js?v=2"></script>
     <link rel="stylesheet" href="/theme.css?v=2">
@@ -33,7 +34,7 @@
     STYLES
     ══════════════════════════════════════════ -->
     <link rel="stylesheet" href="global.css?v=theme-v1" />
-    <link rel="stylesheet" href="bottom-nav.css" />
+    <link rel="stylesheet" href="bottom-nav.css?v=five-tabs-v1" />
     <link rel="stylesheet" href="side-nav.css" />
 
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
@@ -48,7 +49,7 @@
     </script>
     <script src="auth.js">
     </script>
-    <script src="posts.js" data-fu-quotes>
+    <script src="posts.js?v=five-tabs-v1" data-fu-quotes>
     </script>
     <script src="listings.js">
     </script>
@@ -1992,7 +1993,7 @@
             <div class="create-col">
 
                 <!-- ─── TOPBAR ─── -->
-                <header class="topbar"><button type="button" class="topbar-btn topbar-close" onclick="window.location.href='index.html'" aria-label="Close" data-i18n="Close" data-i18n-attr="aria-label"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button><span class="topbar-title" data-i18n="Create">Create</span><span></span></header>
+                <header class="topbar"><button type="button" class="topbar-btn topbar-close" onclick="(window.FreeUpperScreen?.navigationWindow || window).location.href='index.html'" aria-label="Close" data-i18n="Close" data-i18n-attr="aria-label"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button><span class="topbar-title" data-i18n="Create">Create</span><span></span></header>
 
                 <!-- ─── TABS ─── -->
                 <nav class="create-tabs" role="tablist">
@@ -2214,9 +2215,9 @@
     SHARED NAV SCRIPTS
     ══════════════════════════════════════════ -->
     <script src="privacy-v2-composer.js?v=privacy-global-1" defer></script>
-    <script src="bottom-nav.js?v=mounted-profile-v1" defer>
+    <script src="bottom-nav.js?v=five-tabs-v1" defer>
     </script>
-    <script src="side-nav.js" defer>
+    <script src="side-nav.js?v=five-tabs-v1" defer>
     </script>
 
     <!-- ══════════════════════════════════════════
@@ -2390,12 +2391,22 @@
         function hasUnsentComposer() {
             return !composerPublished && (!!document.getElementById('postTitle')?.value.trim() ||
                 !!document.getElementById('postContent')?.value.trim() ||
-                state.postMedia.length > 0 || !!state.quotedPost);
+                state.postMedia.length > 0 || state.marketImages?.length > 0 || !!state.quotedPost ||
+                ['itemTitle','itemPrice','itemDescription','linkInput'].some(id=>!!document.getElementById(id)?.value.trim()));
         }
         function syncComposerExitGuard() {
             window.removeEventListener('beforeunload', guardComposerExit);
             if (hasUnsentComposer()) window.addEventListener('beforeunload', guardComposerExit);
         }
+        window.FreeUpperScreen?.register({
+            isDirty: hasUnsentComposer,
+            suspend() { clearTimeout(state.hashtagSearchTimer);clearTimeout(state.mentionSearchTimer); },
+            dispose() {
+                for(const item of [...state.postMedia,...state.marketImages])if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);
+                state.postMedia=[];state.marketImages=[];state.postEmbeddings=[];
+                window.removeEventListener('beforeunload',guardComposerExit);
+            }
+        });
         document.addEventListener('input', syncComposerExitGuard);
         window.addEventListener('pageshow', syncComposerExitGuard);
 
@@ -3907,7 +3918,7 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
                     state.postEmbeddings = [];
                     renderPostImageGrid();
                     showToast(window.fuT('Protected post published!'), 'g');
-                    window.location.href = 'index.html?refresh=' + Date.now();
+                    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'index.html?refresh=' + Date.now();
                 } catch (error) {
                     showToast(error.message || 'Protected publishing unavailable', 'r');
                 } finally {
@@ -4025,7 +4036,7 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
                 btn.disabled = publishedQuote;
 
                 setTimeout(() => {
-                    window.location.href = publishedQuote ? 'index.html?post=' + encodeURIComponent(result.id) : 'index.html?refresh=' + Date.now();
+                    (window.FreeUpperScreen?.navigationWindow || window).location.href = publishedQuote ? 'index.html?post=' + encodeURIComponent(result.id) : 'index.html?refresh=' + Date.now();
                 }, 500);
 
             } catch (err) {
@@ -4140,7 +4151,7 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
                     btn.disabled = false;
 
                     setTimeout(() => {
-                        window.location.href = 'index.html?refresh=' + Date.now();
+                        (window.FreeUpperScreen?.navigationWindow || window).location.href = 'index.html?refresh=' + Date.now();
                     }, 500);
                 })
                 .catch(function(err) {
@@ -4255,12 +4266,8 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
                 setTimeout(loadCategories, 400);
             }
 
-            // Preload embedding model
-            if (window.ImageEmbedding && typeof window.ImageEmbedding.preloadModel === 'function') {
-                window.ImageEmbedding.preloadModel()
-                    .then(() => console.log('[Embedding] Model preloaded'))
-                    .catch(e => console.warn('[Embedding] Preload error:', e));
-            }
+            // ImageEmbedding loads its model on the first selected image.
+            // Merely visiting a retained composer must not allocate model weights.
 
             // Drop zones
             setupDropZones();

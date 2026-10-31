@@ -78,7 +78,7 @@
   function loadProfileShell() {
     if(window.FreeUpperProfileShell)return Promise.resolve(window.FreeUpperProfileShell);
     if(!shellLoading)shellLoading=new Promise((resolve,reject)=>{
-      const script=document.createElement('script');script.src='/profile-shell.js?v=1';
+      const script=document.createElement('script');script.src='/profile-shell.js?v=five-tabs-v1';
       script.onload=()=>resolve(window.FreeUpperProfileShell);script.onerror=()=>{shellLoading=null;reject(new Error('Profile navigation unavailable'));};
       document.head.appendChild(script);
     });
@@ -92,22 +92,40 @@
       this._badges = {};
       const markLeaving = () => { this._leaving = true; setTimeout(() => { this._leaving = false; }, 400); };
       this._markLeaving = markLeaving;
-      this.render();
+      const childScreen=document.documentElement.hasAttribute('data-fu-screen-child');
+      if(!childScreen)this.render();
       this.updateAvatar();
       // Visual viewport shrinks for an iOS keyboard even when 100dvh does not.
       const viewport = window.visualViewport;
       const syncViewport = () => {
         if (!viewport) return;
-        const typing = document.activeElement?.matches('input, textarea, [contenteditable="true"]');
-        const keyboard = typing && window.innerHeight - viewport.height > 100;
-        document.documentElement.toggleAttribute('data-nav-keyboard', !!keyboard);
-        if (keyboard) document.documentElement.style.setProperty('--visual-viewport-height', viewport.height + 'px');
-        else document.documentElement.style.removeProperty('--visual-viewport-height');
+        let owner=window, tab=window, root=window;
+        try {
+          if(window.parent!==window && window.parent.FreeUpperProfileShell){
+            if(!childScreen || window.parent.FreeUpperProfileShell.getActive()!==window.FreeUpperScreen?.kind)return;
+            root=window.parent;
+          }else if(window.FreeUpperProfileShell && window.FreeUpperScreen && window.FreeUpperProfileShell.getActive()!==window.FreeUpperScreen.kind){
+            tab=document.querySelector('iframe[data-fu-mounted="'+window.FreeUpperProfileShell.getActive()+'"]')?.contentWindow || window;
+            owner=tab;
+          }
+          // Focus events do not bubble out of a retained document or a Profile
+          // detail renderer. Use the active leaf and the outer visual viewport.
+          while(owner.document.activeElement?.tagName==='IFRAME')owner=owner.document.activeElement.contentWindow;
+          const height=Math.min(viewport.height,root.visualViewport?.height || Infinity,owner.visualViewport?.height || Infinity);
+          const typing=owner.document.activeElement?.matches('input, textarea, [contenteditable="true"]');
+          const keyboard=!!typing && Math.max(root.innerHeight,tab.innerHeight)-height>100;
+          for(const doc of new Set([document,root.document,tab.document,owner.document])){
+            doc.documentElement.toggleAttribute('data-nav-keyboard',keyboard);
+            if(keyboard)doc.documentElement.style.setProperty('--visual-viewport-height',height+'px');
+            else doc.documentElement.style.removeProperty('--visual-viewport-height');
+          }
+        }catch(_){}
       };
       viewport?.addEventListener('resize', syncViewport);
       document.addEventListener('focusin', syncViewport);
       document.addEventListener('focusout', () => requestAnimationFrame(syncViewport));
       window.addEventListener('pageshow', () => { this._leaving = false; syncViewport(); });
+      if(childScreen){this.remove();return;}
       try{if(window.parent!==window && window.parent.FreeUpperProfileShell)window.FreeUpperProfileShell=window.parent.FreeUpperProfileShell;}catch(_){}
       // Native anchors remain the fallback for guests, modified clicks, and
       // environments without authenticated session support.
@@ -115,17 +133,17 @@
         const link=event.target.closest('[data-nav-key]');
         const key=link?.dataset.navKey;
         if (!link || event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        if (key === currentPageKey() && !['home', 'profile'].includes(key)) { event.preventDefault(); return; }
+        if (key === currentPageKey() && !window.FreeUpperProfileShell) { event.preventDefault(); return; }
         if (this._leaving) { event.preventDefault(); return; }
-        if (!['home', 'profile'].includes(key)) { markLeaving(); return; }
-        if(!getUser()?.isLoggedIn || !window.sb?.auth?.getSession){markLeaving();return;}
+        if(!getUser()?.isLoggedIn || !window.sb?.auth?.getSession){markLeaving();if(key==='create'){event.preventDefault();window.location.href='/create.html';}return;}
         const shell=window.FreeUpperProfileShell;
         if(shell?.request(key)){event.preventDefault();return;}
+        if(shell && key==='create'){event.preventDefault();window.location.href='/create.html';return;}
         if(!shell){
           event.preventDefault();
           if (this._shellPending) return;
           this._shellPending = true;
-          loadProfileShell().then(next=>{if(!next?.request(key))window.location.href=link.href;}).catch(()=>{window.location.href=link.href;}).finally(()=>{this._shellPending=false;});
+          loadProfileShell().then(next=>{if(!next?.request(key))window.location.href=link.href || '/create.html';}).catch(()=>{window.location.href=link.href || '/create.html';}).finally(()=>{this._shellPending=false;});
         }
       });
       const start=()=>{if(getUser()?.isLoggedIn && window.sb?.auth?.getSession)loadProfileShell().catch(()=>{});};
@@ -168,14 +186,15 @@
 
       this.innerHTML = `<nav class="bottom-nav">${itemsHtml}</nav>`;
 
-      const createBtn = this.querySelector('[data-nav-create]');
-      if (createBtn) {
-        createBtn.addEventListener('click', event => {
-          if (currentPageKey() === 'create' || this._leaving) { event.preventDefault(); return; }
-          this._markLeaving();
-          window.location.href = '/create.html';
-        });
-      }
+    }
+
+    setActive(key) {
+      this.querySelectorAll('[data-nav-key]').forEach(item => {
+        const active = item.dataset.navKey === key;
+        item.classList.toggle('active', active);
+        if (active) item.setAttribute('aria-current', 'page');
+        else item.removeAttribute('aria-current');
+      });
     }
 
     updateAvatar() {

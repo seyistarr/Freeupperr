@@ -82,7 +82,7 @@
     }
 
     // Navigate to the target page
-    window.location.href = targetPage + '?post=' + id;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = targetPage + '?post=' + id;
   }
 
   /**
@@ -109,7 +109,7 @@
       return;
     }
 
-    window.location.href = targetPage + '?post=' + id;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = targetPage + '?post=' + id;
   }
 
   /**
@@ -126,7 +126,7 @@
       }));
       return;
     }
-    window.location.href = 'video.html?post=' + id;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'video.html?post=' + id;
   }
 
   /**
@@ -154,7 +154,7 @@
 
     // Already a public FreeUpper ID
     if (String(userId).startsWith('FU')) {
-      window.location.href = '/u/' + encodeURIComponent(String(userId));
+      (window.FreeUpperScreen?.navigationWindow || window).location.href = '/u/' + encodeURIComponent(String(userId));
       return;
     }
 
@@ -194,9 +194,9 @@
       // The existing identity resolver may already return the username.
       const username = String(profile.username || '').trim();
       if (username && /^[A-Za-z0-9_.]+$/.test(username)) {
-        window.location.href = '/@' + encodeURIComponent(username);
+        (window.FreeUpperScreen?.navigationWindow || window).location.href = '/@' + encodeURIComponent(username);
       } else {
-        window.location.href = '/u/' + encodeURIComponent(profile.freeupper_id);
+        (window.FreeUpperScreen?.navigationWindow || window).location.href = '/u/' + encodeURIComponent(profile.freeupper_id);
       }
     } catch (error) {
       console.error(
@@ -228,7 +228,7 @@
       return;
     }
 
-    window.location.href = 'index.html?product=' + listingId;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'index.html?product=' + listingId;
   }
 
   /**
@@ -251,7 +251,7 @@
       return;
     }
 
-    window.location.href = 'search.html?tag=' + encodeURIComponent(clean);
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'search.html?tag=' + encodeURIComponent(clean);
   }
 
   /**
@@ -269,7 +269,7 @@
       return;
     }
 
-    window.location.href = 'search.html?q=' + encodeURIComponent(query);
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'search.html?q=' + encodeURIComponent(query);
   }
 
   /**
@@ -303,7 +303,7 @@
       return;
     }
 
-    window.location.href = target;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = target;
   }
 
   /**
@@ -311,17 +311,17 @@
    */
   function openChat(userId) {
     if (!userId) {
-      window.location.href = 'chat.html';
+      (window.FreeUpperScreen?.navigationWindow || window).location.href = 'chat.html';
       return;
     }
-    window.location.href = 'chat.html?uid=' + userId;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'chat.html?uid=' + userId;
   }
 
   /**
    * Navigate to notifications.
    */
   function openNotifications() {
-    window.location.href = 'notifications.html';
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'notifications.html';
   }
 
   /**
@@ -331,7 +331,7 @@
     if (window.history.length > 1) {
       window.history.back();
     } else {
-      window.location.href = 'index.html';
+      (window.FreeUpperScreen?.navigationWindow || window).location.href = 'index.html';
     }
   }
 
@@ -339,7 +339,8 @@
    * Navigate to the home feed.
    */
   function goHome() {
-    window.location.href = 'index.html';
+    if (window.FreeUpperProfileShell?.request('home')) return;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'index.html';
   }
 
   /**

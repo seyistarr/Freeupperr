@@ -118,6 +118,7 @@
     for (const entry of entries) if (entry.isIntersecting) loadNode(entry.target).catch(() => {});
   }, { rootMargin: '200px' }) : null;
   function scan() {
+    if(window.FreeUpperScreen && !window.FreeUpperScreen.isActive())return;
     for (const node of observed) if (!node.isConnected) {
       visible?.unobserve(node); observed.delete(node);
     }
@@ -138,6 +139,7 @@
     observed.clear();
     scan();
   }
+  window.FreeUpperScreen?.register({suspend(){clear();visible?.disconnect();observed.clear();},resume:refresh,dispose:clear});
   window.addEventListener('pagehide', clear);
   document.addEventListener('visibilitychange', () => { if (document.hidden) clear(); else refresh(); });
   window.sb?.auth?.onAuthStateChange?.((event) => {

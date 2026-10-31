@@ -12,6 +12,7 @@ const chromium = process.env.FREEUPPER_CHROMIUM;
 test('browser decodes private images/videos/posters and rejects cross-session delivery', { skip: !chromium, timeout: 45000 }, async () => {
   const png = await readFile('icon-192.png');
   const video = await readFile('tests/fixtures/protected-video.mp4');
+  const lifecycle = await readFile('js/screen-lifecycle.js');
   const client = await readFile('protected-media-client.js');
   const publisher = await readFile('privacy-v2-composer.js');
   const owner = '9341af03-e007-4fc6-9c23-b06073379088';
@@ -19,7 +20,7 @@ test('browser decodes private images/videos/posters and rejects cross-session de
   const calls = [], uploads = [];
   let reportResolve;
   const reported = new Promise(resolve => { reportResolve = resolve; });
-  const html = `<!doctype html><html><body>
+  const html = `<!doctype html><html><head><script src="/js/screen-lifecycle.js"></script></head><body>
     <div id="photo" data-protected-asset="${id}" data-protected-kind="image"></div>
     <div id="video" data-protected-asset="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" data-protected-kind="video" data-protected-poster="${id}"></div>
     <script>
@@ -42,6 +43,12 @@ test('browser decodes private images/videos/posters and rejects cross-session de
       check(document.querySelector('#photo img').src.startsWith('blob:'),'private image decodes');
       const vid=document.querySelector('#video video');
       check(vid.videoWidth===64 && vid.poster.startsWith('blob:'),'private video and authenticated poster decode');
+      const retainedSrc=document.querySelector('#photo img').src;
+      FreeUpperScreen.suspend();
+      check(!document.querySelector('#photo img') && !vid.getAttribute('src'),'screen suspension releases protected bytes');
+      FreeUpperScreen.resume();
+      await until(()=>document.querySelector('#photo img')?.naturalWidth>0 && document.querySelector('#video video')?.readyState>=2);
+      check(document.querySelector('#photo img').src!==retainedSrc,'screen restoration reauthorizes private media');
       const file = new File([await (await nativeFetch('/fixture-video')).blob()],'test.mp4',{type:'video/mp4'});
       const result=await window.FreeUpperProtectedPublish.publish({audience:'only_me',source:'studio',title:'test',content:'',tags:[],media:[{type:'video',protectedFile:file}]});
       check(result.status==='published','Studio pipeline publishes video and generated poster');
@@ -63,6 +70,7 @@ test('browser decodes private images/videos/posters and rejects cross-session de
     const url = new URL(request.url, 'http://localhost');
     const send = (status, type, body) => { response.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'private, no-store' }); response.end(body); };
     if (url.pathname === '/') return send(200, 'text/html', html);
+    if (url.pathname === '/js/screen-lifecycle.js') return send(200, 'text/javascript', lifecycle);
     if (url.pathname === '/protected-media-client.js') return send(200, 'text/javascript', client);
     if (url.pathname === '/privacy-v2-composer.js') return send(200, 'text/javascript', publisher);
     if (url.pathname === '/fixture-video') return send(200, 'video/mp4', video);
@@ -99,7 +107,7 @@ test('browser decodes private images/videos/posters and rejects cross-session de
   try {
     const result = await Promise.race([reported, new Promise((_, reject) => { timeout = setTimeout(() => reject(Error('Browser acceptance timed out')), 35000); })]);
     assert.equal(result.ok, true, JSON.stringify(result));
-    assert.equal(result.checks.length, 7);
+    assert.equal(result.checks.length, 9);
     assert.deepEqual(uploads.map(x => x.type), ['authenticated', 'authenticated']);
     assert.deepEqual(calls.filter(x => ['create','sign','register','publish'].includes(x)), ['create','sign','register','sign','register','publish']);
   } finally {

@@ -21,13 +21,13 @@
   const BASE_ITEMS = [
     {
       key: 'home',
-      href: 'index.html',
+      href: '/index.html',
       label: 'Home',
       svg: '<path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/>'
     },
     {
       key: 'search',
-      href: 'search.html',
+      href: '/search.html',
       label: 'Search',
       svg: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'
     },
@@ -41,26 +41,27 @@
     },
     {
       key: 'create',
-      href: 'create.html',
+      href: '/create.html',
       label: 'Create',
       svg: '<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'
     },
     {
       key: 'video',
-      href: 'video.html',
+      href: '/video.html',
       label: 'Video',
       svg: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>'
     },
     { key: 'gap' },
     {
       key: 'profile',
-      href: 'profile.html',
+      href: '/profile.html',
       label: 'Profile',
       isAvatar: true
     }
   ];
 
   function currentPageKey() {
+    if (/^\/(?:@|u\/)/.test(location.pathname)) return 'profile';
     const path = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
     if (path === '' || path === 'index.html') return 'home';
     if (path.startsWith('search')) return 'search';
@@ -89,6 +90,11 @@
       this._built = true;
       this.render();
       this.updateAvatar();
+      this.addEventListener('click',event=>{
+        const link=event.target.closest('[data-side-key]');
+        if(!link || event.defaultPrevented || event.button>0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+        if(window.FreeUpperProfileShell?.request(link.dataset.sideKey))event.preventDefault();
+      });
 
       document.addEventListener('profileUpdated', () => this.updateAvatar());
       window.addEventListener('storage', (e) => {
