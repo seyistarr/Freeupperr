@@ -102,6 +102,36 @@
     isDirty:() => [...hooks].some(hook=>hook.isDirty?.()),
     dispose() { disposed=true; suspend();descendants('dispose');call('dispose'); initialSnapshot=null; hooks.clear(); observers.clear(); }
   };
+  // Moving navigation outside each document must not put it above the page's
+  // existing full-screen dialogs. Use the visible stack at the bar, not a list
+  // of page-specific modal names. Nested owned renderers defer to their owner.
+  function syncOverlay() {
+    const coordinator=mounted?shell:window===parent?window.FreeUpperProfileShell:null;
+    if(!active || document.hidden || !coordinator?.setOverlay)return;
+    const root=mounted?parent:window;
+    const bar=root.document.querySelector('bottom-nav .bottom-nav')?.getBoundingClientRect();
+    if(!bar?.height){coordinator.setOverlay(window,false);return;}
+    const box=mounted?window.frameElement.getBoundingClientRect():{left:0,top:0};
+    const x=bar.left+bar.width/2-box.left,y=bar.top+bar.height/2-box.top;
+    const leaf=document.elementsFromPoint(x,y).find(el=>!el.closest('bottom-nav'));
+    let covered=false;
+    for(let el=leaf;el && el!==document.documentElement;el=el.parentElement){
+      const css=getComputedStyle(el);
+      const box=el.getBoundingClientRect();
+      const dialog=el.getAttribute('role')==='dialog' || el.getAttribute('aria-modal')==='true';
+      if(css.position==='fixed' && Number(css.zIndex)>=50 && (dialog || box.width>=bar.width*.9 && box.height>=innerHeight*.5)){covered=true;break;}
+    }
+    coordinator.setOverlay(window,covered);
+  }
+  const overlayObserver=new MutationObserver(syncOverlay);
+  function observeOverlays(){
+    if(!active || disposed)return;
+    overlayObserver.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']});
+    syncOverlay();
+  }
+  register({suspend(){overlayObserver.disconnect();},resume:observeOverlays,dispose(){overlayObserver.disconnect();}});
+  window.addEventListener('resize',syncOverlay);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observeOverlays,{once:true});else observeOverlays();
   window.addEventListener('message',event=>{
     if(active && !document.hidden)return;
     let data;try{data=typeof event.data==='string'?JSON.parse(event.data):event.data;}catch(_){return;}

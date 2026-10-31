@@ -90,11 +90,11 @@ not production network measurements or physical iPhone results.
 
 | Screen | Cold coordinator commit | Warm coordinator commit |
 | --- | ---: | ---: |
-| Home | 485.1 ms | 3.3–4.6 ms |
-| Search | 260.9 ms first visit; 172.2–185.7 ms after eviction | 5.1 ms |
-| Create | 182.4 ms | 1.5–3.1 ms |
-| Video | 286.1 ms first visit; 255.4–285.6 ms after eviction | 1.9 ms |
-| Profile | 562.7 ms | 2.2–2.9 ms |
+| Home | 480.5 ms | 4.7–6.9 ms |
+| Search | 279.5 ms first visit; 192.2–209.5 ms after eviction | 5.6 ms |
+| Create | 221.2 ms | 2.5–4.2 ms |
+| Video | 293.9 ms first visit; 281.3–321.4 ms after eviction | 2.3 ms |
+| Profile | 556.1 ms | 3.4–5.0 ms |
 
 Home/Profile cold tests inject 350 ms of document delay; other destinations inject
 100 ms, and Video additionally injects 80 ms of feed delay. The first Search
@@ -103,7 +103,7 @@ bar remain present. Assertions check destination state on the first animation
 frame of warm returns; coordinator commit timing is not a GPU paint metric.
 
 After repeated dirty-composer five-tab cycles, Chromium CDP reported 3,960 nodes
-and 385 listeners in every post-GC sample. Heap samples were 4.57, 4.98 and 5.00 MB.
+and 389 listeners in every post-GC sample. Heap samples were 4.60, 5.00 and 5.03 MB.
 The stable seven-document CDP count includes nested documents, whereas the shell's
 retention limit counts tab documents. This does not establish a physical iOS memory
 budget or bound how much feed content a user loads independently of navigation.
@@ -120,7 +120,7 @@ budget or bound how much feed content a user loads independently of navigation.
   renderer visibility, preserving existing detail/relationship history.
 - `search.js`, `posts.js`, `header-badges.js`, `protected-media-client.js`: bounded
   snapshots, subscriptions, timers and private-media lifecycle.
-- `service-worker.js`: v25, matching offline document fallback and versioned
+- `service-worker.js`: v26, matching offline document fallback and versioned
   navigation dependencies; no skip-waiting that could discard a draft.
 - `tests/five-tab-navigation.test.js`, `tests/protected-media-browser.test.js`:
   timing, identity, scroll, drafts, native media, geometry, keyboard, rapid taps,
@@ -140,10 +140,10 @@ uses a finite timestamp double in that assertion; native play/pause is exercised
 No physical iPhone, installed iOS PWA, real keyboard or iOS swipe gesture testing
 was performed. Back/Forward use native browser history in both automated engines.
 
-Final local verification on 2026-10-31: complete repository suite **437 passed,
-2 optional checks skipped, 0 failed** (439 total). The local Worker-origin check
+Final local verification on 2026-10-31: complete repository suite **438 passed,
+2 optional checks skipped, 0 failed** (440 total). The local Worker-origin check
 was then run separately: **8 passed, 0 skipped**. Desktop WebKit's five-tab and
-original mounted-Profile suites: **14 passed, 0 skipped**. Web/API dry-run builds
+original mounted-Profile suites: **15 passed, 0 skipped**. Web/API dry-run builds
 passed. Release uses the existing `cloudflare-tests.yml` push-to-main workflow;
 its test job must pass before the production deploy job runs.
 
@@ -152,4 +152,13 @@ reports `WebKit encountered an internal error`. The same test fails at the same
 line on the untouched production baseline in a separate worktree. This is a
 pre-existing runner limitation, not counted as a passing check; the complete
 Chromium theme/PWA test passes. Online and warm-offline WebKit navigation remains
-covered by the 14 passing regressions above.
+covered by the 15 passing regressions above.
+
+A final overlay regression covers both the launch document and retained screens:
+full-screen dialogs retain priority over the bar, including their bottom controls.
+The navigation component stays mounted and returns when the dialog closes;
+nonmodal toasts do not hide it. The active screen reports visible overlay state
+to the same coordinator, and its observer disconnects on suspension. This avoids
+raising the outer navigation above existing post, relationship and composer dialogs.
+The correction uses v2 navigation assets and PWA cache v26 so previously cached
+navigation code cannot retain the old stacking behavior.

@@ -164,6 +164,8 @@
     rootVisible(!target);
     for (const [key,frame] of frames) frameVisible(frame,key===kind);
     active=kind;
+    document.documentElement.removeAttribute('data-nav-overlay');
+    const nav=document.querySelector('bottom-nav');if(nav)nav.inert=false;
     if(frames.size>MAX_FRAMES)makeRoom();
     entry.state=entry.visits?'Restored':'Active'; ++entry.visits;
     try { win.FreeUpperScreen?.resume(); } catch (_) {}
@@ -199,6 +201,8 @@
     for (const [kind,frame] of frames) { clearTimeout(stateFor(kind).timeout); pause(frame.contentWindow); try{frame.contentWindow.FreeUpperScreen?.dispose();}catch(_){} frame.remove(); }
     frames.clear(); snapshots.clear(); screens.clear();
     if (host==='profile') window.ProfileMounted?.suspend();
+    document.documentElement.removeAttribute('data-nav-overlay');
+    const nav=document.querySelector('bottom-nav');if(nav)nav.inert=false;
     rootVisible(true); active=desired=host; stateFor(host).state='Active'; announce(host); message('');
     if (!resetRoot && history.state?.fuMountedView) history.replaceState({...history.state,fuMountedView:null},'',baseURL);
     // The launch page cannot be removed like a child. Reset its JS heap as
@@ -247,6 +251,11 @@
   }
   window.FreeUpperProfileShell={
     request, clear, ready,
+    setOverlay(win,covered){
+      if(!valid() || win!==winFor(active))return;
+      document.documentElement.toggleAttribute('data-nav-overlay',!!covered);
+      const nav=document.querySelector('bottom-nav');if(nav)nav.inert=!!covered;
+    },
     profileReady(win) {
       if (!valid() || win!==winFor('profile')) return;
       if (desired==='profile') win.ProfileMounted?.prepareVisible(session,{own:false});

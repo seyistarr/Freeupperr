@@ -78,7 +78,7 @@
   function loadProfileShell() {
     if(window.FreeUpperProfileShell)return Promise.resolve(window.FreeUpperProfileShell);
     if(!shellLoading)shellLoading=new Promise((resolve,reject)=>{
-      const script=document.createElement('script');script.src='/profile-shell.js?v=five-tabs-v1';
+      const script=document.createElement('script');script.src='/profile-shell.js?v=five-tabs-v2';
       script.onload=()=>resolve(window.FreeUpperProfileShell);script.onerror=()=>{shellLoading=null;reject(new Error('Profile navigation unavailable'));};
       document.head.appendChild(script);
     });

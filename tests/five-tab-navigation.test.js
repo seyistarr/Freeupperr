@@ -35,7 +35,7 @@ async function harness({root='home',pwa=false,delay=100,route=null,guest=false,p
  const server=createServer(async(req,res)=>{
   const url=new URL(req.url,'http://fixture');
   try{
-   if(url.searchParams.has('fixtureRenderer')){res.setHeader('Content-Type','text/html');res.end('<!doctype html><head><script src="/js/screen-lifecycle.js?v=1"></script></head><body><input id="rendererInput"><main>Owned renderer</main></body>');return;}
+   if(url.searchParams.has('fixtureRenderer')){res.setHeader('Content-Type','text/html');res.end('<!doctype html><head><script src="/js/screen-lifecycle.js?v=2"></script></head><body><input id="rendererInput"><main>Owned renderer</main></body>');return;}
    const key=Object.keys(names).find(key=>url.pathname==='/'+names[key]+'.html') || (url.pathname.startsWith('/u/')||url.pathname.startsWith('/@')?'profile':null);
    if(!key){const path=url.pathname==='/'?'/index.html':url.pathname;const body=await readFile('.'+path);res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'application/octet-stream');res.end(body);return;}
    documents.push({url:req.url,time:Date.now()});
@@ -43,8 +43,8 @@ async function harness({root='home',pwa=false,delay=100,route=null,guest=false,p
    let code=key==='search'?'<script src="/search.js"></script>':key==='create'?'<script>const state={postMedia:[],marketImages:[],postEmbeddings:[]};'+createGuard+'</script>':key==='video'?'<script>'+videoMain+'</script>':key==='profile'?'<script>'+profile.cache+'</script><script>'+profile.bootstrap+'</script><script>window.fixtureSB=window.sb;</script><script>'+bootstrap+'</script><script>sb.from=fixtureSB.from;sb.rpc=fixtureSB.rpc;</script><script>'+profile.main+'</script>':`<script>window.__fuInitialHydrated=${prefetch};addEventListener("DOMContentLoaded",()=>{if(window.__fuInitialHydrated)dispatchEvent(new Event("fu-app-hydrated"));});</script>`;
    // Profile fixture provides identity/relationship RPCs; keep shared auth and
    // realtime semantics from this harness, and its real production page logic.
-   html=html.replace('<head>','<head><script>'+bootstrap+'</script><script src="/js/screen-lifecycle.js?v=1"></script><script src="/theme.js?v=2"></script>');
-   html=html.replace('</body>',code+'<script src="/router.js"></script><script src="/side-nav.js"></script><script src="/bottom-nav.js?v=five-tabs-v1"></script></body>');
+   html=html.replace('<head>','<head><script>'+bootstrap+'</script><script src="/js/screen-lifecycle.js?v=2"></script><script src="/theme.js?v=2"></script>');
+   html=html.replace('</body>',code+'<script src="/router.js"></script><script src="/side-nav.js"></script><script src="/bottom-nav.js?v=five-tabs-v2"></script></body>');
    res.setHeader('Content-Type','text/html');if(holdFirstSearch && key==='search' && url.searchParams.has('fuMounted'))heldSearch=()=>setTimeout(()=>res.end(html),delay);else setTimeout(()=>res.end(html),url.searchParams.has('fuMounted')?delay:0);
   }catch(e){res.writeHead(404);res.end();}
  });
@@ -197,5 +197,18 @@ test('Video launch keeps a dirty composer and both primary feeds within the draf
   await h.select('home');await h.select('profile');await h.select('create');const create=h.screen('create');await create.locator('#postContent').fill('Unsent from Video launch');
   await h.select('search');const status=await h.page.evaluate(()=>FreeUpperProfileShell.status());assert(status.documents<=5);assert.equal(status.limit,5);
   await h.select('profile');assert((await h.page.evaluate(()=>FreeUpperProfileShell.status())).documents<=4);assert.equal(await create.locator('#postContent').inputValue(),'Unsent from Video launch');assert.equal(await h.page.evaluate(()=>pageMarker),marker);assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+test('full-screen overlays keep their original stacking while the single navigation node stays mounted',{timeout:45000},async()=>{
+ const h=await harness();try{
+  await h.page.evaluate(()=>{const toast=document.createElement('div');toast.id='stackingToast';toast.setAttribute('role','status');toast.style.cssText='position:fixed;bottom:0;left:0;width:100%;height:40px;z-index:9999';document.body.append(toast);});await h.page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(await h.page.locator('.bottom-nav').evaluate(el=>getComputedStyle(el).visibility),'visible');await h.page.evaluate(()=>document.getElementById('stackingToast').remove());
+  await h.page.evaluate(()=>{window.overlayNav=document.querySelector('bottom-nav');const modal=document.createElement('section');modal.id='stackingModal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;z-index:120;background:var(--bg)';modal.innerHTML='<button style="position:absolute;bottom:0;height:60px;width:100%">Modal control</button>';document.body.append(modal);});
+  await h.page.waitForFunction(()=>getComputedStyle(document.querySelector('.bottom-nav')).visibility==='hidden');assert(await h.page.evaluate(()=>overlayNav===document.querySelector('bottom-nav')));
+  await h.page.evaluate(()=>document.getElementById('stackingModal').remove());await h.page.waitForFunction(()=>getComputedStyle(document.querySelector('.bottom-nav')).visibility==='visible');
+  await h.select('search');const search=h.screen('search');await search.evaluate(()=>{const modal=document.createElement('section');modal.id='stackingModal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;z-index:120;background:var(--bg)';modal.innerHTML='<button id="modalBottomControl" style="position:absolute;bottom:0;height:60px;width:100%" onclick="window.modalTapped=true">Modal control</button>';document.body.append(modal);});
+  await h.page.waitForFunction(()=>getComputedStyle(document.querySelector('.bottom-nav')).visibility==='hidden');await search.locator('#modalBottomControl').click();assert(await search.evaluate(()=>modalTapped));
+  await search.evaluate(()=>document.getElementById('stackingModal').remove());await h.page.waitForFunction(()=>getComputedStyle(document.querySelector('.bottom-nav')).visibility==='visible');
+  await h.select('home');assert(await h.page.evaluate(()=>overlayNav===document.querySelector('bottom-nav')));assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });

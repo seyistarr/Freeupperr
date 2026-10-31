@@ -1,5 +1,5 @@
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v25';
+const CACHE_NAME = 'freeupper-pwa-v26';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -21,7 +21,7 @@ const URLS_TO_CACHE = [
   './js/vendor/i18next.js',
   './locales/en.json',
   './bottom-nav.css',
-  './bottom-nav.css?v=five-tabs-v1',
+  './bottom-nav.css?v=five-tabs-v2',
   './router.js?v=five-tabs-v1',
   './posts.js?v=five-tabs-v1',
   './search.js?v=five-tabs-v1',
@@ -30,9 +30,9 @@ const URLS_TO_CACHE = [
   './protected-media-client.js?v=five-tabs-v1',
   './side-nav.js?v=five-tabs-v1',
 
-  './profile-shell.js?v=five-tabs-v1',
-  './js/screen-lifecycle.js?v=1',
-  './bottom-nav.js?v=five-tabs-v1',
+  './profile-shell.js?v=five-tabs-v2',
+  './js/screen-lifecycle.js?v=2',
+  './bottom-nav.js?v=five-tabs-v2',
   './global.css',
   './global.js',
   './theme.js?v=2',
