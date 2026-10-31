@@ -139,14 +139,14 @@
    * A mounted Profile handles this in place; other pages navigate to the
    * public profile URL through the existing server rewrite.
    */
-  async function openProfile(userId) {
+  async function openProfile(userId, profileData) {
     if (!userId) {
       console.warn('Router.openProfile: No userId provided');
       return;
     }
 
     if (window.ProfileNavigation) {
-      window.ProfileNavigation.open(userId);
+      window.ProfileNavigation.open(userId, profileData);
       return;
     }
 

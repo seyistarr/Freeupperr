@@ -28,7 +28,7 @@ test('full Profile: avatar ownership, modal seeds, Back DOM/scroll, races and pe
  window.people=Object.fromEntries(['archangel','aliya','third'].map(id=>[id,{id,username:id,display_name:id,avatar_url:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"><text>'+id+'</text></svg>'),cover_url:'',bio:id+' bio',hidden_tabs:[],is_private:false}]));
  window.sb={auth:{onAuthStateChange:fn=>window.authChange=fn},channel:()=>({on(){return this},subscribe(){}}),rpc:async(name,args)=>{
  if(name==='privacy_v2_approved_edge')return {data:approved};if(name==='can_view_profile_tab')return {data:allowTabs};if(name==='get_suggestions')return {data:[]};return {data:null};},from(table){
- let eqs={},fields='',head=false;const q={select(f,o){fields=f;head=!!o?.head;return q},eq(k,v){eqs[k]=v;return q},maybeSingle(){return q},then(resolve,reject){return (async()=>{
+ let eqs={},fields='',head=false;const q={select(f,o){fields=f;head=!!o?.head;return q},eq(k,v){eqs[k]=v;return q},neq(){return q},maybeSingle(){return q},then(resolve,reject){return (async()=>{
  if(table==='profiles'){calls.push('identity:'+eqs.id);if(delays[eqs.id])await new Promise(r=>delays[eqs.id].push(r));return {data:{...people[eqs.id]}};}
  if(table==='blocks')return {data:null};if(head)return {count:1};
  if(table==='follows'&&fields.includes('profiles:'))return {data:[{profiles:people.aliya}]};

@@ -19,10 +19,18 @@
             if (!profile || !profile.id) return null;
             var entry = get(profile.id) || { profile: {}, loadedAt: 0 };
             // Modal seeds must never overwrite a previously resolved identity.
-            entry.profile = complete ? Object.assign({}, profile) : Object.assign({}, profile, entry.profile);
+            var known=entry.profile;
+            entry.profile = complete ? Object.assign({}, profile) : Object.assign({}, profile, known);
+            if(complete)['username','display_username','display_name','avatar_url','verified','verified_status','bio','cover_url'].forEach(function(key){
+                if(entry.profile[key]===undefined && known[key]!==undefined)entry.profile[key]=known[key];
+            });
             if (complete) entry.loadedAt = Date.now();
             entries.set(profile.id, entry);
-            while (entries.size > limit) entries.delete(entries.keys().next().value);
+            while(entries.size>limit){
+                var disposable=Array.from(entries).find(function(pair){return pair[0]!==profile.id && !pair[1].view && !pair[1].modalViews && !pair[1].mutation && !pair[1].active;});
+                if(!disposable)disposable=Array.from(entries).find(function(pair){return pair[0]!==profile.id && !pair[1].active;});
+                entries.delete(disposable?disposable[0]:entries.keys().next().value);
+            }
             return entry;
         }
         function resolve(info) {
@@ -43,7 +51,38 @@
             pending.set(key, promise);
             return promise;
         }
+        function resource(id, key) { return get(id)?.resources?.[key]; }
+        function setResource(id, key, value, loadedAt) {
+            var entry=put({id:id},false);
+            entry.resources=entry.resources || {};
+            entry.revisions=entry.revisions || {};
+            entry.revisions[key]=(entry.revisions[key] || 0)+1;
+            entry.resources[key]={value:value,loadedAt:loadedAt ?? Date.now()};
+            return value;
+        }
+        function invalidate(id, key, keepKnown) {
+            var entry=get(id);if(!entry)return;
+            entry.revisions=entry.revisions || {};
+            entry.revisions[key]=(entry.revisions[key] || 0)+1;
+            if(entry.resources?.[key]){
+                if(keepKnown)entry.resources[key].loadedAt=0;else delete entry.resources[key];
+            }
+        }
+        function loadResource(id, key, loader, force) {
+            var entry=put({id:id},false), cached=resource(id,key);
+            if(!force && cached && Date.now()-cached.loadedAt<ttl)return Promise.resolve(cached.value);
+            var revision=entry.revisions?.[key] || 0;
+            return request(id+':'+key+':'+revision,loader).then(function(value){
+                if(value==null || get(id)!==entry || (entry.revisions?.[key] || 0)!==revision)return null;
+                entry.resources=entry.resources || {};
+                // An authorization read may return server truth while a mutation
+                // is pending, but must not replace its optimistic button state.
+                if(!entry.resources[key]?.value?.mutating)entry.resources[key]={value:value,loadedAt:Date.now()};
+                return value;
+            });
+        }
         return { scope: scope, get: get, put: put, resolve: resolve, request: request,
+            resource:resource,setResource:setResource,loadResource:loadResource,invalidate:invalidate,
             fresh: function(entry) { return !!entry && Date.now() - entry.loadedAt < ttl; },
             clear: function() { generation++; entries.clear(); pending.clear(); } };
     };

@@ -1089,6 +1089,7 @@
 
         .fs-list {
             overflow-y: auto;
+            overflow-anchor: none;
             flex: 1;
             min-height: 0;
             padding: 4px 0 40px;
@@ -2101,7 +2102,7 @@
                 <!-- Header -->
                 <div class="profile-header">
                     <div class="header-left">
-                        <button class="header-back fw-owner-only" onclick="history.back()" aria-label="Back" data-i18n="Back" data-i18n-attr="aria-label"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+                        <button class="header-back" onclick="history.back()" aria-label="Back" data-i18n="Back" data-i18n-attr="aria-label"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
                         <a class="header-brand" href="index.html"><img src="/freeupper.png" alt=""><span>FreeUpper</span></a>
                     </div>
                     <div class="header-actions">
@@ -2584,7 +2585,7 @@
     <script src="/protected-media-client.js"></script>
     <script src="/listings.js"></script>
     <script src="/profile-detail.js?v=4"></script>
-    <script src="/profile-cache.js?v=1"></script>
+    <script src="/profile-cache.js?v=2"></script>
     <script src="/settings.js"></script>
     <script src="/bottom-nav.js" defer></script>
     <script src="/side-nav.js" defer></script>
@@ -2718,7 +2719,10 @@
                 },
                 followChanged: function(userId) {
                     // Only changed relationships require fresh server authorization/counts.
-                    if (userId === targetUserId) { renderActionRow(); loadAndRenderSecondaryData(); }
+                    if (userId === targetUserId) {
+                        var entry=profileCache.get(userId);if(entry)entry.permissionRevision=(entry.permissionRevision || 0)+1;
+                        renderActionRow();loadAndRenderSecondaryData();
+                    }
                 }
             });
             window.openPostFromGrid = function(postId) { profileDetailNavigation.open('post',postId); };
@@ -2791,8 +2795,10 @@
             var profileCache = window.createProfileCache();
             profileCache.scope(profileViewerScope());
             var _profileNavigationId = 0, _profileRestore = null;
-            var _profileCounts = { followers: 0, following: 0 };
+            if('scrollRestoration' in history)history.scrollRestoration='manual';
+            var _profileCounts = { followers: null, following: null };
             var _secondaryDataLoaded = false;
+            var _profileAccessPending=true;
             var _profileViewer = profileViewerScope(), _profileScopeVersion = 0, _profileRefreshQueued = false;
             function profileViewerUpdated() {
                 var next=profileViewerScope();
@@ -2808,7 +2814,12 @@
                 allPosts=[];_profileUserPosts=[];_collectionPostCache.clear();_collectionPostRequests.clear();
                 likedPostIds=[];bookmarkedPostIds=[];repostedPostIds=[];marketItemsCache=[];
                 savedMarketItemsCache=[];savedMarketLoaded=false;marketSubView='mine';
-                _fwList=[];_fwFiltered=[];_fwPendingRequests=[];_fwRefreshing=false;
+                _fwList=[];_fwFiltered=[];_fwPendingRequests=[];_fwRefreshing=false;_profileAccessPending=true;
+                if(typeof _relationshipPrefetch!=='undefined')_relationshipPrefetch.clear();
+                document.getElementById('followModal')?.classList?.remove('open');
+                document.querySelectorAll('#followModal [id^="fsVirtualContent"]').forEach(function(el){el.replaceChildren();});
+                if(typeof _fwPageState!=='undefined')_fwPageState.forEach(function(page){page.query='';page.loaded=false;});
+
                 viewerIsBlockedByPrivacy=true;_secondaryDataLoaded=false;
                 document.querySelectorAll('#statPosts,#statFollowers,#statFollowing').forEach(function(el){el.textContent='—';});
                 document.querySelectorAll('.panel').forEach(function(el){el.innerHTML='';delete el.dataset.profileRendered;el.dataset.collectionRequest=String(Number(el.dataset.collectionRequest || 0)+1);});
@@ -2829,6 +2840,7 @@
             var FW_ROW_H = 76;
             var FW_BUFFER = 4;
             var followModalData = null;
+            var _relationshipPrefetch=new Map();
             var _lastKnownFriendsCount = 0;
             var _lastKnownSuggestionsCount = 0;
             var _fwRefreshing = false;
@@ -3022,39 +3034,52 @@
 
             async function fetchProfileByUuid(userId) {
                 var result = await window.sb.from('profiles').select('id, freeupper_id, username, display_username, display_name, avatar_url, cover_url, bio, tags, verified, is_private, hide_all_posts, hide_follower_count, hidden_tabs, activity_status, created_at').eq('id', userId).maybeSingle();
-                if (result.error) throw result.error;
-                return result.data;
+                if(!result.error && result.data)return result.data;
+                // Use the same restricted public resolvers as the router for guests.
+                var identity=await window.sb.rpc('get_profile_identity_by_id',{p_user_id:userId});
+                if(identity.error)throw identity.error;
+                var row=Array.isArray(identity.data)?identity.data[0]:identity.data;
+                if(row?.username)return fetchProfileByUsername(row.username);
+                if(row?.freeupper_id)return fetchProfileByFreeUpperId(row.freeupper_id);
+                throw new Error('Profile not found');
             }
 
-            async function fetchFollowCounts(userId) {
-                try {
-                    var followers = await window.sb.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId).eq('status','active');
-                    var following = await window.sb.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId).eq('status','active');
-                    if (followers.error) throw followers.error;
-                    if (following.error) throw following.error;
-                    return { followers: followers.count || 0, following: following.count || 0 };
-                } catch (err) {
-                    console.warn('fetchFollowCounts error:', err);
-                    return { followers: 0, following: 0 };
-                }
+            async function fetchFollowCounts(userId, force) {
+                return profileCache.loadResource(userId,'counts',async function() {
+                    var results=await Promise.all([
+                        window.sb.from('follows').select('*',{count:'exact',head:true}).eq('following_id',userId).neq('follower_id',userId).eq('status','active'),
+                        window.sb.from('follows').select('*',{count:'exact',head:true}).eq('follower_id',userId).neq('following_id',userId).eq('status','active')
+                    ]);
+                    if(results.some(function(r){return r.error || typeof r.count!=='number';}))throw new Error('Statistics unavailable');
+                    return {followers:results[0].count,following:results[1].count};
+                },force);
+            }
+            function renderKnownStatistics() {
+                var entry=profileCache.get(targetUserId), counts=profileCache.resource(targetUserId,'counts')?.value;
+                var posts=profileCache.resource(targetUserId,'postCount')?.value;
+                if(posts==null && entry?.view)posts=entry.view.posts.length;
+                if(!counts && entry?.view)counts=entry.view.counts;
+                [['statPosts',posts],['statFollowers',counts?.followers],['statFollowing',counts?.following]].forEach(function(pair){
+                    document.getElementById(pair[0]).textContent=typeof pair[1]==='number'?fmtNum(pair[1]):'—';
+                });
             }
 
             async function fetchFollowers(userId) {
                 var result = await window.sb
                     .from('follows')
-                    .select('follower_id, profiles:follower_id (id, freeupper_id, username, display_username, display_name, avatar_url, verified)')
+                    .select('follower_id, profiles:follower_id (id, freeupper_id, username, display_username, display_name, avatar_url, verified, verified_status, bio, cover_url, is_private)')
                     .eq('following_id', userId).eq('status','active');
-                if (result.error) return [];
-                return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
+                if(result.error)throw result.error;
+                return uniqueRelationships(result.data.map(function(f) { return f.profiles; }),userId);
             }
 
             async function fetchFollowing(userId) {
                 var result = await window.sb
                     .from('follows')
-                    .select('following_id, profiles:following_id (id, freeupper_id, username, display_username, display_name, avatar_url, verified)')
+                    .select('following_id, profiles:following_id (id, freeupper_id, username, display_username, display_name, avatar_url, verified, verified_status, bio, cover_url, is_private)')
                     .eq('follower_id', userId).eq('status','active');
-                if (result.error) return [];
-                return result.data.map(function(f) { return f.profiles; }).filter(function(p) { return p; });
+                if(result.error)throw result.error;
+                return uniqueRelationships(result.data.map(function(f) { return f.profiles; }),userId);
             }
 
             async function isFollowing(followerId, targetId) {
@@ -3063,23 +3088,27 @@
                 return !!result.data;
             }
 
-            async function getRelationship(myId, targetId) {
-                var results = await Promise.all([
-                    window.sb.from('follows').select('id,status').eq('follower_id', myId).eq('following_id', targetId).maybeSingle(),
-                    window.sb.from('follows').select('id,status').eq('follower_id', targetId).eq('following_id', myId).maybeSingle()
-                ]);
-                // Private-account post access requires owner approval, not just a follow row.
-                var approved = await window.sb.rpc('privacy_v2_approved_edge', {
-                    p_follower: myId,
-                    p_following: targetId
+            function getRelationship(myId, targetId, force) {
+                if(!myId || myId===targetId)return Promise.resolve(null);
+                return profileCache.loadResource(targetId,'relationship',async function() {
+                    if(myId!==profileViewerScope())return null;
+                    var results=await Promise.all([
+                        window.sb.from('follows').select('id,status').eq('follower_id',myId).eq('following_id',targetId).maybeSingle(),
+                        window.sb.from('follows').select('id,status').eq('follower_id',targetId).eq('following_id',myId).maybeSingle(),
+                        window.sb.rpc('privacy_v2_approved_edge',{p_follower:myId,p_following:targetId})
+                    ]);
+                    if(results.some(function(r){return r.error;}))throw new Error('Relationship unavailable');
+                    return {outgoingActive:results[0].data?.status==='active',iFollowThem:results[2].data===true,
+                        pending:results[0].data?.status==='pending',hasRequest:!!results[0].data,
+                        theyFollowMe:results[1].data?.status==='active',incomingPending:results[1].data?.status==='pending'};
+                },force);
+            }
+            function uniqueRelationships(rows, ownerId) {
+                var seen=new Set();
+                return (rows || []).filter(function(row){
+                    if(!row?.id || row.id===ownerId || seen.has(row.id))return false;
+                    seen.add(row.id);return true;
                 });
-                return {
-                    iFollowThem: !approved.error && approved.data === true,
-                    pending: !!results[0].data && results[0].data.status === 'pending',
-                    hasRequest: !!results[0].data,
-                    theyFollowMe: !!results[1].data && results[1].data.status === 'active',
-                    incomingPending: !!results[1].data && results[1].data.status === 'pending'
-                };
             }
 
             async function didUserBlockMe(targetId, viewerId) {
@@ -3099,6 +3128,7 @@
                     showToast(window.fuT('Please sign in to follow'), 'o');
                     return false;
                 }
+                if (targetId===user.id)throw new Error('Cannot follow yourself');
                 if (!targetId) {
                     showToast(window.fuT('Unable to follow this user'), 'o');
                     return false;
@@ -3354,7 +3384,7 @@
                 if (!targetUserId || !_secondaryDataLoaded) return;
                 var entry = profileCache.put(targetUser, false);
                 entry.view = {
-                    key: profileContentKey(), tab: activeTab,
+                    key: profileContentKey(),postsKey:JSON.stringify([_profileUserPosts,viewerIsBlockedByPrivacy,!!targetUser?.hide_all_posts,!!targetUser?.is_private]),tab:activeTab,
                     scroll: document.getElementById('mainScroll').scrollTop,
                     nodes: Array.from(document.querySelectorAll('.panel')).map(function(el) {
                         return { id: el.id, nodes: Array.from(el.childNodes), className: el.className, rendered: el.dataset.profileRendered };
@@ -3373,7 +3403,7 @@
             function restoreProfilePanels() {
                 var view = _profileRestore;
                 if (!view) return;
-                if (view.key === profileContentKey()) {
+                if(view.postsKey===JSON.stringify([_profileUserPosts,viewerIsBlockedByPrivacy,!!targetUser?.hide_all_posts,!!targetUser?.is_private])){
                     view.nodes.forEach(function(saved) {
                         // Optional collections can contain other authors' protected posts;
                         // their existing loader must authorize them again.
@@ -3387,24 +3417,53 @@
                 setProfileScroll(view.scroll);
                 _profileRestore = null;
             }
+            var _profileMoving=false;
+            function captureRelationshipDestination(){
+                var entry=targetUserId && profileCache.put(targetUser,false);
+                if(!entry)return;
+                var open=document.getElementById('followModal').classList.contains('open');
+                var key=crypto.randomUUID();
+                var modal={open:open,tab:_fwCurTab,queries:_fwPageState.map(function(p){return p.query;}),
+                    scroll:[0,1,2,3].map(function(i){return document.getElementById('fsList'+i)?.scrollTop || 0;})};
+                entry.modalViews=entry.modalViews || new Map();
+                entry.modalViews.set(key,{data:followModalData,pending:_fwPendingRequests.slice()});
+                while(entry.modalViews.size>5)entry.modalViews.delete(entry.modalViews.keys().next().value);
+                history.replaceState(Object.assign({},history.state,{fuProfileNavigation:{viewer:profileViewerScope(),profileId:targetUserId,key:key,modal:modal}}),'',location.href);
+            }
+            function restoreRelationshipDestination(){
+                var state=history.state?.fuProfileNavigation;
+                if(!state?.modal?.open || state.viewer!==profileViewerScope() || state.profileId!==targetUserId)return;
+                if(!isOwner && (viewerIsBlockedByPrivacy || targetUser?.hide_follower_count || _profileAccessPending))return;
+                var snapshot=profileCache.get(targetUserId)?.modalViews?.get(state.key);
+                if(!snapshot?.data)return;
+                followModalData=snapshot.data;_fwPendingRequests=snapshot.pending;
+                state.modal.queries.forEach(function(query,i){_fwPageState[i].query=query;var input=document.getElementById('fsSearch'+i);if(input)input.value=query;});
+                openFS('followModal');
+                tabTap(['followers','following','friends','suggestions'].indexOf(state.modal.tab));
+                state.modal.scroll.forEach(function(top,i){var list=document.getElementById('fsList'+i);if(list)list.scrollTop=top;});
+                _fwRenderVisible();
+            }
             function navigateProfile(href, push) {
                 if(profileLocalViewerScope()!==profileViewerScope()){profileViewerUpdated();return;}
                 retainProfile();
-                if (push !== false) history.pushState({}, '', href);
+                var previous=profileCache.get(targetUserId);if(previous)previous.active=false;
+                if(push!==false){captureRelationshipDestination();history.pushState({fuProfileNavigation:{viewer:profileViewerScope(),modal:{open:false}}},'',href);}
                 ++_profileScopeVersion;
                 ++_profileNavigationId;
                 window.__freeupperProfileLoading = false;
                 profileDetailNavigation.setProfile();
-                closeFS('followModal');
+                _profileMoving=true;closeFS('followModal');_profileMoving=false;
                 document.querySelectorAll('.mfs.open,.mco.open').forEach(function(el){el.classList.remove('open');});
                 document.body.style.overflow = '';
                 followModalData = null; _fwList = []; _fwFiltered = []; _fwRefreshing = false;
                 _fwPendingRequests = []; _lastKnownFriendsCount = 0; _lastKnownSuggestionsCount = 0;
                 _fwPageState.forEach(function(page){page.list=[];page.query='';page.loaded=false;});
+                document.querySelectorAll('#followModal [id^="fsVirtualContent"]').forEach(function(el){el.replaceChildren();});
                 var info = getTargetUserFromUrl();
                 var viewer = getCurrentUser();
                 if (!info && viewer && viewer.isLoggedIn) info = {type:'uuid',value:viewer.id};
                 var entry = profileCache.resolve(info);
+                if(entry)entry.active=true;
                 targetUser = entry ? Object.assign({}, entry.profile) : null;
                 targetUserId = targetUser ? targetUser.id : null;
                 isOwner = !!(viewer && viewer.isLoggedIn && viewer.id === targetUserId);
@@ -3413,7 +3472,7 @@
                 allPosts=[]; _profileUserPosts=[]; likedPostIds=[];bookmarkedPostIds=[];repostedPostIds=[];
                 marketItemsCache=[];savedMarketItemsCache=[];savedMarketLoaded=false;
                 _collectionPostCache.clear();_collectionPostRequests.clear();
-                _secondaryDataLoaded=false;viewerIsBlockedByPrivacy=true;
+                _secondaryDataLoaded=false;viewerIsBlockedByPrivacy=true;_profileAccessPending=true;
                 document.querySelectorAll('.panel').forEach(function(el){
                     el.replaceChildren();delete el.dataset.profileRendered;
                     el.dataset.collectionRequest=String(Number(el.dataset.collectionRequest || 0)+1);
@@ -3425,6 +3484,8 @@
                 document.getElementById('statPostsBox').onclick=openPostsModal;
                 ['statPostsBox','statFollowersBox','statFollowingBox'].forEach(function(id){document.getElementById(id).classList.remove('locked');});
                 setProfileScroll(0);
+                delete document.getElementById('actionRow').dataset.relationshipKey;
+                delete document.getElementById('actionRow').dataset.relationshipTarget;
                 _profileLoadedOnce=!!targetUser;
                 if (targetUser) renderProfileIdentity(targetUser);
                 else {
@@ -3436,37 +3497,34 @@
                 // The viewer's own fresh view needs no permission round trip. All other
                 // retained content stays detached until the server revalidates it.
                 if (isOwner && activeTab==='posts' && _profileRestore && Date.now()-_profileRestore.loadedAt<30000) {
+                    _profileAccessPending=false;
                     var view=_profileRestore;
                     _profileUserPosts=view.posts;allPosts=view.posts.slice();likedPostIds=view.likes;
                     bookmarkedPostIds=view.bookmarks;repostedPostIds=view.reposts;marketItemsCache=view.market;
-                    _profileCounts=view.counts;viewerIsBlockedByPrivacy=view.blocked;_secondaryDataLoaded=true;
+                    _profileCounts=profileCache.resource(targetUserId,'counts')?.value || view.counts;viewerIsBlockedByPrivacy=view.blocked;_secondaryDataLoaded=true;
                     document.getElementById('statFollowersBox').onclick=function(){openFollowModal('followers');};
                     document.getElementById('statFollowingBox').onclick=function(){openFollowModal('following');};
                     document.getElementById('statPostsBox').onclick=openPostsModal;
                     renderProfileIdentity(targetUser);
-                    document.getElementById('statPosts').textContent=fmtNum(view.posts.length);
-                    document.getElementById('statFollowers').textContent=fmtNum(view.counts.followers);
-                    document.getElementById('statFollowing').textContent=fmtNum(view.counts.following);
+                    renderKnownStatistics();
                     restoreProfilePanels();
                     profileDetailNavigation.restore();
+                    restoreRelationshipDestination();
                     return;
                 }
-                if (entry && entry.view) {
-                    document.getElementById('statPosts').textContent=fmtNum(entry.view.posts.length);
-                    document.getElementById('statFollowers').textContent=fmtNum(entry.view.counts.followers);
-                    document.getElementById('statFollowing').textContent=fmtNum(entry.view.counts.following);
-                }
+                renderKnownStatistics();
                 if (!entry || !entry.view) document.getElementById('panel-'+activeTab).innerHTML=buildGridSkeleton();
                 renderProfile();
             }
             window.openFollowProfile = function(index) {
                 var selected = _fwFiltered[index];
                 if (!selected || !selected.id) return;
-                profileCache.put({id:selected.id,display_name:selected.displayName,username:(selected.handle || '').replace(/^@/,''),avatar_url:selected.avatar},false);
+                profileCache.put(selected.profile || {id:selected.id,display_name:selected.displayName,username:(selected.handle || '').replace(/^@/,''),avatar_url:selected.avatar,verified:selected.verified},false);
+                if(selected.relationship && !profileCache.resource(selected.id,'relationship'))profileCache.setResource(selected.id,'relationship',selected.relationship,selected.relationshipLoadedAt);
                 navigateProfile('/profile.html?uid='+encodeURIComponent(selected.id), true);
             };
             window.ProfileNavigation = {
-                open: function(id) { navigateProfile(String(id).startsWith('FU') ? '/u/'+encodeURIComponent(id) : '/profile.html?uid='+encodeURIComponent(id), true); },
+                open: function(id,known) { if(known?.id===id)profileCache.put(known,false);navigateProfile(String(id).startsWith('FU') ? '/u/'+encodeURIComponent(id) : '/profile.html?uid='+encodeURIComponent(id), true); },
                 prefetch: function(id) {
                     var entry=profileCache.get(id);
                     if(profileCache.fresh(entry))return;
@@ -3531,7 +3589,7 @@
                     }
 
                     if(scopeVersion!==_profileScopeVersion)return;
-                    profileCache.put(profile, true);
+                    profileCache.put(profile,true).active=true;
                     targetUser = profile;
                     targetUserId = profile.id;
 
@@ -3572,6 +3630,7 @@
                     }
 
                     if(scopeVersion!==_profileScopeVersion)return;
+                    _profileAccessPending=false;
                     renderProfileIdentity(profile);
                     _profileLoadedOnce = true;
                     hideProfileSkeleton();
@@ -3614,13 +3673,13 @@
                     }
                 }
 
-                document.getElementById('displayName').textContent = profile.display_name || 'Guest';
+                document.getElementById('displayName').textContent = profile.display_name || profile.display_username || profile.username || '';
                 document.getElementById('headerUsername').textContent = '@' + (profile.display_username || profile.username || 'user');
                 document.getElementById('qrName').textContent = profile.display_name || 'Guest';
                 document.getElementById('qrHandle').textContent = '@' + (profile.display_username || profile.username || 'user');
 
                 var bioEl = document.getElementById('heroBio');
-                bioEl.innerHTML = linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.');
+                bioEl.innerHTML=profile.bio===undefined?'':(linkifyBio(profile.bio) || (isOwner ? 'No bio yet. Tap edit to add one.' : 'No bio yet.'));
 
                 var tags = profile.tags || [];
                 document.getElementById('roleTags').innerHTML = tags.map(function(t) {
@@ -3628,7 +3687,7 @@
                 }).join('');
 
                 var badge = document.getElementById('verifiedBadge');
-                if (profile.verified) badge.classList.remove('hidden');
+                if (profile.verified || ['verified','official','staff','business'].includes(profile.verified_status)) badge.classList.remove('hidden');
                 else badge.classList.add('hidden');
 
                 document.getElementById('onlineDot').style.display = profile.activity_status ? 'block' : 'none';
@@ -3651,19 +3710,8 @@
                     };
                 }
 
-                if (!isOwner) {
-                    var row = document.getElementById('actionRow');
-                    row.innerHTML = '<div class="skl-block skl-btn"></div><div class="skl-block skl-btn"></div>';
-                    renderActionRow();
-                } else {
-                    document.getElementById('actionRow').innerHTML = '';
-                }
-
-                if (!_secondaryDataLoaded) {
-                    document.getElementById('statPosts').textContent = window.fuT('—');
-                    document.getElementById('statFollowers').textContent = window.fuT('—');
-                    document.getElementById('statFollowing').textContent = window.fuT('—');
-                }
+                renderActionRow();
+                renderKnownStatistics();
             }
 
             // ─── SECONDARY DATA LOAD ──────────────────────────────────
@@ -3674,11 +3722,11 @@
                 var isOwnerLocal = isOwner;
 
                 try {
-                    var results = await profileCache.request('secondary:'+targetId, async function() {
+                    var results = await profileCache.request('secondary:'+targetId+':'+(profileCache.get(targetId)?.permissionRevision || 0), async function() {
                     var promises = [
-                        fetchFollowCounts(targetId),
+                        fetchFollowCounts(targetId).catch(function(){return profileCache.resource(targetId,'counts')?.value || {followers:null,following:null};}),
                         (window.PostsAPI && window.PostsAPI.loadPostsByUserId)
-                            ? window.PostsAPI.loadPostsByUserId(targetId).catch(function() { return []; })
+                            ? window.PostsAPI.loadPostsByUserId(targetId).catch(function() { return null; })
                             : Promise.resolve([]),
                         getUserMarketItems(targetId)
                     ];
@@ -3689,7 +3737,7 @@
                     promises.push(getUserReposts(targetId).catch(function(err) { return { loadError: err }; }));
 
                     if (!isOwnerLocal && user && user.isLoggedIn) {
-                        promises.push(getRelationship(user.id, targetId).catch(function() {
+                        promises.push(getRelationship(user.id, targetId, true).catch(function() {
                             return { iFollowThem: false, theyFollowMe: false };
                         }));
                     } else {
@@ -3699,8 +3747,9 @@
                     return Promise.all(promises);
                     });
                     if(scopeVersion!==_profileScopeVersion || !results)return;
-                    var counts = results[0] || { followers: 0, following: 0 };
-                    var userPosts = results[1] || [];
+                    var counts=results[0] || profileCache.resource(targetId,'counts')?.value || {followers:null,following:null};
+                    var postsLoaded=Array.isArray(results[1]);
+                    var userPosts=results[1] || (isOwnerLocal?profileCache.get(targetId)?.view?.posts:[]) || [];
                     var marketItems = results[2] || [];
                     var likedIds = results[3] || [];
                     var bookmarksError = results[4] && results[4].loadError;
@@ -3721,11 +3770,12 @@
                     bookmarkedPostIds = bookmarkedIds;
                     marketItemsCache = marketItems;
                     _profileCounts = counts;
-                    document.getElementById('statPosts').textContent = fmtNum(userPosts.length);
-                    document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
-                    document.getElementById('statFollowing').textContent = fmtNum(counts.following);
-                    document.getElementById('fsTabFCount').textContent = fmtNum(counts.followers);
-                    document.getElementById('fsTabFgCount').textContent = fmtNum(counts.following);
+                    if(postsLoaded)profileCache.setResource(targetId,'postCount',userPosts.length);
+                    renderKnownStatistics();
+                    document.getElementById('statFollowers').textContent = (typeof counts.followers==='number'?fmtNum(counts.followers):'—');
+                    document.getElementById('statFollowing').textContent = (typeof counts.following==='number'?fmtNum(counts.following):'—');
+                    document.getElementById('fsTabFCount').textContent = (typeof counts.followers==='number'?fmtNum(counts.followers):'—');
+                    document.getElementById('fsTabFgCount').textContent = (typeof counts.following==='number'?fmtNum(counts.following):'—');
                     document.getElementById('fsTabFrCount').textContent = '';
 
                     // Resolve tab access on the server; the same RPC enforces followers
@@ -3736,6 +3786,7 @@
                     }));
                     if(scopeVersion!==_profileScopeVersion)return;
                     _secondaryDataLoaded = true;
+                    renderActionRow();
                     targetUser._tabAllowed = {};
                     tabKeys.forEach(function(key,idx) {
                         targetUser._tabAllowed[key] = !tabResults[idx].error && tabResults[idx].data === true;
@@ -3744,6 +3795,7 @@
                     restoreProfilePanels();
                     profileDetailNavigation.warm();
                     profileDetailNavigation.restore();
+                    restoreRelationshipDestination();
                     if (isOwnerLocal && targetUser.is_private) loadPrivateFollowRequests().catch(console.error);
                 } catch (err) {
                     console.error('Secondary load error:', err);
@@ -4073,20 +4125,10 @@
             }
 
             // ─── ACTION ROW ────────────────────────────────────────────
-            async function renderActionRow() {
-                var row = document.getElementById('actionRow');
-                if (isOwner) { row.innerHTML = ''; return; }
-                var user = getCurrentUser();
-                if (!user || !user.isLoggedIn) {
-                    row.innerHTML =
-                        '<button class="act-btn act-follow" onclick="showToast(\'Please sign in to follow\',\'o\')" data-i18n=&#70;&#111;&#108;&#108;&#111;&#119;>Follow</button>' +
-                        '<button class="act-btn act-msg" onclick="showToast(\'Please sign in to message\',\'o\')" data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;>Message</button>';
-                    return;
-                }
-                var scopeVersion = _profileScopeVersion;
-                var rel = { iFollowThem: false, theyFollowMe: false };
-                try { rel = await getRelationship(user.id, targetUserId); } catch (e) {}
-                if(scopeVersion!==_profileScopeVersion)return;
+            function paintRelationshipActions(row,user,rel) {
+                var key=targetUserId+':'+JSON.stringify(rel)+':'+_profileAccessPending+':'+!!targetUser?.is_private;
+                if(row.dataset.relationshipKey===key)return;
+                row.dataset.relationshipKey=key;
                 // A private-account owner can approve a request directly from the requester's profile.
                 if (rel.incomingPending && user.id !== targetUserId) {
                     row.innerHTML = '<button class="act-btn act-follow" id="approveIncomingFollow">Accept Request</button>' +
@@ -4101,8 +4143,9 @@
                                     p_follower_id:targetUserId,p_approve:accept
                                 });
                                 if(outcome.error) throw outcome.error;
+                                profileCache.invalidate(targetUserId,'relationship');
                                 await renderActionRow();
-                                await loadSecondaryData();
+                                await loadAndRenderSecondaryData();
                             } catch(error) {
                                 console.error('Unable to resolve follow request',error);
                                 showToast('Unable to update request. Please try again.','r');
@@ -4110,36 +4153,120 @@
                             }
                         });
                     });
+                    row.querySelectorAll('button').forEach(function(button){button.disabled=_profileAccessPending || !!rel.mutating;});
                     return;
                 }
-                var label = rel.pending ? 'Requested' : (rel.iFollowThem && rel.theyFollowMe ? 'Friends' : rel.iFollowThem ? 'Following' : rel.theyFollowMe ? 'Follow Back' : (targetUser && targetUser.is_private ? 'Request to Follow' : 'Follow'));
-                var cls = rel.iFollowThem && rel.theyFollowMe ? 'act-follow friends' : rel.iFollowThem ? 'act-follow fstate' : 'act-follow';
+                var label = rel.pending ? 'Requested' : ((rel.outgoingActive ?? rel.iFollowThem) && rel.theyFollowMe ? 'Friends' : (rel.outgoingActive ?? rel.iFollowThem) ? 'Following' : rel.theyFollowMe ? 'Follow Back' : (targetUser && targetUser.is_private ? 'Request to Follow' : 'Follow'));
+                var cls = (rel.outgoingActive ?? rel.iFollowThem) && rel.theyFollowMe ? 'act-follow friends' : (rel.outgoingActive ?? rel.iFollowThem) ? 'act-follow fstate' : 'act-follow';
                 row.innerHTML =
-                    '<button class="act-btn ' + cls + '" id="followBtn" data-following="' + (rel.iFollowThem || rel.pending) + '">' + label + '</button>' +
+                    '<button class="act-btn ' + cls + '" id="followBtn" data-following="' + ((rel.outgoingActive ?? rel.iFollowThem) || rel.pending) + '">' + label + '</button>' +
                     '<button class="act-btn act-msg" onclick="window.location.href=\'chat.html?uid=' + targetUserId + '\'" data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;>Message</button>';
                 document.getElementById('followBtn').addEventListener('click', handleFollow);
+                row.querySelectorAll('button').forEach(function(button){button.disabled=_profileAccessPending || !!rel.mutating;});
+            }
+            async function renderActionRow() {
+                var row=document.getElementById('actionRow'),user=getCurrentUser();
+                if(isOwner){row.innerHTML='';delete row.dataset.relationshipKey;return;}
+                if(!user?.isLoggedIn){
+                    row.innerHTML='<button class="act-btn act-follow" onclick="showToast(\'Please sign in to follow\',\'o\')">Follow</button><button class="act-btn act-msg" onclick="showToast(\'Please sign in to message\',\'o\')">Message</button>';
+                    return;
+                }
+                var scopeVersion=_profileScopeVersion,id=targetUserId;
+                var known=profileCache.resource(id,'relationship')?.value;
+                if(known)paintRelationshipActions(row,user,known);
+                else if(row.dataset.relationshipTarget!==id || row.dataset.relationshipKey){
+                    row.innerHTML='<div class="skl-block skl-btn"></div><button class="act-btn act-msg" '+(_profileAccessPending?'disabled':'')+' onclick="window.location.href=\'chat.html?uid='+encodeURIComponent(id)+'\'">Message</button>';
+                    delete row.dataset.relationshipKey;
+                }
+                row.dataset.relationshipTarget=id;
+                if(known?.mutating)return;
+                try {
+                    var rel=await getRelationship(user.id,id);
+                    if(scopeVersion!==_profileScopeVersion || !rel)return;
+                    paintRelationshipActions(row,user,rel);
+                }catch(error){
+                    if(scopeVersion!==_profileScopeVersion)return;
+                    if(!known)row.innerHTML='<button class="act-btn" disabled>Relationship unavailable</button>';
+                }
+            }
+            function patchOwnRelationshipLists(viewer,id,profile,rel) {
+                var entry=profileCache.get(viewer);if(!entry)return;
+                function patch(data){
+                    if(!data)return;
+                    if(data.relationships)data.relationships[id]=rel;
+                    data.following=data.following.filter(function(p){return p.id!==id;});
+                    if(rel.outgoingActive)data.following.push(profile);
+                    var ids=new Set(data.following.map(function(p){return p.id;}));
+                    data.friends=data.followers.filter(function(p){return ids.has(p.id);});
+                    if(rel.hasRequest)data.suggestions=data.suggestions.filter(function(p){return p.id!==id;});
+                }
+                patch(entry.resources?.lists?.value);
+                entry.modalViews?.forEach(function(view){patch(view.data);});
+            }
+            async function mutateProfileRelationship(id) {
+                var viewer=profileViewerScope(), user=getCurrentUser();
+                if(!user?.isLoggedIn || user.id!==viewer || id===viewer)throw new Error('Invalid follow target');
+                var entry=profileCache.put({id:id},false);
+                if(entry.mutation)return entry.mutation;
+                if(typeof entry.profile.is_private!=='boolean'){
+                    var resolved=await profileCache.request(id,function(){return fetchProfileByUuid(id);});
+                    if(!resolved || viewer!==profileViewerScope() || profileCache.get(id)!==entry)return null;
+                    profileCache.put(resolved,true);
+                    if(entry.mutation)return entry.mutation;
+                }
+                var before=profileCache.resource(id,'relationship')?.value;
+                if(!before)before=await getRelationship(viewer,id);
+                if(!before)throw new Error('Relationship unavailable');
+                // Check again after an awaited hydration, before sending a toggle.
+                if(entry.mutation)return entry.mutation;
+                var scope=profileViewerScope(), profile=Object.assign({},entry.profile);
+                function current(){return scope===profileViewerScope() && user.id===getCurrentUser()?.id && profileCache.get(id)===entry;}
+                var remove=before.hasRequest || before.pending || before.outgoingActive;
+                var optimistic=Object.assign({},before,{outgoingActive:!remove && !profile.is_private,
+                    pending:!remove && !!profile.is_private,hasRequest:!remove,iFollowThem:remove?false:before.iFollowThem,mutating:true});
+                profileCache.setResource(id,'relationship',optimistic);
+                if(id===targetUserId)renderActionRow();
+                if(document.getElementById('followModal').classList.contains('open'))_fwRenderVisible();
+                var committed=false;
+                var promise=(async function(){
+                    try{
+                        var result=await window.sb.rpc('toggle_follow_with_notification',{p_target_id:id});
+                        if(result.error)throw result.error;
+                        if(!current())return null;
+                        committed=true;entry.permissionRevision=(entry.permissionRevision || 0)+1;
+                        if(id===targetUserId){
+                            ++_profileScopeVersion;viewerIsBlockedByPrivacy=true;_secondaryDataLoaded=false;_profileRestore=null;
+                            _collectionPostCache.clear();_collectionPostRequests.clear();profileDetailNavigation.invalidate();
+                            document.querySelectorAll('.panel').forEach(function(panel){panel.replaceChildren();delete panel.dataset.profileRendered;});
+                        }
+                        var next=Object.assign({},optimistic,{outgoingActive:!!result.data && !profile.is_private,
+                            pending:!!result.data && !!profile.is_private,hasRequest:!!result.data,mutating:false});
+                        profileCache.setResource(id,'relationship',next);
+                        patchOwnRelationshipLists(viewer,id,profile,next);
+                        [id,viewer].forEach(function(owner){profileCache.invalidate(owner,'counts',true);profileCache.invalidate(owner,'lists');});
+                        await Promise.allSettled([fetchFollowCounts(id,true),fetchFollowCounts(viewer,true)]);
+                        await getRelationship(viewer,id,true).catch(function(){});
+                        return !!result.data;
+                    }catch(error){
+                        if(current())profileCache.setResource(id,'relationship',before);
+                        throw error;
+                    }finally{
+                        entry.mutation=null;
+                        if(current()){
+                            if(id===targetUserId){renderActionRow();renderKnownStatistics();if(committed)loadAndRenderSecondaryData();}
+                            if(document.getElementById('followModal').classList.contains('open'))_fwRenderVisible();
+                        }
+                    }
+                })();
+                entry.mutation=promise;return promise;
             }
 
             window.handleFollow = async function() {
-                var user = getCurrentUser();
-                if (!user || !user.isLoggedIn) { showToast('Please sign in to follow', 'o'); return; }
-                var btn = document.getElementById('followBtn');
-                if (!btn || btn.dataset.busy === '1') return;
-                btn.dataset.busy = '1';
-                btn.disabled = true;
-                try {
-                    var result = await window.sb.rpc('toggle_follow_with_notification', {p_target_id:targetUserId});
-                    if (result.error) throw result.error;
-                    btn.textContent = result.data ? (targetUser && targetUser.is_private ? 'Requested' : 'Following') : (targetUser && targetUser.is_private ? 'Request to Follow' : 'Follow');
-                    await renderActionRow();
-                    await loadSecondaryData();
-                } catch (err) {
-                    console.error('Follow request failed:',err);
-                    showToast('Unable to update follow request. Please try again.','r');
-                } finally {
-                    var currentBtn = document.getElementById('followBtn');
-                    if (currentBtn) { currentBtn.dataset.busy = '0'; currentBtn.disabled = false; }
-                }
+                var id=targetUserId,scopeVersion=_profileScopeVersion;
+                try{
+                    await mutateProfileRelationship(id);
+                    if(scopeVersion===_profileScopeVersion)await loadAndRenderSecondaryData();
+                }catch(error){showToast('Unable to update follow request. Please try again.','r');}
             };
 
             function escapeFollowText(value) {
@@ -4167,6 +4294,7 @@
                 }
             }
             window.resolvePrivateFollowRequest = async function(followerId, approve) {
+                var owner=targetUserId,scopeVersion=_profileScopeVersion;
                 var result = await window.sb.rpc('resolve_private_follow_request',{
                     p_follower_id:followerId,p_approve:approve
                 });
@@ -4174,12 +4302,16 @@
                     showToast('Could not update follow request.','r');
                     return;
                 }
+                [owner,followerId].forEach(function(id){profileCache.invalidate(id,'relationship');profileCache.invalidate(id,'counts',true);profileCache.invalidate(id,'lists');});
+                if(scopeVersion!==_profileScopeVersion)return;
                 _fwPendingRequests = _fwPendingRequests.filter(function(r){return r.follower_id !== followerId;});
-                followModalData = await fetchFollowLists(targetUserId);
+                var lists=await fetchFollowLists(owner,true);
+                if(scopeVersion!==_profileScopeVersion || !lists)return;
+                followModalData=lists;
                 _fwBuildListFromCache(_fwPageIdx);
                 _fwApplyFilter();
                 _fwRenderVisible();
-                await loadSecondaryData();
+                await loadAndRenderSecondaryData();
             };
 
             // ─── TABS SWITCH ──────────────────────────────────────────
@@ -4846,6 +4978,10 @@
                 document.body.style.overflow = 'hidden';
             };
             window.closeFS = function(id) {
+                if(id==='followModal' && !_profileMoving && history.state?.fuProfileNavigation?.modal){
+                    var nav=Object.assign({},history.state.fuProfileNavigation,{modal:Object.assign({},history.state.fuProfileNavigation.modal,{open:false})});
+                    history.replaceState(Object.assign({},history.state,{fuProfileNavigation:nav}),'',location.href);
+                }
                 document.getElementById(id).classList.remove('open');
                 document.body.style.overflow = '';
             };
@@ -5043,44 +5179,43 @@
             };
 
             // ─── FOLLOW MODAL (self-healing) ──────────────────────────
-            async function fetchFollowLists(userId) {
-                var followers = await fetchFollowers(userId);
-                var following = await fetchFollowing(userId);
-                var followingIds = new Set(following.map(function(u) { return u.id; }));
-                var friends = followers.filter(function(u) { return followingIds.has(u.id); });
-                var current = getCurrentUser();
-                var suggestions = [];
-                if (isOwner && current && current.isLoggedIn) {
-                    var sugResult = await window.sb.rpc('get_suggestions', { p_limit: 10, p_offset: 0 });
-                    if (!sugResult.error) {
-                        suggestions = (sugResult.data || []).map(function(u) {
-                            return {
-                                id: u.id,
-                                freeupper_id: u.freeupper_id,
-                                username: u.username,
-                                display_name: u.display_name,
-                                avatar_url: u.avatar_url,
-                                verified: u.verified,
-                                verified_status: u.verified_status
-                            };
+            async function fetchFollowLists(userId,force) {
+                var viewer=profileViewerScope();
+                var own=userId===viewer && viewer!=='guest',startedAt=Date.now();
+                return profileCache.loadResource(userId,'lists',async function(){
+                    var own=userId===viewer && viewer!=='guest';
+                    var results=await Promise.all([
+                        fetchFollowers(userId),fetchFollowing(userId),
+                        own?window.sb.rpc('get_suggestions',{p_limit:10,p_offset:0}):Promise.resolve({data:[]}),
+                        own?window.sb.from('follows').select('following_id').eq('follower_id',viewer).eq('status','pending'):Promise.resolve({data:[]}),
+                        own?window.sb.from('follows').select('follower_id').eq('following_id',viewer).eq('status','pending'):Promise.resolve({data:[]})
+                    ]);
+                    var followers=results[0],following=results[1],ids=new Set(following.map(function(p){return p.id;}));
+                    var data={followers:followers,following:following,friends:followers.filter(function(p){return ids.has(p.id);}),
+                        suggestions:uniqueRelationships(results[2].data || [],userId).map(function(p){return Object.assign({is_private:false},p);}),loadedAt:Date.now()};
+                    if(viewer!==profileViewerScope())return null;
+                    data.pendingOut=results[3].error?null:(results[3].data || []).map(function(p){return p.following_id;});
+                    data.pendingIn=results[4].error?null:(results[4].data || []).map(function(p){return p.follower_id;});
+                    return data;
+                },force).then(function(data){
+                    if(!data || viewer!==profileViewerScope())return null;
+                    if(own && data.pendingOut && data.pendingIn){
+                        var followingIds=new Set(data.following.map(function(p){return p.id;}));
+                        var followerIds=new Set(data.followers.map(function(p){return p.id;}));
+                        var pendingOut=new Set(data.pendingOut),pendingIn=new Set(data.pendingIn);
+                        uniqueRelationships(data.followers.concat(data.following,data.suggestions),viewer).forEach(function(p){
+                            var cached=profileCache.resource(p.id,'relationship');
+                            if(cached && (cached.value.mutating || cached.loadedAt>startedAt))return;
+                            data.relationships=data.relationships || {};
+                            data.relationships[p.id]={outgoingActive:followingIds.has(p.id),pending:pendingOut.has(p.id),
+                                hasRequest:followingIds.has(p.id)||pendingOut.has(p.id),theyFollowMe:followerIds.has(p.id),incomingPending:pendingIn.has(p.id)};
                         });
                     }
-                    _sugOffset = suggestions.length;
-                }
-                return { followers: followers, following: following, friends: friends, suggestions: suggestions };
+                    return data;
+                });
             }
 
-            async function fetchFollowListsWithRetry(userId) {
-                var data = await fetchFollowLists(userId);
-                var expectF = _profileCounts.followers || 0;
-                var expectG = _profileCounts.following || 0;
-                var mismatch = (expectF > 0 && data.followers.length === 0) || (expectG > 0 && data.following.length === 0);
-                if (mismatch) {
-                    await new Promise(function(r) { setTimeout(r, 600); });
-                    data = await fetchFollowLists(userId);
-                }
-                return data;
-            }
+            function fetchFollowListsWithRetry(userId) { return fetchFollowLists(userId); }
 
             function _fwBuildListFromCache(idx) {
                 var dataSource = [];
@@ -5094,21 +5229,23 @@
                     var seen = new Set(dataSource.map(function(u){return u.id;}));
                     dataSource = _fwPendingRequests.filter(function(r){return !seen.has(r.follower_id);}).map(function(r){return Object.assign({},r.profiles,{_pendingRequest:true});}).concat(dataSource);
                 }
-                dataSource.forEach(function(u) { profileCache.put(u, false); });
+                dataSource=uniqueRelationships(dataSource,targetUserId);
+
                 _fwList = dataSource.map(function(u) {
                     var href = u.freeupper_id
                         ? '/u/' + encodeURIComponent(u.freeupper_id)
                         : 'profile.html?uid=' + encodeURIComponent(u.id);
                     return {
                         id: u.id,
+                        profile: Object.assign({},u),
                         pendingRequest: !!u._pendingRequest,
                         href: href,
                         displayName: u.display_name || u.username,
                         handle: '@' + (u.display_username || u.username || ''),
                         avatar: u.avatar_url || '',
                         verified: u.verified || false,
-                        isFollowing: false,
-                        isMutual: false
+                        relationship: profileCache.resource(u.id,'relationship')?.value || followModalData?.relationships?.[u.id] || null,
+                        relationshipLoadedAt:profileCache.resource(u.id,'relationship')?.loadedAt || followModalData?.loadedAt || 0
                     };
                 });
             }
@@ -5182,9 +5319,11 @@
             }
 
             function _fwApplyFilter() {
+                var seen=new Set();
+                _fwList=_fwList.filter(function(row){if(!row.id || row.id===targetUserId || seen.has(row.id))return false;seen.add(row.id);return true;});
                 var q = _fwPageState[_fwPageIdx].query || '';
-                if (!q) { _fwFiltered = _fwList.slice(); } else {
-                    var q2 = q.toLowerCase();
+                if (!q.trim()) { _fwFiltered = _fwList.slice(); } else {
+                    var q2 = q.toLowerCase().trim();
                     _fwFiltered = _fwList.filter(function(u) {
                         return (u.displayName || '').toLowerCase().includes(q2) || (u.handle || '').toLowerCase().includes(q2);
                     });
@@ -5227,9 +5366,7 @@
                             '<div class="u-handle">' + truncateName(u.handle || '', 18) + '</div>' +
                             '<div class="u-sugg-src">' + srcLbl + '</div>' +
                             '</div>' +
-                            '<div class="u-sugg-actions" style="display:flex;gap:8px;flex-shrink:0">' +
-                            '<button class="u-btn" ' + d + ' data-action="toggle-follow" ' + tp + ' data-i18n=&#70;&#111;&#108;&#108;&#111;&#119;>Follow</button>' +
-                            '<button class="u-btn-sugg-remove" ' + d + ' data-action="remove" ' + tp + '><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
+                            '<div class="u-sugg-actions" style="display:flex;gap:8px;flex-shrink:0">' + _fwRowAction(u,i) +
                             '</div></div>';
                     } else {
                         var actionHtml = _fwRowAction(u, i);
@@ -5244,35 +5381,49 @@
                     }
                 }
                 contentEl.innerHTML = html;
+                prefetchVisibleRelationships(data.slice(Math.floor(scrollTop/rowH),Math.min(total,Math.ceil((scrollTop+vh)/rowH))));
+            }
+            function prefetchVisibleRelationships(rows){
+                var user=getCurrentUser();if(!user?.isLoggedIn)return;
+                rows.forEach(function(row){
+                    if(row.id===user.id)return;
+                    profileCache.put(row.profile || {id:row.id},false);
+                    if(row.relationship && !profileCache.resource(row.id,'relationship'))profileCache.setResource(row.id,'relationship',row.relationship,row.relationshipLoadedAt);
+                });
+                var needed=rows.filter(function(row){
+                    var cached=profileCache.resource(row.id,'relationship');
+                    return row.id!==user.id && !cached?.value.mutating && (!cached || Date.now()-cached.loadedAt>=60000) &&
+                        !_relationshipPrefetch.has(row.id) && !(profileCache.get(row.id)?.relationshipRetryAt>Date.now());
+                });
+                needed.slice(0,Math.max(0,8-_relationshipPrefetch.size)).forEach(function(row){
+                    var token={},entry=profileCache.get(row.id);_relationshipPrefetch.set(row.id,token);
+                    getRelationship(user.id,row.id).catch(function(){
+                        if(user.id===profileViewerScope() && profileCache.get(row.id)===entry)entry.relationshipRetryAt=Date.now()+10000;
+                    }).finally(function(){
+                        if(_relationshipPrefetch.get(row.id)!==token)return;
+                        _relationshipPrefetch.delete(row.id);
+                        if(user.id===profileViewerScope() && document.getElementById('followModal').classList.contains('open'))_fwRenderVisible();
+                    });
+                });
             }
 
             function _fwRowAction(u, idx) {
                 var d = 'data-uid="' + (u.id || '') + '" data-fidx="' + idx + '"';
                 var tp = 'onclick="_fwTap(this)"';
-                if (_fwCurTab === 'friends') {
-                    return '<button class="u-btn-msg" ' + d + ' data-action="message" ' + tp + '><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Message</button>';
+                if(!getCurrentUser()?.isLoggedIn || u.id===profileViewerScope())return '';
+                if(_fwCurTab==='followers' && u.pendingRequest && isOwner){
+                    return '<div style="display:flex;gap:5px"><button class="u-btn" '+d+' data-action="approve-request" '+tp+'>Approve</button><button class="u-btn" '+d+' data-action="decline-request" '+tp+'>Decline</button></div>';
                 }
-                if (_fwCurTab === 'suggestions') {
-                    return '<div style="display:flex;gap:8px;flex-shrink:0">' +
-                        '<button class="u-btn" ' + d + ' data-action="toggle-follow" ' + tp + ' data-i18n=&#70;&#111;&#108;&#108;&#111;&#119;>Follow</button>' +
-                        '<button class="u-btn-sugg-remove" ' + d + ' data-action="remove" ' + tp + '><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
-                        '</div>';
-                }
-                if (_fwCurTab === 'followers' && u.pendingRequest) {
-                    return '<div style="display:flex;gap:5px;flex-shrink:0">' +
-                        '<button class="u-btn follow-back" style="width:auto;min-width:0;padding:8px 10px;font-size:12px" ' + d + ' data-action="approve-request" ' + tp + '>Approve</button>' +
-                        '<button class="u-btn" style="width:auto;min-width:0;padding:8px 10px;font-size:12px;background:rgba(139,92,246,.16);border-color:rgba(139,92,246,.35);color:var(--pd)" ' + d + ' data-action="decline-request" ' + tp + '>Decline</button></div>';
-                }
-                if (_fwCurTab === 'followers') {
-                    var isMutual = followModalData?.following.some(function(f) { return f.id === u.id; }) || false;
-                    if (isMutual) return '<button class="u-btn friends" ' + d + ' data-action="unfriend" ' + tp + ' data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</button>';
-                    return '<button class="u-btn follow-back" ' + d + ' data-action="follow-back" ' + tp + '>Follow Back</button>';
-                }
-                if (_fwCurTab === 'following') {
-                    var isMutual2 = followModalData?.followers.some(function(f) { return f.id === u.id; }) || false;
-                    if (isMutual2) return '<button class="u-btn friends" ' + d + ' data-action="unfriend" ' + tp + ' data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</button>';
-                    return '<button class="u-btn following" ' + d + ' data-action="unfollow" ' + tp + ' data-i18n=&#70;&#111;&#108;&#108;&#111;&#119;&#105;&#110;&#103;>Following</button>';
-                }
+                var rel=profileCache.resource(u.id,'relationship')?.value;
+                if(!rel)return '<button class="u-btn" disabled aria-label="Loading relationship">…</button>';
+                var active=rel.outgoingActive ?? rel.iFollowThem;
+                var label=rel.pending?'Requested':active&&rel.theyFollowMe?'Friends':active?'Following':rel.theyFollowMe?'Follow Back':'Follow';
+                var action=active||rel.pending?'unfollow':'toggle-follow';
+                var html='<button class="u-btn'+(active?' following':'')+'" '+d+' data-action="'+action+'" '+tp+(rel.mutating?' disabled':'')+'>'+label+'</button>';
+                if(_fwCurTab==='friends')html+='<button class="u-btn-msg" '+d+' data-action="message" '+tp+'>Message</button>';
+                if(_fwCurTab==='suggestions')html+='<button class="u-btn-sugg-remove" '+d+' data-action="remove" '+tp+'>×</button>';
+                return html;
+
                 return '';
             }
 
@@ -5291,7 +5442,7 @@
                             try { await window.resolvePrivateFollowRequest(user.id, action === 'approve-request'); }
                             finally { btn.disabled = false; }
                         } else if (action === 'follow-back' || action === 'toggle-follow') {
-                            var newState = await toggleFollow(user.id);
+                            var newState = await mutateProfileRelationship(user.id);
                             if(scopeVersion!==_profileScopeVersion)return;
                             btn.textContent = newState ? 'Following' : 'Follow';
                             btn.className = 'u-btn' + (newState ? ' following' : '');
@@ -5300,11 +5451,11 @@
                             followModalData = null;
                             var counts = await fetchFollowCounts(targetUserId);
                             if(scopeVersion!==_profileScopeVersion)return;
-                            document.getElementById('statFollowers').textContent = fmtNum(counts.followers);
-                            document.getElementById('statFollowing').textContent = fmtNum(counts.following);
+                            document.getElementById('statFollowers').textContent = (typeof counts.followers==='number'?fmtNum(counts.followers):'—');
+                            document.getElementById('statFollowing').textContent = (typeof counts.following==='number'?fmtNum(counts.following):'—');
                             openFollowModal(_fwCurTab);
                         } else if (action === 'unfollow') {
-                            await toggleFollow(user.id);
+                            await mutateProfileRelationship(user.id);
                             if(scopeVersion!==_profileScopeVersion)return;
                             btn.textContent = window.fuT('Follow');
                             btn.className = 'u-btn';
@@ -5317,7 +5468,7 @@
                             document.getElementById('statFollowing').textContent = fmtNum(counts2.following);
                             openFollowModal(_fwCurTab);
                         } else if (action === 'unfriend') {
-                            await toggleFollow(user.id);
+                            await mutateProfileRelationship(user.id);
                             if(scopeVersion!==_profileScopeVersion)return;
                             showToast(window.fuT('Unfriended'));
                             followModalData = null;
@@ -5423,7 +5574,7 @@
             window.filterUsersPage = function(pageIdx) {
                 if (pageIdx !== _fwPageIdx) return;
                 var inp = document.getElementById('fsSearch' + pageIdx);
-                _fwPageState[pageIdx].query = inp ? inp.value.toLowerCase().trim() : '';
+                _fwPageState[pageIdx].query = inp ? inp.value : '';
                 _fwApplyFilter();
                 _fwRenderVisible();
             };
@@ -5437,16 +5588,17 @@
             window.openFollowModal = async function(tab) {
                 var scopeVersion = _profileScopeVersion;
                 tab = tab || 'followers';
+                if(!isOwner && (_profileAccessPending || !_secondaryDataLoaded || viewerIsBlockedByPrivacy))return;
                 if (!isOwner && targetUser && targetUser.hide_follower_count) {
                     openFS('followModal');
-                    document.getElementById('fsPagesTrack').innerHTML =
-                        '<div style="display:flex;flex-direction:column;align-items:center;padding:70px 28px;gap:14px;width:100%">' +
-                        '<svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="1" y1="1" x2="23" y2="23" stroke="var(--danger)"/></svg>' +
-                        '<h3 style="font-size:17px;font-weight:800">Followers Hidden</h3>' +
-                        '<p style="font-size:13px;color:var(--muted);text-align:center;max-width:240px">This user has chosen to keep their follower list private.</p>' +
-                        '</div>';
+                    [0,1,2,3].forEach(function(i){
+                        document.getElementById('fsPage'+i)?.classList.toggle('active',i===0);
+                        var content=document.getElementById('fsVirtualContent'+i);
+                        if(content)content.innerHTML=i===0?'<div class="fw-empty"><h3>Followers Hidden</h3><p>This user has chosen to keep their follower list private.</p></div>':'';
+                    });
                     return;
                 }
+                if (!followModalData)followModalData=profileCache.resource(targetUserId,'lists')?.value || null;
                 if (!followModalData) {
                     try {
                         var freshLists = await fetchFollowListsWithRetry(targetUserId);
@@ -5465,6 +5617,14 @@
                 if (!isOwner && idx > 1) idx = 0;
                 tabTap(idx);
                 requestAnimationFrame(function() { _fwPositionBar(idx); });
+                var cachedLists=profileCache.resource(targetUserId,'lists');
+                if(cachedLists && Date.now()-cachedLists.loadedAt>=60000){
+                    var owner=targetUserId;
+                    fetchFollowLists(owner,true).then(function(data){
+                        if(!data || scopeVersion!==_profileScopeVersion || !document.getElementById('followModal').classList.contains('open'))return;
+                        followModalData=data;_fwBuildListFromCache(_fwPageIdx);_fwApplyFilter();_fwRenderVisible();
+                    }).catch(function(){});
+                }
             };
 
             // ─── AVATAR PICKER ──────────────────────────────────────────
@@ -5528,7 +5688,7 @@
                 openFS('countryModal'); };
             window.filterCountries = function(q) {
                 if (!q) { renderCountries(COUNTRIES, false); return; }
-                var q2 = q.toLowerCase();
+                var q2 = q.toLowerCase().trim();
                 renderCountries(COUNTRIES.filter(function(c) { return c.n.toLowerCase().includes(q2); }), true);
             };
             window.clearCountrySearch = function() {
