@@ -1,5 +1,5 @@
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v23';
+const CACHE_NAME = 'freeupper-pwa-v24';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -20,6 +20,8 @@ const URLS_TO_CACHE = [
   './js/i18n.css',
   './js/vendor/i18next.js',
   './locales/en.json',
+  './bottom-nav.css',
+  './bottom-nav.js?v=mounted-profile-v1',
   './global.css',
   './global.js',
   './theme.js?v=2',

@@ -183,7 +183,7 @@
             background: var(--bg);
             scroll-behavior: smooth;
             transition: background .3s;
-            padding-bottom: 80px;
+
             -webkit-overflow-scrolling: touch;
         }
 
@@ -1893,9 +1893,7 @@
                 padding-top: max(clamp(44px, 8vw, 56px), env(safe-area-inset-top, 12px));
             }
 
-            .main {
-                padding-bottom: max(80px, env(safe-area-inset-bottom, 12px));
-            }
+
         }
     
 /* Post composer visual refresh; marketplace and backend remain unchanged */
@@ -1946,9 +1944,9 @@
 .composer-card .mention-textarea-wrap:first-child{margin-bottom:12px}
 
 /* ── Publish button: normal flow, below Audience + Comments ── */
-.main{padding-bottom:calc(var(--nav-h) + 40px + env(safe-area-inset-bottom,0px))!important}
+
 #postSubmitBtn{position:relative;margin-top:6px}
-@media (min-width:768px){.main{padding-bottom:24px!important}}
+
 
 /* ── Link card in composer ── */
 .composer-link-card{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:12px 0 4px;border:1.5px solid var(--brd);border-radius:14px;background:var(--inp);position:relative}
@@ -1984,13 +1982,13 @@
     <!-- ══════════════════════════════════════════
     LAYOUT
     ══════════════════════════════════════════ -->
-    <div class="layout">
+    <div class="layout bottom-nav-viewport">
 
         <!-- ─── SIDE NAV ─── -->
         <side-nav show-chat></side-nav>
 
         <!-- ─── MAIN ─── -->
-        <div class="main" id="mainScroll">
+        <div class="main bottom-nav-scroll" id="mainScroll">
             <div class="create-col">
 
                 <!-- ─── TOPBAR ─── -->
@@ -2376,6 +2374,30 @@
             hashtagSearchTimer: null,
             mentionSearchTimer: null,
         };
+
+        // Keep unsent composer data in memory. Only guard document exits while
+        // dirty; retained Home/Profile visits do not unload this document.
+        let composerPublished = false;
+        window.markComposerPublished = () => {
+            composerPublished = true;
+            window.removeEventListener('beforeunload', guardComposerExit);
+        };
+        function guardComposerExit(event) {
+            if (!hasUnsentComposer()) return;
+            event.preventDefault();
+            event.returnValue = '';
+        }
+        function hasUnsentComposer() {
+            return !composerPublished && (!!document.getElementById('postTitle')?.value.trim() ||
+                !!document.getElementById('postContent')?.value.trim() ||
+                state.postMedia.length > 0 || !!state.quotedPost);
+        }
+        function syncComposerExitGuard() {
+            window.removeEventListener('beforeunload', guardComposerExit);
+            if (hasUnsentComposer()) window.addEventListener('beforeunload', guardComposerExit);
+        }
+        document.addEventListener('input', syncComposerExitGuard);
+        window.addEventListener('pageshow', syncComposerExitGuard);
 
         // ──────────────────────────────────────────────────────────────
         // 3.  TOAST SYSTEM
@@ -3352,6 +3374,7 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
         // The hasPoster guard (thumbnailUrl !== m.url) prevents an
         // <img src="…mp4">, which browsers would refuse to decode.
         function renderPostImageGrid() {
+            syncComposerExitGuard();
             const grid = document.getElementById('postImageGrid');
             if (!grid) return;
 
@@ -3878,6 +3901,7 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
                         commentsHidden: hideComments, media: state.postMedia,
                         onProgress: (done, total) => showToast('Securing media ' + done + '/' + total, 'p')
                     });
+                    window.markComposerPublished?.();
                     state.postMedia.forEach(m => { if (m.url?.startsWith('blob:')) URL.revokeObjectURL(m.url); });
                     state.postMedia = [];
                     state.postEmbeddings = [];
@@ -3981,6 +4005,7 @@ function closeCommentsModal(){document.getElementById('commentsModal').classList
                     }
                 }
 
+                window.markComposerPublished?.();
                 // Reset form
                 titleEl.value = '';
                 contentEl.value = '';

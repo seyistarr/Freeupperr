@@ -3,17 +3,44 @@
 :root, [data-theme="dark"], [data-theme="light"] {
     /* Resolve through the existing theme tokens on initial load and switches. */
     --fu-bottom-nav-surface: var(--navbg);
-    --fu-bottom-nav-content-height: 64px;
+    --bottom-nav-height: 64px;
+    --bottom-safe-area: env(safe-area-inset-bottom, 0px);
+    --bottom-nav-total-height: calc(var(--bottom-nav-height) + var(--bottom-safe-area));
+    --bottom-content-gap: 12px;
+    --bottom-nav-clearance: calc(var(--bottom-nav-total-height) + var(--bottom-content-gap));
+    --fu-bottom-nav-content-height: var(--bottom-nav-height);
+    --app-viewport-height: 100vh;
+}
+@supports (height: 100dvh) {
+    :root { --app-viewport-height: 100dvh; }
+}
+/* Opt in on the actual scroll owner, never on both body and its child. */
+.bottom-nav-scroll {
+    padding-bottom: var(--bottom-nav-clearance) !important;
+    scroll-padding-bottom: var(--bottom-nav-clearance);
+}
+.bottom-nav-viewport {
+    height: var(--app-viewport-height) !important;
+    height: min(var(--app-viewport-height), var(--visual-viewport-height, 100dvh)) !important;
+}
+@media (min-width: 768px) {
+    :root { --bottom-nav-total-height: 0px; --bottom-nav-clearance: var(--bottom-content-gap); }
+}
+@media (max-width: 767px) {
+    html[data-nav-keyboard] .bottom-nav {
+        visibility: hidden;
+        pointer-events: none;
+    }
 }
 @media (max-width: 767px) {
     html { background-color: var(--fu-bottom-nav-surface) !important; }
     .bottom-nav {
         background: var(--fu-bottom-nav-surface) !important;
         bottom: 0 !important;
-        height: calc(var(--fu-bottom-nav-content-height) + env(safe-area-inset-bottom, 0px)) !important;
+        height: var(--bottom-nav-total-height) !important;
         min-height: 0 !important;
         max-height: none !important;
-        padding: 0 0 env(safe-area-inset-bottom, 0px) !important;
+        padding: 0 0 var(--bottom-safe-area) !important;
         box-sizing: border-box !important;
         align-items: center !important;
         backdrop-filter: none !important;
@@ -49,10 +76,10 @@ bottom-nav {
     display: flex;
     justify-content: space-around;
     align-items: center;
-    padding: 0 0 env(safe-area-inset-bottom, 0px);
+    padding: 0 0 var(--bottom-safe-area);
     z-index: 50;
     transition: background .3s, border-color .3s, transform .35s cubic-bezier(.32, .94, .6, 1);
-    height: calc(64px + env(safe-area-inset-bottom, 0px));
+    height: var(--bottom-nav-total-height);
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
@@ -61,6 +88,9 @@ bottom-nav {
 }
 
 .nav-item {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
     display: flex;
     flex-direction: column;
     align-items: center;
