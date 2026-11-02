@@ -8,6 +8,7 @@ import {profileFixtureParts as profile} from './helpers/profile-navigation-fixtu
 // Real page markup/CSS, coordinator, component and lifecycle; real Search,
 // Profile and Video page code. Backend fixtures deliberately isolate latency,
 // authorization boundaries and document navigation from external availability.
+const routes={home:'/home',search:'/search',create:'/create',video:'/videos',profile:'/profile'};
 const names={home:'index',search:'search',create:'create',video:'video',profile:'profile'};
 const sources=Object.fromEntries(await Promise.all(Object.entries(names).map(async([key,name])=>[key,await readFile(name+'.html','utf8')])));
 const createGuard=sources.create.slice(sources.create.indexOf('        let composerPublished = false;'),sources.create.indexOf('        // 3.  TOAST SYSTEM'));
@@ -30,20 +31,21 @@ window.PostsAPI={loadFeedWithReposts:async()=>{requests.push('feed');await new P
 window.switchActor=id=>{top.actor=id;localStorage.setItem('test-actor',id||'guest');for(const w of [top,...Array.from(top.frames)]){try{w.authListeners.forEach(f=>f(id?'SIGNED_IN':'SIGNED_OUT',id?{user:{id},expires_at:top.sessionExpiry}:null));w.userListeners.forEach(f=>f());}catch(_){}}};
 })();
 `;
-async function harness({root='home',pwa=false,delay=100,route=null,guest=false,prefetch=true,holdFirstSearch=false}={}){
- const documents=[];const errors=[];let heldSearch=null;
+async function harness({root='home',pwa=false,delay=100,route=null,guest=false,prefetch=true,holdFirstSearch=false,legacyWorker=false}={}){
+ const documents=[];const errors=[];let heldSearch=null;let workerUpdated=false;
  const server=createServer(async(req,res)=>{
   const url=new URL(req.url,'http://fixture');
   try{
-   if(url.searchParams.has('fixtureRenderer')){res.setHeader('Content-Type','text/html');res.end('<!doctype html><head><script src="/js/screen-lifecycle.js?v=2"></script></head><body><input id="rendererInput"><main>Owned renderer</main></body>');return;}
-   const key=Object.keys(names).find(key=>url.pathname==='/'+names[key]+'.html') || (url.pathname.startsWith('/u/')||url.pathname.startsWith('/@')?'profile':null);
+   if(url.pathname==='/service-worker.js' && legacyWorker){res.setHeader('Content-Type','text/javascript');res.setHeader('Cache-Control','no-cache');res.end(await readFile(workerUpdated?'service-worker.js':'tests/fixtures/service-worker-v26.js'));return;}
+   if(url.searchParams.has('fixtureRenderer')){res.setHeader('Content-Type','text/html');res.end('<!doctype html><head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script src="/js/screen-lifecycle.js?v=2"></script></head><body><input id="rendererInput"><main>Owned renderer</main></body>');return;}
+   const key=Object.keys(names).find(key=>url.pathname==='/'+names[key]+'.html' || url.pathname===routes[key]) || (url.pathname.startsWith('/u/')||url.pathname.startsWith('/@')?'profile':null);
    if(!key){const path=url.pathname==='/'?'/index.html':url.pathname;const body=await readFile('.'+path);res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'application/octet-stream');res.end(body);return;}
    documents.push({url:req.url,time:Date.now()});
    let html=sources[key].replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<link\b[^>]*https:[^>]*>/gi,'');
    let code=key==='search'?'<script src="/search.js"></script>':key==='create'?'<script>const state={postMedia:[],marketImages:[],postEmbeddings:[]};'+createGuard+'</script>':key==='video'?'<script>'+videoMain+'</script>':key==='profile'?'<script>'+profile.cache+'</script><script>'+profile.bootstrap+'</script><script>window.fixtureSB=window.sb;</script><script>'+bootstrap+'</script><script>sb.from=fixtureSB.from;sb.rpc=fixtureSB.rpc;</script><script>'+profile.main+'</script>':`<script>window.__fuInitialHydrated=${prefetch};addEventListener("DOMContentLoaded",()=>{if(window.__fuInitialHydrated)dispatchEvent(new Event("fu-app-hydrated"));});</script>`;
    // Profile fixture provides identity/relationship RPCs; keep shared auth and
    // realtime semantics from this harness, and its real production page logic.
-   html=html.replace('<head>','<head><script>'+bootstrap+'</script><script src="/js/screen-lifecycle.js?v=2"></script><script src="/theme.js?v=2"></script>');
+   html=html.replace('<head>','<head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script>'+bootstrap+'</script><script src="/js/screen-lifecycle.js?v=2"></script><script src="/theme.js?v=2"></script>');
    html=html.replace('</body>',code+'<script src="/router.js"></script><script src="/side-nav.js"></script><script src="/bottom-nav.js?v=five-tabs-v2"></script></body>');
    res.setHeader('Content-Type','text/html');if(holdFirstSearch && key==='search' && url.searchParams.has('fuMounted'))heldSearch=()=>setTimeout(()=>res.end(html),delay);else setTimeout(()=>res.end(html),url.searchParams.has('fuMounted')?delay:0);
   }catch(e){res.writeHead(404);res.end();}
@@ -55,13 +57,13 @@ async function harness({root='home',pwa=false,delay=100,route=null,guest=false,p
  await context.route(url=>url.origin!==origin,r=>r.abort());
  if(guest)await context.addInitScript(()=>localStorage.setItem('test-actor','guest'));
  const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>{errors.push(e.message);if(process.env.FREEUPPER_DEBUG)console.error(e.message);});
- await page.goto(origin+(route || '/'+names[root]+'.html'));
+ await page.goto(origin+(route || routes[root]));
  if(pwa){await page.evaluate(async()=>{await navigator.serviceWorker.register('/service-worker.js');await navigator.serviceWorker.ready;});await page.reload();await page.waitForFunction(()=>!!navigator.serviceWorker.controller);}
  if(!guest)await page.waitForFunction(()=>!!window.FreeUpperProfileShell?.getSession());
  const screen=key=>key===root?page.mainFrame():page.frames().find(f=>f!==page.mainFrame() && new URL(f.url()).pathname==='/'+names[key]+'.html');
  const select=async key=>{const start=Date.now();await page.locator('bottom-nav [data-nav-key='+key+']').click();await page.waitForFunction(k=>FreeUpperProfileShell.getActive()===k,key).catch(async e=>{console.error(key,errors,await page.evaluate(()=>({status:FreeUpperProfileShell.status(),frames:[...document.querySelectorAll('iframe[data-fu-mounted]')].map(f=>({src:f.src,html:f.contentDocument?.body?.textContent.slice(0,120),ready:f.contentWindow.FreeUpperScreen?.isReady(),controller:!!f.contentWindow.navigator.serviceWorker.controller,scripts:[...f.contentDocument.scripts].map(s=>s.src)}))})));throw e;});return Date.now()-start;};
  const releaseSearch=()=>{holdFirstSearch=false;heldSearch?.();heldSearch=null;};
- return {page,screen,select,errors,documents,origin,releaseSearch,close:async()=>{releaseSearch();await browser.close();await new Promise(r=>server.close(r));}};
+ return {page,screen,select,errors,documents,origin,releaseSearch,updateWorker:()=>{workerUpdated=true;},close:async()=>{releaseSearch();await browser.close();await new Promise(r=>server.close(r));}};
 }
 
 test('five tabs: cold/warm timing, persistent nav identity, state, geometry, history and bounded retention',{timeout:120000},async t=>{
@@ -158,9 +160,9 @@ test('PWA account boundaries clear the launch document and child screens',{timeo
 
 test('direct query links and guest tab navigation keep native URL behavior',{timeout:45000},async()=>{
  const direct=await harness({root:'search',route:'/search.html?q=deep-link'});
- try{await direct.page.waitForFunction(()=>document.getElementById('resultsContainer').textContent.includes('deep-link'));await direct.select('create');await direct.select('search');assert.equal(await direct.page.locator('#searchInput').inputValue(),'deep-link');assert.deepEqual(direct.errors,[]);}finally{await direct.close();}
+ try{await direct.page.waitForFunction(()=>document.getElementById('resultsContainer').textContent.includes('deep-link'));await direct.select('create');await direct.select('search');assert.equal(new URL(direct.page.url()).pathname,'/search');assert.equal(new URL(direct.page.url()).search,'?q=deep-link');assert.equal(await direct.page.locator('#searchInput').inputValue(),'deep-link');assert.deepEqual(direct.errors,[]);}finally{await direct.close();}
  const guest=await harness({guest:true});
- try{for(const key of ['search','create','video','profile','home']){await guest.page.locator('[data-nav-key='+key+']').click();await guest.page.waitForURL('**/'+names[key]+'.html');assert.equal(await guest.page.locator('[aria-current=page]').getAttribute('data-nav-key'),key);assert.equal(await guest.page.locator('.bottom-nav').count(),1);}assert.deepEqual(guest.errors,[]);}finally{await guest.close();}
+ try{for(const key of ['search','create','video','profile','home']){await guest.page.locator('[data-nav-key='+key+']').click();await guest.page.waitForURL('**'+routes[key]);assert.equal(await guest.page.locator('[aria-current=page]').getAttribute('data-nav-key'),key);assert.equal(await guest.page.locator('.bottom-nav').count(),1);}assert.deepEqual(guest.errors,[]);}finally{await guest.close();}
 });
 
 test('cold Home and Profile handoffs retain the outer document and navigation',{timeout:45000},async t=>{
@@ -185,7 +187,7 @@ test('owned renderers inherit suspension; native post links leave the managed ta
   await h.select('profile');assert(await profile.evaluate(()=>document.getElementById('ownedRenderer').contentWindow.FreeUpperScreen.isActive()));
   await h.select('search');const marker=await h.page.evaluate(()=>pageMarker);
   await h.screen('search').evaluate(()=>Router.openVideo('fixture-post'));
-  await h.page.waitForURL('**/video.html?post=fixture-post');await h.page.waitForFunction(value=>window.pageMarker && pageMarker!==value,marker);
+  await h.page.waitForURL('**/videos?post=fixture-post');await h.page.waitForFunction(value=>window.pageMarker && pageMarker!==value,marker);
   assert.equal(await h.page.locator('[aria-current=page]').getAttribute('data-nav-key'),'video');assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
@@ -210,5 +212,25 @@ test('full-screen overlays keep their original stacking while the single navigat
   await h.page.waitForFunction(()=>getComputedStyle(document.querySelector('.bottom-nav')).visibility==='hidden');await search.locator('#modalBottomControl').click();assert(await search.evaluate(()=>modalTapped));
   await search.evaluate(()=>document.getElementById('stackingModal').remove());await h.page.waitForFunction(()=>getComputedStyle(document.querySelector('.bottom-nav')).visibility==='visible');
   await h.select('home');assert(await h.page.evaluate(()=>overlayNav===document.querySelector('bottom-nav')));assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+
+test('v26 PWA controller and waiting update retain clean navigation and an unsent draft',{timeout:60000},async()=>{
+ const h=await harness({pwa:true,legacyWorker:true});try{
+  await h.select('search');await h.select('video');await h.select('create');
+  await h.screen('create').locator('#postContent').fill('Draft across a waiting worker update');
+  const marker=await h.page.evaluate(()=>pageMarker);
+  h.updateWorker();
+  await h.page.evaluate(async()=>{const registration=await navigator.serviceWorker.getRegistration();await registration.update();await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Update did not wait')),10000);const check=()=>{if(registration.waiting){clearTimeout(timer);resolve();}};check();registration.installing?.addEventListener('statechange',check);registration.addEventListener('updatefound',()=>registration.installing?.addEventListener('statechange',check));});});
+  assert.equal(await h.page.evaluate(()=>pageMarker),marker);
+  assert.equal(await h.screen('create').locator('#postContent').inputValue(),'Draft across a waiting worker update');
+  assert.equal(await h.page.evaluate(async()=>!!(await navigator.serviceWorker.getRegistration()).waiting),true);
+  await h.page.context().setOffline(true);
+  await h.select('home');await h.select('create');
+  assert(new URL(h.page.url()).pathname==='/create');
+  assert.equal(await h.screen('create').locator('#postContent').inputValue(),'Draft across a waiting worker update');
+  await h.page.context().setOffline(false);
+  assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });

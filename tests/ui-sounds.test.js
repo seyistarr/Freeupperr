@@ -310,7 +310,10 @@ test('coupled sound consumers bypass pre-upgrade PWA cache entries', () => {
     'notification.html': ['auth.js', 'notification.js']
   })) {
     const html = readFileSync(page, 'utf8');
-    for (const file of files) assert.ok(html.includes(file + '?v=sounds-v3'), page + ': ' + file);
+    for (const file of files) assert.ok(
+      html.includes(file + '?v=sounds-v3') || html.includes(file + '?v=clean-urls-v1'),
+      page + ': ' + file
+    );
   }
 });
 

@@ -21,19 +21,19 @@
   const BASE_ITEMS = [
     {
       key: 'home',
-      href: '/index.html',
+      href: '/home',
       label: 'Home',
       svg: '<path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/>'
     },
     {
       key: 'search',
-      href: '/search.html',
+      href: '/search',
       label: 'Search',
       svg: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'
     },
     {
       key: 'chat',
-      href: 'chat.html',
+      href: '/messages',
       label: 'Chat',
       svg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
       optional: true,
@@ -41,35 +41,28 @@
     },
     {
       key: 'create',
-      href: '/create.html',
+      href: '/create',
       label: 'Create',
       svg: '<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'
     },
     {
       key: 'video',
-      href: '/video.html',
+      href: '/videos',
       label: 'Video',
       svg: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>'
     },
     { key: 'gap' },
     {
       key: 'profile',
-      href: '/profile.html',
+      href: '/profile',
       label: 'Profile',
       isAvatar: true
     }
   ];
 
   function currentPageKey() {
-    if (/^\/(?:@|u\/)/.test(location.pathname)) return 'profile';
-    const path = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
-    if (path === '' || path === 'index.html') return 'home';
-    if (path.startsWith('search')) return 'search';
-    if (path.startsWith('chat')) return 'chat';
-    if (path.startsWith('create')) return 'create';
-    if (path.startsWith('video')) return 'video';
-    if (path.startsWith('profile')) return 'profile';
-    return ''; // settings.html etc -> no tab highlighted
+    const key = window.FreeUpperRoutes.screen(location.pathname);
+    return ['home', 'search', 'create', 'video', 'profile'].includes(key) || key === 'messages' ? (key === 'messages' ? 'chat' : key) : '';
   }
 
   function getUser() {
@@ -131,7 +124,7 @@
 
       this.innerHTML = `
         <nav class="side-nav">
-          <div class="side-logo"><a href="index.html">◈</a></div>
+          <div class="side-logo"><a href="/home">◈</a></div>
           ${itemsHtml}
         </nav>`;
     }

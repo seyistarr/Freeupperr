@@ -1,3 +1,7 @@
+// Keep the existing Firebase registration and its root scope while sharing
+// the same shell-only offline policy as the installable app.
+importScripts('/service-worker.js');
+
 importScripts(
   "https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"
 );
@@ -275,7 +279,7 @@ self.addEventListener(
     ) {
 
       const url =
-        `/chat.html?conversation=${encodeURIComponent(
+        `/messages?conversation=${encodeURIComponent(
           data.conversation_id
         )}`;
 
@@ -296,7 +300,7 @@ self.addEventListener(
     ) {
 
       const url =
-        `/index.html?post=${encodeURIComponent(
+        `/home?post=${encodeURIComponent(
           data.post_id
         )}`;
 
@@ -317,7 +321,7 @@ self.addEventListener(
     ) {
 
       const url =
-        `/profile.html?uid=${encodeURIComponent(
+        `/profile?uid=${encodeURIComponent(
           data.actor_id
         )}`;
 
@@ -335,7 +339,7 @@ self.addEventListener(
 
     event.waitUntil(
       openFreeUpperUrl(
-        "/index.html"
+        "/home"
       )
     );
 

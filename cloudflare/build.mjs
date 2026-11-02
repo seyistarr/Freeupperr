@@ -14,10 +14,17 @@ for (const path of files) await cp(path, new URL('public/' + path, output));
 const swFile = new URL('public/service-worker.js', output);
 let sw = await readFile(swFile, 'utf8');
 sw = sw.replace(/const CACHE_NAME = '([^']+)'/, (_, version) => `const CACHE_NAME = '${version}-cloudflare-v1'`);
-sw = sw.replace("  if (event.request.headers.has('Authorization')) return;", "  if (/^\\/(?:u|p|v)(?:\\/|$)/.test(url.pathname) || url.pathname.startsWith('/@') || (url.pathname === '/sitemap-profiles.xml' || url.pathname === '/sitemap-posts.xml')) return;\n  if (event.request.headers.has('Authorization')) return;");
-sw = sw.replace('          cache.put(event.request, responseClone);', "          if (!/no-store|private/.test(response.headers.get('Cache-Control') || '')) return cache.put(event.request, responseClone);");
 await writeFile(swFile, sw);
 for (const dir of ['assets', 'themes', 'js', 'locales']) await cp(dir, new URL('public/' + dir, output), { recursive: true });
+// A pre-migration page can lazily request a navigation script with its old
+// version query. Bundle the shared helper into dependency entry points so that
+// such a page does not need the new head script before retaining its next tab.
+const routeSource = await readFile('js/freeupper-routes.js', 'utf8');
+for (const path of ['router.js', 'profile-shell.js', 'bottom-nav.js', 'side-nav.js', 'js/screen-lifecycle.js']) {
+  const target = new URL('public/' + path, output);
+  const source = await readFile(target, 'utf8');
+  await writeFile(target, `if (!globalThis.FreeUpperRoutes) {\n${routeSource}\n}\n${source}`);
+}
 await writeFile(new URL('public/_headers', output), `/manifest.webmanifest\n  Content-Type: application/manifest+json\n  Cache-Control: public, max-age=0, must-revalidate\n/service-worker.js\n  Cache-Control: no-cache\n  Service-Worker-Allowed: /\n/firebase-messaging-sw.js\n  Cache-Control: no-cache\n  Service-Worker-Allowed: /\n/*\n  X-Content-Type-Options: nosniff\n`);
 // This is the existing browser-public anon key, never a service-role credential.
 const auth = await readFile('auth.js', 'utf8');

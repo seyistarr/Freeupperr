@@ -332,7 +332,7 @@
             return;
         }
         if (postId) {
-            window.location.href = 'index.html?post=' + postId;
+            window.location.href = '/home?post=' + postId;
             return;
         }
         if (actorId) {

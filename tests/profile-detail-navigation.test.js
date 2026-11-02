@@ -21,7 +21,7 @@ test('retained Profile detail navigation across tabs, media, profiles and histor
    const id=new URL(req.url,'http://test').searchParams.get('id');pending.set(id,res);waiters.get(id)?.();waiters.delete(id);return;
   }
   if(req.url===moduleURL){res.setHeader('Content-Type','text/javascript');res.end(module);return;}
-  if(req.url.startsWith('/index.html')){
+  if(req.url.startsWith('/index.html') || req.url.startsWith('/home')){
    const params=new URL(req.url,'http://test').searchParams;const id=params.get('post')||params.get('product');
    res.end(`<!doctype html><html><body><button id="childBack" onclick="closeExploreFullscreen()">Back</button><div id="productModal"><button id="marketBack" onclick="closeProductModal()">Back</button></div><div data-post-id="${id}"><span data-author-id="author">Author</span><span data-engagement-id="${id}">Engagements</span>${id.split('-')[0]==='video'?'<video style="width:100%;aspect-ratio:9/16" muted playsinline></video>':id.split('-')[0]==='image'?'<img alt="Image">':id.split('-')[0]==='quote'?'<a data-fu-quote href="index.html?post=original">Original</a>':'Text'}</div><script>
    let allPosts=[{id:${JSON.stringify(id)},views:12,reactions:{like:4},comments:2,shareCount:3,bookmarkCount:5,repostCount:6,likedByMe:true,myRepost:false}];

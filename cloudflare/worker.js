@@ -2,6 +2,7 @@ import { invoke } from './adapter.js';
 import { postMedia } from './post-media.js';
 import { runProtectedMaintenance } from './protected-cleanup.js';
 import { releaseHealth } from './release-health.js';
+import '../js/freeupper-routes.js';
 import profilePreview from './generated/api/profile-preview.js';
 import profileOg from './generated/api/profile-og.js';
 import postPreview from './generated/api/post-preview.js';
@@ -72,6 +73,13 @@ export default {
       catch { return unavailable(503, 'Temporarily unavailable'); }
     }
     if (/^\/(api|u|p|v)(\/|$)/.test(path) || path.startsWith('/@')) return unavailable(404, 'Not found');
-    return env.ASSETS.fetch(path === '/' ? new Request(new URL('/index.html' + url.search, url), request) : request);
+    const document = globalThis.FreeUpperRoutes.documentPath(path);
+    if (document) {
+      if (!['GET', 'HEAD'].includes(request.method)) return unavailable(405, 'Method not allowed', { Allow: 'GET, HEAD' });
+      // Change only the pathname. Query bytes and the visible browser URL survive.
+      url.pathname = document;
+      return env.ASSETS.fetch(new Request(url, request));
+    }
+    return env.ASSETS.fetch(request);
   }
 };

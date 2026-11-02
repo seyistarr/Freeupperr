@@ -1,3 +1,4 @@
+import '../js/freeupper-routes.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -12,12 +13,13 @@ test('bottom navigation follows persisted themes, live switches and page navigat
   }
   for (const required of ['index.html', 'profile.html', 'search.html', 'video.html']) assert.ok(pages.includes(required));
   const server = createServer(async (req, res) => {
-    const path = new URL(req.url, 'http://local').pathname;
+    const requested = new URL(req.url, 'http://local').pathname;
+    const path = globalThis.FreeUpperRoutes.documentPath(requested) || requested;
     try {
       let body = await readFile('.' + path, 'utf8');
       if (path.endsWith('.html')) {
         body = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, script =>
-          /src=["']\/?(?:theme|bottom-nav)\.js(?:\?[^"']*)?["']/.test(script) ? script : '');
+          /src=["']\/?(?:js\/freeupper-routes|theme|bottom-nav)\.js(?:\?[^"']*)?["']/.test(script) ? script : '');
         body = body.replace(/<link\b[^>]*https:[^>]*>/gi, '');
       }
       res.setHeader('Content-Type', path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : 'text/html');

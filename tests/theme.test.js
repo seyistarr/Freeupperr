@@ -52,6 +52,13 @@ for (const engine of ['chromium', 'webkit']) {
       const pathname = new URL(req.url,'http://local').pathname;
       const path = pathname === '/' ? '/index.html' : pathname;
       try {
+        // Theme fixtures block third-party SDKs. Keep the production root
+        // registration and cache policy without loading Firebase's remote SDK.
+        if (path === '/firebase-messaging-sw.js') {
+          res.setHeader('Content-Type', 'text/javascript');
+          res.end("importScripts('/service-worker.js');");
+          return;
+        }
         let body = await readFile('.'+path, 'utf8');
         if (path.endsWith('.html')) {
           // Render actual page surfaces without backend requests, account writes or unrelated scripts.

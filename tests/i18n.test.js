@@ -38,7 +38,7 @@ test('failed dictionaries can retry without changing the current language',async
  await s.changeLanguage('fr');await assert.rejects(s.changeLanguage('de'));assert.equal(s.language,'fr');fail=false;await s.changeLanguage('de');assert.equal(s.language,'de');
 });
 test('PWA precaches English and lazily caches public dictionaries; Cloudflare publishes resources',async()=>{
- const sw=await readFile('service-worker.js','utf8');assert.ok(sw.includes('./locales/en.json'));assert.ok(!sw.includes('./locales/ak.json'));assert.ok(sw.includes('cache.put(event.request, responseClone)'));
+ const sw=await readFile('service-worker.js','utf8');assert.ok(sw.includes('./locales/en.json'));assert.ok(!sw.includes('./locales/ak.json'));assert.ok(sw.includes('cache.put(event.request, response.clone())'));
  const build=await readFile('cloudflare/build.mjs','utf8');assert.ok(build.includes("'locales'"));
  const app=await readFile('js/freeupper-i18n.js','utf8');assert.ok(!app.includes('innerHTML'));assert.ok(app.includes("selected === 'ar' ? 'rtl' : 'ltr'"));
 });

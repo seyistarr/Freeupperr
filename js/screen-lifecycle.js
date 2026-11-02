@@ -3,7 +3,7 @@
   'use strict';
   if (window.FreeUpperScreen) return;
   const path=location.pathname;
-  const kind=/^\/(?:@|u\/)/.test(path)?'profile':({index:'home',search:'search',create:'create',video:'video',profile:'profile'})[path.split('/').pop()?.replace('.html','')] || 'home';
+  const kind=window.FreeUpperRoutes.screen(path) || 'home';
   let shell=null;
   try { if (parent!==window && parent.FreeUpperProfileShell) shell=parent.FreeUpperProfileShell; } catch (_) {}
   const mounted=!!shell && !!window.frameElement?.hasAttribute('data-fu-mounted');

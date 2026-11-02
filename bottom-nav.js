@@ -26,40 +26,34 @@
   const NAV_ITEMS = [
     {
       key: 'home',
-      href: '/index.html',
+      href: '/home',
       label: 'Home',
       svg: '<path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/>'
     },
     {
       key: 'search',
-      href: '/search.html',
+      href: '/search',
       label: 'Search',
       svg: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'
     },
-    { key: 'create', isCreateButton: true, href: '/create.html' },
+    { key: 'create', isCreateButton: true, href: '/create' },
     {
       key: 'video',
-      href: '/video.html',
+      href: '/videos',
       label: 'Video',
       svg: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>'
     },
     {
       key: 'profile',
-      href: '/profile.html',
+      href: '/profile',
       label: 'Profile',
       isAvatar: true
     }
   ];
 
   function currentPageKey() {
-    const path = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
-    if (/^\/(?:@|u\/)/.test(location.pathname)) return 'profile';
-    if (path === '' || path === 'index.html') return 'home';
-    if (path.startsWith('search')) return 'search';
-    if (path.startsWith('create')) return 'create';
-    if (path.startsWith('video')) return 'video';
-    if (path.startsWith('profile')) return 'profile';
-    return ''; // settings.html, chat.html, etc. -> no tab highlighted
+    const key = window.FreeUpperRoutes.screen(location.pathname);
+    return ['home', 'search', 'create', 'video', 'profile'].includes(key) ? key : '';
   }
 
   function getUser() {
@@ -78,7 +72,7 @@
   function loadProfileShell() {
     if(window.FreeUpperProfileShell)return Promise.resolve(window.FreeUpperProfileShell);
     if(!shellLoading)shellLoading=new Promise((resolve,reject)=>{
-      const script=document.createElement('script');script.src='/profile-shell.js?v=five-tabs-v2';
+      const script=document.createElement('script');script.src='/profile-shell.js?v=clean-urls-v1';
       script.onload=()=>resolve(window.FreeUpperProfileShell);script.onerror=()=>{shellLoading=null;reject(new Error('Profile navigation unavailable'));};
       document.head.appendChild(script);
     });
@@ -135,15 +129,15 @@
         if (!link || event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         if (key === currentPageKey() && !window.FreeUpperProfileShell) { event.preventDefault(); return; }
         if (this._leaving) { event.preventDefault(); return; }
-        if(!getUser()?.isLoggedIn || !window.sb?.auth?.getSession){markLeaving();if(key==='create'){event.preventDefault();window.location.href='/create.html';}return;}
+        if(!getUser()?.isLoggedIn || !window.sb?.auth?.getSession){markLeaving();if(key==='create'){event.preventDefault();window.location.href='/create';}return;}
         const shell=window.FreeUpperProfileShell;
         if(shell?.request(key)){event.preventDefault();return;}
-        if(shell && key==='create'){event.preventDefault();window.location.href='/create.html';return;}
+        if(shell && key==='create'){event.preventDefault();window.location.href='/create';return;}
         if(!shell){
           event.preventDefault();
           if (this._shellPending) return;
           this._shellPending = true;
-          loadProfileShell().then(next=>{if(!next?.request(key))window.location.href=link.href || '/create.html';}).catch(()=>{window.location.href=link.href || '/create.html';}).finally(()=>{this._shellPending=false;});
+          loadProfileShell().then(next=>{if(!next?.request(key))window.location.href=link.href || '/create';}).catch(()=>{window.location.href=link.href || '/create';}).finally(()=>{this._shellPending=false;});
         }
       });
       const start=()=>{if(getUser()?.isLoggedIn && window.sb?.auth?.getSession)loadProfileShell().catch(()=>{});};

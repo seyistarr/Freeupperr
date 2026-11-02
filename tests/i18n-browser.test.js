@@ -8,6 +8,8 @@ test('browser: picker, persistence, all languages, dynamic UI, UGC isolation, RT
  const fixture=`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/js/i18n.css"><script type="module" src="/js/freeupper-i18n.js"></script></head><body><button data-i18n="Home">Home</button><div id="dynamic"></div><span id="counted" data-i18n-count="2"></span><p id="post">Home</p><span id="preloaded" data-i18n="Profile">An actual username</span><span id="mutable" data-i18n="Profile">Profile</span><input data-i18n="Search…" data-i18n-attr="placeholder" placeholder="Search…"></body></html>`;
  const server=createServer(async(req,res)=>{
   const path=new URL(req.url,'http://local').pathname;
+  // The fixture isolates external SDKs while retaining the shared offline policy.
+  if(path==='/firebase-messaging-sw.js'){res.setHeader('Content-Type','text/javascript');res.end("importScripts('/service-worker.js');");return;}
   if(path==='/i18n-fixture'){res.setHeader('Content-Type','text/html');res.end(fixture);return;}
   if(path.includes('..')){res.writeHead(400);res.end();return;}
   try {const content=await readFile('.'+(path==='/'?'/index.html':path));res.setHeader('Content-Type',path.endsWith('.json')?'application/json':path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.html')?'text/html':'application/octet-stream');res.end(content);}catch{res.writeHead(404);res.end();}
