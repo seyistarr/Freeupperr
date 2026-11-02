@@ -150,18 +150,25 @@ production OAuth, messaging, publishing or real-user privacy acceptance.
 4. Smoke-test clean/legacy URLs, public/private profile previews, existing post
    links, OAuth return URLs, installed PWA shortcuts, waiting updates and target
    iPhone devices. Check redirects and private/no-store headers.
-5. If necessary, restore the recorded Worker version using Cloudflare rollback
-   or redeploy the prior source with `--keep-vars`. Do not change API/RLS/privacy
-   configuration as part of rollback.
+5. If necessary, deploy a reviewed compatibility rollback package: restore the
+   last-known-good application documents/assets while retaining the clean-route
+   Worker and route-aware navigation bridge, stable manifest identity and a new
+   corrective service-worker cache generation. Preserve dashboard variables with
+   `--keep-vars`. Do not change API/RLS/privacy configuration as part of rollback.
 
-A server rollback does not erase an activated client service worker. Prefer a
-forward corrective release that retains clean route aliases and publishes a new
-cache version. Preserve `/home` and clean shortcuts for installations whose
-manifest has updated. If restoring the old server immediately, follow promptly
-with compatibility aliases and a corrective worker/cache version; otherwise a
-new installed shortcut may hit a route the old server does not recognize.
-Keep old `.html` endpoints throughout. Permanent redirect migration is a separate,
-later decision after mixed-version and real-device verification.
+A server rollback does not erase an activated client service worker. Never first
+restore an alias-unaware Worker version: installed shortcuts and loaded clean
+URLs must continue working throughout recovery. Release matching restored assets,
+compatibility routing and corrective worker together. Keep old `.html` endpoints,
+`/home`, the remaining clean routes and manifest shortcuts throughout. Let a
+waiting worker activate after existing clients close naturally; do not force
+activation, clear user storage or reload drafts. Offline clients receive recovery
+only when they reconnect. Validate Back/Forward and offline shell mapping before
+and after activation. The isolated rollback builder's local-only configuration
+must not be deployed to production; a reviewed production configuration must
+preserve the existing routes, bindings, cron and dashboard variables. Permanent
+redirect migration remains a separate decision after mixed-version and real-device
+verification.
 
 ## Verification results — 2026-11-02
 

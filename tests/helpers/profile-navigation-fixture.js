@@ -4,6 +4,7 @@ import {chromium,webkit} from '@playwright/test';
 const html=await readFile(new URL('../../profile.html',import.meta.url),'utf8');
 const cache=await readFile(new URL('../../profile-cache.js',import.meta.url),'utf8');
 const worker=await readFile(new URL('../../service-worker.js',import.meta.url),'utf8');
+const routes=await readFile(new URL('../../js/freeupper-routes.js',import.meta.url),'utf8');
 const main=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].find(m=>m[1].includes('var targetUserId'))[1];
 const bootstrap=`
 window.fuT=s=>s;window.showToast=s=>(window.toasts ||= []).push(s);window.updateNavAvatar=()=>{};
@@ -54,7 +55,9 @@ window.PostsAPI={loadPostsByUserId:async id=>{calls.push({kind:'posts',id});awai
 `;
 export async function profileHarness({guest=false,pwa=false}={}){
  let documents=0;
- const server=createServer((req,res)=>{if(req.url==='/service-worker.js'){res.setHeader('Content-Type','text/javascript');res.end(worker);return;}
+ const server=createServer((req,res)=>{const pathname=new URL(req.url,'http://fixture').pathname;
+ if(pathname==='/js/freeupper-routes.js'){res.setHeader('Content-Type','text/javascript');res.end(routes);return;}
+ if(pathname==='/service-worker.js'){res.setHeader('Content-Type','text/javascript');res.end(worker);return;}
  res.setHeader('Content-Type','text/html');if(req.url.startsWith('/profile.html'))documents++;
  res.end(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace('</body>',`<script>${cache}</script><script>${bootstrap}${guest?"viewer={id:'guest',isLoggedIn:false};":''}</script><script>${main}</script></body>`));});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`;
