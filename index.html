@@ -5142,7 +5142,7 @@
             function renderPostTitle(title, opts = {}) {
                 const text = title || '';
                 const type = getTitleType(text, opts.hasMedia);
-                const clampClass = opts.noClamp ? ' fu-title-noclamp' : '';
+                const clampClass = (opts.noClamp || opts.hasMedia === false) ? ' fu-title-noclamp' : '';
                 if (type === 'none') return '';
                 if (type === 'emoji') {
                     const sizeClass = getEmojiSizeClass(text);
@@ -5219,7 +5219,15 @@
                     const full = preview.nextElementSibling;
                     const button = full && full.nextElementSibling;
                     if (!full || !button || !button.classList.contains('read-more-btn')) return;
-                    const overflowing = preview.scrollHeight > preview.clientHeight + 2;
+                    // Measure natural text height independently of WebKit line-clamp,
+                    // which can report misleading scrollHeight on iOS Safari.
+                    const probe = preview.cloneNode(true);
+                    probe.removeAttribute('data-fu-ten-line-preview');
+                    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;display:block;overflow:visible;-webkit-line-clamp:unset;height:auto;max-height:none;width:' + preview.getBoundingClientRect().width + 'px;';
+                    preview.parentElement.appendChild(probe);
+                    const lineHeight = parseFloat(getComputedStyle(preview).lineHeight) || 24;
+                    const overflowing = probe.getBoundingClientRect().height > lineHeight * 10 + 2;
+                    probe.remove();
                     if (!overflowing) {
                         preview.classList.remove('hidden');
                         full.classList.add('hidden');
