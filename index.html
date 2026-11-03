@@ -332,9 +332,10 @@
             -webkit-box-orient: vertical;
         }
         .content-preview.no-media-preview {
-            display: block;
-            overflow: visible;
-            -webkit-line-clamp: unset;
+            display: -webkit-box;
+            overflow: hidden;
+            -webkit-line-clamp: 10;
+            -webkit-box-orient: vertical;
         }
         .feed-post .post-body {
             padding: 0 16px;
@@ -5180,7 +5181,7 @@
                     const sizeClass = getContentEmojiSizeClass(text);
                     return `<div class="fu-content-emoji ${sizeClass}"><span class="fu-content-emoji-inner">${escapeHtml(text)}</span></div>`;
                 }
-                if (type === 'short') {
+                if (type === 'short' && hasMedia) {
                     return `<div class="fu-content-bold">${linkifyContent(text, mentions)}</div>`;
                 }
                 if (opts.noPreview) {
@@ -5188,17 +5189,11 @@
                 }
 
                 if (!hasMedia) {
-                    const words = text.trim().split(/\s+/);
-                    const isLongNoMedia = words.length > 12;
-                    if (!isLongNoMedia) {
-                        return `<div class="content-text full-text-${postId}">${linkifyContent(text, mentions)}</div>`;
-                    }
-                    const ptWords = words.slice(0, 12).join(' ');
-                    const renderedContentNM = linkifyContent(text, mentions);
-                    const renderedPreviewNM = linkifyContent(ptWords, mentions);
-                    return `<div class="content-preview no-media-preview preview-text-${postId}">${renderedPreviewNM}…</div>
-                        <div class="content-text full-text-${postId} hidden">${renderedContentNM}</div>
-                        <button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm" data-i18n=&#83;&#104;&#111;&#119;&#32;&#109;&#111;&#114;&#101;>Show more</button>`;
+                    // Actual rendered lines determine expansion, not words or characters.
+                    const rendered = linkifyContent(text, mentions);
+                    return `<div class="content-preview no-media-preview preview-text-${postId}" data-fu-ten-line-preview>${rendered}</div>
+                        <div class="content-text full-text-${postId} hidden">${rendered}</div>
+                        <button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm" style="display:none" data-i18n=&#83;&#104;&#111;&#119;&#32;&#109;&#111;&#114;&#101;>Show more</button>`;
                 }
 
                 const isLong = text.length > 250;
@@ -5212,6 +5207,50 @@
                     <div class="content-text full-text-${postId} hidden">${renderedContent}</div>
                     <button type="button" class="read-more-btn mt-1 text-primary font-semibold text-sm" data-i18n=&#83;&#104;&#111;&#119;&#32;&#109;&#111;&#114;&#101;>Show more</button>`;
             }
+
+            // FreeUpper text-only posts: reveal controls only when content exceeds ten visible lines.
+            (function initTenLinePostExpansion() {
+                const observed = new WeakSet();
+                const resizeObserver = typeof ResizeObserver === 'function'
+                    ? new ResizeObserver(entries => entries.forEach(entry => update(entry.target)))
+                    : null;
+                function update(preview) {
+                    if (!preview.isConnected) return;
+                    const full = preview.nextElementSibling;
+                    const button = full && full.nextElementSibling;
+                    if (!full || !button || !button.classList.contains('read-more-btn')) return;
+                    const overflowing = preview.scrollHeight > preview.clientHeight + 2;
+                    if (!overflowing) {
+                        preview.classList.remove('hidden');
+                        full.classList.add('hidden');
+                        button.style.display = 'none';
+                    } else {
+                        button.style.display = '';
+                    }
+                }
+                function scan(root) {
+                    if (root.nodeType !== 1) return;
+                    const previews = [];
+                    if (root.matches?.('[data-fu-ten-line-preview]')) previews.push(root);
+                    root.querySelectorAll?.('[data-fu-ten-line-preview]').forEach(el => previews.push(el));
+                    previews.forEach(preview => {
+                        if (observed.has(preview)) return;
+                        observed.add(preview);
+                        resizeObserver?.observe(preview);
+                        requestAnimationFrame(() => update(preview));
+                    });
+                }
+                const observer = new MutationObserver(records => {
+                    records.forEach(record => record.addedNodes.forEach(scan));
+                });
+                observer.observe(document.documentElement, { childList: true, subtree: true });
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => scan(document.body), { once: true });
+                } else scan(document.body);
+                if (!resizeObserver) window.addEventListener('resize', () => {
+                    document.querySelectorAll('[data-fu-ten-line-preview]').forEach(update);
+                });
+            })();
 
             // Link cards share the Create Post composer's compact visual language.
             const postLinkMetaCache = new Map();
