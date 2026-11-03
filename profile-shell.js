@@ -9,11 +9,14 @@
   }
   const pages = {home:'index', search:'search', create:'create', video:'video', profile:'profile'};
   const path = location.pathname;
-  const host = /^\/(?:@|u\/)/.test(path) ? 'profile' : Object.keys(pages).find(k => path.endsWith('/'+pages[k]+'.html')) || (path === '/' ? 'home' : 'root');
+  const routeKey = window.FreeUpperRoutes.screen(path);
+  const host = Object.hasOwn(pages, routeKey) ? routeKey : 'root';
   // Settings/chat/detail documents keep their established native routing.
   // Entering a primary tab creates its shell rather than retaining a sixth page.
   if(host==='root')return;
   const baseURL = location.href;
+  const publicBaseURL = path.endsWith('.html') && window.FreeUpperRoutes.key(path)
+    ? window.FreeUpperRoutes.href(path) + location.search + location.hash : baseURL;
   const frames = new Map(), screens = new Map(), snapshots = new Map(), rootState = new Map();
   const MAX_FRAMES = 3; // four retained tab documents including the launch page
   let active = host, desired = host, session = null, bound = null, authKnown = false;
@@ -136,12 +139,13 @@
       try {
         // The standalone HTML must really be this screen (auth redirects and
         // offline Home fallbacks must never masquerade as a ready destination).
-        if (!frame.contentWindow.location.pathname.endsWith('/'+pages[kind]+'.html')) { fail(kind); return; }
+        if (window.FreeUpperRoutes.key(frame.contentWindow.location.pathname) !== kind) { fail(kind); return; }
         if (!frame.contentWindow.FreeUpperScreen || frame.contentWindow.FreeUpperScreen.isReady()) ready(kind,frame.contentWindow);
 
       } catch (_) { fail(kind); }
     });
     entry.timeout=setTimeout(() => fail(kind),20000);
+    // Keep hidden document endpoints compatible with an older active PWA worker.
     frame.src='/'+pages[kind]+'.html?fuMounted=1'; document.body.append(frame);
     return frame;
   }
@@ -149,7 +153,7 @@
     if (desired!==kind || !valid()) return;
     desired=active; announce(active); message('Unable to open this tab. Please try again.',true);
     if (kind!==active && frames.has(kind)) evict(kind);
-    history.replaceState({...history.state,fuMountedView:{kind:active,viewer:session.viewer}},'',active===host?baseURL:'/'+pages[active]+'.html');
+    history.replaceState({...history.state,fuMountedView:{kind:active,viewer:session.viewer}},'',active===host?publicBaseURL:window.FreeUpperRoutes.pages[active].path);
   }
   function activate(kind) {
     if (!valid() || desired!==kind) return;
@@ -185,7 +189,7 @@
     announce(kind); // the persistent bar responds in the tap task
     if (push) {
       if (!history.state?.fuMountedView) history.replaceState({...history.state,fuMountedView:{kind:active,viewer:session.viewer}},'',location.href);
-      history.pushState({fuMountedView:{kind,viewer:session.viewer}},'',kind===host?baseURL:'/'+pages[kind]+'.html');
+      history.pushState({fuMountedView:{kind,viewer:session.viewer}},'',kind===host?publicBaseURL:window.FreeUpperRoutes.pages[kind].path);
     }
     const frame=kind===host?null:makeFrame(kind);
     if (kind!==host && !frame) { fail(kind); return true; }

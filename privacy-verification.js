@@ -27,7 +27,7 @@
         const label = document.createElement('p');
         label.textContent = post.id + ' · ' + post.visibility + ' · ' + post.status + ' · expires ' + new Date(post.expires_at).toLocaleString();
         const link = document.createElement('a');
-        link.href = '/video.html?post=' + encodeURIComponent(post.id); link.textContent = 'Open post';
+        link.href = '/videos?post=' + encodeURIComponent(post.id); link.textContent = 'Open post';
         item.append(label, link);
         const cleanup = document.createElement('button');
         cleanup.textContent = post.retired ? (post.cleanupPending ? 'Retry pending asset cleanup' : 'Removed and cleaned up') : 'Remove verification post';

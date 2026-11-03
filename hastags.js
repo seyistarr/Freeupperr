@@ -27,7 +27,7 @@
       window.Router.openHashtag(clean);
     } else {
       // Fallback (should never happen if router.js loads first)
-      window.location.href = 'search.html?tag=' + encodeURIComponent(clean);
+      window.location.href = '/search?tag=' + encodeURIComponent(clean);
     }
   }
 

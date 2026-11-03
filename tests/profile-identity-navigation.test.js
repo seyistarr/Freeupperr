@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import {createServer} from 'node:http';
 import {chromium, webkit} from '@playwright/test';
 const engine=process.env.FREEUPPER_PROFILE_ENGINE || 'chromium';
+const routeSource=await readFile(new URL('../js/freeupper-routes.js',import.meta.url),'utf8');
 const html=await readFile(new URL('../profile.html',import.meta.url),'utf8');
 const cache=await readFile(new URL('../profile-cache.js',import.meta.url),'utf8');
 const auth=await readFile(new URL('../auth.js',import.meta.url),'utf8');
@@ -36,7 +37,7 @@ test('full Profile: avatar ownership, modal seeds, Back DOM/scroll, races and pe
  window.PostsAPI={loadPostsByUserId:async id=>{calls.push('posts:'+id);if(delays['posts:'+id])await new Promise(r=>delays['posts:'+id].push(r));return [{id:'post-'+id,title:id+' post',user_id:id,mediaType:'text',timestamp:'2026-01-01'}];}};
  `;
  let documents=0;
- const server=createServer((req,res)=>{if(req.url==='/service-worker.js'){res.setHeader('Content-Type','text/javascript');res.end(serviceWorker);return;}res.setHeader('Content-Type','text/html');if(req.url.startsWith('/profile.html'))documents++;res.end(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace('</body>',`<script>${cache}</script><script>${avatar}</script><script>${bootstrap}</script><script>${main}</script></body>`));});
+ const server=createServer((req,res)=>{if(req.url.startsWith('/js/freeupper-routes.js')){res.setHeader('Content-Type','text/javascript');res.end(routeSource);return;}if(req.url==='/service-worker.js'){res.setHeader('Content-Type','text/javascript');res.end(serviceWorker);return;}res.setHeader('Content-Type','text/html');if(req.url.startsWith('/profile.html'))documents++;res.end(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace('</body>',`<script>${cache}</script><script>${avatar}</script><script>${bootstrap}</script><script>${main}</script></body>`));});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`;
  const browser=await (engine==='webkit' ? webkit.launch() : chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']})).catch(async error=>{await new Promise(r=>server.close(r));throw error;});
  try{const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const errors=[];page.on('pageerror',e=>errors.push(e.message));

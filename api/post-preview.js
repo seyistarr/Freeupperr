@@ -57,7 +57,7 @@ export default async function handler(req, res) {
   const requestHost = String(req.headers.host || '').toLowerCase().split(':')[0];
   const origin = requestHost.endsWith('.vercel.app') ? 'https://' + requestHost : SITE;
   const url = origin + '/' + (type === 'video' ? 'v' : 'p') + '/' + encodeURIComponent(code);
-  const destination = origin + '/' + (type === 'video' ? 'video.html' : 'index.html') + '?post=' + encodeURIComponent(post.id);
+  const destination = origin + '/' + (type === 'video' ? 'videos' : 'home') + '?post=' + encodeURIComponent(post.id);
   const title = clean(post.title || post.content || post.description || 'FreeUpper post', 100);
   // Text posts already show their content in the preview image and title.
   // Avoid repeating the same words in the social card description.

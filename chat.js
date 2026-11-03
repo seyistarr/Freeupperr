@@ -5692,10 +5692,10 @@
                 } else if (data.status === 'pending_approval') {
                     showToast(window.fuT('Join request sent — waiting for admin approval'), 'p');
                 }
-                window.history.replaceState({}, '', '/chat.html');
+                window.history.replaceState({}, '', '/messages');
             } catch (err) {
                 showToast(err.message || 'Invalid invite link', 'r');
-                window.history.replaceState({}, '', '/chat.html');
+                window.history.replaceState({}, '', '/messages');
             }
         } else {
             const params = new URLSearchParams(window.location.search);

@@ -6,6 +6,21 @@ window.fuCommentsCount = function(node, count) {
   node.textContent = window.FreeUpperI18n ? window.FreeUpperI18n.commentsCount(total) : total + (total === 1 ? ' comment' : ' comments');
 };
 window.fuT = window.fuT || function(key, values) { return window.FreeUpperI18n ? window.FreeUpperI18n.t(key, values) : key; };
+// Register once in the outer document. Preserve a Firebase-owned root scope,
+// and let waiting workers activate naturally so retained drafts are not lost.
+if (window === window.top && window.isSecureContext && 'serviceWorker' in navigator) {
+  const installWorker = async () => {
+    try {
+      const existing = await navigator.serviceWorker.getRegistration('/');
+      if (existing) await existing.update();
+      // Chat already uses this root registration. Its script also imports the
+      // offline policy, so a first chat visit does not replace an app-only worker.
+      else await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/', updateViaCache: 'none' });
+    } catch (error) { console.warn('FreeUpper offline support unavailable', error); }
+  };
+  if (document.readyState === 'complete') installWorker();
+  else window.addEventListener('load', installWorker, { once: true });
+}
 // ============================================================
 // GLOBAL UTILITIES – THEME, TOAST, USER CACHE, AUTHOR HELPERS
 // Marketplace helpers: currency, time, badges, listings

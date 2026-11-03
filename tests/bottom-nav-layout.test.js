@@ -1,3 +1,4 @@
+import '../js/freeupper-routes.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile, mkdir, writeFile} from 'node:fs/promises';
@@ -10,11 +11,11 @@ test('shared navigation clearance, video hit areas, keyboard and native history'
  let baseline=false;
  const server=createServer(async(req,res)=>{
   const requestedPath=new URL(req.url,'http://local').pathname;
-  const path=/^\/(?:u\/|@)/.test(requestedPath)?'/profile.html':requestedPath;
+  const path=/^\/(?:u\/|@)/.test(requestedPath)?'/profile.html':globalThis.FreeUpperRoutes.documentPath(requestedPath) || requestedPath;
   try {
    let body=baseline?execFileSync('git',['show',process.env.FREEUPPER_NAV_BASELINE_REF+':'+path.slice(1)],{encoding:'utf8',stdio:['ignore','pipe','ignore']}):await readFile('.'+path,'utf8');
    if(baseline)body=body.replace(/env\(safe-area-inset-bottom(?:,\s*[^)]+)?\)/g,'34px');
-   if(path.endsWith('.html')) body=body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,s=>/src=["']\/?(?:theme|bottom-nav)\.js(?:\?[^"']*)?["']/.test(s)?s:'').replace(/<link\b[^>]*https:[^>]*>/gi,'');
+   if(path.endsWith('.html')) body=body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,s=>/src=["']\/?(?:js\/freeupper-routes|theme|bottom-nav)\.js(?:\?[^"']*)?["']/.test(s)?s:'').replace(/<link\b[^>]*https:[^>]*>/gi,'');
    res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html');res.end(body);
   } catch {res.writeHead(404);res.end();}
  });
@@ -79,15 +80,15 @@ test('shared navigation clearance, video hit areas, keyboard and native history'
   }
   for(const route of [['home','search','home'],['home','create'],['home','video','profile'],['profile','home','profile'],['search','profile','search']]){
    await page.goto(`${origin}/${route[0]==='home'?'index':route[0]}.html`);
-   for(const key of route.slice(1)){await page.locator(`[data-nav-key=${key}]`).click();await page.waitForURL(`**/${key==='home'?'index':key}.html`);assert.equal(await page.locator('[aria-current=page]').getAttribute('data-nav-key'),key);assert.equal(await page.locator('.bottom-nav').count(),1);}
+   for(const key of route.slice(1)){await page.locator(`[data-nav-key=${key}]`).click();await page.waitForURL('**'+globalThis.FreeUpperRoutes.pages[key].path);assert.equal(await page.locator('[aria-current=page]').getAttribute('data-nav-key'),key);assert.equal(await page.locator('.bottom-nav').count(),1);}
    await page.goBack();await page.goForward();
   }
   await page.goto(`${origin}/u/FUfixture`);await page.waitForSelector('.bottom-nav');
   assert.equal(await page.locator('[aria-current=page]').getAttribute('data-nav-key'),'profile');
-  await page.locator('[data-nav-key=search]').click();await page.waitForURL('**/search.html');
+  await page.locator('[data-nav-key=search]').click();await page.waitForURL('**/search');
   await page.goto(`${origin}/index.html`);await page.waitForSelector('.bottom-nav');
   await page.evaluate(()=>{document.querySelector('[data-nav-key=search]').click();document.querySelector('[data-nav-key=video]').click();document.querySelector('[data-nav-key=profile]').click();});
-  await page.waitForURL('**/search.html');assert.equal(await page.locator('.bottom-nav').count(),1);
+  await page.waitForURL('**/search');assert.equal(await page.locator('.bottom-nav').count(),1);
   await page.goto(`${origin}/create.html`);await page.waitForSelector('.bottom-nav');await page.locator('#postContent').fill('Unsent text');
   await page.evaluate(()=>{for(let i=0;i<8;i++)document.querySelector('[data-nav-create]').click();});assert.equal(await page.locator('#postContent').inputValue(),'Unsent text');
   const composer=await readFile('create.html','utf8');

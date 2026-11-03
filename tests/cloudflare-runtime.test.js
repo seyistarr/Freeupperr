@@ -13,9 +13,12 @@ test('Workers public previews and WASM images preserve privacy', { skip: !bundle
   const image = await readFile('icon-192.png');
   let privateProfile = false;
   let eligible = false;
+  const assetRequests = [];
   const mf = new Miniflare(convertV4MiniflareOptions({ name: 'freeupper-test', modules, compatibilityDate: '2026-10-22', compatibilityFlags: ['nodejs_compat'],
     serviceBindings: { ASSETS: request => {
-      assert.equal(new URL(request.url).pathname, '/profile.html');
+      const url = new URL(request.url);
+      assetRequests.push({ path: url.pathname, search: url.search, method: request.method });
+      assert.match(url.pathname, /^\/(?:index|search|create|video|profile|chat|settings|notification)\.html$/);
       return new Response(request.method === 'HEAD' ? null : '<html>Profile app</html>', {
         headers: { 'Content-Type': 'text/html; charset=utf-8' }
       });
@@ -46,6 +49,16 @@ test('Workers public previews and WASM images preserve privacy', { skip: !bundle
   }));
   try {
     const request = (path, headers = { 'User-Agent': 'Twitterbot' }) => mf.dispatchFetch('https://freeupper-web.oluwaseyistarr.workers.dev' + path, { headers, redirect: 'manual' });
+    for (const [path, document] of [['/', 'index'], ['/home', 'index'], ['/search', 'search'], ['/create', 'create'], ['/videos', 'video'], ['/profile', 'profile'], ['/messages', 'chat'], ['/settings', 'settings'], ['/notifications', 'notification']]) {
+      for (const method of ['GET', 'HEAD']) {
+        const response = await mf.dispatchFetch('https://example.test' + path + '?q=a%2Bb&q=c&fuMounted=1', { method, redirect: 'manual' });
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get('Location'), null);
+        assert.deepEqual(assetRequests.at(-1), { path: '/' + document + '.html', search: '?q=a%2Bb&q=c&fuMounted=1', method });
+        if (method === 'HEAD') assert.equal(await response.text(), '');
+      }
+      assert.equal((await mf.dispatchFetch('https://example.test' + path, { method: 'POST' })).status, 405);
+    }
     let response = await request('/u/FU_TEST');
     assert.equal(response.status, 200);
     let html = await response.text();
@@ -81,7 +94,7 @@ test('Workers public previews and WASM images preserve privacy', { skip: !bundle
       assert.equal(response.status, 200);
       html = await response.text();
       assert.match(html, /og:title/);
-      assert.match(html, /freeupper-web.oluwaseyistarr.workers.dev\/(index|video).html\?post=/);
+      assert.match(html, /freeupper-web.oluwaseyistarr.workers.dev\/(home|videos)\?post=/);
     }
     response = await request('/api/post-text-og?code=abcdef');
     assert.equal(response.status, 200);

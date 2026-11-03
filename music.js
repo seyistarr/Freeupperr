@@ -62,7 +62,7 @@
     function goBack() {
         if (window.Router && typeof window.Router.back === 'function') window.Router.back();
         else if (document.referrer) window.history.back();
-        else window.location.href = 'index.html';
+        else window.location.href = '/home';
     }
 
     function goToSoundPage(soundId) {

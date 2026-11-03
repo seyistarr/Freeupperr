@@ -41,7 +41,7 @@ test('quote links retain the document, original identity, themes and return hist
   await page.locator('#quote [data-fu-quote]').tap();await page.locator('#quote [data-fu-quote]').tap();
   assert.equal(await page.evaluate(()=>fetches.length),1);assert.equal(await page.locator('#quote [data-fu-quote]').getAttribute('aria-busy'),'true');
   assert(await page.locator('#quote').isVisible());assert.equal(await page.evaluate(()=>getComputedStyle(document.body).visibility),'visible');assert(!page.url().includes('?post='));
-  await page.evaluate(()=>resolveLoad());await page.waitForURL('**/index.html?post=A');
+  await page.evaluate(()=>resolveLoad());await page.waitForURL('**/home?post=A');
   await page.waitForFunction(()=>document.querySelector('.single-post-container')?.dataset.postId==='A');
   assert.equal(await page.evaluate(()=>documentToken),token);assert.equal(await page.locator('[data-author-name]').innerText(),'Original author');assert((await page.locator('.single-post-container').innerText()).includes('Original content'));
   assert.equal(await page.locator('.post-actions-row').getAttribute('data-post-reactions'),'A');assert.equal(await page.locator('[data-like]').getAttribute('data-like'),'A');assert.equal(await page.locator('[data-repost]').getAttribute('data-repost'),'A');assert.deepEqual(await page.evaluate(()=>views),['A']);

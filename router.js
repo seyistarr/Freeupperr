@@ -31,13 +31,13 @@
   /** Safely get the current page name */
   function getCurrentPage() {
     const path = window.location.pathname;
-    const page = path.split('/').pop() || 'index.html';
+    const page = window.FreeUpperRoutes.documentPath(path)?.slice(1) || (window.FreeUpperRoutes.screen(path) === 'profile' ? 'profile.html' : path.split('/').pop());
     return page;
   }
 
   /** Check if we're already on a specific page */
   function isOnPage(pageName) {
-    return getCurrentPage() === pageName;
+    return getCurrentPage() === (window.FreeUpperRoutes.documentPath(pageName.startsWith('/') ? pageName : '/' + pageName)?.slice(1) || pageName);
   }
 
 
@@ -73,7 +73,7 @@
         return;
       }
       // Update URL without reloading
-      history.pushState({}, '', targetPage + '?post=' + id);
+      history.pushState({}, '', window.FreeUpperRoutes.href(targetPage) + '?post=' + encodeURIComponent(id));
       // Dispatch a custom event so the page can react
       window.dispatchEvent(new CustomEvent('router:navigate', {
         detail: { type: 'post', id: id, post: post, page: targetPage }
@@ -82,7 +82,7 @@
     }
 
     // Navigate to the target page
-    (window.FreeUpperScreen?.navigationWindow || window).location.href = targetPage + '?post=' + id;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = window.FreeUpperRoutes.href(targetPage) + '?post=' + encodeURIComponent(id);
   }
 
   /**
@@ -102,14 +102,14 @@
       const currentParams = new URLSearchParams(window.location.search);
       const currentPostId = currentParams.get('post');
       if (currentPostId === String(id)) return;
-      history.pushState({}, '', targetPage + '?post=' + id);
+      history.pushState({}, '', window.FreeUpperRoutes.href(targetPage) + '?post=' + encodeURIComponent(id));
       window.dispatchEvent(new CustomEvent('router:navigate', {
         detail: { type: 'post', id: id, mediaType: mediaType, page: targetPage }
       }));
       return;
     }
 
-    (window.FreeUpperScreen?.navigationWindow || window).location.href = targetPage + '?post=' + id;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = window.FreeUpperRoutes.href(targetPage) + '?post=' + encodeURIComponent(id);
   }
 
   /**
@@ -120,13 +120,13 @@
     if (isOnPage('video.html')) {
       const currentParams = new URLSearchParams(window.location.search);
       if (currentParams.get('post') === String(id)) return;
-      history.pushState({}, '', 'video.html?post=' + id);
+      history.pushState({}, '', '/videos?post=' + id);
       window.dispatchEvent(new CustomEvent('router:navigate', {
         detail: { type: 'video', id: id, page: 'video.html' }
       }));
       return;
     }
-    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'video.html?post=' + id;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = '/videos?post=' + id;
   }
 
   /**
@@ -221,14 +221,14 @@
     if (isOnPage('index.html')) {
       const currentParams = new URLSearchParams(window.location.search);
       if (currentParams.get('product') === String(listingId)) return;
-      history.pushState({}, '', 'index.html?product=' + listingId);
+      history.pushState({}, '', '/home?product=' + listingId);
       window.dispatchEvent(new CustomEvent('router:navigate', {
         detail: { type: 'listing', id: listingId, page: 'index.html' }
       }));
       return;
     }
 
-    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'index.html?product=' + listingId;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = '/home?product=' + listingId;
   }
 
   /**
@@ -251,7 +251,7 @@
       return;
     }
 
-    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'search.html?tag=' + encodeURIComponent(clean);
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = '/search?tag=' + encodeURIComponent(clean);
   }
 
   /**
@@ -269,7 +269,7 @@
       return;
     }
 
-    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'search.html?q=' + encodeURIComponent(query);
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = '/search?q=' + encodeURIComponent(query);
   }
 
   /**
@@ -311,17 +311,17 @@
    */
   function openChat(userId) {
     if (!userId) {
-      (window.FreeUpperScreen?.navigationWindow || window).location.href = 'chat.html';
+      (window.FreeUpperScreen?.navigationWindow || window).location.href = '/messages';
       return;
     }
-    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'chat.html?uid=' + userId;
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = '/messages?uid=' + userId;
   }
 
   /**
    * Navigate to notifications.
    */
   function openNotifications() {
-    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'notifications.html';
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = '/notifications';
   }
 
   /**
@@ -331,7 +331,7 @@
     if (window.history.length > 1) {
       window.history.back();
     } else {
-      (window.FreeUpperScreen?.navigationWindow || window).location.href = 'index.html';
+      (window.FreeUpperScreen?.navigationWindow || window).location.href = '/home';
     }
   }
 
@@ -340,7 +340,7 @@
    */
   function goHome() {
     if (window.FreeUpperProfileShell?.request('home')) return;
-    (window.FreeUpperScreen?.navigationWindow || window).location.href = 'index.html';
+    (window.FreeUpperScreen?.navigationWindow || window).location.href = '/home';
   }
 
   /**
@@ -445,15 +445,17 @@
       typeof code === 'string' &&
       /^[A-Za-z0-9_-]{6,16}$/.test(code)
     ) {
+      sharePage = window.FreeUpperRoutes.documentPath(sharePage?.startsWith('/') ? sharePage : '/' + sharePage)?.slice(1) || sharePage;
       const prefix = sharePage === 'video.html' ? 'v' : sharePage === 'index.html' ? 'p' : (isVideo(post) ? 'v' : 'p');
 
       return `${shareOrigin()}/${prefix}/${code}`;
     }
 
+    sharePage = window.FreeUpperRoutes.documentPath(sharePage?.startsWith('/') ? sharePage : '/' + sharePage)?.slice(1) || sharePage;
     const page = sharePage === 'video.html' || sharePage === 'index.html'
       ? sharePage : (isVideo(post) ? 'video.html' : 'index.html');
 
-    return `${shareOrigin()}/${page}?post=${encodeURIComponent(id)}`;
+    return `${shareOrigin()}${window.FreeUpperRoutes.href(page)}?post=${encodeURIComponent(id)}`;
   }
 
 

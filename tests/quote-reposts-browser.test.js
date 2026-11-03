@@ -40,7 +40,7 @@ test('quote composer gates, quote-only payload, duplicate guard, errors and auth
   await open({approved:true});await page.waitForFunction(()=>!document.getElementById('postSubmitBtn').disabled);
   await page.evaluate(()=>{submitPost();submitPost();submitPost();});await page.waitForFunction(()=>calls.length===1);
   const payload=await page.evaluate(()=>calls[0]);assert.equal(payload.quotedPostId,original);assert.match(payload.quotePostId,/^[0-9a-f-]{36}$/);assert.equal(payload.content,'');assert.equal(payload.media.length,0);
-  await page.evaluate(()=>resolvePublish());await page.waitForURL('**/index.html?post='+authored);
+  await page.evaluate(()=>resolvePublish());await page.waitForURL('**/home?post='+authored);
  });
  await t.test('errors are visible, retry keeps ID, and quote audience stays Public',async()=>{
   await open({approved:true});await page.locator('#postContent').fill('My comment');
@@ -53,7 +53,7 @@ test('quote composer gates, quote-only payload, duplicate guard, errors and auth
  });
  await t.test('removal preserves text and other parameters; normal publishing still works',async()=>{
   await open();await page.locator('#postContent').fill('Normal text');await page.evaluate(()=>removeComposerQuote());assert(page.url().includes('keep=1'));assert(!page.url().includes('quote='));assert.equal(await page.locator('#postContent').inputValue(),'Normal text');
-  await page.evaluate(()=>{submitPost();});await page.waitForFunction(()=>calls.length===1);assert(!('quotedPostId' in await page.evaluate(()=>calls[0])));await page.evaluate(()=>resolvePublish());await page.waitForURL('**/index.html?refresh=*');
+  await page.evaluate(()=>{submitPost();});await page.waitForFunction(()=>calls.length===1);assert(!('quotedPostId' in await page.evaluate(()=>calls[0])));await page.evaluate(()=>resolvePublish());await page.waitForURL('**/home?refresh=*');
  });
  assert.deepEqual(errors,[]);
  }finally{await browser.close();await new Promise(r=>server.close(r));}

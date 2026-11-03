@@ -1,9 +1,11 @@
+import '../js/freeupper-routes.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {chromium,webkit} from '@playwright/test';
 import {profileFixtureParts as fixture} from './helpers/profile-navigation-fixture.js';
+const routeSource=await readFile(new URL('../js/freeupper-routes.js',import.meta.url),'utf8');
 const nav=await readFile(new URL('../bottom-nav.js',import.meta.url),'utf8');
 const shell=await readFile(new URL('../profile-shell.js',import.meta.url),'utf8');
 const engine=process.env.FREEUPPER_PROFILE_ENGINE || 'chromium';
@@ -28,18 +30,19 @@ async function mountedHarness({root='home',delay=120,hydrated=true}={}){
  const documents=[];let failPrimary=false;
  const server=createServer((req,res)=>{
   const url=new URL(req.url,'http://local');
+  if(url.pathname==='/js/freeupper-routes.js'){res.setHeader('Content-Type','text/javascript');res.end(routeSource);return;}
   if(url.pathname==='/bottom-nav.js'){res.setHeader('Content-Type','text/javascript');res.end(nav);return;}
   if(url.pathname==='/profile-shell.js'){res.setHeader('Content-Type','text/javascript');res.end(shell);return;}
   if(url.pathname==='/service-worker.js'){res.setHeader('Content-Type','text/javascript');res.end(fixture.worker);return;}
   if(url.pathname==='/fixture/primary'){res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','private, no-store');setTimeout(()=>{if(failPrimary){res.writeHead(503);res.end('{}');}else res.end(JSON.stringify({total:40}));},delay);return;}
   if(url.pathname.endsWith('.css')){res.setHeader('Content-Type','text/css');res.end('');return;}
   res.setHeader('Content-Type','text/html');
-  if(url.pathname==='/profile.html'){
+  if(url.pathname==='/profile.html' || url.pathname==='/profile'){
    documents.push(req.url);
-   res.end(fixture.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace('</body>',`<script>${fixture.cache}</script><script>${fixture.bootstrap}</script><script>${sessionSetup}</script><script>${fixture.main}</script><script src="/bottom-nav.js?v=mounted-profile-v1"></script></body>`));return;
+   res.end(fixture.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace('</body>',`<script>${routeSource}</script><script>${fixture.cache}</script><script>${fixture.bootstrap}</script><script>${sessionSetup}</script><script>${fixture.main}</script><script src="/bottom-nav.js?v=mounted-profile-v1"></script></body>`));return;
   }
   if(url.pathname.endsWith('.html') || url.pathname==='/')documents.push(req.url);
-  res.end(`<!doctype html><html data-theme="dark"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0}#home{height:100vh;overflow:auto}bottom-nav{position:fixed;bottom:0;z-index:100}a{display:inline-block;padding:16px;background:white;color:black}</style><main id="home"><h1>Home</h1><div style="height:3000px">Retained home feed</div></main><bottom-nav></bottom-nav><script>${fixture.bootstrap}</script><script>${sessionSetup}</script><script src="/bottom-nav.js?v=mounted-profile-v1"></script><script>window.__fuInitialHydrated=${hydrated};if(window.__fuInitialHydrated)requestAnimationFrame(()=>dispatchEvent(new Event('fu-app-hydrated')));</script></html>`);
+  res.end(`<!doctype html><html data-theme="dark"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0}#home{height:100vh;overflow:auto}bottom-nav{position:fixed;bottom:0;z-index:100}a{display:inline-block;padding:16px;background:white;color:black}</style><main id="home"><h1>Home</h1><div style="height:3000px">Retained home feed</div></main><bottom-nav></bottom-nav><script>${routeSource}</script><script>${fixture.bootstrap}</script><script>${sessionSetup}</script><script src="/bottom-nav.js?v=mounted-profile-v1"></script><script>window.__fuInitialHydrated=${hydrated};if(window.__fuInitialHydrated)requestAnimationFrame(()=>dispatchEvent(new Event('fu-app-hydrated')));</script></html>`);
  });await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`;
  const browser=await (engine==='webkit'?webkit.launch():chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']})).catch(async e=>{await new Promise(r=>server.close(r));throw e;});
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const page=await context.newPage();page.setDefaultTimeout(10000);const errors=[];page.on('pageerror',e=>{errors.push(e.message);if(process.env.FREEUPPER_DEBUG)console.error(e.message);});
@@ -61,7 +64,10 @@ test(`${engine}${pwa?'/PWA':''}: Home → Profile → Home restores complete fir
  const first=await h.page.evaluate(async()=>{const start=performance.now();document.querySelector('[data-nav-key="profile"]').click();await new Promise(requestAnimationFrame);const win=document.querySelector('iframe[data-fu-mounted=profile]').contentWindow;return {ms:performance.now()-start,name:win.document.getElementById('displayName').textContent,posts:win.document.getElementById('statPosts').textContent,cards:win.document.querySelectorAll('#panel-posts .grid-card').length,skeletons:win.document.querySelectorAll('#panel-posts .skl-block').length};});
  assert.equal(first.name,'viewer name');assert.equal(first.posts,'40');assert.equal(first.cards,24);assert.equal(first.skeletons,0);t.diagnostic(`warm first RAF: ${first.ms.toFixed(1)}ms`);
  await f.evaluate(()=>{window.savedCard=document.querySelector('#panel-posts .grid-card');document.getElementById('mainScroll').style.scrollBehavior='auto';document.getElementById('mainScroll').scrollTop=350;window.savedScroll=document.getElementById('mainScroll').scrollTop;});
- await f.locator('[data-nav-key=home]').click();assert.equal(await h.page.locator('iframe[data-fu-mounted=profile]').evaluate(el=>getComputedStyle(el).visibility),'hidden');
+ // This fixture omits navigation CSS. Activate the real link without Playwright
+ // scrolling it into view and changing the scroll state being tested. The
+ // production hit areas and native clicks are covered by bottom-nav-layout.
+ await f.locator('[data-nav-key=home]').evaluate(el=>el.click());assert.equal(await h.page.locator('iframe[data-fu-mounted=profile]').evaluate(el=>getComputedStyle(el).visibility),'hidden');
  const sample=await h.page.evaluate(async()=>{const start=performance.now();document.querySelector('[data-nav-key=profile]').click();await new Promise(requestAnimationFrame);const win=document.querySelector('iframe[data-fu-mounted=profile]').contentWindow;return {ms:performance.now()-start,same:win.savedCard===win.document.querySelector('#panel-posts .grid-card'),scroll:win.document.getElementById('mainScroll').scrollTop,expected:win.savedScroll,posts:win.document.getElementById('statPosts').textContent,skeletons:win.document.querySelectorAll('#panel-posts .skl-block').length};});
  assert(sample.same);assert.equal(sample.scroll,sample.expected);assert.equal(sample.posts,'40');assert.equal(sample.skeletons,0);t.diagnostic(`warm return first RAF: ${sample.ms.toFixed(1)}ms`);
  await f.evaluate(()=>{window.historyLength=history.length;document.querySelector('[data-nav-key=profile]').click();document.querySelector('[data-nav-key=profile]').click();document.querySelector('[data-nav-key=profile]').click();});
