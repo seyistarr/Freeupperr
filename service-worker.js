@@ -1,7 +1,7 @@
 importScripts('/js/freeupper-routes.js?v=clean-urls-v1');
 
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v27-clean-urls';
+const CACHE_NAME = 'freeupper-pwa-v28-native-tabs';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -34,9 +34,9 @@ const URLS_TO_CACHE = [
   './protected-media-client.js?v=clean-urls-v1',
   './side-nav.js?v=clean-urls-v1',
 
-  './profile-shell.js?v=clean-urls-v1',
-  './js/screen-lifecycle.js?v=clean-urls-v1',
-  './bottom-nav.js?v=clean-urls-v1',
+  './profile-shell.js?v=native-tabs-v1',
+  './js/screen-lifecycle.js?v=native-tabs-v1',
+  './bottom-nav.js?v=native-tabs-v1',
   './global.css',
   './global.js?v=clean-urls-v1',
   './theme.js?v=2',
@@ -84,6 +84,15 @@ self.addEventListener('fetch', event => {
   if (event.request.mode === 'navigate' || documentPath || url.pathname.endsWith('.html')) {
     // Cache only install-time static shells. Search parameters choose app state,
     // never a different cached viewer. Unknown pages get no Home fallback.
+    // Managed tabs use install-time public HTML shells immediately. Runtime
+    // viewer HTML is never cached, and deep links keep their network routing.
+    if (url.searchParams.get('fuMounted') === '1' && documentPath) {
+      event.respondWith((async () => {
+        const cache = await caches.open(CACHE_NAME);
+        return (await cache.match(documentPath)) || fetch(event.request);
+      })());
+      return;
+    }
     event.respondWith(fetch(event.request).catch(async () => {
       if (!documentPath) return Response.error();
       const cache = await caches.open(CACHE_NAME);

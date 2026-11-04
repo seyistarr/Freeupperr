@@ -151,7 +151,8 @@
   window.addEventListener('fu-app-hydrated',ready);
   window.addEventListener('fu-profile-view-ready',ready);
   document.addEventListener('DOMContentLoaded',() => {
-    if (kind==='create') ready();
+    // DOM and handlers are ready; data/media hydration continues independently.
+    setTimeout(ready,0);
     if (mounted && !active) suspend();
   },{once:true});
 })();

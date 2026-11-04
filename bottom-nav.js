@@ -72,7 +72,7 @@
   function loadProfileShell() {
     if(window.FreeUpperProfileShell)return Promise.resolve(window.FreeUpperProfileShell);
     if(!shellLoading)shellLoading=new Promise((resolve,reject)=>{
-      const script=document.createElement('script');script.src='/profile-shell.js?v=clean-urls-v1';
+      const script=document.createElement('script');script.src='/profile-shell.js?v=native-tabs-v1';
       script.onload=()=>resolve(window.FreeUpperProfileShell);script.onerror=()=>{shellLoading=null;reject(new Error('Profile navigation unavailable'));};
       document.head.appendChild(script);
     });

@@ -44,7 +44,12 @@ test('quote RPC batches are bounded and retries preserve the request ID',async()
  await f.api.createPost({quotedPostId:id(100),quotePostId:id(800),content:'New quote'});assert.equal(f.writes,1);
 });
 test('video and Explore legacy APIs, media normalization, view tracking and source files remain unchanged',async()=>{
- for(const name of ['video.html','explore.js'])assert.equal(createHash('sha256').update(await readFile(new URL('../'+name,import.meta.url))).digest('hex'),contracts[name+'_sha256']);
+ // Navigation asset versions may change without altering the legacy player.
+ for(const name of ['video.html','explore.js']){
+  const bytes=await readFile(new URL('../'+name,import.meta.url),'utf8');
+  const legacy=bytes.replaceAll('js/screen-lifecycle.js?v=native-tabs-v1','js/screen-lifecycle.js?v=clean-urls-v1').replaceAll('bottom-nav.js?v=native-tabs-v1','bottom-nav.js?v=clean-urls-v1');
+  assert.equal(createHash('sha256').update(legacy).digest('hex'),contracts[name+'_sha256']);
+ }
  for(const name of ['toggleRepostAPI','updateRepostComment','normalizeMedia','mapPost','incrementView'])assert(source.includes(contracts[name]),name+' legacy contract changed');
  const f=postsFixture({enabled:false,rows:[outer()],originals:new Map([[id(100),original]])});const [p]=await f.api.loadAllPosts();assert(!('isQuote' in p));assert(!f.calls.some(c=>c.rpc==='load_quote_references'));
  const result=await f.api.toggleRepostAPI(id(200),'Existing video note');assert.equal(result.reposted,true);assert.equal(result.count,3);const call=f.calls.find(c=>c.rpc==='toggle_repost');assert.equal(call.args.p_post_id,id(200));assert.equal(call.args.p_comment,'Existing video note');

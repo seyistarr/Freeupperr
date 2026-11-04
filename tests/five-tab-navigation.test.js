@@ -31,8 +31,8 @@ window.PostsAPI={loadFeedWithReposts:async()=>{requests.push('feed');await new P
 window.switchActor=id=>{top.actor=id;localStorage.setItem('test-actor',id||'guest');for(const w of [top,...Array.from(top.frames)]){try{w.authListeners.forEach(f=>f(id?'SIGNED_IN':'SIGNED_OUT',id?{user:{id},expires_at:top.sessionExpiry}:null));w.userListeners.forEach(f=>f());}catch(_){}}};
 })();
 `;
-async function harness({root='home',pwa=false,delay=100,route=null,guest=false,prefetch=true,holdFirstSearch=false,legacyWorker=false}={}){
- const documents=[];const errors=[];let heldSearch=null;let workerUpdated=false;
+async function harness({root='home',pwa=false,delay=100,route=null,guest=false,prefetch=true,holdFirstSearch=false,holdFirstCreate=false,dataDelay=80,legacyWorker=false}={}){
+ const documents=[];const errors=[];let heldSearch=null,heldCreate=null;let workerUpdated=false;
  const server=createServer(async(req,res)=>{
   const url=new URL(req.url,'http://fixture');
   try{
@@ -42,12 +42,12 @@ async function harness({root='home',pwa=false,delay=100,route=null,guest=false,p
    if(!key){const path=url.pathname==='/'?'/index.html':url.pathname;const body=await readFile('.'+path);res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'application/octet-stream');res.end(body);return;}
    documents.push({url:req.url,time:Date.now()});
    let html=sources[key].replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<link\b[^>]*https:[^>]*>/gi,'');
-   let code=key==='search'?'<script src="/search.js"></script>':key==='create'?'<script>const state={postMedia:[],marketImages:[],postEmbeddings:[]};'+createGuard+'</script>':key==='video'?'<script>'+videoMain+'</script>':key==='profile'?'<script>'+profile.cache+'</script><script>'+profile.bootstrap+'</script><script>window.fixtureSB=window.sb;</script><script>'+bootstrap+'</script><script>sb.from=fixtureSB.from;sb.rpc=fixtureSB.rpc;</script><script>'+profile.main+'</script>':`<script>window.__fuInitialHydrated=${prefetch};addEventListener("DOMContentLoaded",()=>{if(window.__fuInitialHydrated)dispatchEvent(new Event("fu-app-hydrated"));});</script>`;
+   let code=key==='search'?'<script src="/search.js"></script>':key==='create'?'<script>const state={postMedia:[],marketImages:[],postEmbeddings:[]};'+createGuard+';window.handlePostUpload=event=>{window.handedFiles=Array.from(event.target.files);};</script>':key==='video'?'<script>'+videoMain+'</script>':key==='profile'?'<script>'+profile.cache+'</script><script>'+profile.bootstrap+'</script><script>window.fixtureSB=window.sb;</script><script>'+bootstrap.replace('setTimeout(r,80)','setTimeout(r,'+dataDelay+')')+'</script><script>sb.from=fixtureSB.from;sb.rpc=fixtureSB.rpc;</script><script>'+profile.main+'</script>':`<script>window.__fuInitialHydrated=${prefetch};addEventListener("DOMContentLoaded",()=>{if(window.__fuInitialHydrated)dispatchEvent(new Event("fu-app-hydrated"));});</script>`;
    // Profile fixture provides identity/relationship RPCs; keep shared auth and
    // realtime semantics from this harness, and its real production page logic.
-   html=html.replace('<head>','<head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script>'+bootstrap+'</script><script src="/js/screen-lifecycle.js?v=2"></script><script src="/theme.js?v=2"></script>');
+   html=html.replace('<head>','<head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script>'+bootstrap.replace('setTimeout(r,80)','setTimeout(r,'+dataDelay+')')+'</script><script src="/js/screen-lifecycle.js?v=2"></script><script src="/theme.js?v=2"></script>');
    html=html.replace('</body>',code+'<script src="/router.js"></script><script src="/side-nav.js"></script><script src="/bottom-nav.js?v=five-tabs-v2"></script></body>');
-   res.setHeader('Content-Type','text/html');if(holdFirstSearch && key==='search' && url.searchParams.has('fuMounted'))heldSearch=()=>setTimeout(()=>res.end(html),delay);else setTimeout(()=>res.end(html),url.searchParams.has('fuMounted')?delay:0);
+   res.setHeader('Content-Type','text/html');if(holdFirstCreate && key==='create' && url.searchParams.has('fuMounted'))heldCreate=()=>res.end(html);else if(holdFirstSearch && key==='search' && url.searchParams.has('fuMounted'))heldSearch=()=>setTimeout(()=>res.end(html),delay);else setTimeout(()=>res.end(html),url.searchParams.has('fuMounted')?delay:0);
   }catch(e){res.writeHead(404);res.end();}
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;
@@ -61,20 +61,22 @@ async function harness({root='home',pwa=false,delay=100,route=null,guest=false,p
  if(pwa){await page.evaluate(async()=>{await navigator.serviceWorker.register('/service-worker.js');await navigator.serviceWorker.ready;});await page.reload();await page.waitForFunction(()=>!!navigator.serviceWorker.controller);}
  if(!guest)await page.waitForFunction(()=>!!window.FreeUpperProfileShell?.getSession());
  const screen=key=>key===root?page.mainFrame():page.frames().find(f=>f!==page.mainFrame() && new URL(f.url()).pathname==='/'+names[key]+'.html');
- const select=async key=>{const start=Date.now();await page.locator('bottom-nav [data-nav-key='+key+']').click();await page.waitForFunction(k=>FreeUpperProfileShell.getActive()===k,key).catch(async e=>{console.error(key,errors,await page.evaluate(()=>({status:FreeUpperProfileShell.status(),frames:[...document.querySelectorAll('iframe[data-fu-mounted]')].map(f=>({src:f.src,html:f.contentDocument?.body?.textContent.slice(0,120),ready:f.contentWindow.FreeUpperScreen?.isReady(),controller:!!f.contentWindow.navigator.serviceWorker.controller,scripts:[...f.contentDocument.scripts].map(s=>s.src)}))})));throw e;});return Date.now()-start;};
+ const select=async key=>{const start=Date.now();await page.locator('bottom-nav [data-nav-key='+key+']').click();await page.waitForFunction(k=>FreeUpperProfileShell.getActive()===k,key).catch(async e=>{console.error(key,errors,await page.evaluate(()=>({status:FreeUpperProfileShell.status(),frames:[...document.querySelectorAll('iframe[data-fu-mounted]')].map(f=>({src:f.src,html:f.contentDocument?.body?.textContent.slice(0,120),ready:f.contentWindow.FreeUpperScreen?.isReady(),controller:!!f.contentWindow.navigator.serviceWorker.controller,scripts:[...f.contentDocument.scripts].map(s=>s.src)}))})));throw e;});if(key!==root)await page.waitForFunction(k=>document.querySelector('iframe[data-fu-mounted='+k+']')?.dataset.loaded==='true',key);return Date.now()-start;};
  const releaseSearch=()=>{holdFirstSearch=false;heldSearch?.();heldSearch=null;};
- return {page,screen,select,errors,documents,origin,releaseSearch,updateWorker:()=>{workerUpdated=true;},close:async()=>{releaseSearch();await browser.close();await new Promise(r=>server.close(r));}};
+ return {page,screen,select,errors,documents,origin,releaseSearch,releaseCreate:()=>{holdFirstCreate=false;heldCreate?.();},updateWorker:()=>{workerUpdated=true;},close:async()=>{releaseSearch();holdFirstCreate=false;heldCreate?.();await browser.close();await new Promise(r=>server.close(r));}};
 }
 
 test('five tabs: cold/warm timing, persistent nav identity, state, geometry, history and bounded retention',{timeout:120000},async t=>{
  const h=await harness({holdFirstSearch:true});const samples=[];let cdp;const memory=[];
  if(process.env.FREEUPPER_PROFILE_ENGINE!=='webkit'){cdp=await h.page.context().newCDPSession(h.page);await cdp.send('Performance.enable');}
  try{
-  await h.page.evaluate(()=>{window.originalNav=document.querySelector('bottom-nav');window.originalDocument=document;window.navigationSamples=[];addEventListener('fu-tab-active',e=>navigationSamples.push(e.detail));});
-  // Hold a cold destination behind Home. No frame is revealed before ready.
-  const cold=await h.page.evaluate(async()=>{const start=performance.now();document.querySelector('[data-nav-key=search]').click();await new Promise(requestAnimationFrame);const frame=document.querySelector('[data-fu-mounted=search]');return {ms:performance.now()-start,selected:document.querySelector('[aria-current=page]').dataset.navKey,hidden:getComputedStyle(frame).visibility,home:getComputedStyle(document.querySelector('#app-container')||document.querySelector('main')||document.body.children[0]).visibility,nav:getComputedStyle(document.querySelector('.bottom-nav')).visibility};});
-  assert.equal(cold.selected,'search');assert.equal(cold.hidden,'hidden');assert.equal(cold.home,'visible');assert.equal(cold.nav,'visible');
-  h.releaseSearch();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='search');
+  await h.page.evaluate(()=>{window.originalNav=document.querySelector('bottom-nav');window.originalDocument=document;window.navigationSamples=[];addEventListener('fu-tab-active',e=>{const sample={...e.detail};navigationSamples.push(sample);const received=performance.now();requestAnimationFrame(()=>{sample.firstFrameMs=sample.ms+performance.now()-received;});});});
+  // A blocked cold document shows its usable shell in the tap task.
+  const cold=await h.page.evaluate(async()=>{const start=performance.now();document.querySelector('[data-nav-key=search]').click();await new Promise(requestAnimationFrame);const frame=document.querySelector('[data-fu-mounted=search]');return {ms:performance.now()-start,selected:document.querySelector('[aria-current=page]').dataset.navKey,hidden:frame?getComputedStyle(frame).visibility:'hidden',home:getComputedStyle(document.querySelector('#app-container')||document.querySelector('main')||document.body.children[0]).visibility,nav:getComputedStyle(document.querySelector('.bottom-nav')).visibility,shell:document.querySelector('[data-fu-mounted=shell]').hidden,shellTitle:document.querySelector('[data-fu-mounted=shell] h1').textContent};});
+  assert.equal(cold.selected,'search');assert.equal(cold.hidden,'hidden');assert.equal(cold.home,'hidden');assert.equal(cold.shell,false);assert.equal(cold.shellTitle,'Search');assert.equal(cold.nav,'visible');
+  await h.page.locator('[data-fu-mounted=shell] input').fill('cold query');
+  h.releaseSearch();await h.page.waitForFunction(()=>document.querySelector('iframe[data-fu-mounted=search]')?.dataset.loaded==='true');
+  assert.equal(await h.screen('search').locator('#searchInput').inputValue(),'cold query');
   const search=h.screen('search');await search.locator('#searchInput').fill('retained query');await search.evaluate(()=>Search.runSearch('retained query'));await search.waitForFunction(()=>document.getElementById('resultsContainer').textContent.includes('retained query'));
   await search.evaluate(()=>{window.savedResults=document.getElementById('resultsContainer').firstElementChild;document.getElementById('resultsContainer').insertAdjacentHTML('beforeend','<div style="height:2000px">Scroll fixture</div>');document.getElementById('mainScroll').scrollTop=240;});
   const count=await search.evaluate(()=>queryCalls);const oldSearchDoc=search;
@@ -84,7 +86,7 @@ test('five tabs: cold/warm timing, persistent nav identity, state, geometry, his
   assert(warm.same);assert.equal(warm.scroll,240);assert.equal(await search.locator('#searchInput').inputValue(),'retained query');assert.equal(await search.evaluate(()=>queryCalls),count);assert.equal(h.documents.length,before);samples.push({kind:'search',warmMs:warm.ms});
   // WebKit/WPE's WAV backend does not seek this silent fixture: its timestamp
   // assertion uses a finite media double; native play/pause is still exercised.
-  // Video forces bounded eviction of Search when the draft and Profile are retained.
+  // Video keeps the initialized Search document and the composer draft alive.
   samples.push({kind:'video',coldMs:await h.select('video')});
   const video=h.screen('video');
   const wav=Buffer.alloc(44+8000*2*6);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
@@ -100,11 +102,11 @@ test('five tabs: cold/warm timing, persistent nav identity, state, geometry, his
   await h.select('profile');await h.select('home');
   const historyCount=await h.page.evaluate(()=>history.length);
   await h.page.evaluate(()=>{for(let i=0;i<10;i++)document.querySelector('[data-nav-key=home]').click();});assert.equal(await h.page.evaluate(()=>history.length),historyCount);
-  await h.select('search');const restored=h.screen('search');assert.equal(await restored.locator('#searchInput').inputValue(),'retained query');assert.equal(await restored.locator('#mainScroll').evaluate(el=>el.scrollTop),240);
+  await h.select('search');const restored=h.screen('search');assert.equal(await restored.locator('#searchInput').inputValue(),'retained query');assert.equal(await restored.locator('#mainScroll').evaluate(el=>el.scrollTop),240);assert.equal(restored,oldSearchDoc);
   for(let round=0;round<4;round++){for(const key of ['create','video','profile','home','search']){
    await h.select(key);
    const state=await h.page.evaluate(()=>({status:FreeUpperProfileShell.status(),same:originalNav===document.querySelector('bottom-nav'),doc:originalDocument===document,nav:document.querySelector('.bottom-nav').getBoundingClientRect().toJSON(),hit:document.elementFromPoint(30,innerHeight-32)?.closest('bottom-nav')===originalNav,visible:[...document.querySelectorAll('iframe[data-fu-mounted]')].filter(f=>getComputedStyle(f).visibility==='visible').length}));
-   assert(state.same);assert(state.doc);assert(state.status.documents<=4,JSON.stringify(state));assert.equal(state.nav.height,64);assert(state.hit);assert(state.visible<=1);
+   assert(state.same);assert(state.doc);assert(state.status.documents<=5,JSON.stringify(state));assert.equal(state.nav.height,64);assert(state.hit);assert(state.visible<=1);
    assert.equal(await h.page.locator('[aria-current=page]').getAttribute('data-nav-key'),key);
    assert.equal(await composer.locator('#postContent').inputValue(),'Unsent work');
    if(key!=='home')assert.equal(await h.screen(key).locator('.bottom-nav').count(),0);
@@ -125,17 +127,16 @@ test('five tabs: cold/warm timing, persistent nav identity, state, geometry, his
   await h.page.setViewportSize({width:1024,height:768});await h.screen('create').locator('side-nav [data-side-key=search]').click();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='search');assert(await h.page.evaluate(()=>originalDocument===document));
   await h.page.setViewportSize({width:390,height:844});await h.select('home');
   const rapid=await h.page.evaluate(()=>{const before=history.length;for(const key of ['search','search','create','create','video','video','profile','profile','home','home'])document.querySelector('[data-nav-key='+key+']').click();return {added:history.length-before,kinds:[...document.querySelectorAll('iframe[data-fu-mounted]')].map(f=>f.dataset.fuMounted)};});assert.equal(rapid.added,5);assert.equal(new Set(rapid.kinds).size,rapid.kinds.length);await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='home');
-  assert.deepEqual(h.errors,[]);await writeFile('/tmp/freeupper-five-tab-timings.json',JSON.stringify(samples,null,2));t.diagnostic(JSON.stringify(Object.keys(names).map(kind=>({kind,warmMs:samples.filter(s=>s.kind===kind && s.mode==='warm').map(s=>Number(s.ms.toFixed(1))),coldMs:samples.filter(s=>s.kind===kind && s.mode==='cold').map(s=>Number(s.ms.toFixed(1)))}))));
+  assert.deepEqual(h.errors,[]);await writeFile('/tmp/freeupper-five-tab-'+(process.env.FREEUPPER_PROFILE_ENGINE || 'chromium')+'-timings.json',JSON.stringify(samples,null,2));t.diagnostic(JSON.stringify(Object.keys(names).map(kind=>({kind,warmMs:samples.filter(s=>s.kind===kind && s.mode==='warm').map(s=>Number(s.ms.toFixed(1))),coldMs:samples.filter(s=>s.kind===kind && s.mode==='cold').map(s=>Number(s.ms.toFixed(1)))}))));
  }finally{await h.close();}
 });
 
-test('PWA direct Search: Back/Forward, eviction and offline navigation',{timeout:90000},async()=>{
+test('PWA direct Search: Back/Forward, retention and offline navigation',{timeout:90000},async()=>{
  const h=await harness({root:'search',pwa:true});try{
   await h.select('video');await h.select('create');await h.screen('create').locator('#postContent').fill('Retained offline draft');await h.select('profile');await h.select('home');
   await h.page.goBack();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='profile');await h.page.goForward();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='home');
-  // Chromium also restores an evicted document offline. WebKit/WPE's offline
-  // driver blocks new iframe navigations before its service worker can respond.
-  await h.page.context().setOffline(true);if(process.env.FREEUPPER_PROFILE_ENGINE!=='webkit')await h.select('video');assert(await h.page.evaluate(()=>FreeUpperProfileShell.status().documents<=FreeUpperProfileShell.status().limit));await h.select('search');assert.equal(await h.screen('search').locator('#searchInput').inputValue(),'');await h.page.context().setOffline(false);
+  // All initialized documents restore offline in both engines.
+  await h.page.context().setOffline(true);await h.select('video');assert(await h.page.evaluate(()=>FreeUpperProfileShell.status().documents<=FreeUpperProfileShell.status().limit));await h.select('search');assert.equal(await h.screen('search').locator('#searchInput').inputValue(),'');await h.page.context().setOffline(false);
   assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
@@ -198,7 +199,7 @@ test('Video launch keeps a dirty composer and both primary feeds within the draf
   const marker=await h.page.evaluate(()=>pageMarker);
   await h.select('home');await h.select('profile');await h.select('create');const create=h.screen('create');await create.locator('#postContent').fill('Unsent from Video launch');
   await h.select('search');const status=await h.page.evaluate(()=>FreeUpperProfileShell.status());assert(status.documents<=5);assert.equal(status.limit,5);
-  await h.select('profile');assert((await h.page.evaluate(()=>FreeUpperProfileShell.status())).documents<=4);assert.equal(await create.locator('#postContent').inputValue(),'Unsent from Video launch');assert.equal(await h.page.evaluate(()=>pageMarker),marker);assert.deepEqual(h.errors,[]);
+  await h.select('profile');assert((await h.page.evaluate(()=>FreeUpperProfileShell.status())).documents<=5);assert.equal(await create.locator('#postContent').inputValue(),'Unsent from Video launch');assert.equal(await h.page.evaluate(()=>pageMarker),marker);assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
 
@@ -231,6 +232,52 @@ test('v26 PWA controller and waiting update retain clean navigation and an unsen
   assert(new URL(h.page.url()).pathname==='/create');
   assert.equal(await h.screen('create').locator('#postContent').inputValue(),'Draft across a waiting worker update');
   await h.page.context().setOffline(false);
+  assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+
+test('cold Create accepts text and files before HTML arrives and preserves them across tab switches',{timeout:45000},async t=>{
+ const h=await harness({holdFirstCreate:true});try{
+  const sample=await h.page.evaluate(async()=>{
+   const start=performance.now();document.querySelector('[data-nav-key=create]').click();await new Promise(requestAnimationFrame);
+   return {ms:performance.now()-start,title:document.querySelector('[data-fu-mounted=shell] h1').textContent,active:FreeUpperProfileShell.getActive()};
+  });
+  assert.equal(sample.active,'create');assert.equal(sample.title,'Create');
+  await h.page.screenshot({path:'/tmp/freeupper-cold-create-'+(process.env.FREEUPPER_PROFILE_ENGINE || 'chromium')+'.png'});
+  const shell=h.page.locator('[data-fu-mounted=shell]');
+  await shell.locator('textarea').fill('Draft typed before the document loads');
+  await shell.locator('input[type=file]').setInputFiles({name:'draft.txt',mimeType:'image/png',buffer:Buffer.from('attachment fixture')});
+  await h.select('home');await h.page.locator('[data-nav-key=create]').click();
+  assert.equal(await shell.locator('textarea').inputValue(),'Draft typed before the document loads');
+  assert.match(await shell.textContent(),/1 attachment/);
+  h.releaseCreate();await h.page.waitForFunction(()=>document.querySelector('iframe[data-fu-mounted=create]')?.dataset.loaded==='true');
+  const create=h.screen('create');assert.equal(await create.locator('#postContent').inputValue(),'Draft typed before the document loads');
+  assert.equal(await create.evaluate(async()=>handedFiles[0].text()),'attachment fixture');
+  assert.equal(await h.page.locator('.fu-navigation-status').textContent(),'');assert.deepEqual(h.errors,[]);
+  t.diagnostic('Cold Create first animation frame: '+sample.ms.toFixed(1)+'ms; HTML held until after typing and switching');
+ }finally{await h.close();}
+});
+
+test('ten-second feed hydration does not gate Video visibility or warm returns',{timeout:45000},async t=>{
+ const h=await harness({dataDelay:10000});try{
+  const coldElapsed=await h.select('video');const video=h.screen('video');
+  t.diagnostic('Cold Video tap-to-document-visible with 10s feed request: '+coldElapsed+'ms');
+  assert.equal(await video.evaluate(()=>requests.includes('feed')),true);
+  assert.equal(await video.evaluate(()=>FreeUpperScreen.isReady()),true);
+  const before=h.documents.length;await h.select('home');
+  const sample=await h.page.evaluate(async()=>{const start=performance.now();document.querySelector('[data-nav-key=video]').click();await new Promise(requestAnimationFrame);return {ms:performance.now()-start,visible:getComputedStyle(document.querySelector('iframe[data-fu-mounted=video]')).visibility};});
+  assert.equal(sample.visible,'visible');assert.equal(h.documents.length,before);assert.deepEqual(h.errors,[]);
+  t.diagnostic('Warm Video first animation frame during 10s feed request: '+sample.ms.toFixed(1)+'ms');
+ }finally{await h.close();}
+});
+
+test('installed PWA serves managed HTML shells without a network navigation round trip',{timeout:45000},async()=>{
+ const h=await harness({pwa:true,holdFirstSearch:true});try{
+  const before=h.documents.filter(x=>x.url.includes('fuMounted')).length;
+  await h.select('search');
+  assert.equal(h.documents.filter(x=>x.url.includes('fuMounted')).length,before);
+  assert.equal(await h.screen('search').evaluate(()=>FreeUpperScreen.isReady()),true);
   assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });

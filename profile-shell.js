@@ -18,7 +18,7 @@
   const publicBaseURL = path.endsWith('.html') && window.FreeUpperRoutes.key(path)
     ? window.FreeUpperRoutes.href(path) + location.search + location.hash : baseURL;
   const frames = new Map(), screens = new Map(), snapshots = new Map(), rootState = new Map();
-  const MAX_FRAMES = 3; // four retained tab documents including the launch page
+  const MAX_FRAMES = 4; // all five tab documents live until the authenticated session ends
   let active = host, desired = host, session = null, bound = null, authKnown = false;
   let resetting=false;
   let pendingKind = null, idle = null, expiry = null, generation = 0, prefetchedOwn = false;
@@ -101,27 +101,54 @@
     pause(win); frames.get(kind)?.remove(); frames.delete(kind);
     clearTimeout(entry.timeout); entry.state='Uninitialized'; entry.loaded=false;
   }
-  const draftOverflow=()=>['search','video'].includes(host) && !!winFor('create')?.FreeUpperScreen?.isDirty?.();
-  function makeRoom() {
-    if (frames.size < MAX_FRAMES) return true;
-    // Keep feed DOM, profile hydration and draft File objects. Drop an empty
-    // composer first, then video buffers, then the Search snapshot.
-    const candidates=['create','video','search'].filter(k => frames.has(k) && k!==active && k!==desired && !winFor(k)?.FreeUpperScreen?.isDirty?.());
-    // A cold handoff may temporarily need one extra initializing document.
-    // Keep the active pixels until ready, then evict its snapshot immediately.
-    if (!candidates.length) {
-      // A Search/Video launch document cannot itself be removed. Permit one
-      // extra active screen rather than discard a draft or either retained feed.
-      // The extra screen is evicted as soon as it becomes suspendable.
-      if(frames.size===MAX_FRAMES && draftOverflow())return true;
-      return ['video','search','create'].includes(active) && !winFor(active)?.FreeUpperScreen?.isDirty?.();
+  function makeRoom() { return frames.size < MAX_FRAMES; }
+
+  // A cold document can be delayed by HTML, scripts or the network. These
+  // controls belong to this coordinator and hand their state to the real page.
+  // They are never populated with invented feed/profile data.
+  let coldShell=null;
+  function hideColdShell() { if(coldShell)coldShell.hidden=true; }
+  function showColdShell(kind) {
+    if (!coldShell) {
+      coldShell=document.createElement('section');coldShell.dataset.fuMounted='shell';
+      coldShell.style.cssText='position:fixed;inset:0;z-index:19001;background:var(--bg,#fff);color:var(--text,#111);padding:24px 20px calc(var(--bottom-nav-height,64px) + 24px);overflow:auto';
+      document.body.append(coldShell);
     }
-    evict(candidates[0]); return true;
+    const entry=stateFor(kind);
+    coldShell.replaceChildren();coldShell.hidden=false;
+    const title=document.createElement('h1');title.textContent=kind==='video'?'Video':kind[0].toUpperCase()+kind.slice(1);coldShell.append(title);
+    const hint=document.createElement('p');hint.setAttribute('role','status');hint.textContent='Loading content…';coldShell.append(hint);
+    if(kind==='search' || kind==='create') {
+      const input=document.createElement(kind==='search'?'input':'textarea');
+      input.setAttribute('aria-label',kind==='search'?'Search':'Content');
+      input.placeholder=kind==='search'?'Search FreeUpper':"What's on your mind?";
+      input.style.cssText='display:block;width:100%;box-sizing:border-box;padding:16px;font:inherit;background:var(--bg,#fff);color:inherit;border:1px solid #888;border-radius:12px';
+      input.value=entry.pendingText || '';input.oninput=()=>{entry.pendingText=input.value;};coldShell.append(input);
+      if(kind==='create') {
+        input.rows=6;
+        const files=document.createElement('input');files.type='file';files.multiple=true;files.accept='image/*,video/*';files.setAttribute('aria-label','Add attachments');
+        files.onchange=()=>{entry.pendingFiles=files.files;};coldShell.append(files);
+        if(entry.pendingFiles?.length){const count=document.createElement('p');count.textContent=entry.pendingFiles.length+' attachment(s) selected';coldShell.append(count);}
+        hint.textContent='Loading publishing tools. Your draft stays here while they load.';
+      } else hint.textContent='Type a search. Results load when the search service is ready.';
+    }
+  }
+  function transferColdState(kind,win) {
+    const entry=stateFor(kind),doc=win.document;
+    if(entry.pendingText!==undefined) {
+      const input=doc.getElementById(kind==='create'?'postContent':'searchInput');
+      if(input){input.value=entry.pendingText;input.dispatchEvent(new win.Event('input',{bubbles:true}));delete entry.pendingText;}
+    }
+    if(entry.pendingFiles?.length && typeof win.handlePostUpload==='function') {
+      win.handlePostUpload({target:{files:entry.pendingFiles,value:''}});delete entry.pendingFiles;
+    }
   }
   function ready(kind, win) {
     if (!valid() || win !== winFor(kind)) return;
+    try { if(window.FreeUpperRoutes.key(win.location.pathname)!==kind){fail(kind);return;} } catch(_){fail(kind);return;}
     const entry=stateFor(kind); if(entry.loaded)return; entry.loaded=true; clearTimeout(entry.timeout);
     const frame=frames.get(kind); if (frame) { frame.dataset.loaded='true'; syncTheme(frame); }
+    transferColdState(kind,win);
     if (desired===kind) activate(kind); else { pause(win); entry.state='Suspended'; }
   }
   function makeFrame(kind) {
@@ -140,42 +167,56 @@
         // The standalone HTML must really be this screen (auth redirects and
         // offline Home fallbacks must never masquerade as a ready destination).
         if (window.FreeUpperRoutes.key(frame.contentWindow.location.pathname) !== kind) { fail(kind); return; }
-        if (!frame.contentWindow.FreeUpperScreen || frame.contentWindow.FreeUpperScreen.isReady()) ready(kind,frame.contentWindow);
+        ready(kind,frame.contentWindow);
 
       } catch (_) { fail(kind); }
     });
     entry.timeout=setTimeout(() => fail(kind),20000);
     // Keep hidden document endpoints compatible with an older active PWA worker.
-    frame.src='/'+pages[kind]+'.html?fuMounted=1'; document.body.append(frame);
+    // Commit the cold shell before creating the browsing context or starting
+    // document work. Neither operation belongs on the tab's first paint path.
+    setTimeout(()=>{
+      if(frames.get(kind)!==frame || !valid())return;
+      frame.src='/'+pages[kind]+'.html?fuMounted=1';document.body.append(frame);
+    },0);
     return frame;
   }
   function fail(kind) {
     if (desired!==kind || !valid()) return;
-    desired=active; announce(active); message('Unable to open this tab. Please try again.',true);
-    if (kind!==active && frames.has(kind)) evict(kind);
+    const entry=stateFor(kind);clearTimeout(entry.timeout);
+    if(coldShell && !coldShell.hidden){
+      const hint=coldShell.querySelector('[role=status]');if(hint)hint.textContent='This screen could not load. Your input is preserved.';
+      const retry=document.createElement('button');retry.textContent='Retry';retry.onclick=()=>{if(frames.has(kind))evict(kind);makeFrame(kind);showColdShell(kind);};coldShell.append(retry);
+    }
+    message('Unable to load content. Please retry.',true);
+    if (frames.has(kind)) evict(kind);
     history.replaceState({...history.state,fuMountedView:{kind:active,viewer:session.viewer}},'',active===host?publicBaseURL:window.FreeUpperRoutes.pages[active].path);
   }
   function activate(kind) {
     if (!valid() || desired!==kind) return;
     const win=winFor(kind), target=kind===host?null:frames.get(kind), entry=stateFor(kind);
-    if (kind!==host && !entry.loaded) return;
+    const loading=kind!==host && !entry.loaded;
+    const handoff=!loading && active===kind && entry.state==='InitializingVisible';
     const profile=winFor('profile');
     if (active!==kind) {
       if (active==='profile') profile?.ProfileMounted?.beforeHide();
       pause(winFor(active)); stateFor(active).state='Suspended';
     }
-    if (kind==='profile') profile?.ProfileMounted?.prepareVisible(session,{own:entry.own!==false,history:active==='profile'?'push':profile===window?'none':'replace'});
+    if (!loading && kind==='profile') {
+      const lease=session, options={own:entry.own!==false,history:active==='profile' && !handoff?'push':profile===window?'none':'replace'};
+      setTimeout(()=>{if(valid() && session.viewer===lease.viewer && active===kind)profile?.ProfileMounted?.prepareVisible(session,options);},0);
+    }
     rootVisible(!target);
-    for (const [key,frame] of frames) frameVisible(frame,key===kind);
+    for (const [key,frame] of frames) frameVisible(frame,key===kind && !loading);
+    if(loading)showColdShell(kind);else hideColdShell();
     active=kind;
     document.documentElement.removeAttribute('data-nav-overlay');
     const nav=document.querySelector('bottom-nav');if(nav)nav.inert=false;
-    if(frames.size>MAX_FRAMES)makeRoom();
-    entry.state=entry.visits?'Restored':'Active'; ++entry.visits;
-    try { win.FreeUpperScreen?.resume(); } catch (_) {}
+    entry.state=loading?'InitializingVisible':entry.visits?'Restored':'Active'; if(!handoff)++entry.visits;
+    if(!loading)try { win.FreeUpperScreen?.resume(); } catch (_) {}
     announce(kind); message('');
-    document.documentElement.toggleAttribute('data-nav-keyboard',!!win.document.documentElement.hasAttribute('data-nav-keyboard'));
-    window.dispatchEvent(new CustomEvent('fu-tab-active',{detail:{kind,state:entry.state,mode:entry.wasWarm?'warm':'cold',ms:performance.now()-(entry.requestedAt || performance.now())}}));
+    document.documentElement.toggleAttribute('data-nav-keyboard',!loading && !!win?.document?.documentElement.hasAttribute('data-nav-keyboard'));
+    window.dispatchEvent(new CustomEvent(handoff?'fu-tab-content-ready':'fu-tab-active',{detail:{kind,state:entry.state,mode:entry.wasWarm?'warm':'cold',ms:performance.now()-(entry.requestedAt || performance.now())}}));
   }
   function request(kind,push=true) {
     if (!Object.hasOwn(pages,kind) && kind!==host) return false;
@@ -193,8 +234,7 @@
     }
     const frame=kind===host?null:makeFrame(kind);
     if (kind!==host && !frame) { fail(kind); return true; }
-    if (kind===host || stateFor(kind).loaded) activate(kind);
-    else message('Opening '+kind+'…'); // current screen stays painted and usable
+    activate(kind);
     return true;
   }
   function clear(resetRoot=false) {
@@ -203,7 +243,7 @@
     ++generation; pendingKind=null; prefetchedOwn=false;
     clearTimeout(idle); idle=null; clearTimeout(expiry); expiry=null;
     for (const [kind,frame] of frames) { clearTimeout(stateFor(kind).timeout); pause(frame.contentWindow); try{frame.contentWindow.FreeUpperScreen?.dispose();}catch(_){} frame.remove(); }
-    frames.clear(); snapshots.clear(); screens.clear();
+    frames.clear(); snapshots.clear(); screens.clear(); coldShell?.replaceChildren();coldShell?.remove();coldShell=null;
     if (host==='profile') window.ProfileMounted?.suspend();
     document.documentElement.removeAttribute('data-nav-overlay');
     const nav=document.querySelector('bottom-nav');if(nav)nav.inert=false;
@@ -271,7 +311,7 @@
     },
     getSession:() => valid()?{...session}:null,
     getActive:() => active,
-    status:() => ({active,desired,documents:frames.size+1,limit:MAX_FRAMES+1+(draftOverflow()?1:0),snapshots:snapshots.size,screens:Object.fromEntries([...screens].map(([k,v])=>[k,v.state]))})
+    status:() => ({active,desired,documents:frames.size+1,limit:MAX_FRAMES+1,snapshots:snapshots.size,screens:Object.fromEntries([...screens].map(([k,v])=>[k,v.state]))})
   };
   window.addEventListener('popstate',e => {
     const state=e.state?.fuMountedView;
