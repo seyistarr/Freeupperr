@@ -10,6 +10,7 @@ import {profileFixtureParts as profile} from './helpers/profile-navigation-fixtu
 // authorization boundaries and document navigation from external availability.
 const routes={home:'/home',search:'/search',create:'/create',video:'/videos',profile:'/profile'};
 const names={home:'index',search:'search',create:'create',video:'video',profile:'profile'};
+const fixtureIcon='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"/>').toString('base64');
 const sources=Object.fromEntries(await Promise.all(Object.entries(names).map(async([key,name])=>[key,await readFile(name+'.html','utf8')])));
 const createGuard=sources.create.slice(sources.create.indexOf('        let composerPublished = false;'),sources.create.indexOf('        // 3.  TOAST SYSTEM'));
 const videoMain=[...sources.video.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].find(m=>m[1].includes('let _curIdx'))[1];
@@ -27,12 +28,12 @@ window.sb={auth:{getSession:async()=>({data:{session:top.actor?{user:{id:top.act
  from(table){let filtered=false;const q=new Proxy({}, {get(_,key){if(key==='then')return (resolve)=>{queryCalls++;return Promise.resolve({data:[],count:0}).then(resolve);};return (...args)=>{if(key==='ilike'||key==='or')filtered=true;return q;};}});return q;},rpc:async()=>({data:[]})};
 window.getAuthorFromProfile=p=>({name:p?.display_name || 'Creator',avatar:'',verified:false});
 window.ListingsAPI={getListings:async()=>({data:[]})};
-window.PostsAPI={loadFeedWithReposts:async()=>{requests.push('feed');await new Promise(r=>setTimeout(r,80));return []},subscribe(){window.repostSubscriptions=(window.repostSubscriptions||0)+1;},loadProfilePage:async()=>({posts:[],total:0})};
+window.PostsAPI={loadFeedWithReposts:async()=>{requests.push('feed');await new Promise(r=>setTimeout(r,80));requests.push('feed-complete');return []},subscribe(){window.repostSubscriptions=(window.repostSubscriptions||0)+1;},loadProfilePage:async()=>({posts:[],total:0})};
 window.switchActor=id=>{top.actor=id;localStorage.setItem('test-actor',id||'guest');for(const w of [top,...Array.from(top.frames)]){try{w.authListeners.forEach(f=>f(id?'SIGNED_IN':'SIGNED_OUT',id?{user:{id},expires_at:top.sessionExpiry}:null));w.userListeners.forEach(f=>f());}catch(_){}}};
 })();
 `;
-async function harness({root='home',pwa=false,delay=100,route=null,guest=false,prefetch=true,holdFirstSearch=false,holdFirstCreate=false,dataDelay=80,legacyWorker=false}={}){
- const documents=[];const errors=[];let heldSearch=null,heldCreate=null;let workerUpdated=false;
+async function harness({root='home',pwa=false,delay=100,route=null,guest=false,prefetch=true,holdFirstSearch=false,holdFirstCreate=false,holdFirstProfile=false,dataDelay=80,legacyWorker=false}={}){
+ const documents=[];const errors=[];let heldSearch=null,heldCreate=null;const heldProfiles=[];let profileRequestedResolve;const profileRequested=new Promise(resolve=>{profileRequestedResolve=resolve;});let workerUpdated=false;
  const server=createServer(async(req,res)=>{
   const url=new URL(req.url,'http://fixture');
   try{
@@ -42,12 +43,16 @@ async function harness({root='home',pwa=false,delay=100,route=null,guest=false,p
    if(!key){const path=url.pathname==='/'?'/index.html':url.pathname;const body=await readFile('.'+path);res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'application/octet-stream');res.end(body);return;}
    documents.push({url:req.url,time:Date.now()});
    let html=sources[key].replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<link\b[^>]*https:[^>]*>/gi,'');
+   // Keep decorative share icons local, like the fixture's mocked backend
+   // and stripped external scripts/styles. WebKit reports aborted third-party
+   // image requests as page errors when the PWA is switched offline.
+   html=html.replace(/(<img\b[^>]*\bsrc=["'])https:\/\/cdn-icons-png\.flaticon\.com\/[^"']+(["'])/gi,(_match,before,after)=>before+fixtureIcon+after);
    let code=key==='search'?'<script src="/search.js"></script>':key==='create'?'<script>const state={postMedia:[],marketImages:[],postEmbeddings:[]};'+createGuard+';window.handlePostUpload=event=>{window.handedFiles=Array.from(event.target.files);};</script>':key==='video'?'<script>'+videoMain+'</script>':key==='profile'?'<script>'+profile.cache+'</script><script>'+profile.bootstrap+'</script><script>window.fixtureSB=window.sb;</script><script>'+bootstrap.replace('setTimeout(r,80)','setTimeout(r,'+dataDelay+')')+'</script><script>sb.from=fixtureSB.from;sb.rpc=fixtureSB.rpc;</script><script>'+profile.main+'</script>':`<script>window.__fuInitialHydrated=${prefetch};addEventListener("DOMContentLoaded",()=>{if(window.__fuInitialHydrated)dispatchEvent(new Event("fu-app-hydrated"));});</script>`;
    // Profile fixture provides identity/relationship RPCs; keep shared auth and
    // realtime semantics from this harness, and its real production page logic.
    html=html.replace('<head>','<head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script>'+bootstrap.replace('setTimeout(r,80)','setTimeout(r,'+dataDelay+')')+'</script><script src="/js/screen-lifecycle.js?v=2"></script><script src="/theme.js?v=2"></script>');
    html=html.replace('</body>',code+'<script src="/router.js"></script><script src="/side-nav.js"></script><script src="/bottom-nav.js?v=five-tabs-v2"></script></body>');
-   res.setHeader('Content-Type','text/html');if(holdFirstCreate && key==='create' && url.searchParams.has('fuMounted'))heldCreate=()=>res.end(html);else if(holdFirstSearch && key==='search' && url.searchParams.has('fuMounted'))heldSearch=()=>setTimeout(()=>res.end(html),delay);else setTimeout(()=>res.end(html),url.searchParams.has('fuMounted')?delay:0);
+   res.setHeader('Content-Type','text/html');if(holdFirstProfile && key==='profile' && url.searchParams.has('fuMounted')){heldProfiles.push(()=>res.end(html));profileRequestedResolve();}else if(holdFirstCreate && key==='create' && url.searchParams.has('fuMounted'))heldCreate=()=>res.end(html);else if(holdFirstSearch && key==='search' && url.searchParams.has('fuMounted'))heldSearch=()=>setTimeout(()=>res.end(html),delay);else setTimeout(()=>res.end(html),url.searchParams.has('fuMounted')?delay:0);
   }catch(e){res.writeHead(404);res.end();}
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;
@@ -63,7 +68,9 @@ async function harness({root='home',pwa=false,delay=100,route=null,guest=false,p
  const screen=key=>key===root?page.mainFrame():page.frames().find(f=>f!==page.mainFrame() && new URL(f.url()).pathname==='/'+names[key]+'.html');
  const select=async key=>{const start=Date.now();await page.locator('bottom-nav [data-nav-key='+key+']').click();await page.waitForFunction(k=>FreeUpperProfileShell.getActive()===k,key).catch(async e=>{console.error(key,errors,await page.evaluate(()=>({status:FreeUpperProfileShell.status(),frames:[...document.querySelectorAll('iframe[data-fu-mounted]')].map(f=>({src:f.src,html:f.contentDocument?.body?.textContent.slice(0,120),ready:f.contentWindow.FreeUpperScreen?.isReady(),controller:!!f.contentWindow.navigator.serviceWorker.controller,scripts:[...f.contentDocument.scripts].map(s=>s.src)}))})));throw e;});if(key!==root)await page.waitForFunction(k=>document.querySelector('iframe[data-fu-mounted='+k+']')?.dataset.loaded==='true',key);return Date.now()-start;};
  const releaseSearch=()=>{holdFirstSearch=false;heldSearch?.();heldSearch=null;};
- return {page,screen,select,errors,documents,origin,releaseSearch,releaseCreate:()=>{holdFirstCreate=false;heldCreate?.();},updateWorker:()=>{workerUpdated=true;},close:async()=>{releaseSearch();holdFirstCreate=false;heldCreate?.();await browser.close();await new Promise(r=>server.close(r));}};
+ const waitForProfileRequest=async()=>{let timeout;try{await Promise.race([profileRequested,new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('Profile prefetch did not request its document')),12000);})]);}finally{clearTimeout(timeout);}};
+ const releaseProfile=()=>{holdFirstProfile=false;heldProfiles.splice(0).forEach(release=>release());};
+ return {page,screen,select,errors,documents,origin,releaseSearch,waitForProfileRequest,releaseProfile,releaseCreate:()=>{holdFirstCreate=false;heldCreate?.();},updateWorker:()=>{workerUpdated=true;},close:async()=>{releaseSearch();releaseProfile();holdFirstCreate=false;heldCreate?.();await browser.close();await new Promise(r=>server.close(r));}};
 }
 
 test('five tabs: cold/warm timing, persistent nav identity, state, geometry, history and bounded retention',{timeout:120000},async t=>{
@@ -260,16 +267,66 @@ test('cold Create accepts text and files before HTML arrives and preserves them 
 });
 
 test('ten-second feed hydration does not gate Video visibility or warm returns',{timeout:45000},async t=>{
- const h=await harness({dataDelay:10000});try{
+ // Isolate Home/Video document retention; the concurrent prefetch case below
+ // separately exercises Profile creation during the same warm handoff.
+ const h=await harness({dataDelay:10000,prefetch:false});try{
   const coldElapsed=await h.select('video');const video=h.screen('video');
   t.diagnostic('Cold Video tap-to-document-visible with 10s feed request: '+coldElapsed+'ms');
   assert.equal(await video.evaluate(()=>requests.includes('feed')),true);
   assert.equal(await video.evaluate(()=>FreeUpperScreen.isReady()),true);
+  assert.equal(await video.evaluate(()=>requests.includes('feed-complete')),false);
+  assert.equal(h.documents.length,2);
   const before=h.documents.length;await h.select('home');
   const sample=await h.page.evaluate(async()=>{const start=performance.now();document.querySelector('[data-nav-key=video]').click();await new Promise(requestAnimationFrame);return {ms:performance.now()-start,visible:getComputedStyle(document.querySelector('iframe[data-fu-mounted=video]')).visibility};});
-  assert.equal(sample.visible,'visible');assert.equal(h.documents.length,before);assert.deepEqual(h.errors,[]);
+  assert.equal(sample.visible,'visible');assert.equal(h.documents.length,before,JSON.stringify(h.documents));
+  assert.equal(await video.evaluate(()=>requests.includes('feed-complete')),false);assert.deepEqual(h.errors,[]);
   t.diagnostic('Warm Video first animation frame during 10s feed request: '+sample.ms.toFixed(1)+'ms');
  }finally{await h.close();}
+});
+
+test('ten-second feed: Profile prefetch overlaps warm navigation without reloading retained screens',{timeout:45000},async()=>{
+ const h=await harness({dataDelay:10000,prefetch:false,holdFirstProfile:true});try{
+  await h.select('video');const video=h.screen('video');
+  const visitedURLs=['/home','/video.html?fuMounted=1'];
+  assert.deepEqual(h.documents.map(d=>d.url),visitedURLs);
+  await h.page.evaluate(()=>{
+   window.retainedHomeDocument=document;
+   const win=document.querySelector('iframe[data-fu-mounted=video]').contentWindow;
+   window.retainedVideoDocument=win.document;window.retainedFeedTrack=win.document.getElementById('feedTrack');
+  });
+  await h.select('home');assert.equal(await video.evaluate(()=>FreeUpperScreen.isActive()),false);
+  // Finish Home hydration only after recording the two visited documents.
+  // Use the real coordinator's 250ms prefetch; hold its HTML response to force
+  // Profile initialization to overlap the warm Video return deterministically.
+  await h.page.evaluate(()=>{window.__fuInitialHydrated=true;dispatchEvent(new Event('fu-app-hydrated'));});
+  await h.waitForProfileRequest();
+  const profileURL='/profile.html?fuMounted=1';
+  assert.deepEqual(h.documents.slice(visitedURLs.length).map(d=>d.url),[profileURL]);
+  const during=await h.page.evaluate(async()=>{
+   document.querySelector('[data-nav-key=video]').click();await new Promise(requestAnimationFrame);
+   const frame=document.querySelector('iframe[data-fu-mounted=video]'),profile=document.querySelector('iframe[data-fu-mounted=profile]');
+   return {active:FreeUpperProfileShell.getActive(),videoVisible:getComputedStyle(frame).visibility,videoActive:frame.contentWindow.FreeUpperScreen.isActive(),
+    sameHome:document===retainedHomeDocument,sameVideo:frame.contentDocument===retainedVideoDocument,
+    sameTrack:frame.contentDocument.getElementById('feedTrack')===retainedFeedTrack,
+    profileHidden:getComputedStyle(profile).visibility==='hidden' && profile.inert,
+    profileState:FreeUpperProfileShell.status().screens.profile,feedPending:!frame.contentWindow.requests.includes('feed-complete')};
+  });
+  assert.deepEqual(during,{active:'video',videoVisible:'visible',videoActive:true,sameHome:true,sameVideo:true,sameTrack:true,profileHidden:true,profileState:'Initializing',feedPending:true});
+  // Account for precisely the one expected background request, rejecting any
+  // repeated visited tab, unexpected tab or duplicate Profile document.
+  assert.deepEqual(h.documents.filter(d=>d.url!==profileURL).map(d=>d.url),visitedURLs);
+  assert.deepEqual(h.documents.filter(d=>d.url===profileURL).map(d=>d.url),[profileURL]);
+  h.releaseProfile();await h.page.waitForFunction(()=>document.querySelector('iframe[data-fu-mounted=profile]')?.dataset.loaded==='true');
+  assert.equal(await h.screen('profile').evaluate(()=>FreeUpperScreen.isActive()),false);
+  assert.equal(await h.page.evaluate(()=>FreeUpperProfileShell.status().screens.profile),'Suspended');
+  assert.equal(await h.page.evaluate(()=>FreeUpperProfileShell.getActive()),'video');
+  const before=h.documents.length;
+  await h.select('home');await h.select('video');
+  assert.equal(h.documents.length,before,JSON.stringify(h.documents));
+  assert(await h.page.evaluate(()=>document===retainedHomeDocument && document.querySelector('iframe[data-fu-mounted=video]').contentDocument===retainedVideoDocument));
+  assert.equal(await video.evaluate(()=>requests.includes('feed-complete')),false);
+  assert.deepEqual(h.errors,[]);
+ }finally{await h.close();assert.equal(h.page.isClosed(),true);assert.equal(h.page.context().pages().length,0);}
 });
 
 test('installed PWA serves managed HTML shells without a network navigation round trip',{timeout:45000},async()=>{
