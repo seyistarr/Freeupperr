@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════
    <side-nav> — shared custom element (desktop rail)
    Drop <side-nav></side-nav> where the old
-   <nav class="side-nav">...</nav> block was.
+   <nav class="side-nav" aria-label="Main navigation">...</nav> block was.
 
    Usage:
      <link rel="stylesheet" href="side-nav.css">
@@ -81,15 +81,38 @@
     connectedCallback() {
       if (this._built) return;
       this._built = true;
+      // The launch document owns one rail throughout cold and warm switches.
+      // Standalone/legacy hosts without a rail keep their existing local UI.
+      try {
+        if(document.documentElement.hasAttribute('data-fu-screen-child') && parent.document.querySelector('side-nav')){this.remove();return;}
+      } catch (_) {}
       this.render();
       this.updateAvatar();
+      this.setActive(window.FreeUpperProfileShell?.getActive() || currentPageKey());
       this.addEventListener('click',event=>{
         const link=event.target.closest('[data-side-key]');
         if(!link || event.defaultPrevented || event.button>0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
-        if(window.FreeUpperProfileShell?.request(link.dataset.sideKey))event.preventDefault();
+        const key=link.dataset.sideKey;
+        if(!['home','search','create','video','profile'].includes(key))return;
+        const intent=Symbol();
+        if(window.FreeUpperScreen)window.FreeUpperScreen.navigationIntent=intent;
+        if(window.FreeUpperProfileShell?.request(key)){event.preventDefault();return;}
+        if(!window.FreeUpperProfileShell && getUser()?.isLoggedIn && window.sb?.auth?.getSession && window.FreeUpperScreen?.ensureCoordinator){
+          event.preventDefault();
+          // A new intent replaces the old one while the shared bootstrap loads.
+          this._pendingLink=link;this._pendingIntent=intent;
+          if(this._loading)return;
+          this._loading=true;
+          window.FreeUpperScreen.ensureCoordinator().then(shell=>{
+            if(this._pendingIntent!==window.FreeUpperScreen.navigationIntent)return;
+            const next=this._pendingLink;
+            if(!shell?.request(next.dataset.sideKey))window.top.location.href=next.href;
+          }).catch(()=>{if(this._pendingIntent===window.FreeUpperScreen.navigationIntent)window.top.location.href=this._pendingLink.href;}).finally(()=>{this._loading=false;});
+        }
       });
 
       document.addEventListener('profileUpdated', () => this.updateAvatar());
+      window.AuthUser?.onChange?.(() => this.updateAvatar());
       window.addEventListener('storage', (e) => {
         if (e.key === 'freeupper_user_profile') this.updateAvatar();
       });
@@ -108,14 +131,14 @@
 
         if (item.isAvatar) {
           return `
-            <a href="${item.href}" class="side-btn${isActive ? ' active' : ''}" data-side-key="${item.key}">
+            <a href="${item.href}" target="_top" class="side-btn${isActive ? ' active' : ''}" data-side-key="${item.key}">
               <img class="side-av" data-side-avatar src="" alt=""
                    onerror="this.style.display='none'">
               <span data-i18n="${item.label}">${item.label}</span>
             </a>`;
         }
         return `
-          <a href="${item.href}" class="side-btn${isActive ? ' active' : ''}" data-side-key="${item.key}">
+          <a href="${item.href}" target="_top" class="side-btn${isActive ? ' active' : ''}" data-side-key="${item.key}">
             <svg viewBox="0 0 24 24">${item.svg}</svg>
             <span data-i18n="${item.label}">${item.label}</span>
             ${badgeHtml}
@@ -123,16 +146,24 @@
       }).join('');
 
       this.innerHTML = `
-        <nav class="side-nav">
-          <div class="side-logo"><a href="/home">◈</a></div>
+        <nav class="side-nav" aria-label="Main navigation">
+          <div class="side-logo"><a href="/home" target="_top" data-side-key="home" aria-label="Home">◈</a></div>
           ${itemsHtml}
         </nav>`;
+    }
+
+    setActive(key) {
+      for(const link of this.querySelectorAll('.side-btn[data-side-key]')){
+        const active=link.dataset.sideKey===key;
+        link.classList.toggle('active',active);
+        if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
+      }
     }
 
     updateAvatar() {
       const user = getUser();
       const img = this.querySelector('[data-side-avatar]');
-      if (img && user && user.avatar) img.src = user.avatar;
+      if(img){if(user?.avatar){img.src=user.avatar;img.style.display='';}else{img.removeAttribute('src');img.style.display='none';}}
     }
   }
 

@@ -70,9 +70,10 @@
 
   let shellLoading=null;
   function loadProfileShell() {
+    if(window.FreeUpperScreen?.ensureCoordinator)return window.FreeUpperScreen.ensureCoordinator();
     if(window.FreeUpperProfileShell)return Promise.resolve(window.FreeUpperProfileShell);
     if(!shellLoading)shellLoading=new Promise((resolve,reject)=>{
-      const script=document.createElement('script');script.src='/profile-shell.js?v=native-tabs-v1';
+      const script=document.createElement('script');script.src='/profile-shell.js?v=sidebar-v1';
       script.onload=()=>resolve(window.FreeUpperProfileShell);script.onerror=()=>{shellLoading=null;reject(new Error('Profile navigation unavailable'));};
       document.head.appendChild(script);
     });
@@ -127,6 +128,9 @@
         const link=event.target.closest('[data-nav-key]');
         const key=link?.dataset.navKey;
         if (!link || event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        // A later click in either component supersedes an unfinished bootstrap.
+        const intent=Symbol();
+        if(window.FreeUpperScreen)window.FreeUpperScreen.navigationIntent=intent;
         if (key === currentPageKey() && !window.FreeUpperProfileShell) { event.preventDefault(); return; }
         if (this._leaving) { event.preventDefault(); return; }
         if(!getUser()?.isLoggedIn || !window.sb?.auth?.getSession){markLeaving();if(key==='create'){event.preventDefault();window.location.href='/create';}return;}
@@ -135,9 +139,15 @@
         if(shell && key==='create'){event.preventDefault();window.location.href='/create';return;}
         if(!shell){
           event.preventDefault();
+          this._pendingLink=link;this._pendingIntent=intent;
           if (this._shellPending) return;
           this._shellPending = true;
-          loadProfileShell().then(next=>{if(!next?.request(key))window.location.href=link.href || '/create';}).catch(()=>{window.location.href=link.href || '/create';}).finally(()=>{this._shellPending=false;});
+          const latest=()=>!window.FreeUpperScreen || this._pendingIntent===window.FreeUpperScreen.navigationIntent;
+          loadProfileShell().then(next=>{
+            if(!latest())return;
+            const target=this._pendingLink;
+            if(!next?.request(target.dataset.navKey))window.location.href=target.href || '/create';
+          }).catch(()=>{if(latest())window.location.href=this._pendingLink.href || '/create';}).finally(()=>{this._shellPending=false;});
         }
       });
       const start=()=>{if(getUser()?.isLoggedIn && window.sb?.auth?.getSession)loadProfileShell().catch(()=>{});};

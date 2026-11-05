@@ -32,7 +32,7 @@
   };
   stateFor(host).state = 'Active';stateFor(host).visits=1;
   function announce(kind) {
-    document.querySelectorAll('bottom-nav').forEach(nav => nav.setActive?.(kind));
+    document.querySelectorAll('bottom-nav, side-nav').forEach(nav => nav.setActive?.(kind));
   }
   function message(text, failed = false) {
     if (!status) {
@@ -58,9 +58,12 @@
     const nav = document.querySelector('bottom-nav');
     if (nav && nav.parentElement !== document.body) document.body.append(nav);
     nav?.setAttribute('data-fu-shell-nav','');
+    const side=document.querySelector('side-nav');
+    if(side && side.parentElement!==document.body)document.body.append(side);
+    side?.setAttribute('data-fu-shell-side','');
     document.documentElement.setAttribute('data-fu-shell','');
     for (const el of document.body.children) {
-      if (el === nav || el.hasAttribute('data-fu-mounted') || /^(SCRIPT|STYLE|LINK)$/.test(el.tagName)) continue;
+      if (el === nav || el === side || el.hasAttribute('data-fu-mounted') || /^(SCRIPT|STYLE|LINK)$/.test(el.tagName)) continue;
       if (!visible && !rootState.has(el)) rootState.set(el, {inert:el.inert, aria:el.getAttribute('aria-hidden'), visibility:el.style.visibility});
       if (!visible) { el.inert = true; el.setAttribute('aria-hidden','true'); el.style.visibility='hidden'; }
       else if (rootState.has(el)) {
@@ -213,12 +216,43 @@
     if(loading)showColdShell(kind);else hideColdShell();
     active=kind;
     document.documentElement.removeAttribute('data-nav-overlay');
-    const nav=document.querySelector('bottom-nav');if(nav)nav.inert=false;
+    document.querySelectorAll('bottom-nav, side-nav').forEach(nav=>{nav.inert=false;});
     entry.state=loading?'InitializingVisible':entry.visits?'Restored':'Active'; if(!handoff)++entry.visits;
     if(!loading)try { win.FreeUpperScreen?.resume(); } catch (_) {}
     announce(kind); message('');
     document.documentElement.toggleAttribute('data-nav-keyboard',!loading && !!win?.document?.documentElement.hasAttribute('data-nav-keyboard'));
     window.dispatchEvent(new CustomEvent(handoff?'fu-tab-content-ready':'fu-tab-active',{detail:{kind,state:entry.state,mode:entry.wasWarm?'warm':'cold',ms:performance.now()-(entry.requestedAt || performance.now())}}));
+  }
+  // WebKit limits History API writes to 100 / 10 seconds. Normal taps keep
+  // their entries; sustained bursts coalesce to the latest tab at most every
+  // 300ms after 50 writes, reserving room for existing detail/modal history.
+  // Only history is paced: visibility and lifecycle changes stay synchronous.
+  let historyTimes=[], pendingHistory=null, historyTimer=null, lastHistory=-Infinity, historyBlockedUntil=0;
+  function cancelTabHistory() { clearTimeout(historyTimer);historyTimer=null;pendingHistory=null; }
+  function flushTabHistory() {
+    clearTimeout(historyTimer);historyTimer=null;
+    const next=pendingHistory;
+    if(!next || !valid() || next.viewer!==session.viewer || next.version!==generation || next.kind!==desired || next.from!==location.href){pendingHistory=null;return;}
+    const now=performance.now();historyTimes=historyTimes.filter(time=>now-time<10000);
+    const wait=Math.max(0,historyBlockedUntil-now,historyTimes.length>=50?300-(now-lastHistory):0);
+    if(wait>0){historyTimer=setTimeout(flushTabHistory,Math.ceil(wait));return;}
+    pendingHistory=null;
+    const url=next.kind===host?publicBaseURL:window.FreeUpperRoutes.pages[next.kind].path;
+    if(history.state?.fuMountedView?.kind===next.kind && history.state.fuMountedView.viewer===session.viewer && new URL(url,location.href).href===location.href)return;
+    try {
+      if(!history.state?.fuMountedView)history.replaceState({...history.state,fuMountedView:{kind:active,viewer:session.viewer}},'',location.href);
+      history.pushState({fuMountedView:{kind:next.kind,viewer:session.viewer}},'',url);
+      lastHistory=now;historyTimes.push(now);
+    } catch(error) {
+      if(error.name!=='SecurityError')throw error;
+      // Other native history owners may already have consumed WebKit's quota.
+      // Keep the screen usable and retry the latest intent when it resets.
+      pendingHistory=next;historyBlockedUntil=now+10001;
+      historyTimer=setTimeout(flushTabHistory,10001);
+    }
+  }
+  function recordTabHistory(kind) {
+    pendingHistory={kind,viewer:session.viewer,version:generation,from:location.href};flushTabHistory();
   }
   function request(kind,push=true) {
     if (!Object.hasOwn(pages,kind) && kind!==host) return false;
@@ -230,10 +264,7 @@
     desired=kind; stateFor(kind).own=push;
     stateFor(kind).requestedAt=performance.now();stateFor(kind).wasWarm=kind===host || !!stateFor(kind).loaded;
     announce(kind); // the persistent bar responds in the tap task
-    if (push) {
-      if (!history.state?.fuMountedView) history.replaceState({...history.state,fuMountedView:{kind:active,viewer:session.viewer}},'',location.href);
-      history.pushState({fuMountedView:{kind,viewer:session.viewer}},'',kind===host?publicBaseURL:window.FreeUpperRoutes.pages[kind].path);
-    }
+    if(push)recordTabHistory(kind);
     const frame=kind===host?null:makeFrame(kind);
     if (kind!==host && !frame) { fail(kind); return true; }
     activate(kind);
@@ -242,13 +273,14 @@
   function clear(resetRoot=false) {
     if(resetting)return;
     if(resetRoot && window.FreeUpperScreen)resetting=true;
+    cancelTabHistory();
     ++generation; pendingKind=null; prefetchedOwn=false;
     clearTimeout(idle); idle=null; clearTimeout(expiry); expiry=null;
     for (const [kind,frame] of frames) { clearTimeout(stateFor(kind).timeout); pause(frame.contentWindow); try{frame.contentWindow.FreeUpperScreen?.dispose();}catch(_){} frame.remove(); }
     frames.clear(); snapshots.clear(); screens.clear(); coldShell?.replaceChildren();coldShell?.remove();coldShell=null;
     if (host==='profile') window.ProfileMounted?.suspend();
     document.documentElement.removeAttribute('data-nav-overlay');
-    const nav=document.querySelector('bottom-nav');if(nav)nav.inert=false;
+    document.querySelectorAll('bottom-nav, side-nav').forEach(nav=>{nav.inert=false;});
     rootVisible(true); active=desired=host; stateFor(host).state='Active'; announce(host); message('');
     if (!resetRoot && history.state?.fuMountedView) history.replaceState({...history.state,fuMountedView:null},'',baseURL);
     // The launch page cannot be removed like a child. Reset its JS heap as
@@ -300,7 +332,7 @@
     setOverlay(win,covered){
       if(!valid() || win!==winFor(active))return;
       document.documentElement.toggleAttribute('data-nav-overlay',!!covered);
-      const nav=document.querySelector('bottom-nav');if(nav)nav.inert=!!covered;
+      document.querySelectorAll('bottom-nav, side-nav').forEach(nav=>{nav.inert=!!covered;});
     },
     profileReady(win) {
       if (!valid() || win!==winFor('profile')) return;
@@ -316,6 +348,7 @@
     status:() => ({active,desired,documents:frames.size+1,limit:MAX_FRAMES+1,snapshots:snapshots.size,screens:Object.fromEntries([...screens].map(([k,v])=>[k,v.state]))})
   };
   window.addEventListener('popstate',e => {
+    cancelTabHistory();
     const state=e.state?.fuMountedView;
     if (!state) return; // Profile/modal/detail keeps its native history
     if (!valid() || state.viewer!==session.viewer) { e.stopImmediatePropagation(); clear(true); return; }

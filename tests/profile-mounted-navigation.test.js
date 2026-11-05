@@ -7,6 +7,8 @@ import {chromium,webkit} from '@playwright/test';
 import {profileFixtureParts as fixture} from './helpers/profile-navigation-fixture.js';
 const routeSource=await readFile(new URL('../js/freeupper-routes.js',import.meta.url),'utf8');
 const nav=await readFile(new URL('../bottom-nav.js',import.meta.url),'utf8');
+const sideNav=await readFile(new URL('../side-nav.js',import.meta.url),'utf8');
+const sideCSS=await readFile(new URL('../side-nav.css',import.meta.url),'utf8');
 const shell=await readFile(new URL('../profile-shell.js',import.meta.url),'utf8');
 const engine=process.env.FREEUPPER_PROFILE_ENGINE || 'chromium';
 const pwa=!!process.env.FREEUPPER_PROFILE_PWA;
@@ -26,11 +28,13 @@ window.PostsAPI.loadProfilePage=async(id,{offset=0,limit=24}={})=>{
 };
 window.applyTheme=theme=>document.documentElement.dataset.theme=theme;
 `;
-async function mountedHarness({root='home',delay=120,hydrated=true}={}){
+async function mountedHarness({root='home',delay=120,hydrated=true,sidebar=false}={}){
  const documents=[];let failPrimary=false;
  const server=createServer((req,res)=>{
   const url=new URL(req.url,'http://local');
   if(url.pathname==='/js/freeupper-routes.js'){res.setHeader('Content-Type','text/javascript');res.end(routeSource);return;}
+  if(url.pathname==='/side-nav.js'){res.setHeader('Content-Type','text/javascript');res.end(sideNav);return;}
+  if(url.pathname==='/side-nav.css'){res.setHeader('Content-Type','text/css');res.end(sideCSS);return;}
   if(url.pathname==='/bottom-nav.js'){res.setHeader('Content-Type','text/javascript');res.end(nav);return;}
   if(url.pathname==='/profile-shell.js'){res.setHeader('Content-Type','text/javascript');res.end(shell);return;}
   if(url.pathname==='/service-worker.js'){res.setHeader('Content-Type','text/javascript');res.end(fixture.worker);return;}
@@ -42,7 +46,7 @@ async function mountedHarness({root='home',delay=120,hydrated=true}={}){
    res.end(fixture.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace('</body>',`<script>${routeSource}</script><script>${fixture.cache}</script><script>${fixture.bootstrap}</script><script>${sessionSetup}</script><script>${fixture.main}</script><script src="/bottom-nav.js?v=mounted-profile-v1"></script></body>`));return;
   }
   if(url.pathname.endsWith('.html') || url.pathname==='/')documents.push(req.url);
-  res.end(`<!doctype html><html data-theme="dark"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0}#home{height:100vh;overflow:auto}bottom-nav{position:fixed;bottom:0;z-index:100}a{display:inline-block;padding:16px;background:white;color:black}</style><main id="home"><h1>Home</h1><div style="height:3000px">Retained home feed</div></main><bottom-nav></bottom-nav><script>${routeSource}</script><script>${fixture.bootstrap}</script><script>${sessionSetup}</script><script src="/bottom-nav.js?v=mounted-profile-v1"></script><script>window.__fuInitialHydrated=${hydrated};if(window.__fuInitialHydrated)requestAnimationFrame(()=>dispatchEvent(new Event('fu-app-hydrated')));</script></html>`);
+  res.end(`<!doctype html><html data-theme="dark"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0}#home{height:100vh;overflow:auto}bottom-nav{position:fixed;bottom:0;z-index:100}a{display:inline-block;padding:16px;background:white;color:black}</style>${sidebar?'<link rel="stylesheet" href="/side-nav.css"><side-nav show-chat></side-nav><script src="/side-nav.js" defer></script>':''}<main id="home"><h1>Home</h1><div style="height:3000px">Retained home feed</div></main><bottom-nav></bottom-nav><script>${routeSource}</script><script>${fixture.bootstrap}</script><script>${sessionSetup}</script><script src="/bottom-nav.js?v=mounted-profile-v1"></script><script>window.__fuInitialHydrated=${hydrated};if(window.__fuInitialHydrated)requestAnimationFrame(()=>dispatchEvent(new Event('fu-app-hydrated')));</script></html>`);
  });await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`;
  const browser=await (engine==='webkit'?webkit.launch():chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']})).catch(async e=>{await new Promise(r=>server.close(r));throw e;});
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const page=await context.newPage();page.setDefaultTimeout(10000);const errors=[];page.on('pageerror',e=>{errors.push(e.message);if(process.env.FREEUPPER_DEBUG)console.error(e.message);});
@@ -126,7 +130,7 @@ test(`${engine}: background refresh failures retain counts and valid thumbnails;
  }finally{await h.close();}
 });
 
-async function inspectOfflineActivation(h,age) {
+async function inspectOfflineActivation(h,age,selector='[data-nav-key=profile]') {
  const f=await ready(h);
  const authorizedAt=await f.evaluate(()=>ProfileMounted.status().authorizedAt);
  const requests=await f.evaluate(()=>calls.filter(c=>c.kind==='page').length);
@@ -136,7 +140,7 @@ async function inspectOfflineActivation(h,age) {
   window.virtualNow=now;Date.now=()=>top.virtualNow;
   for(const frame of Array.from(frames))frame.Date.now=()=>top.virtualNow;
  },authorizedAt+age);
- const sample=await h.page.evaluate(async()=>{
+ const sample=await h.page.evaluate(async selector=>{
   const frame=document.querySelector('iframe[data-fu-mounted=profile]'),win=frame.contentWindow;
   const inspect=()=>({
    cards:win.document.querySelectorAll('#panel-posts .grid-card').length,
@@ -149,11 +153,11 @@ async function inspectOfflineActivation(h,age) {
   let atActivation=null;
   const listener=e=>{if(e.detail.kind==='profile')atActivation=inspect();};
   addEventListener('fu-tab-active',listener);
-  document.querySelector('[data-nav-key=profile]').click();
+  document.querySelector(selector).click();
   const sameTask=inspect();removeEventListener('fu-tab-active',listener);
   await new Promise(requestAnimationFrame);
   return {atActivation,sameTask,firstFrame:inspect()};
- });
+ },selector);
  return {sample,requests};
 }
 
@@ -178,5 +182,16 @@ test(`${engine}: a valid offline Profile lease retains its DOM but redacts forei
    assert.equal(state.foreignUnavailable,true);assert.equal(state.pageRequests,requests);
   }
   assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+for(const age of [299999,300000])test(`${engine}: sidebar Profile validates offline lease at ${age}ms before any reveal`,{timeout:45000},async()=>{
+ const h=await mountedHarness({sidebar:true});try{
+  const {sample,requests}=await inspectOfflineActivation(h,age,'side-nav [data-side-key=profile]');
+  for(const state of [sample.sameTask,sample.atActivation,sample.firstFrame]){
+   assert(state);assert.equal(state.visible,'visible');assert.equal(state.cards,age===300000?0:24);assert.equal(state.pageRequests,requests);
+   if(age===300000)assert.match(state.message,/Connect to refresh/);else{assert(state.same);assert(state.foreignUnavailable);}
+  }
+  assert.equal(await h.page.locator('side-nav .side-btn[aria-current=page]').getAttribute('data-side-key'),'profile');assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });

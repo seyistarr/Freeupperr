@@ -94,7 +94,22 @@
     register({suspend:stop,resume:start,dispose:stop});
     if (active) start();
   }
+  // Both navigation components share this bootstrap and the same coordinator.
+  // It only loads code; authentication, retention and history stay in the shell.
+  let coordinatorLoading=null;
+  function ensureCoordinator() {
+    if(mounted)return Promise.resolve(shell);
+    if(window.FreeUpperProfileShell)return Promise.resolve(window.FreeUpperProfileShell);
+    if(!coordinatorLoading)coordinatorLoading=new Promise((resolve,reject)=>{
+      const script=document.createElement('script');script.src='/profile-shell.js?v=sidebar-v1';
+      script.onload=()=>resolve(window.FreeUpperProfileShell);
+      script.onerror=()=>{coordinatorLoading=null;script.remove();reject(new Error('Navigation unavailable'));};
+      document.head.append(script);
+    });
+    return coordinatorLoading;
+  }
   window.FreeUpperScreen={
+    ensureCoordinator,
     kind, ready, navigationWindow:mounted?window.parent:window, isDisposed:()=>disposed, isReady:()=>initialized, isActive:()=>active && !document.hidden,
     register, realtime:trackRealtime, suspend, resume,
     takeSnapshot() { const data=initialSnapshot; initialSnapshot=null; return data; },
@@ -109,11 +124,11 @@
     const coordinator=mounted?shell:window===parent?window.FreeUpperProfileShell:null;
     if(!active || document.hidden || !coordinator?.setOverlay)return;
     const root=mounted?parent:window;
-    const bar=root.document.querySelector('bottom-nav .bottom-nav')?.getBoundingClientRect();
+    const bar=[...root.document.querySelectorAll('bottom-nav .bottom-nav, side-nav .side-nav')].map(el=>el.getBoundingClientRect()).find(box=>box.width && box.height);
     if(!bar?.height){coordinator.setOverlay(window,false);return;}
     const box=mounted?window.frameElement.getBoundingClientRect():{left:0,top:0};
     const x=bar.left+bar.width/2-box.left,y=bar.top+bar.height/2-box.top;
-    const leaf=document.elementsFromPoint(x,y).find(el=>!el.closest('bottom-nav'));
+    const leaf=document.elementsFromPoint(x,y).find(el=>!el.closest('bottom-nav, side-nav'));
     let covered=false;
     for(let el=leaf;el && el!==document.documentElement;el=el.parentElement){
       const css=getComputedStyle(el);

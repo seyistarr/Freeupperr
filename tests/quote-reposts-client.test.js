@@ -47,7 +47,7 @@ test('video and Explore legacy APIs, media normalization, view tracking and sour
  // Navigation asset versions may change without altering the legacy player.
  for(const name of ['video.html','explore.js']){
   const bytes=await readFile(new URL('../'+name,import.meta.url),'utf8');
-  const legacy=bytes.replaceAll('js/screen-lifecycle.js?v=native-tabs-v1','js/screen-lifecycle.js?v=clean-urls-v1').replaceAll('bottom-nav.js?v=native-tabs-v1','bottom-nav.js?v=clean-urls-v1');
+  const legacy=bytes.replaceAll('side-nav.css?v=sidebar-v1','side-nav.css').replaceAll('side-nav.js?v=sidebar-v1','side-nav.js?v=clean-urls-v1').replaceAll('js/screen-lifecycle.js?v=sidebar-v1','js/screen-lifecycle.js?v=native-tabs-v1').replaceAll('bottom-nav.js?v=sidebar-v1','bottom-nav.js?v=native-tabs-v1').replaceAll('js/screen-lifecycle.js?v=native-tabs-v1','js/screen-lifecycle.js?v=clean-urls-v1').replaceAll('bottom-nav.js?v=native-tabs-v1','bottom-nav.js?v=clean-urls-v1');
   assert.equal(createHash('sha256').update(legacy).digest('hex'),contracts[name+'_sha256']);
  }
  for(const name of ['toggleRepostAPI','updateRepostComment','normalizeMedia','mapPost','incrementView'])assert(source.includes(contracts[name]),name+' legacy contract changed');

@@ -1,7 +1,7 @@
 importScripts('/js/freeupper-routes.js?v=clean-urls-v1');
 
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v28-native-tabs';
+const CACHE_NAME = 'freeupper-pwa-v29-sidebar';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -32,11 +32,12 @@ const URLS_TO_CACHE = [
   './profile-detail.js?v=clean-urls-v1',
   './header-badges.js?v=sounds-v3-clean-urls-v1',
   './protected-media-client.js?v=clean-urls-v1',
-  './side-nav.js?v=clean-urls-v1',
+  './side-nav.css?v=sidebar-v1',
+  './side-nav.js?v=sidebar-v1',
 
-  './profile-shell.js?v=native-tabs-v1',
-  './js/screen-lifecycle.js?v=native-tabs-v1',
-  './bottom-nav.js?v=native-tabs-v1',
+  './profile-shell.js?v=sidebar-v1',
+  './js/screen-lifecycle.js?v=sidebar-v1',
+  './bottom-nav.js?v=sidebar-v1',
   './global.css',
   './global.js?v=clean-urls-v1',
   './theme.js?v=2',

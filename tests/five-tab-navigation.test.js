@@ -32,26 +32,27 @@ window.PostsAPI={loadFeedWithReposts:async()=>{requests.push('feed');await new P
 window.switchActor=id=>{top.actor=id;localStorage.setItem('test-actor',id||'guest');for(const w of [top,...Array.from(top.frames)]){try{w.authListeners.forEach(f=>f(id?'SIGNED_IN':'SIGNED_OUT',id?{user:{id},expires_at:top.sessionExpiry}:null));w.userListeners.forEach(f=>f());}catch(_){}}};
 })();
 `;
-async function harness({root='home',pwa=false,delay=100,route=null,guest=false,prefetch=true,holdFirstSearch=false,holdFirstCreate=false,holdFirstProfile=false,dataDelay=80,legacyWorker=false}={}){
- const documents=[];const errors=[];let heldSearch=null,heldCreate=null;const heldProfiles=[];let profileRequestedResolve;const profileRequested=new Promise(resolve=>{profileRequestedResolve=resolve;});let workerUpdated=false;
+async function harness({root='home',pwa=false,delay=100,route=null,guest=false,prefetch=true,holdFirstSearch=false,holdFirstCreate=false,holdFirstProfile=false,dataDelay=80,legacyWorker=false,coordinatorDelay=0,waitShell=true}={}){
+ const documents=[];const errors=[];const offlineRequests=[];let transportOffline=false;let heldSearch=null,heldCreate=null;const heldProfiles=[];let profileRequestedResolve;const profileRequested=new Promise(resolve=>{profileRequestedResolve=resolve;});let workerUpdated=false;
  const server=createServer(async(req,res)=>{
+  if(transportOffline){offlineRequests.push(req.url);res.destroy();return;}
   const url=new URL(req.url,'http://fixture');
   try{
    if(url.pathname==='/service-worker.js' && legacyWorker){res.setHeader('Content-Type','text/javascript');res.setHeader('Cache-Control','no-cache');res.end(await readFile(workerUpdated?'service-worker.js':'tests/fixtures/service-worker-v26.js'));return;}
-   if(url.searchParams.has('fixtureRenderer')){res.setHeader('Content-Type','text/html');res.end('<!doctype html><head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script src="/js/screen-lifecycle.js?v=2"></script></head><body><input id="rendererInput"><main>Owned renderer</main></body>');return;}
+   if(url.searchParams.has('fixtureRenderer')){res.setHeader('Content-Type','text/html');res.end('<!doctype html><head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script src="/js/screen-lifecycle.js?v=sidebar-v1"></script></head><body><input id="rendererInput"><main>Owned renderer</main></body>');return;}
    const key=Object.keys(names).find(key=>url.pathname==='/'+names[key]+'.html' || url.pathname===routes[key]) || (url.pathname.startsWith('/u/')||url.pathname.startsWith('/@')?'profile':null);
-   if(!key){const path=url.pathname==='/'?'/index.html':url.pathname;const body=await readFile('.'+path);res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'application/octet-stream');res.end(body);return;}
+   if(!key){if(url.pathname==='/profile-shell.js' && coordinatorDelay)await new Promise(r=>setTimeout(r,coordinatorDelay));const path=url.pathname==='/'?'/index.html':url.pathname;const body=await readFile('.'+path);res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'application/octet-stream');res.end(body);return;}
    documents.push({url:req.url,time:Date.now()});
    let html=sources[key].replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<link\b[^>]*https:[^>]*>/gi,'');
    // Keep decorative share icons local, like the fixture's mocked backend
    // and stripped external scripts/styles. WebKit reports aborted third-party
    // image requests as page errors when the PWA is switched offline.
    html=html.replace(/(<img\b[^>]*\bsrc=["'])https:\/\/cdn-icons-png\.flaticon\.com\/[^"']+(["'])/gi,(_match,before,after)=>before+fixtureIcon+after);
-   let code=key==='search'?'<script src="/search.js"></script>':key==='create'?'<script>const state={postMedia:[],marketImages:[],postEmbeddings:[]};'+createGuard+';window.handlePostUpload=event=>{window.handedFiles=Array.from(event.target.files);};</script>':key==='video'?'<script>'+videoMain+'</script>':key==='profile'?'<script>'+profile.cache+'</script><script>'+profile.bootstrap+'</script><script>window.fixtureSB=window.sb;</script><script>'+bootstrap.replace('setTimeout(r,80)','setTimeout(r,'+dataDelay+')')+'</script><script>sb.from=fixtureSB.from;sb.rpc=fixtureSB.rpc;</script><script>'+profile.main+'</script>':`<script>window.__fuInitialHydrated=${prefetch};addEventListener("DOMContentLoaded",()=>{if(window.__fuInitialHydrated)dispatchEvent(new Event("fu-app-hydrated"));});</script>`;
+   let code=key==='search'?'<script src="/search.js?v=clean-urls-v1"></script>':key==='create'?'<script>const state={postMedia:[],marketImages:[],postEmbeddings:[]};'+createGuard+';window.handlePostUpload=event=>{window.handedFiles=Array.from(event.target.files);};</script>':key==='video'?'<script>'+videoMain+'</script>':key==='profile'?'<script>'+profile.cache+'</script><script>'+profile.bootstrap+'</script><script>window.fixtureSB=window.sb;</script><script>'+bootstrap.replace('setTimeout(r,80)','setTimeout(r,'+dataDelay+')')+'</script><script>sb.from=fixtureSB.from;sb.rpc=fixtureSB.rpc;</script><script>'+profile.main+'</script>':`<script>window.__fuInitialHydrated=${prefetch};addEventListener("DOMContentLoaded",()=>{if(window.__fuInitialHydrated)dispatchEvent(new Event("fu-app-hydrated"));});</script>`;
    // Profile fixture provides identity/relationship RPCs; keep shared auth and
    // realtime semantics from this harness, and its real production page logic.
-   html=html.replace('<head>','<head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script>'+bootstrap.replace('setTimeout(r,80)','setTimeout(r,'+dataDelay+')')+'</script><script src="/js/screen-lifecycle.js?v=2"></script><script src="/theme.js?v=2"></script>');
-   html=html.replace('</body>',code+'<script src="/router.js"></script><script src="/side-nav.js"></script><script src="/bottom-nav.js?v=five-tabs-v2"></script></body>');
+   html=html.replace('<head>','<head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script>'+bootstrap.replace('setTimeout(r,80)','setTimeout(r,'+dataDelay+')')+'</script><script src="/js/screen-lifecycle.js?v=sidebar-v1"></script><script src="/theme.js?v=2"></script>');
+   html=html.replace('</body>',code+'<script src="/router.js?v=clean-urls-v1"></script><script src="/side-nav.js?v=sidebar-v1"></script><script src="/bottom-nav.js?v=sidebar-v1"></script></body>');
    res.setHeader('Content-Type','text/html');if(holdFirstProfile && key==='profile' && url.searchParams.has('fuMounted')){heldProfiles.push(()=>res.end(html));profileRequestedResolve();}else if(holdFirstCreate && key==='create' && url.searchParams.has('fuMounted'))heldCreate=()=>res.end(html);else if(holdFirstSearch && key==='search' && url.searchParams.has('fuMounted'))heldSearch=()=>setTimeout(()=>res.end(html),delay);else setTimeout(()=>res.end(html),url.searchParams.has('fuMounted')?delay:0);
   }catch(e){res.writeHead(404);res.end();}
  });
@@ -62,15 +63,15 @@ async function harness({root='home',pwa=false,delay=100,route=null,guest=false,p
  await context.route(url=>url.origin!==origin,r=>r.abort());
  if(guest)await context.addInitScript(()=>localStorage.setItem('test-actor','guest'));
  const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>{errors.push(e.message);if(process.env.FREEUPPER_DEBUG)console.error(e.message);});
- await page.goto(origin+(route || routes[root]));
+ await page.goto(origin+(route || routes[root]),{waitUntil:waitShell?'load':'domcontentloaded'});
  if(pwa){await page.evaluate(async()=>{await navigator.serviceWorker.register('/service-worker.js');await navigator.serviceWorker.ready;});await page.reload();await page.waitForFunction(()=>!!navigator.serviceWorker.controller);}
- if(!guest)await page.waitForFunction(()=>!!window.FreeUpperProfileShell?.getSession());
- const screen=key=>key===root?page.mainFrame():page.frames().find(f=>f!==page.mainFrame() && new URL(f.url()).pathname==='/'+names[key]+'.html');
+ if(!guest && waitShell)await page.waitForFunction(()=>!!window.FreeUpperProfileShell?.getSession());
+ const screen=key=>key===root?page.mainFrame():page.frames().find(f=>f!==page.mainFrame() && f.url() && new URL(f.url()).pathname==='/'+names[key]+'.html');
  const select=async key=>{const start=Date.now();await page.locator('bottom-nav [data-nav-key='+key+']').click();await page.waitForFunction(k=>FreeUpperProfileShell.getActive()===k,key).catch(async e=>{console.error(key,errors,await page.evaluate(()=>({status:FreeUpperProfileShell.status(),frames:[...document.querySelectorAll('iframe[data-fu-mounted]')].map(f=>({src:f.src,html:f.contentDocument?.body?.textContent.slice(0,120),ready:f.contentWindow.FreeUpperScreen?.isReady(),controller:!!f.contentWindow.navigator.serviceWorker.controller,scripts:[...f.contentDocument.scripts].map(s=>s.src)}))})));throw e;});if(key!==root)await page.waitForFunction(k=>document.querySelector('iframe[data-fu-mounted='+k+']')?.dataset.loaded==='true',key);return Date.now()-start;};
  const releaseSearch=()=>{holdFirstSearch=false;heldSearch?.();heldSearch=null;};
  const waitForProfileRequest=async()=>{let timeout;try{await Promise.race([profileRequested,new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('Profile prefetch did not request its document')),12000);})]);}finally{clearTimeout(timeout);}};
  const releaseProfile=()=>{holdFirstProfile=false;heldProfiles.splice(0).forEach(release=>release());};
- return {page,screen,select,errors,documents,origin,releaseSearch,waitForProfileRequest,releaseProfile,releaseCreate:()=>{holdFirstCreate=false;heldCreate?.();},updateWorker:()=>{workerUpdated=true;},close:async()=>{releaseSearch();releaseProfile();holdFirstCreate=false;heldCreate?.();await browser.close();await new Promise(r=>server.close(r));}};
+ return {page,screen,select,errors,documents,offlineRequests,origin,disconnectTransport:()=>{transportOffline=true;},releaseSearch,waitForProfileRequest,releaseProfile,releaseCreate:()=>{holdFirstCreate=false;heldCreate?.();},updateWorker:()=>{workerUpdated=true;},close:async()=>{releaseSearch();releaseProfile();holdFirstCreate=false;heldCreate?.();await browser.close();await new Promise(r=>server.close(r));}};
 }
 
 test('five tabs: cold/warm timing, persistent nav identity, state, geometry, history and bounded retention',{timeout:120000},async t=>{
@@ -79,7 +80,7 @@ test('five tabs: cold/warm timing, persistent nav identity, state, geometry, his
  try{
   await h.page.evaluate(()=>{window.originalNav=document.querySelector('bottom-nav');window.originalDocument=document;window.navigationSamples=[];addEventListener('fu-tab-active',e=>{const sample={...e.detail};navigationSamples.push(sample);const received=performance.now();requestAnimationFrame(()=>{sample.firstFrameMs=sample.ms+performance.now()-received;});});});
   // A blocked cold document shows its usable shell in the tap task.
-  const cold=await h.page.evaluate(async()=>{const start=performance.now();document.querySelector('[data-nav-key=search]').click();await new Promise(requestAnimationFrame);const frame=document.querySelector('[data-fu-mounted=search]');return {ms:performance.now()-start,selected:document.querySelector('[aria-current=page]').dataset.navKey,hidden:frame?getComputedStyle(frame).visibility:'hidden',home:getComputedStyle(document.querySelector('#app-container')||document.querySelector('main')||document.body.children[0]).visibility,nav:getComputedStyle(document.querySelector('.bottom-nav')).visibility,shell:document.querySelector('[data-fu-mounted=shell]').hidden,shellTitle:document.querySelector('[data-fu-mounted=shell] h1').textContent};});
+  const cold=await h.page.evaluate(async()=>{const start=performance.now();document.querySelector('[data-nav-key=search]').click();await new Promise(requestAnimationFrame);const frame=document.querySelector('[data-fu-mounted=search]');return {ms:performance.now()-start,selected:document.querySelector('bottom-nav [aria-current=page]').dataset.navKey,hidden:frame?getComputedStyle(frame).visibility:'hidden',home:getComputedStyle(document.querySelector('.top-header')).visibility,nav:getComputedStyle(document.querySelector('.bottom-nav')).visibility,shell:document.querySelector('[data-fu-mounted=shell]').hidden,shellTitle:document.querySelector('[data-fu-mounted=shell] h1').textContent};});
   assert.equal(cold.selected,'search');assert.equal(cold.hidden,'hidden');assert.equal(cold.home,'hidden');assert.equal(cold.shell,false);assert.equal(cold.shellTitle,'Search');assert.equal(cold.nav,'visible');
   await h.page.locator('[data-fu-mounted=shell] input').fill('cold query');
   h.releaseSearch();await h.page.waitForFunction(()=>document.querySelector('iframe[data-fu-mounted=search]')?.dataset.loaded==='true');
@@ -114,7 +115,7 @@ test('five tabs: cold/warm timing, persistent nav identity, state, geometry, his
    await h.select(key);
    const state=await h.page.evaluate(()=>({status:FreeUpperProfileShell.status(),same:originalNav===document.querySelector('bottom-nav'),doc:originalDocument===document,nav:document.querySelector('.bottom-nav').getBoundingClientRect().toJSON(),hit:document.elementFromPoint(30,innerHeight-32)?.closest('bottom-nav')===originalNav,visible:[...document.querySelectorAll('iframe[data-fu-mounted]')].filter(f=>getComputedStyle(f).visibility==='visible').length}));
    assert(state.same);assert(state.doc);assert(state.status.documents<=5,JSON.stringify(state));assert.equal(state.nav.height,64);assert(state.hit);assert(state.visible<=1);
-   assert.equal(await h.page.locator('[aria-current=page]').getAttribute('data-nav-key'),key);
+   assert.equal(await h.page.locator('bottom-nav [aria-current=page]').getAttribute('data-nav-key'),key);
    assert.equal(await composer.locator('#postContent').inputValue(),'Unsent work');
    if(key!=='home')assert.equal(await h.screen(key).locator('.bottom-nav').count(),0);
   }
@@ -131,7 +132,7 @@ test('five tabs: cold/warm timing, persistent nav identity, state, geometry, his
   await composer.evaluate(()=>{delete visualViewport.height;document.activeElement.blur();visualViewport.dispatchEvent(new Event('resize'));});await h.page.waitForFunction(()=>!document.documentElement.hasAttribute('data-nav-keyboard'));
   await h.page.evaluate(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,get:()=>480});});await composer.locator('#postContent').focus();await h.page.evaluate(()=>visualViewport.dispatchEvent(new Event('resize')));assert.equal(await h.page.locator('.bottom-nav').evaluate(el=>getComputedStyle(el).visibility),'hidden');assert((await composer.locator('.layout').boundingBox()).height<=480);
   await composer.locator('#postContent').blur();await h.page.evaluate(()=>{delete visualViewport.height;visualViewport.dispatchEvent(new Event('resize'));});await h.page.waitForFunction(()=>!document.documentElement.hasAttribute('data-nav-keyboard'));
-  await h.page.setViewportSize({width:1024,height:768});await h.screen('create').locator('side-nav [data-side-key=search]').click();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='search');assert(await h.page.evaluate(()=>originalDocument===document));
+  await h.page.setViewportSize({width:1024,height:768});await h.page.locator('side-nav [data-side-key=search]').click();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='search');assert(await h.page.evaluate(()=>originalDocument===document));
   await h.page.setViewportSize({width:390,height:844});await h.select('home');
   const rapid=await h.page.evaluate(()=>{const before=history.length;for(const key of ['search','search','create','create','video','video','profile','profile','home','home'])document.querySelector('[data-nav-key='+key+']').click();return {added:history.length-before,kinds:[...document.querySelectorAll('iframe[data-fu-mounted]')].map(f=>f.dataset.fuMounted)};});assert.equal(rapid.added,5);assert.equal(new Set(rapid.kinds).size,rapid.kinds.length);await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='home');
   assert.deepEqual(h.errors,[]);await writeFile('/tmp/freeupper-five-tab-'+(process.env.FREEUPPER_PROFILE_ENGINE || 'chromium')+'-timings.json',JSON.stringify(samples,null,2));t.diagnostic(JSON.stringify(Object.keys(names).map(kind=>({kind,warmMs:samples.filter(s=>s.kind===kind && s.mode==='warm').map(s=>Number(s.ms.toFixed(1))),coldMs:samples.filter(s=>s.kind===kind && s.mode==='cold').map(s=>Number(s.ms.toFixed(1)))}))));
@@ -170,7 +171,7 @@ test('direct query links and guest tab navigation keep native URL behavior',{tim
  const direct=await harness({root:'search',route:'/search.html?q=deep-link'});
  try{await direct.page.waitForFunction(()=>document.getElementById('resultsContainer').textContent.includes('deep-link'));await direct.select('create');await direct.select('search');assert.equal(new URL(direct.page.url()).pathname,'/search');assert.equal(new URL(direct.page.url()).search,'?q=deep-link');assert.equal(await direct.page.locator('#searchInput').inputValue(),'deep-link');assert.deepEqual(direct.errors,[]);}finally{await direct.close();}
  const guest=await harness({guest:true});
- try{for(const key of ['search','create','video','profile','home']){await guest.page.locator('[data-nav-key='+key+']').click();await guest.page.waitForURL('**'+routes[key]);assert.equal(await guest.page.locator('[aria-current=page]').getAttribute('data-nav-key'),key);assert.equal(await guest.page.locator('.bottom-nav').count(),1);}assert.deepEqual(guest.errors,[]);}finally{await guest.close();}
+ try{for(const key of ['search','create','video','profile','home']){await guest.page.locator('[data-nav-key='+key+']').click();await guest.page.waitForURL('**'+routes[key]);assert.equal(await guest.page.locator('bottom-nav [aria-current=page]').getAttribute('data-nav-key'),key);assert.equal(await guest.page.locator('.bottom-nav').count(),1);}assert.deepEqual(guest.errors,[]);}finally{await guest.close();}
 });
 
 test('cold Home and Profile handoffs retain the outer document and navigation',{timeout:45000},async t=>{
@@ -196,7 +197,7 @@ test('owned renderers inherit suspension; native post links leave the managed ta
   await h.select('search');const marker=await h.page.evaluate(()=>pageMarker);
   await h.screen('search').evaluate(()=>Router.openVideo('fixture-post'));
   await h.page.waitForURL('**/videos?post=fixture-post');await h.page.waitForFunction(value=>window.pageMarker && pageMarker!==value,marker);
-  assert.equal(await h.page.locator('[aria-current=page]').getAttribute('data-nav-key'),'video');assert.deepEqual(h.errors,[]);
+  assert.equal(await h.page.locator('bottom-nav [aria-current=page]').getAttribute('data-nav-key'),'video');assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
 
@@ -336,5 +337,166 @@ test('installed PWA serves managed HTML shells without a network navigation roun
   assert.equal(h.documents.filter(x=>x.url.includes('fuMounted')).length,before);
   assert.equal(await h.screen('search').evaluate(()=>FreeUpperScreen.isReady()),true);
   assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+
+// Exercise the shared rail at desktop/iPad width in both Chromium and mobile
+// WebKit; the very same root component becomes the bottom bar at phone width.
+async function sidebarSelect(h,key){
+ await h.page.locator('side-nav .side-btn[data-side-key='+key+']').click();
+ await h.page.waitForFunction(k=>FreeUpperProfileShell.getActive()===k,key).catch(async error=>{console.error('sidebar destination',key,h.errors,await h.page.evaluate(()=>({status:FreeUpperProfileShell.status(),frames:[...document.querySelectorAll('iframe[data-fu-mounted]')].map(f=>({kind:f.dataset.fuMounted,url:f.contentWindow.location.href,ready:f.contentWindow.FreeUpperScreen?.isReady()}))})));throw error;});
+ if(key!=='home')await h.page.waitForFunction(k=>document.querySelector('iframe[data-fu-mounted='+k+']')?.dataset.loaded==='true',key).catch(async error=>{console.error('sidebar content',key,h.errors,await h.page.evaluate(()=>({status:FreeUpperProfileShell.status(),frames:[...document.querySelectorAll('iframe[data-fu-mounted]')].map(f=>({kind:f.dataset.fuMounted,url:f.contentWindow.location.href,ready:f.contentWindow.FreeUpperScreen?.isReady(),html:f.contentDocument?.body?.innerText.slice(0,100),scripts:[...f.contentDocument.scripts].map(s=>s.src)}))})));throw error;});
+ assert.equal(await h.page.locator('side-nav .side-btn[aria-current=page]').getAttribute('data-side-key'),key);
+ assert.equal(await h.page.locator('bottom-nav [aria-current=page]').getAttribute('data-nav-key'),key);
+}
+
+test('sidebar: blocked cold shell, all five destinations, warm state, logo, history and bounded rapid switching',{timeout:90000},async t=>{
+ const h=await harness({prefetch:false,holdFirstSearch:true});
+ try{
+  await h.page.setViewportSize({width:1024,height:768});
+  await h.page.evaluate(()=>{window.retainedRail=document.querySelector('side-nav');window.retainedLaunch=document;window.sidebarSamples=[];addEventListener('fu-tab-active',e=>sidebarSamples.push(e.detail));});
+  const cold=await h.page.evaluate(async()=>{
+   const start=performance.now();document.querySelector('side-nav [data-side-key=search]').click();await new Promise(requestAnimationFrame);
+   const shell=document.querySelector('[data-fu-mounted=shell]'),rail=document.querySelector('side-nav .side-nav');
+   return {ms:performance.now()-start,visible:!shell.hidden && getComputedStyle(shell).visibility==='visible',title:shell.querySelector('h1').textContent,interactive:!document.querySelector('side-nav').inert,hit:document.elementFromPoint(30,180)?.closest('side-nav')===retainedRail,clear:shell.getBoundingClientRect().left>=rail.getBoundingClientRect().right,opening:document.body.innerText.includes('Opening')};
+  });
+  assert(cold.visible);assert(cold.interactive);assert(cold.hit);assert(cold.clear);assert.equal(cold.title,'Search');assert.equal(cold.opening,false);
+  await h.page.locator('[data-fu-mounted=shell] input').fill('cold sidebar query');
+  // Escape a blocked cold screen using the same rail, then return to its shell.
+  await sidebarSelect(h,'home');await h.page.locator('side-nav [data-side-key=search]').click();
+  assert.equal(await h.page.locator('[data-fu-mounted=shell] input').inputValue(),'cold sidebar query');
+  h.releaseSearch();await sidebarSelect(h,'search');const search=h.screen('search');
+  await search.locator('#searchInput').fill('retained sidebar query');await search.evaluate(()=>Search.runSearch('retained sidebar query'));await search.waitForFunction(()=>document.getElementById('resultsContainer').textContent.includes('retained sidebar query'));
+  await search.evaluate(()=>{window.savedDocument=document;document.getElementById('resultsContainer').innerHTML='<div style="height:2000px">Retained results</div>';document.getElementById('mainScroll').scrollTop=250;});
+  await sidebarSelect(h,'create');const create=h.screen('create');await create.locator('#postContent').fill('Unsent sidebar draft');
+  await create.locator('#postFileInput').setInputFiles({name:'draft.txt',mimeType:'text/plain',buffer:Buffer.from('draft attachment')});
+  await sidebarSelect(h,'video');const video=h.screen('video');await video.evaluate(()=>{window.retainedTrack=document.getElementById('feedTrack');});
+  await sidebarSelect(h,'profile');await sidebarSelect(h,'home');
+  const before=h.documents.length;
+  await h.page.context().setOffline(true);
+  for(let round=0;round<3;round++)for(const key of ['search','create','video','profile','home'])await sidebarSelect(h,key);
+  assert.equal(h.documents.length,before);assert.equal(before,5);
+  assert.equal(await search.locator('#mainScroll').evaluate(el=>el.scrollTop),250);
+  assert.equal(await create.locator('#postContent').inputValue(),'Unsent sidebar draft');
+  assert.equal(await create.locator('#postFileInput').evaluate(el=>el.files[0].name),'draft.txt');
+  assert(await search.evaluate(()=>document===savedDocument));assert(await video.evaluate(()=>retainedTrack===document.getElementById('feedTrack')));
+  const warm=await h.page.evaluate(async()=>{
+   const start=performance.now();document.querySelector('side-nav [data-side-key=search]').click();await new Promise(requestAnimationFrame);
+   return {ms:performance.now()-start,visible:getComputedStyle(document.querySelector('iframe[data-fu-mounted=search]')).visibility,rail:retainedRail===document.querySelector('side-nav'),launch:retainedLaunch===document};
+  });
+  assert.equal(warm.visible,'visible');assert(warm.rail);assert(warm.launch);
+  await h.page.locator('.side-logo a').click();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='home');assert.equal(h.documents.length,before);
+  await h.page.goBack();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='search');await h.page.goForward();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='home');
+  await h.page.evaluate(()=>{for(let n=0;n<15;n++)for(const key of ['video','create','profile','search','home'])document.querySelector('side-nav [data-side-key='+key+']').click();});
+  assert.equal(await h.page.evaluate(()=>FreeUpperProfileShell.status().documents),5);assert.equal(h.documents.length,before);
+  for(const key of ['search','create','video','profile'])assert.equal(await h.screen(key).locator('side-nav').count(),0);
+  await h.page.setViewportSize({width:390,height:844});assert.equal(await h.page.locator('.side-nav').isVisible(),false);assert(await h.page.locator('.bottom-nav').isVisible());await h.select('create');
+  await h.page.setViewportSize({width:1024,height:768});assert(await h.page.locator('.side-nav').isVisible());assert.equal(await h.page.locator('side-nav .side-btn[aria-current=page]').getAttribute('data-side-key'),'create');
+  assert.equal(await create.locator('#postContent').inputValue(),'Unsent sidebar draft');assert.equal(h.documents.length,before);
+  assert.deepEqual(h.errors,[]);t.diagnostic('Sidebar tap → first frame '+JSON.stringify({coldMs:cold.ms,warmMs:warm.ms,samples:await h.page.evaluate(()=>sidebarSamples.slice(0,8))}));
+ }finally{await h.close();}
+});
+
+test('sidebar: shared bootstrap race retains latest intent without native reload',{timeout:30000},async()=>{
+ const h=await harness({prefetch:false,coordinatorDelay:1200,waitShell:false});try{
+  await h.page.setViewportSize({width:1024,height:768});
+  assert.equal(await h.page.evaluate(()=>!!window.FreeUpperProfileShell),false);
+  await h.page.evaluate(()=>{window.initialDoc=document;document.querySelector('side-nav [data-side-key=search]').click();document.querySelector('bottom-nav [data-nav-key=create]').click();document.querySelector('side-nav [data-side-key=video]').click();});
+  await h.page.waitForFunction(()=>window.FreeUpperProfileShell?.getActive()==='video');
+  await h.page.waitForFunction(()=>document.querySelector('iframe[data-fu-mounted=video]')?.dataset.loaded==='true');
+  assert(await h.page.evaluate(()=>document===initialDoc));assert.deepEqual(h.documents.map(d=>d.url),['/home','/video.html?fuMounted=1']);
+  assert.equal(await h.page.locator('side-nav .side-btn[aria-current=page]').getAttribute('data-side-key'),'video');assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+test('sidebar: native Chat exits the managed document at the top level',{timeout:30000},async()=>{
+ const h=await harness({prefetch:false});try{
+  await h.page.setViewportSize({width:1024,height:768});await sidebarSelect(h,'search');
+  await h.page.context().route('**/messages',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><title>Messages native route</title><main>Chat</main>'}));
+  await h.page.locator('side-nav [data-side-key=chat]').click();await h.page.waitForURL(h.origin+'/messages');
+  assert.equal(await h.page.title(),'Messages native route');assert.equal(h.page.frames().length,1);assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+test('sidebar: desktop modal ownership, themes, accessible keyboard and account cleanup',{timeout:45000},async()=>{
+ const h=await harness({prefetch:false});try{
+  await h.page.setViewportSize({width:1024,height:768});await sidebarSelect(h,'search');const search=h.screen('search');
+  await search.locator('#searchInput').fill('retained sidebar query');await search.evaluate(()=>Search.runSearch('retained sidebar query'));await search.waitForFunction(()=>document.getElementById('resultsContainer').textContent.includes('retained sidebar query'));
+  await search.evaluate(()=>{const modal=document.createElement('div');modal.id='sidebarModal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;z-index:1000;background:var(--bg)';document.body.append(modal);});
+  await h.page.waitForFunction(()=>document.querySelector('side-nav').inert);
+  assert.equal(await h.page.locator('.side-nav').evaluate(el=>getComputedStyle(el).visibility),'hidden');
+  await search.locator('#sidebarModal').evaluate(el=>el.remove());await h.page.waitForFunction(()=>!document.querySelector('side-nav').inert);
+  await h.page.evaluate(()=>applyTheme('light'));assert.equal(await search.evaluate(()=>document.documentElement.dataset.theme),'light');
+  await h.page.locator('side-nav [data-side-key=create]').focus();await h.page.keyboard.press('Enter');await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='create');await sidebarSelect(h,'create');
+  await h.screen('create').locator('#postContent').fill('Private account A draft');
+  await h.page.evaluate(()=>switchActor('other-viewer'));await h.page.waitForFunction(()=>document.querySelectorAll('iframe[data-fu-mounted]').length===0);
+  assert.equal(await h.page.evaluate(()=>[...document.querySelectorAll('textarea')].some(el=>el.value==='Private account A draft')),false);
+  await h.page.waitForFunction(()=>window.actor==='other-viewer' && !!window.FreeUpperProfileShell?.getSession());
+  await sidebarSelect(h,'create');assert.equal(await h.screen('create').locator('#postContent').inputValue(),'');assert.equal(await h.page.evaluate(()=>FreeUpperProfileShell.getSession().viewer),'other-viewer');assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+test('sidebar: installed PWA cold switches offline without another document fetch',{timeout:45000},async()=>{
+ const h=await harness({prefetch:false,pwa:true});try{
+  await h.page.setViewportSize({width:1024,height:768});// WebKit's emulated offline mode prevents even a cached new iframe from
+  // committing. Disconnect the actual fixture transport instead, retaining
+  // real SW/cache handling and offline privacy signals in every document.
+  h.disconnectTransport();await h.page.context().addInitScript(()=>Object.defineProperty(navigator,'onLine',{get:()=>false}));await h.page.evaluate(()=>Object.defineProperty(navigator,'onLine',{get:()=>false}));
+  const before=h.documents.filter(d=>d.url.includes('fuMounted')).length;
+  for(const key of ['search','create','video','profile','home'])await sidebarSelect(h,key);
+  assert.equal(h.documents.filter(d=>d.url.includes('fuMounted')).length,before);
+  assert.deepEqual(h.offlineRequests.filter(url=>url.includes('fuMounted')),[]);
+  assert.equal(await h.page.evaluate(()=>FreeUpperProfileShell.status().documents),5);assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+test('sidebar: guest navigation stays native and modified links retain browser behavior',{timeout:30000},async()=>{
+ const h=await harness({guest:true,prefetch:false});try{
+  await h.page.setViewportSize({width:1024,height:768});const before=h.documents.length;
+  await h.page.locator('side-nav [data-side-key=search]').click();await h.page.waitForURL(h.origin+'/search');
+  assert.equal(h.documents.length,before+1);assert.equal(await h.page.locator('iframe[data-fu-mounted]').count(),0);
+  assert.equal(await h.page.locator('side-nav .side-btn[aria-current=page]').getAttribute('data-side-key'),'search');
+  const untouched=await h.page.evaluate(()=>{const link=document.querySelector('side-nav [data-side-key=create]');const event=new MouseEvent('click',{bubbles:true,cancelable:true,ctrlKey:true});let handled;window.addEventListener('click',e=>{handled=e.defaultPrevented;e.preventDefault();},{once:true});link.dispatchEvent(event);return handled===false && link.target==='_top';});
+  assert(untouched);assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+test('sidebar: Video suspends native media and retains feed position on return',{timeout:30000},async()=>{
+ const h=await harness({prefetch:false});try{
+  await h.page.setViewportSize({width:1024,height:768});await sidebarSelect(h,'video');const video=h.screen('video');
+  const wav=Buffer.alloc(44+8000*2*6);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
+  await video.evaluate(async src=>{const media=document.createElement('video');media.id='vid-0';media.src=src;media.muted=true;media.loop=true;document.body.append(media);await media.play();window.savedFeed=document.getElementById('feedTrack');},'data:audio/wav;base64,'+wav.toString('base64'));
+  await sidebarSelect(h,'search');assert(await video.locator('#vid-0').evaluate(v=>v.paused));
+  const position=await video.locator('#vid-0').evaluate(v=>v.currentTime);
+  const count=h.documents.length;await sidebarSelect(h,'video');
+  assert.equal(h.documents.length,count);assert(await video.evaluate(()=>savedFeed===document.getElementById('feedTrack')));
+  assert(Math.abs(await video.locator('#vid-0').evaluate(v=>v.currentTime)-position)<0.25);assert.equal(await video.evaluate(()=>FreeUpperScreen.isActive()),true);assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+test('sidebar: sustained history bursts keep the latest URL and Back cancels a pending write',{timeout:30000},async()=>{
+ const h=await harness({prefetch:false});try{
+  await h.page.setViewportSize({width:1024,height:768});for(const key of ['search','create','home'])await sidebarSelect(h,key);
+  await h.page.evaluate(()=>{for(let n=0;n<30;n++)for(const key of ['search','create','home'])document.querySelector('side-nav [data-side-key='+key+']').click();document.querySelector('side-nav [data-side-key=search]').click();});
+  assert.equal(await h.page.evaluate(()=>FreeUpperProfileShell.getActive()),'search');await h.page.waitForURL(h.origin+'/search');
+  await h.page.evaluate(()=>document.querySelector('side-nav [data-side-key=create]').click());assert.equal(await h.page.evaluate(()=>FreeUpperProfileShell.getActive()),'create');
+  await h.page.goBack();const back=h.page.url();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()===FreeUpperRoutes.screen(location.pathname));const expectedBack=await h.page.evaluate(()=>FreeUpperRoutes.screen(location.pathname));
+  // Let the 300ms history batch become due; it must not undo Back.
+  await h.page.waitForTimeout(350);assert.equal(h.page.url(),back);assert.equal(await h.page.evaluate(()=>FreeUpperProfileShell.getActive()),expectedBack);
+  assert.equal(h.documents.length,3);assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+test('sidebar: a native History SecurityError cannot block screen activation',{timeout:30000},async()=>{
+ const h=await harness({prefetch:false});try{
+  await h.page.setViewportSize({width:1024,height:768});await sidebarSelect(h,'create');await sidebarSelect(h,'home');
+  const immediate=await h.page.evaluate(()=>{
+   const push=history.pushState;history.pushState=function(...args){history.pushState=push;throw new DOMException('Native history quota exhausted','SecurityError');};
+   document.querySelector('side-nav [data-side-key=search]').click();
+   return {active:FreeUpperProfileShell.getActive(),shell:!document.querySelector('[data-fu-mounted=shell]').hidden};
+  });
+  assert.deepEqual(immediate,{active:'search',shell:true});await sidebarSelect(h,'search');
+  await h.page.goBack();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='create');assert.equal(new URL(h.page.url()).pathname,'/create');assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
