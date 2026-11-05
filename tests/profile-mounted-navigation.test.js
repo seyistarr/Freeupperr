@@ -125,3 +125,58 @@ test(`${engine}: background refresh failures retain counts and valid thumbnails;
  assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
+
+async function inspectOfflineActivation(h,age) {
+ const f=await ready(h);
+ const authorizedAt=await f.evaluate(()=>ProfileMounted.status().authorizedAt);
+ const requests=await f.evaluate(()=>calls.filter(c=>c.kind==='page').length);
+ await f.evaluate(()=>{window.leaseCard=document.querySelector('#panel-posts .grid-card');});
+ await h.context.setOffline(true);
+ await h.page.evaluate(now=>{
+  window.virtualNow=now;Date.now=()=>top.virtualNow;
+  for(const frame of Array.from(frames))frame.Date.now=()=>top.virtualNow;
+ },authorizedAt+age);
+ const sample=await h.page.evaluate(async()=>{
+  const frame=document.querySelector('iframe[data-fu-mounted=profile]'),win=frame.contentWindow;
+  const inspect=()=>({
+   cards:win.document.querySelectorAll('#panel-posts .grid-card').length,
+   message:win.document.getElementById('panel-posts').textContent,
+   same:win.leaseCard===win.document.querySelector('#panel-posts .grid-card'),
+   foreignUnavailable:win.testDetailOptions.getPost('own-viewer-0')?.quotedPost?.unavailable===true,
+   visible:getComputedStyle(frame).visibility,
+   pageRequests:win.calls.filter(c=>c.kind==='page').length
+  });
+  let atActivation=null;
+  const listener=e=>{if(e.detail.kind==='profile')atActivation=inspect();};
+  addEventListener('fu-tab-active',listener);
+  document.querySelector('[data-nav-key=profile]').click();
+  const sameTask=inspect();removeEventListener('fu-tab-active',listener);
+  await new Promise(requestAnimationFrame);
+  return {atActivation,sameTask,firstFrame:inspect()};
+ });
+ return {sample,requests};
+}
+
+test(`${engine}: an expired offline Profile lease is cleared before activation and the first frame`,{timeout:45000},async()=>{
+ const h=await mountedHarness();try{
+  const {sample,requests}=await inspectOfflineActivation(h,300000);
+  for(const state of [sample.atActivation,sample.sameTask,sample.firstFrame]){
+   assert(state,'Profile must emit its activation event');
+   assert.equal(state.visible,'visible');assert.equal(state.cards,0);
+   assert.match(state.message,/Connect to refresh/);assert.equal(state.pageRequests,requests);
+  }
+  assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});
+
+test(`${engine}: a valid offline Profile lease retains its DOM but redacts foreign originals before activation`,{timeout:45000},async()=>{
+ const h=await mountedHarness();try{
+  const {sample,requests}=await inspectOfflineActivation(h,299999);
+  for(const state of [sample.atActivation,sample.sameTask,sample.firstFrame]){
+   assert(state,'Profile must emit its activation event');
+   assert.equal(state.visible,'visible');assert.equal(state.cards,24);assert.equal(state.same,true);
+   assert.equal(state.foreignUnavailable,true);assert.equal(state.pageRequests,requests);
+  }
+  assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});

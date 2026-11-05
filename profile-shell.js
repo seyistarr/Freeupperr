@@ -203,8 +203,10 @@
       pause(winFor(active)); stateFor(active).state='Suspended';
     }
     if (!loading && kind==='profile') {
-      const lease=session, options={own:entry.own!==false,history:active==='profile' && !handoff?'push':profile===window?'none':'replace'};
-      setTimeout(()=>{if(valid() && session.viewer===lease.viewer && active===kind)profile?.ProfileMounted?.prepareVisible(session,options);},0);
+      // Validate the retained lease and redact foreign data before revealing
+      // Profile. Its refresh requests remain asynchronous; privacy cannot wait
+      // for a later task, which may run after activation or the first paint.
+      profile?.ProfileMounted?.prepareVisible(session,{own:entry.own!==false,history:active==='profile' && !handoff?'push':profile===window?'none':'replace'});
     }
     rootVisible(!target);
     for (const [key,frame] of frames) frameVisible(frame,key===kind && !loading);
