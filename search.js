@@ -358,6 +358,7 @@
   //          (e.g. guest, network error). try/finally ensures the button
   //          is never left permanently disabled.
   async function toggleFollowHandler(e, userId) {
+      window.FUSound?.interaction?.('follow');
     if (e) e.stopPropagation();
     const clicked = e ? e.currentTarget : null;
     if (clicked) clicked.disabled = true;
@@ -1170,6 +1171,7 @@
     const post = _getPost(postId);
     if (!post) return;
     if (pendingLikes.has(postId)) return;
+      window.FUSound?.interaction?.('like');
     const willLike = !post.likedByMe;
     document.querySelectorAll(`[data-post-reactions="${postId}"] .reaction-btn`).forEach(btn => {
       btn.classList.add('bounce-heart');
@@ -1199,6 +1201,7 @@
 
   async function toggleBookmarkUI(postId, badgeEl) {
     if (pendingBookmarks.has(postId)) return;
+      window.FUSound?.interaction?.('save');
     spawnRipple(badgeEl, null);
     haptic(8);
     const me = getCurrentUser();
@@ -1228,6 +1231,7 @@
   }
 
   function openShareModal(postId) {
+      window.FUSound?.interaction?.('share');
     sharePostId = postId;
     const modal = document.getElementById('share-modal');
     if (!modal) return;
@@ -1318,6 +1322,7 @@
     if (input && el) el.textContent = `${input.value.length}/280`;
   }
   function triggerRepostFromFeed(btn, postId) {
+      window.FUSound?.interaction?.('tap');
     haptic(10);
     btn.classList.add('spinning');
     btn.style.pointerEvents = 'none';
@@ -1562,6 +1567,7 @@
   async function toggleCommentLikeUI(btn) {
     const commentId = btn.dataset.commentId;
     if (!commentId || btn.dataset.busy === '1') return;
+      window.FUSound?.interaction?.('like');
     btn.dataset.busy = '1';
     const countEl = btn.querySelector('.like-count');
     const wasLiked = btn.classList.contains('liked');
@@ -1621,6 +1627,7 @@
 
   // ★ FIX: if the post isn't in the store, fetch it first so comments can render.
   async function openLightboxCommentsSheet(postId) {
+      window.FUSound?.interaction?.('comment');
     const overlay = document.getElementById('lightboxCommentsOverlay');
     if (!overlay) return;
     let post = _getPost(postId);
@@ -1676,6 +1683,7 @@
   }
 
   async function submitLightboxComment() {
+      window.FUSound?.interaction?.('comment');
     const ta = document.getElementById('lightbox-comment-textarea');
     if (!ta || !_lightboxCommentsPostId) return;
     const message = ta.value.trim();
@@ -2148,6 +2156,7 @@
   }
 
   function switchTab(tab) {
+      window.FUSound?.interaction?.('tap');
     ++_searchReqToken;
     const main = document.getElementById('mainScroll');
     if (main) paging[currentTab].scrollY = main.scrollTop;
@@ -2229,6 +2238,7 @@
     const rqSubmit = document.getElementById('repostSubmitBtn');
     if (rqSubmit) rqSubmit.addEventListener('click', async () => {
       if (!repostQuoteTargetId) return;
+      window.FUSound?.interaction?.('repost');
       const quote = document.getElementById('repostQuoteInput').value.trim();
       if (!(window.AuthUser && window.AuthUser.requireAuth)) { showToast(window.fuT('Please sign in'), 'o'); return; }
       window.AuthUser.requireAuth(async () => {

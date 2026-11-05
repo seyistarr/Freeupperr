@@ -128,6 +128,7 @@
         const link=event.target.closest('[data-nav-key]');
         const key=link?.dataset.navKey;
         if (!link || event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        window.FUSound?.interaction?.('tap', event);
         // A later click in either component supersedes an unfinished bootstrap.
         const intent=Symbol();
         if(window.FreeUpperScreen)window.FreeUpperScreen.navigationIntent=intent;

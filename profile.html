@@ -3,6 +3,7 @@
 <head>
 <script src="/js/freeupper-routes.js?v=clean-urls-v1"></script>
     <script src="/js/screen-lifecycle.js?v=sidebar-v1"></script>
+    <script src="/ui-sounds.js?v=4" data-fu-sounds></script>
     <meta name="theme-color" id="theme-color-meta" content="#000000">
     <script src="/theme.js?v=2"></script>
     <link rel="stylesheet" href="/theme.css?v=2">
@@ -2582,15 +2583,15 @@
     <!-- ===== SCRIPTS ===== -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/global.js?v=clean-urls-v1"></script>
-    <script src="/auth.js?v=profile-identity-v1"></script>
+    <script src="/auth.js?v=interaction-sounds-v4"></script>
     <script src="/posts.js?v=clean-urls-v1" data-fu-quotes></script>
     <script src="/protected-media-client.js?v=clean-urls-v1"></script>
     <script src="/listings.js"></script>
     <script src="/profile-detail.js?v=clean-urls-v1"></script>
     <script src="/profile-cache.js?v=3"></script>
-    <script src="/settings.js"></script>
-    <script src="/bottom-nav.js?v=sidebar-v1" defer></script>
-    <script src="/side-nav.js?v=sidebar-v1" defer></script>
+    <script src="/settings.js?v=interaction-sounds-v4"></script>
+    <script src="/bottom-nav.js?v=interaction-sounds-v4" defer></script>
+    <script src="/side-nav.js?v=interaction-sounds-v4" defer></script>
 
     <script>
         (function() {
@@ -3130,6 +3131,7 @@
             // FOLLOW / UNFOLLOW
             // ─────────────────────────────────────────────────────────
             async function toggleFollow(targetId) {
+                window.FUSound?.interaction?.('follow');
                 const user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
                     showToast(window.fuT('Please sign in to follow'), 'o');
@@ -4340,6 +4342,7 @@
                 entry.modalViews?.forEach(function(view){patch(view.data);});
             }
             async function mutateProfileRelationship(id) {
+                window.FUSound?.interaction?.('follow');
                 var viewer=profileViewerScope(), user=getCurrentUser();
                 if(!user?.isLoggedIn || user.id!==viewer || id===viewer)throw new Error('Invalid follow target');
                 var entry=profileCache.put({id:id},false);
@@ -4452,6 +4455,7 @@
 
             // ─── TABS SWITCH ──────────────────────────────────────────
             window.switchTab = function(el, tab) {
+                window.FUSound?.interaction?.('tap');
                 document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
                 el.classList.add('active');
                 document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
@@ -4475,6 +4479,7 @@
 
             // ─── INTERACTION FUNCTIONS ──────────────────────────────
             window.toggleReaction = async function(postId) {
+                window.FUSound?.interaction?.('like');
                 var post = allPosts.find(function(p) { return p.id === postId; });
                 if (!post) return;
                 window.AuthUser.requireAuth(async function() {
@@ -4489,6 +4494,7 @@
             };
 
             window.toggleBookmark = async function(postId) {
+                window.FUSound?.interaction?.('save');
                 var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) { showToast(window.fuT('Please sign in to bookmark'), 'o'); return; }
                 var result = await window.sb.from('bookmarks').select('id').eq('user_id', user.id).eq('post_id', postId).maybeSingle();
@@ -4504,6 +4510,7 @@
             };
 
             window.toggleRepost = async function(postId) {
+                window.FUSound?.interaction?.('repost');
                 var user = getCurrentUser();
                 if (!user || !user.isLoggedIn) { showToast(window.fuT('Please sign in to repost'), 'o'); return; }
                 var result = await window.sb.from('reposts').select('id').eq('user_id', user.id).eq('post_id', postId).maybeSingle();
@@ -4533,6 +4540,7 @@
 
             // ─── SHARE / QR ──────────────────────────────────────────
             window.openShareModal = function() {
+                window.FUSound?.interaction?.('share');
                 openFS('shareModal');
                 setTimeout(generateQRCode, 300);
             };

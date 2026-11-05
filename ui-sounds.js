@@ -3,7 +3,8 @@
   'use strict';
   if (window.FUSound) return;
 
-  const VERSION = '3';
+  const VERSION = '4';
+  const INTERACTION_CACHE = 'fu-interaction-sound:';
   const CACHE = 'fu-sound:';
   const SEEN = 'fu-sound-events:';
   const tones = {
@@ -13,12 +14,29 @@
     like: [[880, 0, .10, 'triangle'], [1320, .06, .14, 'sine']],
     comment: [[587, 0, .12, 'sine'], [784, .11, .16, 'triangle']],
     repost: [[523, 0, .10, 'triangle'], [659, .08, .10, 'sine'], [784, .16, .13, 'sine']],
+    share: [[698, 0, .065, 'sine'], [1047, .035, .09, 'sine']],
+    save: [[784, 0, .06, 'triangle'], [1175, .045, .09, 'sine']],
+    tap: [[640, 0, .045, 'sine']],
     follow: [[523, 0, .16, 'sine'], [659, .03, .17, 'sine'], [1047, .13, .19, 'sine']]
+  };
+  // Neutral activation cues, distinct from incoming notification melodies.
+  // They acknowledge the control, never claim that a network mutation succeeded.
+  const interactionTones = {
+    like: [[780, 0, .055, 'triangle'], [1120, .012, .055, 'sine']],
+    repost: [[520, 0, .055, 'sine'], [650, .025, .065, 'sine']],
+    share: [[480, 0, .09, 'sine', 1000], [1000, .012, .065, 'sine', 650]],
+    comment: [[620, 0, .045, 'sine']],
+    save: [[720, 0, .05, 'triangle'], [900, .025, .055, 'sine']],
+    follow: [[600, 0, .055, 'sine'], [800, .025, .065, 'sine']],
+    tap: [[640, 0, .04, 'sine']]
   };
   let client, userId = null, enabled = true, ready = false;
   let epoch = 0, revision = 0, saving = false, syncPromise = Promise.resolve();
   let context = null, unlocked = false, lastPlay = -Infinity;
   let visibilityRevision = 0;
+  let interactionsEnabled = true, activation = null, activationOwner = 0;
+  const interactionEvents = new WeakSet(), interactionNodes = new Set(), navigationNodes = new Set();
+  let unlockSource = null;
   const seen = new Set();
   const active = new Set();
   let preferenceStatus = 'waiting-auth';
@@ -78,19 +96,72 @@
     }));
     debugChanged();
   }
-  function preferenceState() { return { enabled, ready, authenticated: !!userId, saving }; }
-  function stop() {
-    for (const oscillator of active) { try { oscillator.stop(); } catch (_) {} }
-    active.clear();
+  function preferenceState() { return { enabled, interactionsEnabled, ready, authenticated: !!userId, saving }; }
+  function stop(nodes = active) {
+    for (const oscillator of nodes) {
+      try { oscillator.stop(); } catch (_) {}
+      active.delete(oscillator);
+      interactionNodes.delete(oscillator);
+      navigationNodes.delete(oscillator);
+    }
+    nodes.clear();
+    if (nodes === active) interactionNodes.clear();
   }
+  function setInteractionsEnabled(value) {
+    if (typeof value !== 'boolean') throw new Error('Invalid interaction sound preference.');
+    if (!userId) throw new Error('Please sign in to update interaction sounds.');
+    // Device preference, scoped to the authenticated account; no database writes.
+    try { localStorage.setItem(INTERACTION_CACHE + userId, JSON.stringify(value)); }
+    catch (_) { throw new Error('Could not save interaction sounds on this browser.'); }
+    interactionsEnabled = value;
+    if (!value) stop(interactionNodes);
+    changed();
+    return value;
+  }
+  function interaction(type = 'tap', event = activation) {
+    // Feedback for an activation, not a server-success notification. Never await,
+    // queue, retry or delay the action for audio (including a suspended iOS context).
+    // The visible persistent navigation belongs to the launch document even
+    // while its feed is suspended. This exception cannot authorize page actions.
+    const shellNavigation = type === 'tap' && window.parent === window &&
+      !!window.FreeUpperProfileShell && !!event?.target?.closest?.(
+        'bottom-nav [data-nav-key], side-nav [data-side-key]');
+    if (!event?.isTrusted || event.eventPhase === 0 || (event === activation && activationOwner !== epoch) ||
+        interactionEvents.has(event) || !userId || !interactionsEnabled ||
+        document.visibilityState !== 'visible' ||
+        (window.FreeUpperScreen?.isActive?.() === false && !shellNavigation) ||
+        !['like', 'repost', 'share', 'comment', 'save', 'follow', 'tap'].includes(type)) return false;
+    interactionEvents.add(event);
+    try {
+      if (!gestureSeen || context?.state !== 'running') void unlock(event);
+      if (context?.state !== 'running') return false;
+      synthesize(type, true, shellNavigation);
+      return true;
+    } catch (_) { return false; }
+  }
+  function captureActivation(event) {
+    if (!event.isTrusted || (event.type === 'keydown' && !['Enter', ' '].includes(event.key))) return;
+    activation = event;
+    activationOwner = epoch;
+    // eventPhase becomes NONE after dispatch. Do not clear in a microtask:
+    // Safari may run it between capture and the existing target/bubble handler.
+  }
+  for (const name of ['click', 'touchend', 'keydown']) {
+    document.addEventListener(name, captureActivation, { capture: true, passive: true });
+  }
+
   function setLocal(value) {
     enabled = value !== false;
-    if (!enabled) stop();
+    if (!enabled) stop(new Set([...active].filter(node => !interactionNodes.has(node))));
     if (userId) write(CACHE + userId, enabled);
     changed();
   }
   function audioContext() {
-    if (context?.state === 'closed') context = null;
+    if (context?.state === 'closed') {
+      try { unlockSource?.disconnect(); } catch (_) {}
+      unlockSource = null;
+      context = null;
+    }
     if (!context) {
       const Audio = window.AudioContext || window.webkitAudioContext;
       if (!Audio) return null;
@@ -112,13 +183,17 @@
       const ctx = audioContext();
       if (!ctx) { debug.unlockError = 'web-audio-unavailable'; debugChanged(); return Promise.resolve(false); }
       debug.unlockError = null;
-      const resumed = ctx.state === 'running' ? Promise.resolve() : ctx.resume();
-      const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.onended = () => source.disconnect();
-      source.start();
+      if (ctx.state === 'running') { unlocked = true; return Promise.resolve(true); }
+      const resumed = ctx.resume();
+      // At most one silent buffer may wait behind a suspended iOS context.
+      if (!unlockSource) {
+        const source = ctx.createBufferSource();
+        unlockSource = source;
+        source.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        source.connect(ctx.destination);
+        source.onended = () => { source.disconnect(); if (unlockSource === source) unlockSource = null; };
+        source.start();
+      }
       unlocked = gestureSeen && ctx.state === 'running';
       // A pending iOS resume must not leave Test sound waiting indefinitely.
       resumePending = Promise.resolve(resumed).then(() => {
@@ -193,23 +268,32 @@
       if (Date.now() - started > 1000) return playResult(type, source, 'resume-too-late');
       if (!preview && Date.now() - lastPlay < 180) return playResult(type, source, 'rate-limited');
       lastPlay = Date.now();
-      for (const [frequency, offset, duration, wave] of (tones[type] || tones.notify)) {
-        const oscillator = ctx.createOscillator(), gain = ctx.createGain();
-        const time = ctx.currentTime + offset;
-        oscillator.type = wave;
-        oscillator.frequency.setValueAtTime(frequency, time);
-        gain.gain.setValueAtTime(0, time);
-        gain.gain.linearRampToValueAtTime(.035, time + .012);
-        gain.gain.exponentialRampToValueAtTime(.0001, time + duration);
-        oscillator.connect(gain);
-        gain.connect(ctx.destination);
-        active.add(oscillator);
-        oscillator.onended = () => { active.delete(oscillator); oscillator.disconnect(); gain.disconnect(); };
-        oscillator.start(time);
-        oscillator.stop(time + duration + .015);
-      }
+      synthesize(type);
       return playResult(type, source, 'scheduled', true);
     } catch (_) { stop(); return playResult(type, source, 'audio-operation-failed'); }
+  }
+
+  function synthesize(type, isInteraction = false, isNavigation = false) {
+    const ctx = context;
+    const sequence = isInteraction ? interactionTones[type] : (tones[type] || tones.notify);
+    for (const [frequency, offset, duration, wave, endFrequency] of sequence) {
+      const oscillator = ctx.createOscillator(), gain = ctx.createGain();
+      const time = ctx.currentTime + offset;
+      oscillator.type = wave;
+      oscillator.frequency.setValueAtTime(frequency, time);
+      if (endFrequency) oscillator.frequency.exponentialRampToValueAtTime(endFrequency, time + duration);
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(isInteraction ? .022 : .035, time + .012);
+      gain.gain.exponentialRampToValueAtTime(.0001, time + duration);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      active.add(oscillator);
+      if (isInteraction) interactionNodes.add(oscillator);
+      if (isNavigation) navigationNodes.add(oscillator);
+      oscillator.onended = () => { active.delete(oscillator); interactionNodes.delete(oscillator); navigationNodes.delete(oscillator); oscillator.disconnect(); gain.disconnect(); };
+      oscillator.start(time);
+      oscillator.stop(time + duration + .015);
+    }
   }
 
   async function sync() {
@@ -247,6 +331,8 @@
       if (id) debug.previousPage = JSON.parse(sessionStorage.getItem('fu-sound-debug:' + id));
     } catch (_) {}
     enabled = id ? read(CACHE + id) !== false : true;
+    interactionsEnabled = id ? read(INTERACTION_CACHE + id) !== false : true;
+    activation = null;
     seen.clear();
     stop();
     changed();
@@ -368,9 +454,15 @@
     } catch (_) { return eventResult(source, 'message-check-failed'); }
   }
 
-  window.FUSound = { play, isEnabled: () => enabled, setEnabled, diagnostics };
+  window.FUSound = { play, interaction, isEnabled: () => enabled, setEnabled,
+    isInteractionsEnabled: () => interactionsEnabled, setInteractionsEnabled, diagnostics };
   window.FreeUpperSounds = { notification, message, bindClient, preferenceState, channel };
   window.addEventListener('storage', event => {
+    if (userId && (event.key === INTERACTION_CACHE + userId || event.key === null)) {
+      interactionsEnabled = read(INTERACTION_CACHE + userId) !== false;
+      if (!interactionsEnabled) stop(interactionNodes);
+      changed();
+    }
     if (userId && event.key === CACHE + userId && !saving) {
       revision++;
       setLocal(read(CACHE + userId) !== false);
@@ -385,5 +477,11 @@
   // Older PWA caches may serve auth.js without the explicit bindClient call.
   // Its defer/body script still creates window.sb before DOMContentLoaded.
   document.addEventListener('DOMContentLoaded', () => bindClient(window.sb), { once: true });
+  window.FreeUpperScreen?.register?.({ suspend() {
+    visibilityRevision++; activation = null;
+    // Tab changes stop content feedback, not the visible shell's navigation cue.
+    // Document hiding, logout and the mute control still stop every category.
+    stop(new Set([...active].filter(node => !navigationNodes.has(node))));
+  } });
   bindClient(window.sb);
 })();

@@ -12,6 +12,27 @@
   }
   var sb = window.sb;
 
+  function bindInteractionToggle() {
+    var toggle = document.getElementById('interactionSoundsToggle');
+    var errorLabel = document.getElementById('interactionSoundsError');
+    if (!toggle) return;
+    function reflect() {
+      var state = window.FreeUpperSounds?.preferenceState();
+      toggle.checked = state?.interactionsEnabled !== false;
+      toggle.disabled = !state?.authenticated;
+    }
+    window.addEventListener('fu-sound-preference', reflect);
+    reflect();
+    toggle.addEventListener('change', function () {
+      errorLabel.textContent = '';
+      try { window.FUSound.setInteractionsEnabled(toggle.checked); }
+      catch (_) { errorLabel.textContent = 'Could not save interaction sounds. Please try again.'; }
+      reflect();
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindInteractionToggle);
+  else bindInteractionToggle();
+
   function bindSoundToggle() {
     var toggle = document.getElementById('notificationSoundsToggle');
     var errorLabel = document.getElementById('notificationSoundsError');

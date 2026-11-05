@@ -1,7 +1,7 @@
 importScripts('/js/freeupper-routes.js?v=clean-urls-v1');
 
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v29-sidebar';
+const CACHE_NAME = 'freeupper-pwa-v30-interaction-sounds';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -16,7 +16,10 @@ const URLS_TO_CACHE = [
   './notification.html',
   './js/freeupper-routes.js?v=clean-urls-v1',
   './chat.js?v=clean-urls-v1',
-  './ui-sounds.js?v=3',
+  './ui-sounds.js?v=4',
+  './auth.js?v=interaction-sounds-v4',
+  './settings.js?v=interaction-sounds-v4',
+  './market.js?v=interaction-sounds-v4',
   './js/freeupper-time.js',
   './js/freeupper-i18n.js',
   './js/i18n-core.js',
@@ -28,16 +31,16 @@ const URLS_TO_CACHE = [
   './bottom-nav.css?v=clean-urls-v1',
   './router.js?v=clean-urls-v1',
   './posts.js?v=clean-urls-v1',
-  './search.js?v=clean-urls-v1',
+  './search.js?v=interaction-sounds-v4',
   './profile-detail.js?v=clean-urls-v1',
   './header-badges.js?v=sounds-v3-clean-urls-v1',
   './protected-media-client.js?v=clean-urls-v1',
   './side-nav.css?v=sidebar-v1',
-  './side-nav.js?v=sidebar-v1',
+  './side-nav.js?v=interaction-sounds-v4',
 
   './profile-shell.js?v=sidebar-v1',
   './js/screen-lifecycle.js?v=sidebar-v1',
-  './bottom-nav.js?v=sidebar-v1',
+  './bottom-nav.js?v=interaction-sounds-v4',
   './global.css',
   './global.js?v=clean-urls-v1',
   './theme.js?v=2',

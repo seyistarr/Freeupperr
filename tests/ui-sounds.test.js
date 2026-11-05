@@ -285,8 +285,8 @@ test('diagnostics trace callback receipt, actual play invocation and duplicate/f
 test('sound manager loads before auth/Realtime consumers and auth explicitly binds the existing client', () => {
   for (const file of ['index.html', 'chat.html', 'settings.html', 'notification.html']) {
     const html = readFileSync(file, 'utf8');
-    assert.ok(html.indexOf('/ui-sounds.js?v=3') < html.indexOf('src="auth.js'), file);
-    assert.match(html, /<script src="\/ui-sounds.js\?v=3" data-fu-sounds><\/script>/);
+    assert.ok(html.indexOf('/ui-sounds.js?v=4') < html.indexOf('src="auth.js'), file);
+    assert.match(html, /<script src="\/ui-sounds.js\?v=4" data-fu-sounds><\/script>/);
   }
   assert.match(readFileSync('auth.js', 'utf8'), /window\.FreeUpperSounds\.bindClient\(sb\)/);
 });
@@ -311,7 +311,7 @@ test('coupled sound consumers bypass pre-upgrade PWA cache entries', () => {
   })) {
     const html = readFileSync(page, 'utf8');
     for (const file of files) assert.ok(
-      html.includes(file + '?v=sounds-v3') || html.includes(file + '?v=clean-urls-v1'),
+      html.includes(file + '?v=interaction-sounds-v4') || html.includes(file + '?v=sounds-v3') || html.includes(file + '?v=clean-urls-v1'),
       page + ': ' + file
     );
   }

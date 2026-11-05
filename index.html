@@ -3,7 +3,7 @@
 <head>
 <script src="/js/freeupper-routes.js?v=clean-urls-v1"></script>
     <script src="/js/screen-lifecycle.js?v=sidebar-v1"></script>
-    <script src="/ui-sounds.js?v=3" data-fu-sounds></script>
+    <script src="/ui-sounds.js?v=4" data-fu-sounds></script>
     <meta name="theme-color" id="theme-color-meta" content="#000000">
     <script src="/theme.js?v=2"></script>
     <link rel="stylesheet" href="/theme.css?v=2">
@@ -61,7 +61,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="/js/freeupper-time.js"></script>
     <script src="global.js?v=clean-urls-v1" defer></script>
-    <script src="auth.js?v=sounds-v3" defer></script>
+    <script src="auth.js?v=interaction-sounds-v4" defer></script>
     <script src="posts.js?v=clean-urls-v1" data-fu-quotes defer></script>
     <script src="protected-media-client.js?v=clean-urls-v1" defer></script>
     <script src="header-badges.js?v=sounds-v3-clean-urls-v1" defer></script>
@@ -4991,8 +4991,8 @@
     <!-- ================================================================ -->
 
     <!-- Dependencies (load first) -->
-    <script src="bottom-nav.js?v=sidebar-v1" defer></script>
-    <script src="side-nav.js?v=sidebar-v1" defer></script>
+    <script src="bottom-nav.js?v=interaction-sounds-v4" defer></script>
+    <script src="side-nav.js?v=interaction-sounds-v4" defer></script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 
     <!-- Main application (defines shared functions like window.openExplorePost) -->
@@ -5967,6 +5967,7 @@
                             if (t.closest('.share-btn')) { openShareModal(pid); return; }
                             if (t.closest('[data-repost-btn]')) { triggerRepostFromFeed(t.closest('[data-repost-btn]'), pid); return; }
                             if (t.closest('.comment-btn')) {
+                                window.FUSound?.interaction?.('comment');
                                 if (isLbSplit()) {
                                     const _lbOverlay = document.getElementById('lightboxCommentsOverlay');
                                     if (!_lbOverlay.classList.contains('open')) {
@@ -6427,6 +6428,7 @@
             }
 
             function openLightboxCommentsSheet(postId) {
+                window.FUSound?.interaction?.('comment');
                 const overlay = document.getElementById('lightboxCommentsOverlay');
                 if (!overlay) return;
                 const post = allPosts.find(p => p.id === postId);
@@ -6514,6 +6516,7 @@
                 if (!ta || !_lightboxCommentsPostId) return;
                 const message = ta.value.trim();
                 if (!message && !lightboxCommentMedia) return showToast(window.fuT('Reply cannot be empty.'));
+                window.FUSound?.interaction?.('comment');
                 const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = _lightboxReplyTarget;
                 const postId = _lightboxCommentsPostId;
@@ -6698,6 +6701,7 @@
             }
 
             async function toggleFollowUser(userId) {
+                window.FUSound?.interaction?.('follow');
                 const user = getCurrentUser();
                 if (!user || !user.isLoggedIn) {
                     if (window.AuthUser && window.AuthUser.openModal) window.AuthUser.openModal('signup');
@@ -6916,6 +6920,7 @@
 
             document.getElementById('repostSubmitBtn').addEventListener('click', async () => {
                 if (!repostQuoteTargetId) return;
+                window.FUSound?.interaction?.('repost');
                 const quote = document.getElementById('repostQuoteInput').value.trim();
                 const editing = document.getElementById('repostRemoveBtn').style.display === 'block';
                 if (!(window.AuthUser && window.AuthUser.requireAuth)) { showToast(window.fuT('Please sign in to repost'),
@@ -6947,6 +6952,7 @@
 
             document.getElementById('repostRemoveBtn').addEventListener('click', async () => {
                 if (!repostQuoteTargetId) return;
+                window.FUSound?.interaction?.('repost');
                 if (!(window.AuthUser && window.AuthUser.requireAuth)) return;
                 window.AuthUser.requireAuth(async () => {
                     const removeBtn = document.getElementById('repostRemoveBtn');
@@ -7013,6 +7019,7 @@
             document.getElementById('homeRepostDo').addEventListener('click', () => {
                 const id = homeRepostTarget;
                 if (!id || pendingHomeReposts.has(id)) return;
+                window.FUSound?.interaction?.('repost');
                 closeHomeRepostMenu();
                 if (!window.AuthUser?.requireAuth) { showToast(window.fuT('Please sign in to repost'), 'o'); return; }
                 window.AuthUser.requireAuth(async () => {
@@ -7038,6 +7045,7 @@
             });
 
             function triggerRepostFromFeed(btn, postId) {
+                window.FUSound?.interaction?.('tap');
                 if (uiPage === 'home' || (uiPage === 'single-post-explore' && window._fullscreenReturnPage === 'home')) { openHomeRepostMenu(btn, postId); return; }
                 haptic(10);
                 btn.classList.add('spinning');
@@ -7055,6 +7063,7 @@
                 if (!post) return;
 
                 if (pendingLikes.has(postId)) return;
+                window.FUSound?.interaction?.('like');
 
                 const willLike = !post.likedByMe;
 
@@ -7567,6 +7576,7 @@
                 const post = appData.posts.find(p => p.id === pid);
 
                 if (pendingBookmarks.has(pid)) return;
+                window.FUSound?.interaction?.('save');
 
                 document.querySelectorAll(`[data-bookmark="${pid}"]`).forEach(el => spawnRipple(el, null));
                 haptic(8);
@@ -7637,6 +7647,7 @@
             }
 
             function openShareModal(postId) {
+                window.FUSound?.interaction?.('share');
                 sharePostId = postId;
                 const modal = document.getElementById('share-modal');
                 const post = allPosts.find(p => p.id === postId);
@@ -8144,6 +8155,7 @@
             async function toggleCommentLikeUI(btn) {
                 const commentId = btn.dataset.commentId;
                 if (!commentId || btn.dataset.busy === '1') return;
+                window.FUSound?.interaction?.('like');
                 btn.dataset.busy = '1';
 
                 const countEl = btn.querySelector('.like-count');
@@ -8365,6 +8377,7 @@
                 const ta = document.getElementById('global-comment-textarea');
                 const message = ta.value.trim();
                 if (!message && !globalCommentMedia) return showToast(window.fuT('Reply cannot be empty.'));
+                window.FUSound?.interaction?.('comment');
                 const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = replyTarget ? replyTarget.commentId : null;
                 const mediaFile = globalCommentMedia?.file || null;
@@ -8409,6 +8422,7 @@
                 const ta = document.getElementById('explore-comment-textarea');
                 const message = ta.value.trim();
                 if (!message && !exploreCommentMedia) return showToast(window.fuT('Reply cannot be empty.'));
+                window.FUSound?.interaction?.('comment');
                 const mentions = window.Mentions ? window.Mentions.extractMentions(ta) : [];
                 const pi = exploreReplyTarget ? exploreReplyTarget.commentId : null;
                 const mediaFile = exploreCommentMedia?.file || null;
@@ -8684,6 +8698,7 @@
 
             // ─── openExplorePost ──────────────────────────────────────────────
             async function openExplorePost(id, returnPage, focusComment) {
+                if (focusComment) window.FUSound?.interaction?.('comment');
                 const _guardPost = allPosts.find(p => p.id === id);
                 const _cu = getCurrentUser();
                 if (_guardPost && _guardPost.is_hidden && _guardPost.user_id !== _cu.id) {
@@ -8877,6 +8892,7 @@
                         const post = allPosts.find(p => p.id === postId);
 
                         if (pendingBookmarks.has(postId)) return;
+                        window.FUSound?.interaction?.('save');
 
                         spawnRipple(btn, e);
                         haptic(8);
@@ -8937,6 +8953,7 @@
                         return;
                     }
                     if (t.closest('.comment-btn')) {
+                        window.FUSound?.interaction?.('comment');
                         const btn = t.closest('.comment-btn');
                         btn.classList.add('comment-pop');
                         setTimeout(() => btn.classList.remove('comment-pop'), 260);
@@ -8979,6 +8996,7 @@
 
             // ─── NAVIGATION & UI RENDERING ──────────────────────────────────
             function setTab(mode) {
+                window.FUSound?.interaction?.('tap');
                 const scrollY = window.scrollY;
                 if (uiPage === 'home') tabScrollPositions.home = scrollY;
                 else if (uiPage === 'explore') tabScrollPositions.explore = scrollY;
@@ -9869,7 +9887,7 @@
     </script>
 
     <!-- Page modules (depend on functions defined in the main module) -->
-    <script src="market.js" defer></script>
+    <script src="market.js?v=interaction-sounds-v4" defer></script>
     <script src="explore.js" defer></script>
     <script src="foryou.js" defer></script>
 

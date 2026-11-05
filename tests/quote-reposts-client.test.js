@@ -43,11 +43,18 @@ test('quote RPC batches are bounded and retries preserve the request ID',async()
  const calls=f.calls.filter(c=>c.rpc==='create_quote_post');assert.equal(calls.length,2);assert.equal(calls[0].args.p_post_id,calls[1].args.p_post_id);assert(!('user_id' in calls[0].args.p_fields));
  await f.api.createPost({quotedPostId:id(100),quotePostId:id(800),content:'New quote'});assert.equal(f.writes,1);
 });
-test('video and Explore legacy APIs, media normalization, view tracking and source files remain unchanged',async()=>{
- // Navigation asset versions may change without altering the legacy player.
+test('video and Explore legacy behavior remains unchanged apart from additive interaction feedback',async()=>{
+ // Ignore only the additive sound hooks/loader and versioned consumer URLs.
+ // The legacy player bytes and API contracts must otherwise remain identical.
  for(const name of ['video.html','explore.js']){
   const bytes=await readFile(new URL('../'+name,import.meta.url),'utf8');
-  const legacy=bytes.replaceAll('side-nav.css?v=sidebar-v1','side-nav.css').replaceAll('side-nav.js?v=sidebar-v1','side-nav.js?v=clean-urls-v1').replaceAll('js/screen-lifecycle.js?v=sidebar-v1','js/screen-lifecycle.js?v=native-tabs-v1').replaceAll('bottom-nav.js?v=sidebar-v1','bottom-nav.js?v=native-tabs-v1').replaceAll('js/screen-lifecycle.js?v=native-tabs-v1','js/screen-lifecycle.js?v=clean-urls-v1').replaceAll('bottom-nav.js?v=native-tabs-v1','bottom-nav.js?v=clean-urls-v1');
+  const soundNeutral=bytes
+   .replace(/^[ \t]*window\.FUSound\?\.interaction\?\.\('[a-z]+'\);\n/gm,'')
+   .replace('    <script src="/ui-sounds.js?v=4" data-fu-sounds></script>\n','')
+   .replace('auth.js?v=interaction-sounds-v4','auth.js')
+   .replace('side-nav.js?v=interaction-sounds-v4','side-nav.js?v=sidebar-v1')
+   .replace('bottom-nav.js?v=interaction-sounds-v4','bottom-nav.js?v=sidebar-v1');
+  const legacy=soundNeutral.replaceAll('side-nav.css?v=sidebar-v1','side-nav.css').replaceAll('side-nav.js?v=sidebar-v1','side-nav.js?v=clean-urls-v1').replaceAll('js/screen-lifecycle.js?v=sidebar-v1','js/screen-lifecycle.js?v=native-tabs-v1').replaceAll('bottom-nav.js?v=sidebar-v1','bottom-nav.js?v=native-tabs-v1').replaceAll('js/screen-lifecycle.js?v=native-tabs-v1','js/screen-lifecycle.js?v=clean-urls-v1').replaceAll('bottom-nav.js?v=native-tabs-v1','bottom-nav.js?v=clean-urls-v1');
   assert.equal(createHash('sha256').update(legacy).digest('hex'),contracts[name+'_sha256']);
  }
  for(const name of ['toggleRepostAPI','updateRepostComment','normalizeMedia','mapPost','incrementView'])assert(source.includes(contracts[name]),name+' legacy contract changed');

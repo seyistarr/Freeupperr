@@ -82,6 +82,7 @@
     }
 
     function toggleFavorite(btn, listingId) {
+        window.FUSound?.interaction?.('save');
         const user = window.getCurrentUser();
         if (!user || !user.isLoggedIn) {
             triggerToast('Please sign in', 'Sign in to save items');
@@ -205,6 +206,7 @@
     }
 
     function selectMarketCategory(cat) {
+        window.FUSound?.interaction?.('tap');
         activeMarketCategory = cat;
         activeMarketSubcategory = 'All';
         renderMarketCategoryBars();
@@ -226,6 +228,7 @@
     }
 
     function selectMarketSubcategory(sub) {
+        window.FUSound?.interaction?.('tap');
         activeMarketSubcategory = sub;
         renderMarketCategoryBars();
         applyMarketFiltersAndRender();
@@ -553,6 +556,7 @@
 
     // ─── SHARE / SELLER ─────────────────────────────────────────────
     function shareCurrentProduct() {
+        window.FUSound?.interaction?.('share');
         if (!currentActiveProduct) return;
         const productUrl = window.location.origin + '/?product=' + currentActiveProduct.id;
         const shareData = { title: currentActiveProduct.title, text: `Check out ${currentActiveProduct.title} (${currentActiveProduct.priceFormatted}) on FreeUpper!`, url: productUrl };
