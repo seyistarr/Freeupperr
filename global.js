@@ -190,7 +190,23 @@ if (window === window.top && window.isSecureContext && 'serviceWorker' in naviga
       if (avatarEl) avatarEl.src = avatar;
       // Display name
       const nameEl = el.querySelector('[data-author-name]');
-      if (nameEl) nameEl.textContent = displayName;
+      if (nameEl) {
+        const isHomeFeed = !!el.closest('.feed-post');
+        nameEl.textContent = isHomeFeed && typeof window.truncateName === 'function'
+          ? window.truncateName(displayName, 15) : displayName;
+        if (isHomeFeed) nameEl.title = displayName;
+      }
+      // Keep the Home feed's inline handle consistent after profile updates.
+      if (el.closest('.feed-post') && updatedProfile.username !== undefined) {
+        const handleEl = el.querySelector('[data-author-handle]');
+        const username = updatedProfile.username || '';
+        if (handleEl) {
+          handleEl.textContent = username ? '@' + (typeof window.truncateName === 'function'
+            ? window.truncateName(username, 5) : username.slice(0, 5) + (username.length > 5 ? '…' : '')) : '';
+          handleEl.title = username ? '@' + username : '';
+          handleEl.style.display = username ? '' : 'none';
+        }
+      }
       // Verified badge wrapper
       const badgeWrapper = el.querySelector('[data-author-badge-wrapper]');
       if (badgeWrapper) {
