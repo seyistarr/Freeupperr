@@ -161,7 +161,8 @@
     function buildPostHTML(p, index) {
         const escapeHtml = window.escapeHtml;
         const author = window.getAuthorFromProfile(p.profile);
-        const da = window.truncateName(author.name, 22);
+        const da = window.truncateName(author.name, 15);
+        const handle = window.truncateName(author.username || '', 5);
         const aa = author.avatar;
         const verifiedStatus = author.verified_status;
 
@@ -194,10 +195,11 @@
                     ${window.buildFollowPlusButton(p.user_id)}
                   </div>
                   <div style="min-width:0;flex:1;">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <span data-author-name class="font-bold text-sm cursor-pointer hover:underline" style="color:var(--text);">${escapeHtml(da)}</span>
-                      <span data-author-badge-wrapper>${badgeHtml}</span>
-                      <span class="text-xs" style="color:var(--muted);">· ${window.formatRelativeTime(p.timestamp || p.date)}</span>
+                    <div class="flex items-center gap-1.5" style="min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;">
+                      <span data-author-name class="font-bold cursor-pointer hover:underline" style="color:var(--text);font-size:17px;line-height:1.3;min-width:0;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;" title="${escapeHtml(author.name)}">${escapeHtml(da)}</span>
+                      <span data-author-badge-wrapper style="flex-shrink:0;display:inline-flex;align-items:center;">${badgeHtml}</span>
+                      ${handle ? `<span data-author-handle style="font-size:14px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;" title="@${escapeHtml(author.username)}">@${escapeHtml(handle)}</span>` : ''}
+                      <span class="text-xs" style="color:var(--muted);flex-shrink:0;">· ${window.formatRelativeTime(p.timestamp || p.date)}</span>
                       ${lockPill}
                     </div>
                     <div class="cursor-pointer mt-0.5">${window.renderPostTitle(p.title, { hasMedia, mentions: p.mentions })}</div>
