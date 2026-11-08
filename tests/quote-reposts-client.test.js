@@ -55,6 +55,18 @@ test('video and Explore legacy behavior remains unchanged apart from additive in
    .replace('side-nav.js?v=interaction-sounds-v4','side-nav.js?v=sidebar-v1')
    .replace('bottom-nav.js?v=interaction-sounds-v4','bottom-nav.js?v=sidebar-v1');
   const legacy=soundNeutral.replaceAll('side-nav.css?v=sidebar-v1','side-nav.css').replaceAll('side-nav.js?v=sidebar-v1','side-nav.js?v=clean-urls-v1').replaceAll('js/screen-lifecycle.js?v=sidebar-v1','js/screen-lifecycle.js?v=native-tabs-v1').replaceAll('bottom-nav.js?v=sidebar-v1','bottom-nav.js?v=native-tabs-v1').replaceAll('js/screen-lifecycle.js?v=native-tabs-v1','js/screen-lifecycle.js?v=clean-urls-v1').replaceAll('bottom-nav.js?v=native-tabs-v1','bottom-nav.js?v=clean-urls-v1');
+  // Approved fullscreen video author header: 17px display name, 14px handle,
+  // 15/5 character UI limits, safe escaping and the existing verified badge.
+  // Preserve the whole-file hash gate below for every other behavior.
+  if(name==='video.html'){
+   assert.match(bytes,/\.v-creator-name\s*\{[^}]*font-size:\s*17px;[^}]*font-weight:\s*700;/s);
+   assert.match(bytes,/\.v-creator-handle\s*\{[^}]*font-size:\s*14px;/s);
+   assert.match(bytes,/Array\.from\(displayName\)\.slice\(0, 15\)/);
+   assert.match(bytes,/Array\.from\(username\)\.slice\(0, 5\)/);
+   assert.match(bytes,/escapeHtml\(shortDisplayName\)/);
+   assert.match(bytes,/escapeHtml\(shortUsername\)/);
+   assert.match(bytes,/data-author-badge-wrapper/);
+  }
   // Permit only the approved heavier video-action icon outline; keep all other legacy bytes protected.
   const videoStrokeRule=/(\.v-action-btn svg \{[^}]*?stroke-width: )2\.75(;)/s;
   if(name==='video.html') assert.match(legacy,videoStrokeRule,'expected approved 2.75px video icon stroke');
