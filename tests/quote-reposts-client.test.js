@@ -55,7 +55,11 @@ test('video and Explore legacy behavior remains unchanged apart from additive in
    .replace('side-nav.js?v=interaction-sounds-v4','side-nav.js?v=sidebar-v1')
    .replace('bottom-nav.js?v=interaction-sounds-v4','bottom-nav.js?v=sidebar-v1');
   const legacy=soundNeutral.replaceAll('side-nav.css?v=sidebar-v1','side-nav.css').replaceAll('side-nav.js?v=sidebar-v1','side-nav.js?v=clean-urls-v1').replaceAll('js/screen-lifecycle.js?v=sidebar-v1','js/screen-lifecycle.js?v=native-tabs-v1').replaceAll('bottom-nav.js?v=sidebar-v1','bottom-nav.js?v=native-tabs-v1').replaceAll('js/screen-lifecycle.js?v=native-tabs-v1','js/screen-lifecycle.js?v=clean-urls-v1').replaceAll('bottom-nav.js?v=native-tabs-v1','bottom-nav.js?v=clean-urls-v1');
-  assert.equal(createHash('sha256').update(legacy).digest('hex'),contracts[name+'_sha256']);
+  // Permit only the approved heavier video-action icon outline; keep all other legacy bytes protected.
+  const videoStrokeRule=/([.]v-action-btn svg \\{[^}]*?stroke-width: )2\\.75(;)/s;
+  if(name==='video.html') assert.match(legacy,videoStrokeRule,'expected approved 2.75px video icon stroke');
+  const behaviorBaseline=name==='video.html'?legacy.replace(videoStrokeRule,'$12$2'):legacy;
+  assert.equal(createHash('sha256').update(behaviorBaseline).digest('hex'),contracts[name+'_sha256']);
  }
  for(const name of ['toggleRepostAPI','updateRepostComment','normalizeMedia','mapPost','incrementView'])assert(source.includes(contracts[name]),name+' legacy contract changed');
  const f=postsFixture({enabled:false,rows:[outer()],originals:new Map([[id(100),original]])});const [p]=await f.api.loadAllPosts();assert(!('isQuote' in p));assert(!f.calls.some(c=>c.rpc==='load_quote_references'));
