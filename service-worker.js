@@ -1,7 +1,7 @@
 importScripts('/js/freeupper-routes.js?v=clean-urls-v1');
 
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v30-interaction-sounds';
+const CACHE_NAME = 'freeupper-pwa-v31-author-header';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -42,7 +42,8 @@ const URLS_TO_CACHE = [
   './js/screen-lifecycle.js?v=sidebar-v1',
   './bottom-nav.js?v=interaction-sounds-v4',
   './global.css',
-  './global.js?v=clean-urls-v1',
+  './global.js?v=author-header-v2',
+  './foryou.js?v=author-header-v2',
   './theme.js?v=2',
   './theme.css?v=2',
   './manifest.webmanifest',
