@@ -151,5 +151,5 @@ export async function handleViewOnceOpen(
 // Edge deployment starts normally; only the isolated Deno HTTP test suppresses
 // the listener, so import can exercise the real handler without binding a port.
 if (Deno.env.get('CHAT_PRIVATE_HTTP_TEST_MODE') !== 'true') {
-  Deno.serve(handleViewOnceOpen);
+  Deno.serve((request: Request) => handleViewOnceOpen(request));
 }
