@@ -14,8 +14,8 @@ function requireFragment(pattern, label) {
   return m[0];
 }
 // Use the real page's inline styles, rather than a replacement UI stylesheet.
-const inlineStyles = [...html.matchAll(/<style\\b[^>]*>([\\s\\S]*?)<\\/style>/gi)]
-  .map(m => m[1]).join('\\n');
+const inlineStyles = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)]
+  .map(m => m[1]).join('\n');
 const tabs = requireFragment(/<div class="cl-tabs" id="clTabs"[\s\S]*?<\/div>/, 'chat tabs');
 const search = requireFragment(/<div class="search-box" id="sbSearchBox">[\s\S]*?<\/div>/, 'chat search');
 const newActions = requireFragment(/<div class="nm-actions">[\s\S]*?<\/div>/, 'New Message actions');
