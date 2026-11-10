@@ -8,6 +8,7 @@ const path=require('node:path');
 const root=path.resolve(__dirname,'..');
 const load=(p)=>fs.readFileSync(path.join(root,p),'utf8');
 const sql=load('docs/chat/sql/proposed-private-view-once.sql');
+const fixture=load('tests/chat-private-postgres-fixture.sql');
 const upload=load('supabase/functions/chat-private-upload/index.ts');
 const open=load('supabase/functions/view-once-open/index.ts');
 const cleanup=load('supabase/functions/chat-private-cleanup/index.ts');
@@ -89,4 +90,16 @@ test('review SQL functions use balanced PostgreSQL dollar-quoted bodies',()=>{
   assert.equal(opening,closing,'PL/pgSQL body count must match');
   assert.doesNotMatch(sql,/\bas \$(?!\$)\s*\n/);
   assert.doesNotMatch(sql,/\bend \$(?!\$);/);
+});
+
+test('synthetic PostgreSQL fixture uses valid DO dollar quoting',()=>{
+  assert.doesNotMatch(fixture,/\bdo \$(?!\$)/i);
+  assert.doesNotMatch(fixture,/\bend \$(?!\$);/i);
+  assert.equal((fixture.match(/\bdo \$\$/gi)||[]).length,
+    (fixture.match(/\bend \$\$;/gi)||[]).length);
+});
+test('binary private response uses owned ArrayBuffer accepted by Deno BodyInit',()=>{
+  assert.match(open,/const responseBuffer: ArrayBuffer = new ArrayBuffer\(bytes\.byteLength\)/);
+  assert.match(open,/new Uint8Array\(responseBuffer\)\.set\(bytes\)/);
+  assert.match(open,/new Response\(responseBuffer,/);
 });
