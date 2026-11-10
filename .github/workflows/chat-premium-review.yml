@@ -62,3 +62,21 @@ jobs:
           PGDATABASE: chat_fixture
         run: psql -X -v ON_ERROR_STOP=1 -f tests/chat-private-postgres-fixture.sql
 # Synthetic Postgres contains no production data or external connections.
+
+  edge-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Deno type-check unpublished Edge Functions
+        run: >-
+          deno check
+          supabase/functions/chat-private-upload/index.ts
+          supabase/functions/view-once-open/index.ts
+          supabase/functions/chat-private-cleanup/index.ts
+# Type checks download public dependencies but use no app secrets or deployment.
