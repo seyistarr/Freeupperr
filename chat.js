@@ -1238,7 +1238,7 @@
             chatPartnerStatus.textContent = window.fuT('Loading…');
             populateGroupHeaderSubtitle(conv.id);
         } else {
-            chatPartnerName.textContent = other.display_name || other.username || 'User';
+            chatPartnerName.innerHTML = escapeHtml(other.display_name || other.username || 'User') + ' ' + getVerifiedBadge(other.verified_status);
             chatPartnerAvatar.src = getAvatar(other);
             renderPartnerStatus(conv);
         }
@@ -1768,7 +1768,7 @@
                 const info = groupSenderNameCache[msg.sender_id];
                 if (info) {
                     senderNameHtml =
-                        `<div class="group-sender-name" style="color:${info.color};" title="${escapeHtml(info.name)}">${escapeHtml(info.name)}</div>`;
+                        `<div class="group-sender-name" style="color:${info.color};" title="${escapeHtml(info.name)}"><span>${escapeHtml(info.name)}</span>${info.badge || ""}</div>`;
                 }
             }
 
@@ -2078,7 +2078,14 @@
     let forwardTargetMsgId = null;
     let forwardSelected = new Set();
 
-    window.forwardMessage = function(msgId) { openForwardModal(msgId); };
+    window.forwardMessage = function(msgId) {
+        const msg = messages.find(m => m.id === msgId);
+        if (msg && msg.metadata && msg.metadata.view_once) {
+            showToast(window.fuT('View-once media cannot be forwarded'), 'o');
+            return;
+        }
+        openForwardModal(msgId);
+    };
 
     function openForwardModal(msgId) {
         forwardTargetMsgId = msgId;
@@ -4364,7 +4371,7 @@
                     <div class="member-row">
                         <img class="member-avatar" src="${getAvatar(p)}" ${avatarErrAttr()} onclick="window.Router.openProfile('${p.id}')">
                         <div class="member-info" onclick="window.Router.openProfile('${p.id}')">
-                            <div class="member-name">${escapeHtml(getDisplayName(p))} ${isSelf ? ' (You)' : ''}</div>
+                            <div class="member-name">${escapeHtml(getDisplayName(p))} ${getVerifiedBadge(p.verified_status)} ${isSelf ? ' (You)' : ''}</div>
                             <div class="member-role">${isOwner ? 'Owner' : (isAdmin ? 'Admin' : 'Member')}</div>
                         </div>
                         ${actionHtml}
@@ -5065,9 +5072,9 @@
     }
     function captionHtml(t) { return '<div class="msg-caption">' + renderMessageText(t) + '</div>'; }
     function hasMediaBubble(msg, text) {
-        return msg.message_type === 'document' ||
-            ((msg.message_type === 'image' || msg.message_type === 'video' || msg.message_type ===
-                'media') && !!text);
+        // View-once rows must not expose a large media preview.
+        if (msg.metadata && msg.metadata.view_once) return false;
+        return ['document', 'image', 'video', 'media'].includes(msg.message_type);
     }
 
     function fetchLinkPreview(url) {
