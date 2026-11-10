@@ -28,8 +28,8 @@ const productionHandlers = js.slice(tabStart, tabEnd) + '\n' + js.slice(switchSt
 const markup = '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
   '<style>' + inlineStyles + '</style><body><div class="conversations-sidebar"><div id="sbTitle">Messages</div><p id="sbSub">Your conversations</p>' +
   tabs + search + '<div id="conversationList"></div>' +
-  '<div id="newChatModal"><h2>New Message</h2>' + newActions +
-  '<div id="userSearchResults"></div></div></div></body></html>';
+  '<div id="newChatModal" class="mfs"><h2>New Message</h2>' + newActions +
+  '<div id="userSearchResults" class="fs-list"></div></div></div></body></html>';
 const harness = `
   const convSearch = document.getElementById('convSearch');
   const convList = document.getElementById('conversationList');
