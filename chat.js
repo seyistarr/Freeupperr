@@ -459,21 +459,24 @@
     }
     function renderViewOnceChip(msg) {
         const items = msg.metadata?.media_items || [];
-        const kind = items[0]?.type === 'video' ? 'Video' : 'Photo';
-        const consumed = getConsumedIndicesForMsg(msg.id).has(0);
+        const consumed = getConsumedIndicesForMsg(msg.id);
         const sentByMe = msg.sender_id === currentUserId;
-        const label = msg.uploading ? 'Sending…' : (consumed && !sentByMe) ? 'Opened' : kind;
         const privatePending = msg.metadata?.private_asset === true && !privateViewOnceEnabled();
-        const click = privatePending || msg.uploading || consumed && !sentByMe
-            ? ''
-            : sentByMe
-                ? `onclick="event.stopPropagation();showToast(window.fuT('You cannot reopen your view-once media'), 'o')"`
-                : `onclick="event.stopPropagation();openViewOnceConfirm('${msg.id}',0)"`;
-        // UI-only: existing legacy view-once delivery remains unchanged until the
-        // authenticated Cloudinary/Edge rollout is reviewed and explicitly approved.
-        return `<div class="vo-chip ${consumed ? 'opened' : ''}" ${click} role="button" aria-label="View once ${label}">
-            <span class="vo-ring">1</span><span class="vo-label">${label}</span>
-        </div>` + (msg.text ? captionHtml(msg.text) : '');
+        const chips = items.map((item, index) => {
+            const opened = consumed.has(index);
+            const kind = item.type === 'video' ? 'Video' : 'Photo';
+            const label = msg.uploading ? 'Sending…' : opened && !sentByMe ? 'Opened' : kind;
+            const inert = privatePending || msg.uploading || opened && !sentByMe;
+            const action = inert ? ''
+                : sentByMe
+                    ? `onclick="event.stopPropagation();showToast(window.fuT('You cannot reopen your view-once media'), 'o')"`
+                    : `onclick="event.stopPropagation();openViewOnceConfirm('${msg.id}',${index})"`;
+            return `<div class="vo-chip ${opened ? 'opened' : ''}" ${action} role="button"
+                aria-label="View once ${label} ${index + 1} of ${items.length}">
+                <span class="vo-ring">1</span><span class="vo-label">${label}</span>
+            </div>`;
+        });
+        return chips.join('') + (msg.text ? captionHtml(msg.text) : '');
     }
 
     window.openMixedMedia = function(messageId, index) {
@@ -5474,8 +5477,9 @@
         addToComposerRaw(files);
         composerIdx = composerItems.length - 1;
         if (composerViewOnce && composerItems.length > 1) {
-            composerViewOnce = false;
-            byId('cmpViewOnceCheck').checked = false;
+            // The existing legacy view-once composer permits multiple items.
+            if (privateViewOnceEnabled()) composerViewOnce = false;
+            byId('cmpViewOnceCheck').checked = composerViewOnce;
             byId('cmpVoToggle').classList.remove('active');
             showToast(window.fuT('View once supports a single item'), 'o');
         }
@@ -5526,8 +5530,10 @@
 
     document.addEventListener('change', function(e) {
         if (e.target && e.target.id === 'cmpViewOnceCheck') {
-            if (e.target.checked && (composerItems.length !== 1 ||
-                !['image', 'video'].includes(composerItems[0].kind))) {
+            if (e.target.checked && (
+                !composerItems.length ||
+                composerItems.some(x => !['image', 'video'].includes(x.kind)) ||
+                (privateViewOnceEnabled() && composerItems.length !== 1))) {
                 e.target.checked = false;
                 showToast(window.fuT('View once supports one photo or video'), 'o');
                 return;
@@ -5546,10 +5552,6 @@
         const convId = selectedConversationId;
         const viewOnce = composerViewOnce;
         if (!convId || isBlockedConversation || !canSendMessages) return;
-        if (viewOnce && !privateViewOnceEnabled()) {
-            showToast(window.fuT('Private view-once sending is not available yet'), 'o');
-            return;
-        }
         closeComposer();
 
         if (items[0].kind === 'doc') {
@@ -5562,7 +5564,7 @@
     };
 
     async function sendMixedMediaItems(items, caption, viewOnce) {
-        if (viewOnce) return sendPrivateViewOnceItem(items, caption);
+        if (viewOnce && privateViewOnceEnabled()) return sendPrivateViewOnceItem(items, caption);
         const tempItems = items.map(item => ({ url: item.url, type: item.kind }));
         const tempMeta = { media_items: tempItems };
         if (viewOnce) tempMeta.view_once = true;
@@ -5575,7 +5577,11 @@
         });
         try {
             const uploaded = await Promise.all(items.map(async item => {
-                const uploadKind = item.kind === 'video' ? 'video' : 'image';
+                // Keep the historical view-once Cloudinary path for existing users
+                // until the private backend is verified and explicitly enabled.
+                const uploadKind = viewOnce
+                    ? (item.kind === 'video' ? 'viewonce_video' : 'viewonce_image')
+                    : (item.kind === 'video' ? 'video' : 'image');
                 const result = await uploadToCloudinary(item.file, uploadKind);
                 return {
                     url: result.url,
