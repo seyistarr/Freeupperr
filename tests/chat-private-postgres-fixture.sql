@@ -178,4 +178,16 @@ begin
   end if;
 end $$;
 reset role;
+-- Preserve Cloudinary asset registry after source-message deletion for cleanup.
+do $
+declare v_msg uuid;
+begin
+  select message_id into v_msg from chat_private.view_once_assets
+    where cloudinary_asset_id='asset-00000001';
+  delete from public.messages where id=v_msg;
+  if not exists (select 1 from chat_private.view_once_assets
+      where cloudinary_asset_id='asset-00000001' and message_id is null) then
+    raise exception 'Deleting a message lost the private asset cleanup record';
+  end if;
+end $;
 select 'synthetic private-view-once PostgreSQL tests passed' as result;
