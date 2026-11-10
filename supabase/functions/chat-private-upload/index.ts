@@ -44,6 +44,17 @@ async function signedParameters(fields: Record<string,string>) {
   params.set('signature',await sha1(canonical + API_SECRET));
   return params;
 }
+async function removeUnregisteredAsset(publicId:string,kind:string):Promise<void> {
+  if(!publicId || !['image','video'].includes(kind)) return;
+  const timestamp=String(Math.floor(Date.now()/1000));
+  const fields={invalidate:'true',public_id:publicId,timestamp,type:'authenticated'};
+  const signed=await signedParameters(fields);
+  const res=await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(CLOUD)}/${kind}/destroy`,{
+    method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:signed,signal:AbortSignal.timeout(12000)
+  });
+  if(!res.ok) throw new Error('Orphan destroy failed');
+}
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response(null,{status:204,headers:headers(req)});
   if (req.method !== 'POST') return response(req,{error:'Method not allowed'},405);
@@ -104,7 +115,10 @@ Deno.serve(async req => {
   if (typeof cloud.asset_id !== 'string' || typeof cloud.public_id !== 'string' ||
       cloud.type !== 'authenticated' || cloud.resource_type !== resourceType ||
       cloud.bytes !== file.size) {
-    // A cleanup worker must eventually remove orphaned assets if registration fails.
+    if(typeof cloud.public_id==='string' && cloud.type==='authenticated' &&
+       cloud.resource_type===resourceType) {
+      try { await removeUnregisteredAsset(cloud.public_id,resourceType); } catch (_) {}
+    }
     return response(req,{error:'Private upload verification failed'},502);
   }
 
@@ -115,8 +129,9 @@ Deno.serve(async req => {
     p_kind:resourceType,p_mime:file.type,p_bytes:file.size
   });
   if (registerError || registered !== true) {
-    // Fail closed. Never return Cloudinary URLs or credentials to the caller.
-    // Orphan cleanup must be run before production approval.
+    // Best-effort immediate rollback of an unregistered Cloudinary upload.
+    // A separate reconciliation inventory is still required for network failures.
+    try { await removeUnregisteredAsset(cloud.public_id as string,resourceType); } catch (_) {}
     return response(req,{error:'Private media registration failed'},503);
   }
   return response(req,{status:'registered',message_id:messageId},201);
