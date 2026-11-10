@@ -26,37 +26,53 @@ create index if not exists view_once_assets_cleanup_idx on chat_private.view_onc
 create index if not exists view_once_assets_asset_id_idx on chat_private.view_once_assets(cloudinary_asset_id);
 revoke all on all tables in schema chat_private from public,anon,authenticated;
 
--- Only the Edge Function's service-role connection can register an upload.
-create or replace function public.chat_register_private_asset(
-  p_message_id uuid, p_sender uuid, p_asset_id text, p_public_id text,
-  p_kind text, p_mime text, p_bytes bigint
-) returns boolean language plpgsql security definer set search_path = '' as $$
-declare m record;
+-- Service-role Edge Function publishes only AFTER Cloudinary successfully uploads.
+-- A message and its asset register in ONE transaction.
+create or replace function public.chat_publish_private_view_once(
+  p_conversation_id uuid, p_sender uuid, p_caption text,
+  p_asset_id text, p_public_id text, p_kind text, p_mime text, p_bytes bigint
+) returns uuid language plpgsql security definer set search_path = '' as $$
+declare c public.conversations%rowtype; new_message_id uuid;
 begin
-  if p_asset_id is null or length(p_asset_id) not between 8 and 255
-      or p_public_id is null or length(p_public_id) not between 3 and 255
-      or p_kind not in ('image','video')
-      or p_mime not in ('image/jpeg','image/png','image/webp','video/mp4','video/quicktime','video/webm')
-      or p_bytes not between 1 and 10485760 then
-    raise exception 'Invalid registered asset' using errcode='22023';
+  if p_sender is null or p_conversation_id is null or
+      p_asset_id is null or length(p_asset_id) not between 8 and 255 or
+      p_public_id is null or length(p_public_id) not between 3 and 255 or
+      p_kind not in ('image','video') or
+      p_mime not in ('image/jpeg','image/png','image/webp','video/mp4','video/quicktime','video/webm') or
+      p_bytes not between 1 and 10485760 or length(coalesce(p_caption,'')) > 2000 then
+    raise exception 'Invalid private upload' using errcode='22023';
   end if;
-  select sender_id,metadata,media_url,media_urls into m
-    from public.messages where id=p_message_id for update;
-  if not found or m.sender_id is distinct from p_sender
-     or m.metadata->>'view_once' is distinct from 'true'
-     or m.media_url is not null or m.media_urls is not null then
-    raise exception 'View-once message is not eligible' using errcode='42501';
+  select * into c from public.conversations where id=p_conversation_id;
+  if not found or coalesce(c.is_note,false) then
+    raise exception 'Conversation unavailable' using errcode='42501';
   end if;
+  if coalesce(c.is_group,false) then
+    if not exists (select 1 from public.conversation_members cm
+        where cm.conversation_id=c.id and cm.user_id=p_sender)
+        or not public.can_send_in_conversation(c.id) then
+      raise exception 'Group send not allowed' using errcode='42501';
+    end if;
+  elsif (p_sender is distinct from c.user1_id and p_sender is distinct from c.user2_id)
+        or public.is_blocked_between(c.user1_id,c.user2_id) then
+    raise exception 'DM send not allowed' using errcode='42501';
+  end if;
+  insert into public.messages (
+    conversation_id,sender_id,text,message_type,media_url,media_urls,metadata
+  ) values (
+    c.id,p_sender,coalesce(p_caption,''),'media',null,null,
+    jsonb_build_object('view_once',true,'private_asset',true,
+      'media_items',jsonb_build_array(jsonb_build_object('type',p_kind)))
+  ) returning id into new_message_id;
   insert into chat_private.view_once_assets (
     message_id,uploader_id,cloudinary_asset_id,cloudinary_public_id,
     resource_type,mime_type,byte_size
-  ) values (p_message_id,p_sender,p_asset_id,p_public_id,p_kind,p_mime,p_bytes);
-  return true;
+  ) values (new_message_id,p_sender,p_asset_id,p_public_id,p_kind,p_mime,p_bytes);
+  return new_message_id;
 end $$;
-revoke all on function public.chat_register_private_asset(uuid,uuid,text,text,text,text,bigint)
-  from public,anon,authenticated;
-grant execute on function public.chat_register_private_asset(uuid,uuid,text,text,text,text,bigint)
-  to service_role;
+revoke all on function public.chat_publish_private_view_once(uuid,uuid,text,text,text,text,text,bigint)
+ from public,anon,authenticated;
+grant execute on function public.chat_publish_private_view_once(uuid,uuid,text,text,text,text,text,bigint)
+ to service_role;
 
 -- One-time consumption remains owned by the EXISTING public.claim_view_once
 -- RPC, invoked with the verified recipient's JWT after private media is buffered.
@@ -103,7 +119,7 @@ grant execute on function public.chat_check_private_asset(uuid,uuid) to service_
 -- These RPCs are service_role-only; never grant to authenticated or anon.
 create or replace function public.chat_claim_private_cleanup_batch(p_limit int default 25)
 returns table(asset_id text, public_id text, kind text)
-language plpgsql security definer set search_path = '' as $
+language plpgsql security definer set search_path = '' as $$
 begin
   if p_limit is null or p_limit < 1 or p_limit > 100 then
     raise exception 'Invalid batch limit' using errcode='22023';
@@ -125,13 +141,13 @@ begin
     returning a.cloudinary_asset_id,a.cloudinary_public_id,a.resource_type
   )
   select c.cloudinary_asset_id,c.cloudinary_public_id,c.resource_type from claimed c;
-end $;
+end $$;
 revoke all on function public.chat_claim_private_cleanup_batch(int) from public,anon,authenticated;
 grant execute on function public.chat_claim_private_cleanup_batch(int) to service_role;
 
 create or replace function public.chat_finish_private_cleanup(
   p_asset_id text,p_success boolean,p_error text default null
-) returns boolean language plpgsql security definer set search_path = '' as $
+) returns boolean language plpgsql security definer set search_path = '' as $$
 declare affected int;
 begin
   update chat_private.view_once_assets a
@@ -141,7 +157,7 @@ begin
     where a.cloudinary_asset_id = p_asset_id and a.deleted_at is null;
   get diagnostics affected = row_count;
   return affected=1;
-end $;
+end $$;
 revoke all on function public.chat_finish_private_cleanup(text,boolean,text) from public,anon,authenticated;
 grant execute on function public.chat_finish_private_cleanup(text,boolean,text) to service_role;
 
