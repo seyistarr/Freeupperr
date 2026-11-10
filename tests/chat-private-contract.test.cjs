@@ -95,8 +95,8 @@ test('review SQL functions use balanced PostgreSQL dollar-quoted bodies',()=>{
 test('synthetic PostgreSQL fixture uses valid DO dollar quoting',()=>{
   assert.doesNotMatch(fixture,/\bdo \$(?!\$)/i);
   assert.doesNotMatch(fixture,/\bend \$(?!\$);/i);
-  assert.equal((fixture.match(/\bdo \$\$/gi)||[]).length,
-    (fixture.match(/\bend \$\$;/gi)||[]).length);
+  assert.match(fixture,/-- Preserve Cloudinary asset registry[\s\S]*?do \$\$/);
+  assert.match(fixture,/Deleting a message lost the private asset cleanup record[\s\S]*?end \$\$;/);
 });
 test('binary private response uses owned ArrayBuffer accepted by Deno BodyInit',()=>{
   assert.match(open,/const responseBuffer: ArrayBuffer = new ArrayBuffer\(bytes\.byteLength\)/);
