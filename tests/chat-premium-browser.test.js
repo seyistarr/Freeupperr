@@ -35,8 +35,7 @@ const harness = \`
   function renderConversations(query) { window.__renders.push({tab: chatTab, query}); }
   window.__action = '';
   window.openCreateGroupModal = () => { window.__action = 'group'; };
-  window.openMyNote = () => { window.__action = 'note'; };
-  window.openNoteModal = () => { window.__action = 'note'; };
+  window.openOrCreateFreeUpperNote = () => { window.__action = 'note'; };
 \` + productionHandlers;
 
 async function withPage(viewport, callback, reducedMotion = 'no-preference') {
@@ -90,6 +89,8 @@ for (const [label, viewport] of [
       assert.equal(await page.getByText('My Note', { exact: true }).count(), 1);
       await page.getByText('New Group', { exact: true }).click();
       assert.equal(await page.evaluate(() => window.__action), 'group');
+      await page.getByText('My Note', { exact: true }).click();
+      assert.equal(await page.evaluate(() => window.__action), 'note');
     });
   });
 }
