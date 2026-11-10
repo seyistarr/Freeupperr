@@ -13,6 +13,9 @@ function requireFragment(pattern, label) {
   assert.ok(m, 'Missing production HTML fragment: ' + label);
   return m[0];
 }
+// Use the real page's inline styles, rather than a replacement UI stylesheet.
+const inlineStyles = [...html.matchAll(/<style\\b[^>]*>([\\s\\S]*?)<\\/style>/gi)]
+  .map(m => m[1]).join('\\n');
 const tabs = requireFragment(/<div class="cl-tabs" id="clTabs"[\s\S]*?<\/div>/, 'chat tabs');
 const search = requireFragment(/<div class="search-box" id="sbSearchBox">[\s\S]*?<\/div>/, 'chat search');
 const newActions = requireFragment(/<div class="nm-actions">[\s\S]*?<\/div>/, 'New Message actions');
@@ -23,10 +26,10 @@ const switchEnd = js.indexOf('    function updateChatTabCounts()', switchStart);
 assert.ok(tabStart >= 0 && tabEnd > tabStart && switchStart >= 0 && switchEnd > switchStart);
 const productionHandlers = js.slice(tabStart, tabEnd) + '\n' + js.slice(switchStart, switchEnd);
 const markup = '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
-  '<body><div id="sbTitle">Messages</div><p id="sbSub">Your conversations</p>' +
+  '<style>' + inlineStyles + '</style><body><div class="conversations-sidebar"><div id="sbTitle">Messages</div><p id="sbSub">Your conversations</p>' +
   tabs + search + '<div id="conversationList"></div>' +
   '<div id="newChatModal"><h2>New Message</h2>' + newActions +
-  '<div id="userSearchResults"></div></div></body></html>';
+  '<div id="userSearchResults"></div></div></div></body></html>';
 const harness = \`
   const convSearch = document.getElementById('convSearch');
   const convList = document.getElementById('conversationList');
@@ -100,4 +103,29 @@ test('reduced-motion browser can activate tabs without errors', async () => {
     await page.locator('[data-tab="requests"]').click();
     assert.equal(await page.locator('#sbSearchBox').isVisible(), false);
   }, 'reduce');
+});
+
+test('3D chat cards stay in reading order without overlap on mobile', async () => {
+  await withPage({ width: 390, height: 844 }, async page => {
+    await page.evaluate(() => {
+      const host = document.querySelector('#conversationList');
+      host.style.height = '450px';
+      host.style.overflowY = 'auto';
+      host.innerHTML = Array.from({length: 6}, (_,i) =>
+        '<div class="conv-swipe-wrap" style="--rx:2deg;--tz:0px;--sc:1">' +
+        '<div class="conv-item"><strong>Chat ' + (i+1) + '</strong></div></div>'
+      ).join('');
+    });
+    const geometry = await page.locator('.conv-swipe-wrap').evaluateAll(elements =>
+      elements.map(e => {
+        const r = e.getBoundingClientRect();
+        return { top:r.top, bottom:r.bottom, height:r.height };
+      })
+    );
+    assert.equal(geometry.length, 6);
+    for(let i = 1; i < geometry.length; i++) {
+      assert.ok(geometry[i].top >= geometry[i-1].bottom - 1,
+        'Conversation cards must remain ordered and non-overlapping');
+    }
+  });
 });
