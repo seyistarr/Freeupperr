@@ -11,6 +11,7 @@ on:
       - supabase/functions/view-once-open/**
       - tests/chat-premium-review.test.cjs
       - tests/chat-private-contract.test.cjs
+      - tests/chat-private-postgres-fixture.sql
       - .github/workflows/chat-premium-review.yml
   workflow_dispatch:
 permissions:
@@ -31,3 +32,33 @@ jobs:
       - name: Run isolated review tests
         run: node --test tests/chat-premium-review.test.cjs tests/chat-private-contract.test.cjs
 # This workflow has no secrets, database connections or deployment steps.
+
+  synthetic-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: chat_fixture_only
+          POSTGRES_DB: chat_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test disposable private-media SQL and trigger behavior
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: chat_fixture_only
+          PGDATABASE: chat_fixture
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/chat-private-postgres-fixture.sql
+# Synthetic Postgres contains no production data or external connections.
