@@ -10,6 +10,7 @@ on:
       - supabase/functions/chat-private-*/**
       - supabase/functions/view-once-open/**
       - tests/chat-premium-review.test.cjs
+      - tests/chat-premium-browser.test.js
       - tests/chat-private-contract.test.cjs
       - tests/chat-private-postgres-fixture.sql
       - .github/workflows/chat-premium-review.yml
@@ -31,6 +32,23 @@ jobs:
         run: node --check chat.js
       - name: Run isolated review tests
         run: node --test tests/chat-premium-review.test.cjs tests/chat-private-contract.test.cjs
+  chat-browser-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked browser-test dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install headless Chromium and required libraries
+        run: npx playwright install --with-deps chromium
+      - name: Run isolated UI acceptance tests
+        run: node --test tests/chat-premium-browser.test.js
   synthetic-postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 10
