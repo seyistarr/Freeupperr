@@ -10,7 +10,8 @@ for(const [key,value] of Object.entries({
   CLOUDINARY_CLOUD_NAME:"integration-cloud-test",
   CLOUDINARY_API_KEY:"integration-key-test",
   CLOUDINARY_API_SECRET:"integration-secret-test",
-  CHAT_PRIVATE_MEDIA_ENABLED:"true"
+  CHAT_PRIVATE_MEDIA_ENABLED:"true",
+  CHAT_PRIVATE_HTTP_TEST_MODE:"true"
 })) Deno.env.set(key,value);
 
 const {handleViewOnceOpen} = await import("../supabase/functions/view-once-open/index.ts");
