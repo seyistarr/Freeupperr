@@ -107,6 +107,32 @@ Deno.test("Cloudinary failure never consumes view-once claim",async()=>{
   assertEquals(res.status,502);
   assertEquals(calls.claims,0);
 });
+Deno.test("expired view-once asset denies download and claim",async()=>{
+  const {deps,calls}=setup({assetStatus:"not_found"});
+  const res=await handleViewOnceOpen(req(),deps);
+  assertEquals(res.status,404);
+  assertEquals(calls,{check:1,claims:0,download:0});
+});
+Deno.test("an upstream oversized payload never consumes the claim",async()=>{
+  const {deps,calls}=setup({cloudBytes:Array(10*1024*1024+1).fill(1)});
+  const res=await handleViewOnceOpen(req(),deps);
+  assertEquals(res.status,502);
+  assertEquals(calls.claims,0);
+});
+Deno.test("unsupported origin is rejected before authentication",async()=>{
+  const {deps,calls}=setup();
+  const res=await handleViewOnceOpen(new Request(
+    "https://example.invalid/functions/v1/view-once-open",{
+      method:"POST",headers:{
+        origin:"https://untrusted.example",
+        authorization:"Bearer test-jwt",
+        "content-type":"application/json"
+      },
+      body:JSON.stringify({message_id:ID,media_index:0})
+    }),deps);
+  assertEquals(res.status,403);
+  assertEquals(calls,{check:0,claims:0,download:0});
+});
 Deno.test("disabled backend returns 503 with no external I/O",async()=>{
   const {deps,calls}=setup();
   Deno.env.set("CHAT_PRIVATE_MEDIA_ENABLED","false");
