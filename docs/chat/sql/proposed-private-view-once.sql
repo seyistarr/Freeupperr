@@ -58,54 +58,9 @@ revoke all on function public.chat_register_private_asset(uuid,uuid,text,text,te
 grant execute on function public.chat_register_private_asset(uuid,uuid,text,text,text,text,bigint)
   to service_role;
 
--- Claim only AFTER the private Cloudinary fetch returned a successful response.
--- The consumption row is never rolled back by another network call.
-create or replace function public.chat_claim_private_asset(p_viewer uuid,p_message_id uuid)
-returns jsonb language plpgsql security definer set search_path = '' as $$
-declare a record; m record; c record; claimed uuid;
-begin
-  if p_viewer is null then return jsonb_build_object('status','forbidden'); end if;
-  select a.message_id,a.cloudinary_asset_id,a.resource_type,a.mime_type,
-         a.cleanup_after,a.deleted_at
-    into a from chat_private.view_once_assets a
-    where a.message_id=p_message_id for update;
-  if not found or a.deleted_at is not null or a.cleanup_after <= now() then
-    return jsonb_build_object('status','not_found');
-  end if;
-  select m.id,m.sender_id,m.conversation_id,m.metadata,m.deleted_at,m.expires_at
-    into m from public.messages m where m.id=p_message_id;
-  if not found or m.sender_id=p_viewer or m.deleted_at is not null or
-     (m.expires_at is not null and m.expires_at <= now()) or
-     m.metadata->>'view_once' is distinct from 'true' then
-    return jsonb_build_object('status','forbidden');
-  end if;
-  select c.id,c.is_group,c.is_note,c.owner_id,c.user1_id,c.user2_id
-    into c from public.conversations c where c.id=m.conversation_id;
-  if not found or coalesce(c.is_note,false) then
-    return jsonb_build_object('status','forbidden');
-  end if;
-  if coalesce(c.is_group,false) then
-    if not exists(select 1 from public.conversation_members cm
-                  where cm.conversation_id=c.id and cm.user_id=p_viewer) then
-      return jsonb_build_object('status','forbidden');
-    end if;
-  elsif p_viewer is distinct from c.user1_id and p_viewer is distinct from c.user2_id then
-    return jsonb_build_object('status','forbidden');
-  elsif public.is_blocked_between(c.user1_id,c.user2_id) then
-    return jsonb_build_object('status','forbidden');
-  end if;
-  insert into public.view_once_consumptions(message_id,media_index,viewer_id)
-    values(p_message_id,0,p_viewer) on conflict do nothing
-    returning message_id into claimed;
-  if claimed is null then return jsonb_build_object('status','already_viewed'); end if;
-  if not coalesce(c.is_group,false) then
-    update chat_private.view_once_assets set cleanup_after=least(cleanup_after,now()+interval '2 minutes')
-      where message_id=p_message_id;
-  end if;
-  return jsonb_build_object('status','ok');
-end $$;
-revoke all on function public.chat_claim_private_asset(uuid,uuid) from public,anon,authenticated;
-grant execute on function public.chat_claim_private_asset(uuid,uuid) to service_role;
+-- One-time consumption remains owned by the EXISTING public.claim_view_once
+-- RPC, invoked with the verified recipient's JWT after private media is buffered.
+-- Do not implement a competing claim/unclaim RPC.
 
 -- Non-consuming authorization check before opening an upstream Cloudinary connection.
 -- Caller is trusted ONLY because EXECUTE is restricted to service_role.
@@ -189,6 +144,15 @@ begin
 end $;
 revoke all on function public.chat_finish_private_cleanup(text,boolean,text) from public,anon,authenticated;
 grant execute on function public.chat_finish_private_cleanup(text,boolean,text) to service_role;
+
+-- Existing RLS table has SELECT grant but no SELECT policy as of 2026-11-10.
+-- Restrict consumption reads to the authenticated viewer only. The existing
+-- SECURITY DEFINER claim_view_once function handles writes/authorization.
+drop policy if exists "chat_viewer_can_read_own_consumptions"
+  on public.view_once_consumptions;
+create policy "chat_viewer_can_read_own_consumptions"
+  on public.view_once_consumptions for select to authenticated
+  using (viewer_id = (select auth.uid()));
 
 commit;
 
