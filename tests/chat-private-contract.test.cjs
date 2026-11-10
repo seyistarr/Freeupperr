@@ -75,3 +75,12 @@ test('private_asset markers cannot bypass registry or be rewritten later',()=>{
   assert.match(sql,/new\.metadata is distinct from old\.metadata/);
   assert.match(sql,/new\.media_url is distinct from old\.media_url/);
 });
+
+test('review SQL functions use balanced PostgreSQL dollar-quoted bodies',()=>{
+  const opening=(sql.match(/\\bas \\$\\$/g)||[]).length;
+  const closing=(sql.match(/\\bend \\$\\$;/g)||[]).length;
+  assert.ok(opening >= 4, 'Expected all private-media RPCs and guards');
+  assert.equal(opening,closing,'PL/pgSQL body count must match');
+  assert.doesNotMatch(sql,/\\bas \\$(?!\\$)\\s*\\n/);
+  assert.doesNotMatch(sql,/\\bend \\$(?!\\$);/);
+});
