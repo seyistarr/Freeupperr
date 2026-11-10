@@ -71,6 +71,68 @@ revoke all on function public.chat_publish_private_view_once(uuid,uuid,text,text
 grant execute on function public.chat_publish_private_view_once(uuid,uuid,text,text,text,text,text,bigint)
  to service_role;
 
+-- A private marker is not proof that an asset was registered. Reject direct
+-- REST inserts that spoof private_asset=true without a matching server-only
+-- registry entry. The constraint trigger runs at transaction end, after the
+-- atomic publisher has inserted BOTH records.
+create or replace function chat_private.enforce_registered_private_message()
+returns trigger language plpgsql security definer set search_path = '' as $
+begin
+  if not exists (
+    select 1 from chat_private.view_once_assets a
+    where a.message_id = new.id and a.deleted_at is null
+      and a.uploader_id = new.sender_id
+  ) then
+    raise exception 'Private view-once asset has not been registered'
+      using errcode='23514';
+  end if;
+  if new.message_type <> 'media' or
+     new.metadata->>'view_once' is distinct from 'true' or
+     new.media_url is not null or new.media_urls is not null or
+     jsonb_typeof(new.metadata->'media_items') is distinct from 'array' or
+     jsonb_array_length(new.metadata->'media_items') <> 1 then
+    raise exception 'Invalid private view-once media contract'
+      using errcode='23514';
+  end if;
+  return null;
+end $;
+revoke all on function chat_private.enforce_registered_private_message()
+  from public,anon,authenticated;
+
+drop trigger if exists chat_private_asset_registered on public.messages;
+create constraint trigger chat_private_asset_registered
+after insert or update on public.messages
+deferrable initially deferred for each row
+when ((new.metadata->>'private_asset') = 'true')
+execute function chat_private.enforce_registered_private_message();
+
+-- Once private asset metadata exists, neither sender nor recipient may
+-- remove its marker, change asset identity, or attach a public media URL.
+-- Caption edits and ordinary message deletion remain supported.
+create or replace function chat_private.guard_private_message_update()
+returns trigger language plpgsql security definer set search_path = '' as $
+begin
+  if old.metadata->>'private_asset' = 'true' and (
+     new.metadata is distinct from old.metadata or
+     new.sender_id is distinct from old.sender_id or
+     new.conversation_id is distinct from old.conversation_id or
+     new.media_url is distinct from old.media_url or
+     new.media_urls is distinct from old.media_urls or
+     new.message_type is distinct from old.message_type
+  ) then
+    raise exception 'Private view-once message fields are immutable'
+      using errcode='42501';
+  end if;
+  return new;
+end $;
+revoke all on function chat_private.guard_private_message_update()
+  from public,anon,authenticated;
+
+drop trigger if exists chat_private_message_update_guard on public.messages;
+create trigger chat_private_message_update_guard
+before update on public.messages for each row
+execute function chat_private.guard_private_message_update();
+
 -- One-time consumption remains owned by the EXISTING public.claim_view_once
 -- RPC, invoked with the verified recipient's JWT after private media is buffered.
 -- Do not implement a competing claim/unclaim RPC.
