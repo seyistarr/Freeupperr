@@ -3344,26 +3344,7 @@
                         `;
                 return;
             }
-            let html = `
-                        <div class="u-row" onclick="openCreateGroupModal()">
-                            <div class="u-av" style="display:flex;align-items:center;justify-content:center;background:var(--pdim);">
-                                <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--p);fill:none;stroke-width:2;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
-                            </div>
-                            <div class="u-info">
-                                <div class="u-name" data-i18n=&#78;&#101;&#119;&#32;&#71;&#114;&#111;&#117;&#112;>New Group</div>
-                                <div class="u-handle" data-i18n=&#67;&#114;&#101;&#97;&#116;&#101;&#32;&#97;&#32;&#103;&#114;&#111;&#117;&#112;&#32;&#99;&#104;&#97;&#116;>Create a group chat</div>
-                            </div>
-                        </div>
-                        <div class="u-row" onclick="openOrCreateFreeUpperNote()">
-                            <div class="u-av" style="display:flex;align-items:center;justify-content:center;background:var(--pdim);">
-                                <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--p);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                            </div>
-                            <div class="u-info">
-                                <div class="u-name" data-i18n=&#77;&#121;&#32;&#78;&#111;&#116;&#101;>My Note</div>
-                                <div class="u-handle" data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;&#32;&#111;&#110;&#108;&#121;&#32;&#121;&#111;&#117;&#114;&#115;&#101;&#108;&#102;>Message only yourself</div>
-                            </div>
-                        </div>
-                    `;
+            let html = '';
             const friendResults = results.filter(u => mutualFollowers.has(u.id));
             const otherResults = results.filter(u => !mutualFollowers.has(u.id));
             if (friendResults.length) {
