@@ -47,7 +47,12 @@ function errorResponse(req:Request,status:string):Response {
     default:return json(req,{error:'Media access unavailable'},503);
   }
 }
-export async function handleViewOnceOpen(req:Request):Promise<Response> {
+// Injectable external I/O enables authorization tests without any real users,
+ // private assets, production connections or service-role credentials.
+export async function handleViewOnceOpen(
+  req:Request,
+  deps: { createClient: typeof createClient; fetch: typeof fetch } = {createClient,fetch}
+):Promise<Response> {
   if(req.method==='OPTIONS') return new Response(null,{status:204,headers:cors(req)});
   if(req.method!=='POST') return json(req,{error:'Method not allowed'},405);
   if(Deno.env.get('CHAT_PRIVATE_MEDIA_ENABLED')!=='true')
@@ -58,7 +63,7 @@ export async function handleViewOnceOpen(req:Request):Promise<Response> {
   if(origin && !ORIGINS.has(origin)) return json(req,{error:'Origin rejected'},403);
   const authorization=req.headers.get('authorization')??'';
   if(!authorization.startsWith('Bearer ')) return json(req,{error:'Unauthorized'},401);
-  const userDb=createClient(URL_BASE,ANON,{global:{headers:{Authorization:authorization}}});
+  const userDb=deps.createClient(URL_BASE,ANON,{global:{headers:{Authorization:authorization}}});
   const {data:{user},error:userErr}=await userDb.auth.getUser(authorization.slice(7));
   if(userErr||!user) return json(req,{error:'Unauthorized'},401);
   let data:unknown;
@@ -72,7 +77,7 @@ export async function handleViewOnceOpen(req:Request):Promise<Response> {
   const id=args.message_id;
   if(typeof id!=='string'||!UUID.test(id)||args.media_index!==0)
     return json(req,{error:'Invalid message or media index'},400);
-  const admin=createClient(URL_BASE,SERVICE);
+  const admin=deps.createClient(URL_BASE,SERVICE);
   const {data:checked,error:checkErr}=await admin.rpc('chat_check_private_asset',{
     p_viewer:user.id,p_message_id:id
   });
@@ -82,7 +87,7 @@ export async function handleViewOnceOpen(req:Request):Promise<Response> {
     return json(req,{error:'Invalid stored media'},503);
   let upstream:Response;
   try {
-    upstream=await fetch(await signedDownloadUrl(checked.asset_id),{
+    upstream=await deps.fetch(await signedDownloadUrl(checked.asset_id),{
       headers:{'Accept':'application/octet-stream'},
       redirect:'error',signal:AbortSignal.timeout(20000)
     });
