@@ -1,7 +1,7 @@
 // REVIEW BRANCH ONLY. NOT DEPLOYED. Requires proposed-private-view-once.sql.
 // This function is disabled unless CHAT_PRIVATE_MEDIA_ENABLED=true.
-// Client first creates a view-once message with NO media URL. The server then
-// accepts one authorized upload and binds Cloudinary's immutable asset_id to it.
+// Upload authenticated private media FIRST. A service-side transaction then
+// creates the message and binds Cloudinary's immutable asset_id to it.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -78,22 +78,25 @@ Deno.serve(async req => {
   if (length > MAX_BYTES + 65536) return response(req,{error:'Upload too large'},413);
   let body: FormData;
   try { body=await req.formData(); } catch { return response(req,{error:'Invalid multipart upload'},400); }
-  const messageId=body.get('message_id');
+  const conversationId=body.get('conversation_id');
+  const caption=body.get('caption');
   const file=body.get('file');
-  if (typeof messageId!=='string' || !UUID.test(messageId) || !(file instanceof File)) {
+  if (typeof conversationId!=='string' || !UUID.test(conversationId) ||
+      typeof caption!=='string' || caption.length>2000 || !(file instanceof File)) {
     return response(req,{error:'Missing message or file'},400);
   }
   const resourceType=MIME_TYPES[file.type];
   if (!resourceType || file.size < 1 || file.size > MAX_BYTES) {
     return response(req,{error:'Unsupported media or file size'},400);
   }
-  // This is a user-context query: conversation membership and message RLS apply.
-  const {data:msg,error:msgError}=await userClient.from('messages')
-    .select('id,sender_id,metadata,media_url,media_urls')
-    .eq('id',messageId).maybeSingle();
-  if (msgError || !msg || msg.sender_id !== identity.user.id ||
-      msg.metadata?.view_once !== true || msg.media_url !== null || msg.media_urls !== null) {
-    return response(req,{error:'Message is not eligible'},403);
+  // Use the caller's RLS context to verify an eligible DM before any upload.
+  // The transactional publisher validates membership again to prevent TOCTOU.
+  const {data:conv,error:convErr}=await userClient.from('conversations')
+    .select('id,user1_id,user2_id,is_group,is_note')
+    .eq('id',conversationId).maybeSingle();
+  if(convErr || !conv || conv.is_group || conv.is_note ||
+     ![conv.user1_id,conv.user2_id].includes(identity.user.id)) {
+    return response(req,{error:'Conversation is not eligible'},403);
   }
 
   const timestamp=String(Math.floor(Date.now()/1000));
@@ -123,16 +126,14 @@ Deno.serve(async req => {
   }
 
   const admin=createClient(SUPABASE_URL,SERVICE_KEY);
-  const {data:registered,error:registerError}=await admin.rpc('chat_register_private_asset',{
-    p_message_id:messageId,p_sender:identity.user.id,
+  const {data:publishedId,error:publishError}=await admin.rpc('chat_publish_private_view_once',{
+    p_conversation_id:conversationId,p_sender:identity.user.id,p_caption:caption,
     p_asset_id:cloud.asset_id,p_public_id:cloud.public_id,
     p_kind:resourceType,p_mime:file.type,p_bytes:file.size
   });
-  if (registerError || registered !== true) {
-    // Best-effort immediate rollback of an unregistered Cloudinary upload.
-    // A separate reconciliation inventory is still required for network failures.
+  if(publishError || typeof publishedId!=='string') {
     try { await removeUnregisteredAsset(cloud.public_id as string,resourceType); } catch (_) {}
-    return response(req,{error:'Private media registration failed'},503);
+    return response(req,{error:'Private media publication failed'},503);
   }
-  return response(req,{status:'registered',message_id:messageId},201);
+  return response(req,{status:'published',message_id:publishedId},201);
 });
