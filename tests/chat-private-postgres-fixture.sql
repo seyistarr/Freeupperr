@@ -161,6 +161,7 @@ end $$;
 insert into public.view_once_consumptions(message_id,viewer_id,media_index)
 select id,'22222222-2222-4222-8222-222222222222',0 from public.messages limit 1;
 grant usage on schema public to authenticated;
+grant usage on schema auth to authenticated;
 set role authenticated;
 set request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
 do $$
