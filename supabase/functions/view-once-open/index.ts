@@ -129,7 +129,12 @@ Deno.serve(async req=>{
   // the asset a second time. The user experience must explain that limitation.
   const mime=['image/jpeg','image/png','image/webp','video/mp4','video/quicktime','video/webm']
     .includes(checked.mime_type) ? checked.mime_type : 'application/octet-stream';
-  return new Response(bytes,{
+  // Response accepts an ArrayBuffer BodyInit; a Uint8Array may have an
+  // ArrayBufferLike/SharedArrayBuffer backing type in current Deno lib.dom.
+  // Copy into an explicitly owned ArrayBuffer to preserve binary response bytes.
+  const responseBuffer: ArrayBuffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(responseBuffer).set(bytes);
+  return new Response(responseBuffer,{
     status:200,headers:{
       ...cors(req),'Content-Type':mime,
       'Content-Disposition':'inline',
