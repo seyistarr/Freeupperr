@@ -1,0 +1,33 @@
+name: Chat review — isolated checks
+on:
+  push:
+    branches:
+      - feature/chat-premium-secure-review-20261110
+    paths:
+      - chat.js
+      - chat.html
+      - docs/chat/sql/**
+      - supabase/functions/chat-private-*/**
+      - supabase/functions/view-once-open/**
+      - tests/chat-premium-review.test.cjs
+      - tests/chat-private-contract.test.cjs
+      - .github/workflows/chat-premium-review.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-chat-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse chat JavaScript
+        run: node --check chat.js
+      - name: Run isolated review tests
+        run: node --test tests/chat-premium-review.test.cjs tests/chat-private-contract.test.cjs
+# This workflow has no secrets, database connections or deployment steps.
