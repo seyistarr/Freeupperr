@@ -1,0 +1,40 @@
+name: Chat UI phase 1 release checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'chat.html'
+      - 'chat.js'
+      - 'tests/chat-premium-browser.test.js'
+      - '.github/workflows/chat-ui-release-checks.yml'
+  push:
+    branches:
+      - 'release/chat-ui-phase1-20261110'
+    paths:
+      - 'chat.html'
+      - 'chat.js'
+      - 'tests/chat-premium-browser.test.js'
+      - '.github/workflows/chat-ui-release-checks.yml'
+permissions:
+  contents: read
+jobs:
+  ui-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked test dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check chat JavaScript syntax
+        run: node --check chat.js
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run isolated browser acceptance
+        run: node --test tests/chat-premium-browser.test.js
