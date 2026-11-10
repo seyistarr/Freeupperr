@@ -18,7 +18,8 @@ test('private media functions are fail-closed until explicitly enabled',()=>{
 });
 test('private upload authenticates user and never returns a Cloudinary URL',()=>{
   assert.match(upload,/auth\.getUser\(token\)/);
-  assert.match(upload,/chat_register_private_asset/);
+  assert.match(upload,/chat_publish_private_view_once/);
+  assert.doesNotMatch(upload,/chat_register_private_asset/);
   assert.match(upload,/type:'authenticated'/);
   assert.match(upload,/removeUnregisteredAsset/);
   assert.doesNotMatch(upload,/return response\(req,\{[^\n]*secure_url/);
@@ -35,7 +36,7 @@ test('one-time delivery requires JWT plus server-side membership and atomic clai
   assert.doesNotMatch(open,/unclaim_view_once/);
 });
 test('claims must not be accessible directly by authenticated clients',()=>{
-  for(const name of ['chat_check_private_asset','chat_register_private_asset'])
+  for(const name of ['chat_check_private_asset','chat_publish_private_view_once'])
     assert.match(sql,new RegExp('grant execute on function public\\.'+name+'\\([^;]*to service_role;','s'));
   assert.match(sql,/revoke all on schema chat_private from public, anon, authenticated/);
   assert.doesNotMatch(sql,/create or replace function public\.chat_claim_private_asset/);
@@ -53,4 +54,14 @@ test('asset registry survives message deletion for scheduled cleanup',()=>{
 test('historical message media metadata is not rewritten or mass deleted',()=>{
   assert.doesNotMatch(sql,/update public\.messages\s+set\s+metadata/i);
   assert.doesNotMatch(sql,/delete from public\.messages/i);
+});
+
+test('publication is atomic and occurs only after a private upload',()=>{
+  assert.match(sql,/create or replace function public\.chat_publish_private_view_once/);
+  assert.match(sql,/insert into public\.messages/);
+  assert.match(sql,/insert into chat_private\.view_once_assets/);
+  assert.match(upload,/chat_publish_private_view_once/);
+  assert.match(upload,/status:'published'/);
+  assert.doesNotMatch(upload,/from\('messages'\)\s*\.insert/);
+  assert.match(sql,/coalesce\(c\.is_group,false\)/);
 });
