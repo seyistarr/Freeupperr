@@ -80,3 +80,29 @@ test('legacy view-once remains available while private rollout is disabled',()=>
   assert.match(js,/items\.map\(\(item, index\) =>/);
   assert.match(js,/openViewOnceConfirm\('\$\{msg\.id\}',\$\{index\}\)/);
 });
+
+test('legacy multi-item chip renderer keeps individual indexes and opened state', () => {
+  const start = js.indexOf('    function renderViewOnceChip(msg) {');
+  const end = js.indexOf('    window.openMixedMedia = function', start);
+  assert.ok(start > 0 && end > start);
+  const build = new Function('msg', 'getConsumedIndicesForMsg',
+    'currentUserId', 'privateViewOnceEnabled', 'captionHtml', 'window',
+    js.slice(start, end) + '\\nreturn renderViewOnceChip(msg);');
+  const msg = {
+    id: 'review-test', sender_id: 'sender', text: '',
+    metadata: { view_once: true, media_items: [
+      { type: 'image', url: 'https://example.invalid/one.jpg' },
+      { type: 'video', url: 'https://example.invalid/two.mp4' }
+    ] }
+  };
+  const htmlResult = build(msg, () => new Set([0]), 'recipient',
+    () => false, () => '', {});
+  assert.match(htmlResult, /Opened 1 of 2/);
+  assert.match(htmlResult, /Video 2 of 2/);
+  assert.match(htmlResult, /openViewOnceConfirm\('review-test',1\)/);
+  assert.doesNotMatch(htmlResult, /openViewOnceConfirm\('review-test',0\)/);
+  const disabledPrivate = build({
+    ...msg, metadata: { ...msg.metadata, private_asset: true }
+  }, () => new Set(), 'recipient', () => false, () => '', {});
+  assert.doesNotMatch(disabledPrivate, /onclick=/);
+});
