@@ -12,6 +12,12 @@ const upload=load('supabase/functions/chat-private-upload/index.ts');
 const open=load('supabase/functions/view-once-open/index.ts');
 const cleanup=load('supabase/functions/chat-private-cleanup/index.ts');
 
+test('Edge Functions use a pinned Deno-native Supabase import',()=>{
+  for(const src of [upload,open,cleanup]) {
+    assert.match(src,/from 'jsr:@supabase\\/supabase-js@2\\.110\\.8'/);
+    assert.doesNotMatch(src,/from 'npm:@supabase\\/supabase-js@2'/);
+  }
+});
 test('private media functions are fail-closed until explicitly enabled',()=>{
   for(const src of [upload,open,cleanup])
     assert.match(src,/CHAT_PRIVATE_MEDIA_ENABLED/);
