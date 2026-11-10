@@ -18,7 +18,7 @@ Status: **IN PROGRESS / NO PRODUCTION DEPLOY**. Review branch only. Base main: `
 - `chat.js` has a separate opt-in private-media path guarded by `window.FREEUPPER_PRIVATE_VIEWONCE_ENABLED === true`. It remains disabled by default; legacy view-once media still uses its original RPC and URL path.
 - `view-once-open` buffers authenticated Cloudinary bytes, then invokes the **existing** `claim_view_once` with the recipient's JWT; it does not use a second claim RPC.
 - `docs/chat/sql/proposed-private-view-once.sql` adds a viewer-only SELECT policy to the existing RLS-protected consumption table (the live table currently has no SELECT policy).
-- Upload/cleanup/registry drafts are NOT deployed, NOT Deno-compiled, and have no end-to-end pass.
+- Upload/cleanup/registry drafts are NOT deployed; their Deno type-check passed in isolated GitHub Actions run #28, but real authenticated end-to-end delivery is not tested.
 
 ## Blocking backend implementation tasks (do not paste the supplied SQL directly)
 1. Build additive `conversations.request_status` + `initiated_by` columns with a check constraint and separate migration verification. Do not apply request trigger to `is_note` or `is_group` rows.
@@ -33,6 +33,13 @@ Status: **IN PROGRESS / NO PRODUCTION DEPLOY**. Review branch only. Base main: `
 10. Do not strip historical media URLs or move existing messages without a separately reviewed legacy inventory and rollback plan.
 11. Review the new atomic publish-after-upload path: the Edge Function uploads to Cloudinary, then one service-role RPC creates the message and registers the asset in a single database transaction. It prevents premature message visibility but still needs database-trigger compatibility tests, failure-injection tests, and orphan reconciliation. First canary supports DMs only; groups require separate authorization testing.
 12. Audit deployed `send-push-notification` JWT-disabled webhook and signed triggering separately; keep message notification delivery functional.
+
+## Browser acceptance and private-media release boundaries (2026-11-10)
+- The separate `tests/chat-premium-browser.test.js` executes actual chat tab-switching handlers against extracted production markup in headless Chromium. It exercises iPhone-sized (390 × 844) and desktop (1280 × 800) layouts, Unread/Requests search suppression, Groups search, New Message actions surviving dynamic search results, reduced-motion navigation, and ordered 3D card geometry using the page's inline CSS. It does **not** assert full live authenticated page boot.
+- CI job `chat-browser-acceptance` runs this test with Playwright and no connected Supabase or Cloudinary credentials, alongside existing offline contracts, synthetic PostgreSQL, and Deno type-check. Branch job result must be checked before any claim of pass.
+- Real user/device acceptance remains mandatory: iPhone Safari/PWA keyboard resize, scroll/overscroll, group creation, notes, archived-chat recovery, push/badges, realtime messaging, message requests with authorized RPCs, media viewer, and accessibility.
+- Keep `FREEUPPER_PRIVATE_VIEWONCE_ENABLED` disabled; the existing Supabase `claim_view_once` path remains active. Dedicated, authorized private-media test assets and two genuine test sessions are required for upload → access → atomic claim → replay denied → Cloudinary cleanup validation.
+- No live identities, historical private chats or production Cloudinary objects are used for acceptance tests. No merge, SQL migration or Edge deployment without separate explicit approval.
 
 ## Verification gates
 - Static JS parse and unique DOM ID checks on changed frontend files.
