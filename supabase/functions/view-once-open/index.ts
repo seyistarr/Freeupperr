@@ -115,12 +115,16 @@ Deno.serve(async req=>{
     for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
   }catch{return json(req,{error:'Private media fetch failed'},502);}
   if(!bytes.byteLength) return json(req,{error:'Private media empty'},502);
-  // This database claim is atomic. Of concurrent requests, at most one may succeed.
-  const {data:claim,error:claimErr}=await admin.rpc('chat_claim_private_asset',{
-    p_viewer:user.id,p_message_id:id
+  // Reuse FreeUpper's EXISTING atomic claim_view_once RPC with the recipient JWT.
+  // It validates sender, participant/group membership, message expiry, media index
+  // and the unique (message_id, viewer_id, media_index) consumption key.
+  // The service-role connection must NEVER claim on behalf of a user.
+  const {data:claim,error:claimErr}=await userDb.rpc('claim_view_once',{
+    p_message_id:id,p_media_index:0
   });
-  if(claimErr||!claim) return json(req,{error:'View-once claim failed'},503);
-  if(claim.status!=='ok') return errorResponse(req,claim.status);
+  if(claimErr||!claim) return json(req,{error:'View-once claim failed'},403);
+  if(claim.status==='already_viewed') return errorResponse(req,'already_viewed');
+  if(claim.status!=='opened') return errorResponse(req,'forbidden');
   // Once claimed, never unclaim on network/disconnect error: retry would disclose
   // the asset a second time. The user experience must explain that limitation.
   const mime=['image/jpeg','image/png','image/webp','video/mp4','video/quicktime','video/webm']
