@@ -148,7 +148,7 @@ test('New Message renders one pair of shortcut actions and no duplicate search r
   const render = js.slice(js.indexOf('    function renderUserSearchDefault()'),
     js.indexOf('    function userRowHtml(', js.indexOf('    function renderUserSearchDefault()')));
   assert.doesNotMatch(render, /openCreateGroupModal\(|openOrCreateFreeUpperNote\(/);
-  assert.match(html, /chat\.js\?v=chat-ui-polish-20261110/);
+  assert.match(html, /chat\.js\?v=interaction-sounds-v4/);
 });
 test('Archive reuses themed, ordered, independent 3D conversation cards', async () => {
   assert.match(html, /#fuArchivedModal \.conv-swipe-wrap\{/);
