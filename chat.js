@@ -1259,16 +1259,19 @@
                                 <div class="conv-item ${active}" ${chatTab === 'requests' ? '' : `onclick="handleConvTap(\'${c.id}\')"`}>
                                     <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${hasDisappearing ? '<span class="disap-badge"><i class="ri-time-line"></i></span>' : ''}</div>
                                     <div class="conv-info">
-                                        <div class="conv-name">${pinIcon} ${escapeHtml(name)} ${badge} ${muteIcon} ${unreadDot}</div>
+                                        <div class="conv-name">${pinIcon}<span class="conv-display-name">${escapeHtml(name)}</span> ${badge} ${muteIcon}</div>
                                         ${groupMeta}
                                         <div class="conv-last-msg">${readTick}<span>${escapeHtml(lastMsg)}</span></div>
                                     </div>
                                     <div class="conv-time-row">
                                         <div class="conv-time">${time}</div>
                                         ${requestButtons}
-                                        <button class="conv-more-btn" onclick="event.stopPropagation();openConvActionSheet('${c.id}')" title="More options">
-                                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>
-                                        </button>
+                                        <div class="conv-actions-inline">
+                                            ${unreadDot}
+                                            <button class="conv-more-btn" onclick="event.stopPropagation();openConvActionSheet('${c.id}')" title="More options">
+                                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -3370,6 +3373,7 @@
         document.body.style.overflow = 'hidden';
         document.getElementById('userSearchInput').value = '';
         renderUserSearchDefault();
+        scheduleNewMessage3D();
         setTimeout(() => document.getElementById('userSearchInput').focus(), 300);
     };
 
@@ -3377,6 +3381,33 @@
         document.getElementById('newChatModal').classList.remove('open');
         document.body.style.overflow = '';
     };
+
+    // Apply the same mild, independent depth used in the conversation list.
+    // Keep DOM order and card spacing unchanged for touch scrolling.
+    let newMessage3DFrame = null;
+    const newMessageList = document.getElementById('userSearchResults');
+    function updateNewMessage3D() {
+        newMessage3DFrame = null;
+        if (!newMessageList || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const middle = Math.max(newMessageList.clientHeight / 2, 1);
+        newMessageList.querySelectorAll('.u-row').forEach(row => {
+            const y = row.offsetTop - newMessageList.offsetTop -
+                newMessageList.scrollTop + row.offsetHeight / 2;
+            const t = Math.max(-1, Math.min(1, (y - middle) / middle));
+            const depth = Math.abs(t);
+            row.style.setProperty('--new-rx', (-t * 8).toFixed(2) + 'deg');
+            row.style.setProperty('--new-tz', (-depth * 18).toFixed(1) + 'px');
+            row.style.setProperty('--new-sc', (1 - depth * .018).toFixed(3));
+            row.style.setProperty('--new-op', String(1 - depth * .08));
+        });
+    }
+    function scheduleNewMessage3D() {
+        if (newMessage3DFrame === null) {
+            newMessage3DFrame = requestAnimationFrame(updateNewMessage3D);
+        }
+    }
+    newMessageList?.addEventListener('scroll', scheduleNewMessage3D, { passive: true });
+    window.addEventListener('resize', scheduleNewMessage3D);
 
     function renderUserSearchDefault() {
         // Persistent New Group and My Note buttons live outside #userSearchResults.
@@ -3390,6 +3421,7 @@
                 `<div class="fw-empty"><div class="fw-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><h3>Search FreeUpper</h3><p>Type a name or @username to find anyone on FreeUpper.</p></div>`;
         }
         document.getElementById('userSearchResults').innerHTML = html;
+        scheduleNewMessage3D();
     }
 
     function userRowHtml(u, isFriend) {
@@ -3458,6 +3490,7 @@
                     false)).join('');
             }
             resultsContainer.innerHTML = html;
+        scheduleNewMessage3D();
         } catch (err) {
             console.error('runUserSearch error:', err);
             if (myToken === userSearchToken) {

@@ -311,7 +311,7 @@ test('coupled sound consumers bypass pre-upgrade PWA cache entries', () => {
   })) {
     const html = readFileSync(page, 'utf8');
     for (const file of files) assert.ok(
-      html.includes(file + '?v=interaction-sounds-v4') || html.includes(file + '?v=sounds-v3') || html.includes(file + '?v=clean-urls-v1') || (page === 'chat.html' && file === 'chat.js' && html.includes('chat.js?v=chat-ui-polish-20261110')),
+      html.includes(file + '?v=interaction-sounds-v4') || html.includes(file + '?v=sounds-v3') || html.includes(file + '?v=clean-urls-v1') || (page === 'chat.html' && file === 'chat.js' && (html.includes('chat.js?v=chat-ui-polish-20261110') || html.includes('chat.js?v=chat-ui-scroll-v2'))),
       page + ': ' + file
     );
   }
