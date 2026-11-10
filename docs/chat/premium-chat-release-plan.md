@@ -41,6 +41,13 @@ Status: **IN PROGRESS / NO PRODUCTION DEPLOY**. Review branch only. Base main: `
 - Keep `FREEUPPER_PRIVATE_VIEWONCE_ENABLED` disabled; the existing Supabase `claim_view_once` path remains active. Dedicated, authorized private-media test assets and two genuine test sessions are required for upload → access → atomic claim → replay denied → Cloudinary cleanup validation.
 - No live identities, historical private chats or production Cloudinary objects are used for acceptance tests. No merge, SQL migration or Edge deployment without separate explicit approval.
 
+## Authenticated integration preparation (2026-11-10)
+- The real `view-once-open` HTTP handler is now importable with injected database/client and Cloudinary fetch dependencies. Deployment still starts `Deno.serve`; the listener is suppressed only when the isolated test variable `CHAT_PRIVATE_HTTP_TEST_MODE=true` is set.
+- `tests/chat-private-http.test.ts` and the `edge-typecheck` GitHub Actions job exercise synthetic caller JWT, disallowed origin, nonparticipant/expired message, Cloudinary success/failure/oversize, first view, replay denial and fail-closed flag using **in-memory fakes only**. These tests are not a substitute for real authenticated integration; their new CI result must pass.
+- Read-only staging inspection of project `tagkrhvgcbnybiuyvjxt` found none of `conversations`, `messages`, `conversation_members`, `view_once_consumptions`, `message_reads` or `message_reactions` under `public`. Do not assume existing staging is a valid integration replica.
+- To authorize real two-account acceptance, build a separately approved isolated baseline schema/migrations with synthetic identities and test media; do not copy live private chats or service keys. Verify two JWT sessions: sender can upload and publish only in their DM; recipient opens exactly once, replay returns denial; stranger, sender, expired and blocked requests are denied; forged request status and RLS changes are rejected; orphan queue removes only marked test assets. Confirm upload/claim/cleanup fail-closed on injected Cloudinary and database failures.
+- Keep `CHAT_PRIVATE_MEDIA_ENABLED=false` server-side and `FREEUPPER_PRIVATE_VIEWONCE_ENABLED` false client-side until those authentic live-network staging tests succeed. No staging schema writes, production migrations, real Cloudinary upload or Edge deployment have been performed as part of this phase.
+
 ## Verification gates
 - Static JS parse and unique DOM ID checks on changed frontend files.
 - Desktop + iPhone Safari/PWA keyboard, tab navigation, 3D scroll, reduced motion, New Message search, archived-chat interactions.
