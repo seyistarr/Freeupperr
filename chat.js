@@ -2770,7 +2770,27 @@
             </div>
         `;
         document.body.classList.add('modal-lock');
-        requestAnimationFrame(() => modal.classList.add('open'));
+        requestAnimationFrame(() => {
+            modal.classList.add('open');
+            const list = modal.querySelector('.fu-body');
+            if (!list) return;
+            // A separate 3D treatment for Archive; never reorder or overlap rows.
+            const updateArchived3D = () => {
+                if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+                const half = Math.max(list.clientHeight / 2, 1);
+                list.querySelectorAll('.conv-swipe-wrap').forEach(row => {
+                    const y = row.offsetTop - list.offsetTop - list.scrollTop + row.offsetHeight / 2;
+                    const t = Math.max(-1, Math.min(1, (y - half) / half));
+                    const depth = Math.abs(t);
+                    row.style.setProperty('--rx', (-t * 8).toFixed(2) + 'deg');
+                    row.style.setProperty('--tz', (-depth * 18).toFixed(1) + 'px');
+                    row.style.setProperty('--sc', (1 - depth * .018).toFixed(3));
+                    row.style.setProperty('--op', String(1 - depth * .08));
+                });
+            };
+            list.addEventListener('scroll', () => requestAnimationFrame(updateArchived3D), { passive:true, once:false });
+            updateArchived3D();
+        });
     };
 
     // ═══ CHANGE 1b ═══
@@ -5906,7 +5926,19 @@
         const { data: profile } = await sb.from('profiles').select('id, username, display_name, display_username, avatar_url, bio, verified_status, is_private, is_online, last_seen_at').eq('id', currentUserId).single();
         currentUserProfile = profile || {};
         const headerAvatar = document.getElementById('myHeaderAvatar');
-        if (headerAvatar) { headerAvatar.onerror = () => { headerAvatar.onerror = null; headerAvatar.src = DEFAULT_AVATAR; }; headerAvatar.src = getAvatar(currentUserProfile); }
+        if (headerAvatar) {
+            // The header belongs to the authenticated user, not the chat partner.
+            // Prefer the fresh profile record; fall back to the signed-in Auth metadata.
+            const authAvatar = user.user_metadata?.avatar_url || user.user_metadata?.picture ||
+                user.user_metadata?.avatar || '';
+            headerAvatar.onerror = () => {
+                headerAvatar.onerror = null;
+                headerAvatar.src = DEFAULT_AVATAR;
+            };
+            headerAvatar.src = currentUserProfile.avatar_url ||
+                currentUserProfile.avatar || authAvatar || DEFAULT_AVATAR;
+            headerAvatar.alt = 'My profile photo';
+        }
 
         await sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
         presenceHeartbeatInterval = setInterval(() => {
