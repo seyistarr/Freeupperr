@@ -2,7 +2,7 @@
 // This function is disabled unless CHAT_PRIVATE_MEDIA_ENABLED=true.
 // Upload authenticated private media FIRST. A service-side transaction then
 // creates the message and binds Cloudinary's immutable asset_id to it.
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.110.8';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
