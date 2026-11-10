@@ -14,8 +14,8 @@ const cleanup=load('supabase/functions/chat-private-cleanup/index.ts');
 
 test('Edge Functions use a pinned Deno-native Supabase import',()=>{
   for(const src of [upload,open,cleanup]) {
-    assert.match(src,/from 'jsr:@supabase\\/supabase-js@2\\.110\\.8'/);
-    assert.doesNotMatch(src,/from 'npm:@supabase\\/supabase-js@2'/);
+    assert.ok(src.includes("from 'jsr:@supabase/supabase-js@2.110.8'"));
+    assert.ok(!src.includes("from 'npm:@supabase/supabase-js@2'"));
   }
 });
 test('private media functions are fail-closed until explicitly enabled',()=>{
