@@ -87,7 +87,7 @@ test('legacy multi-item chip renderer keeps individual indexes and opened state'
   assert.ok(start > 0 && end > start);
   const build = new Function('msg', 'getConsumedIndicesForMsg',
     'currentUserId', 'privateViewOnceEnabled', 'captionHtml', 'window',
-    js.slice(start, end) + '\\nreturn renderViewOnceChip(msg);');
+    js.slice(start, end) + '\nreturn renderViewOnceChip(msg);');
   const msg = {
     id: 'review-test', sender_id: 'sender', text: '',
     metadata: { view_once: true, media_items: [
