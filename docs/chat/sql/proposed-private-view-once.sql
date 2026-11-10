@@ -76,7 +76,7 @@ grant execute on function public.chat_publish_private_view_once(uuid,uuid,text,t
 -- registry entry. The constraint trigger runs at transaction end, after the
 -- atomic publisher has inserted BOTH records.
 create or replace function chat_private.enforce_registered_private_message()
-returns trigger language plpgsql security definer set search_path = '' as $
+returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   if not exists (
     select 1 from chat_private.view_once_assets a
@@ -95,7 +95,7 @@ begin
       using errcode='23514';
   end if;
   return null;
-end $;
+end $$;
 revoke all on function chat_private.enforce_registered_private_message()
   from public,anon,authenticated;
 
@@ -110,7 +110,7 @@ execute function chat_private.enforce_registered_private_message();
 -- remove its marker, change asset identity, or attach a public media URL.
 -- Caption edits and ordinary message deletion remain supported.
 create or replace function chat_private.guard_private_message_update()
-returns trigger language plpgsql security definer set search_path = '' as $
+returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   if old.metadata->>'private_asset' = 'true' and (
      new.metadata is distinct from old.metadata or
@@ -124,7 +124,7 @@ begin
       using errcode='42501';
   end if;
   return new;
-end $;
+end $$;
 revoke all on function chat_private.guard_private_message_update()
   from public,anon,authenticated;
 
