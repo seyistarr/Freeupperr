@@ -62,8 +62,6 @@ begin
   end;
   select count(*) into found_count from public.messages;
   if found_count<>1 then raise exception 'Failed publication left a message behind'; end if;
-  if not exists(select 1 from public.view_once_consumptions v
-      where false) then null; end if;
   raise notice 'PASS: synthetic publishing, triggers, rollback and immutability';
 end $$;
 
