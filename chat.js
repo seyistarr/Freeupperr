@@ -606,6 +606,29 @@
     const lbEl = () => document.getElementById('fuLightbox');
     const lbImgEl = () => document.getElementById('lbImg');
     const lbVideoEl = () => document.getElementById('lbVideo');
+    let lbViewOnceBlobUrl = null;
+    function isOpenViewOnce() { return lbViewOnce && lbEl()?.classList.contains('open'); }
+    function shieldViewOnce() {
+        if (isOpenViewOnce()) lbEl().classList.add('vo-shielded');
+    }
+    function closeShieldedViewOnce() {
+        if (isOpenViewOnce() && lbEl().classList.contains('vo-shielded')) window.closeLightbox();
+    }
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) shieldViewOnce();
+        else closeShieldedViewOnce();
+    });
+    window.addEventListener('blur', shieldViewOnce);
+    window.addEventListener('focus', closeShieldedViewOnce);
+    window.addEventListener('pagehide', () => {
+        if (isOpenViewOnce()) window.closeLightbox();
+    });
+    document.addEventListener('contextmenu', e => {
+        if (isOpenViewOnce()) e.preventDefault();
+    }, true);
+    document.addEventListener('dragstart', e => {
+        if (isOpenViewOnce()) e.preventDefault();
+    }, true);
 
     window.lbCurrentUrl = function() { return (lbItems[lbIndex] || {}).url || ''; };
     window.lbCurrentMsgId = function() { return lbMsgId; };
@@ -615,6 +638,9 @@
         lbIndex = startIndex || 0;
         lbMsgId = msgId || null;
         lbViewOnce = !!(opts && opts.viewOnce);
+        lbViewOnceBlobUrl = lbViewOnce && opts?.blobUrl || null;
+        lbEl().classList.toggle('vo-mode', lbViewOnce);
+        lbEl().classList.remove('vo-shielded');
         lbViewOnceExpiresAt = (opts && opts.expiresAt)
             ? new Date(opts.expiresAt)
             : (lbViewOnce ? new Date(Date.now() + 30 * 1000) : null);
@@ -647,7 +673,19 @@
         lbVideoEl().pause();
         lbEl().classList.remove('open');
         if (lbViewOnceTimer) { clearInterval(lbViewOnceTimer); lbViewOnceTimer = null; }
+        const wasViewOnce = lbViewOnce;
         lbViewOnce = false;
+        lbEl().classList.remove('vo-mode', 'vo-shielded');
+        if (wasViewOnce) {
+            lbImgEl().removeAttribute('src');
+            lbVideoEl().removeAttribute('src');
+            try { lbVideoEl().load(); } catch (_) {}
+            lbItems = [];
+        }
+        if (lbViewOnceBlobUrl) {
+            URL.revokeObjectURL(lbViewOnceBlobUrl);
+            lbViewOnceBlobUrl = null;
+        }
         const ov = document.getElementById('lbVoOverlay');
         if (ov) ov.style.display = 'none';
         unlockBody();
