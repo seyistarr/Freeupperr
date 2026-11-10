@@ -91,13 +91,15 @@
     async function ensureGroupSenderNames(convId, senderIds) {
         const missing = senderIds.filter(id => !groupSenderNameCache[id]);
         if (!missing.length) return;
-        const { data } = await sb.from('profiles').select('id, display_name, username').in('id', missing);
+        const { data } = await sb.from('profiles').select('id, display_name, username, verified_status').in('id', missing);
         (data || []).forEach(p => {
-            groupSenderNameCache[p.id] = { name: getDisplayName(p), color: senderColorFor(p.id) };
+            groupSenderNameCache[p.id] = { name: getDisplayName(p), color: senderColorFor(p.id), badge: getVerifiedBadge(p.verified_status) };
         });
     }
 
     let archivedRowShown = false;
+    let chatTab = 'all';
+    let groupMemberCounts = {};
     // ═══ CHANGE 1a ═══
     let returnToArchivedAfterChat = false;
     const CL_PULL_THRESHOLD = 170;
@@ -446,6 +448,37 @@
         return `<div class="fu-media-grid-wrap ${cls}">${tiles}</div>`;
     }
 
+    // Off by default. Production must never enable before backend/RLS canary approval.
+    function privateViewOnceEnabled() {
+        return window.FREEUPPER_PRIVATE_VIEWONCE_ENABLED === true;
+    }
+    function markViewOnceConsumed(id, index = 0) {
+        if (!viewOnceStateByMsg.has(id)) viewOnceStateByMsg.set(id, new Set());
+        viewOnceStateByMsg.get(id).add(index);
+        renderMessages();
+    }
+    function renderViewOnceChip(msg) {
+        const items = msg.metadata?.media_items || [];
+        const consumed = getConsumedIndicesForMsg(msg.id);
+        const sentByMe = msg.sender_id === currentUserId;
+        const privatePending = msg.metadata?.private_asset === true && !privateViewOnceEnabled();
+        const chips = items.map((item, index) => {
+            const opened = consumed.has(index);
+            const kind = item.type === 'video' ? 'Video' : 'Photo';
+            const label = msg.uploading ? 'Sending…' : opened && !sentByMe ? 'Opened' : kind;
+            const inert = privatePending || msg.uploading || opened && !sentByMe;
+            const action = inert ? ''
+                : sentByMe
+                    ? `onclick="event.stopPropagation();showToast(window.fuT('You cannot reopen your view-once media'), 'o')"`
+                    : `onclick="event.stopPropagation();openViewOnceConfirm('${msg.id}',${index})"`;
+            return `<div class="vo-chip ${opened ? 'opened' : ''}" ${action} role="button"
+                aria-label="View once ${label} ${index + 1} of ${items.length}">
+                <span class="vo-ring">1</span><span class="vo-label">${label}</span>
+            </div>`;
+        });
+        return chips.join('') + (msg.text ? captionHtml(msg.text) : '');
+    }
+
     window.openMixedMedia = function(messageId, index) {
         const msg = messages.find(m => m.id === messageId);
         const items = (msg && msg.metadata && msg.metadata.media_items) || [];
@@ -503,46 +536,77 @@
         modal.classList.add('open');
     };
 
+    // Private delivery uses Supabase SDK's Blob response path. Errors are JSON.
+    // Legacy view-once messages remain on the old path until a separate migration.
     window.confirmViewOnce = async function(messageId, index) {
-        document.getElementById('fuViewOnceConfirm').classList.remove('open');
+        document.getElementById('fuViewOnceConfirm')?.classList.remove('open');
         const msg = messages.find(m => m.id === messageId);
         if (!msg) return;
-        const items = (msg.metadata && msg.metadata.media_items) || [];
-        const item = items[index];
+        const item = msg.metadata?.media_items?.[index];
         if (!item) { showToast(window.fuT('Media unavailable'), 'r'); return; }
-
         if (msg.sender_id === currentUserId) {
-            showToast(window.fuT('You sent this view-once media and cannot open it.'), 'o');
+            showToast(window.fuT('You cannot reopen your view-once media'), 'o');
             return;
         }
-
+        if (msg.metadata?.private_asset === true) {
+            if (!privateViewOnceEnabled()) {
+                showToast(window.fuT('Private media is temporarily unavailable'), 'o');
+                return;
+            }
+            if (index !== 0) return;
+            try {
+                const { data, error } = await sb.functions.invoke('view-once-open', {
+                    body: { message_id: messageId, media_index: 0 }
+                });
+                if (error) {
+                    // Invocation errors carry the HTTP response separately.
+                    const status = error.context?.status;
+                    if (status === 409) {
+                        markViewOnceConsumed(messageId);
+                        showToast(window.fuT('This media has already been opened'), 'o');
+                        return;
+                    }
+                    throw error;
+                }
+                if (!(data instanceof Blob) || !data.size ||
+                    !/^(image\/(jpeg|png|webp)|video\/(mp4|quicktime|webm))$/.test(data.type)) {
+                    throw new Error('Invalid private-media response');
+                }
+                const localUrl = URL.createObjectURL(data);
+                markViewOnceConsumed(messageId);
+                try {
+                    openMediaLightbox([{ url: localUrl, type: item.type }], 0, messageId,
+                        resolveMsgSenderName(msg.sender_id), msg.created_at,
+                        { viewOnce: true, expiresAt: null, blobUrl: localUrl });
+                } catch (e) {
+                    URL.revokeObjectURL(localUrl);
+                    throw e;
+                }
+                return;
+            } catch (err) {
+                console.warn('Private view-once open failed:', err);
+                showToast(window.fuT('Unable to open this private media'), 'r');
+                return;
+            }
+        }
+        // Historical messages only; this path still uses the legacy URL.
         try {
             const { data, error } = await sb.rpc('claim_view_once', {
-                p_message_id: messageId,
-                p_media_index: index
+                p_message_id: messageId, p_media_index: index
             });
             if (error) throw error;
             if (!data || data.status === 'already_viewed') {
-                if (!viewOnceStateByMsg.has(messageId)) viewOnceStateByMsg.set(messageId, new Set());
-                viewOnceStateByMsg.get(messageId).add(index);
-                renderMessages();
+                markViewOnceConsumed(messageId, index);
                 showToast(window.fuT('This media has already been opened'), 'o');
                 return;
             }
-            if (!viewOnceStateByMsg.has(messageId)) viewOnceStateByMsg.set(messageId, new Set());
-            viewOnceStateByMsg.get(messageId).add(index);
-            renderMessages();
-
-            openMediaLightbox(
-                [{ url: item.url, type: item.type }],
-                0, messageId,
-                resolveMsgSenderName(msg.sender_id),
-                msg.created_at,
-                { viewOnce: true, expiresAt: data.expires_at || null }
-            );
+            markViewOnceConsumed(messageId, index);
+            openMediaLightbox([{ url: item.url, type: item.type }], 0, messageId,
+                resolveMsgSenderName(msg.sender_id), msg.created_at,
+                { viewOnce: true, expiresAt: data.expires_at || null });
         } catch (err) {
-            console.error('claim_view_once failed:', err);
-            showToast(err.message || 'Could not open media', 'r');
+            console.warn('Legacy view-once open failed:', err);
+            showToast(window.fuT('Unable to open media'), 'r');
         }
     };
 
@@ -586,6 +650,29 @@
     const lbEl = () => document.getElementById('fuLightbox');
     const lbImgEl = () => document.getElementById('lbImg');
     const lbVideoEl = () => document.getElementById('lbVideo');
+    let lbViewOnceBlobUrl = null;
+    function isOpenViewOnce() { return lbViewOnce && lbEl()?.classList.contains('open'); }
+    function shieldViewOnce() {
+        if (isOpenViewOnce()) lbEl().classList.add('vo-shielded');
+    }
+    function closeShieldedViewOnce() {
+        if (isOpenViewOnce() && lbEl().classList.contains('vo-shielded')) window.closeLightbox();
+    }
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) shieldViewOnce();
+        else closeShieldedViewOnce();
+    });
+    window.addEventListener('blur', shieldViewOnce);
+    window.addEventListener('focus', closeShieldedViewOnce);
+    window.addEventListener('pagehide', () => {
+        if (isOpenViewOnce()) window.closeLightbox();
+    });
+    document.addEventListener('contextmenu', e => {
+        if (isOpenViewOnce()) e.preventDefault();
+    }, true);
+    document.addEventListener('dragstart', e => {
+        if (isOpenViewOnce()) e.preventDefault();
+    }, true);
 
     window.lbCurrentUrl = function() { return (lbItems[lbIndex] || {}).url || ''; };
     window.lbCurrentMsgId = function() { return lbMsgId; };
@@ -595,6 +682,9 @@
         lbIndex = startIndex || 0;
         lbMsgId = msgId || null;
         lbViewOnce = !!(opts && opts.viewOnce);
+        lbViewOnceBlobUrl = lbViewOnce && opts?.blobUrl || null;
+        lbEl().classList.toggle('vo-mode', lbViewOnce);
+        lbEl().classList.remove('vo-shielded');
         lbViewOnceExpiresAt = (opts && opts.expiresAt)
             ? new Date(opts.expiresAt)
             : (lbViewOnce ? new Date(Date.now() + 30 * 1000) : null);
@@ -627,7 +717,19 @@
         lbVideoEl().pause();
         lbEl().classList.remove('open');
         if (lbViewOnceTimer) { clearInterval(lbViewOnceTimer); lbViewOnceTimer = null; }
+        const wasViewOnce = lbViewOnce;
         lbViewOnce = false;
+        lbEl().classList.remove('vo-mode', 'vo-shielded');
+        if (wasViewOnce) {
+            lbImgEl().removeAttribute('src');
+            lbVideoEl().removeAttribute('src');
+            try { lbVideoEl().load(); } catch (_) {}
+            lbItems = [];
+        }
+        if (lbViewOnceBlobUrl) {
+            URL.revokeObjectURL(lbViewOnceBlobUrl);
+            lbViewOnceBlobUrl = null;
+        }
         const ov = document.getElementById('lbVoOverlay');
         if (ov) ov.style.display = 'none';
         unlockBody();
@@ -956,6 +1058,7 @@
             conversations = conversations.filter(c =>
                 !(c.hidden_by || []).includes(currentUserId)
             );
+            await loadGroupMemberCounts();
             renderConversations(convSearch.value);
         } catch (err) {
             console.error('loadConversations error:', err);
@@ -964,12 +1067,121 @@
         }
     }
 
+
+    // Review-branch tab navigation: existing chat data and interaction handlers remain intact.
+    const TAB_META = {
+        all: { title: 'Messages', sub: 'Your conversations, all in one place.', search: true, placeholder: 'Search conversations or friends...' },
+        unread: { title: 'Unread Messages', sub: 'Conversations with new messages.', search: false, placeholder: '' },
+        groups: { title: 'Groups', sub: 'All your group conversations.', search: true, placeholder: 'Search groups...' },
+        requests: { title: 'Message Requests', sub: 'People who want to chat with you.', search: false, placeholder: '' }
+    };
+    function isIncomingRequest(c) {
+        return !c.is_group && !c.is_note && c.request_status === 'pending' &&
+            c.initiated_by && c.initiated_by !== currentUserId;
+    }
+    function isIgnoredRequest(c) {
+        return !c.is_group && !c.is_note && c.request_status === 'ignored' &&
+            c.initiated_by !== currentUserId;
+    }
+    async function loadGroupMemberCounts() {
+        const ids = conversations.filter(c => c.is_group && !c.is_note).map(c => c.id);
+        if (!ids.length) { groupMemberCounts = {}; return; }
+        // RPC is introduced in a later, separately approved DB migration.
+        try {
+            const { data, error } = await sb.rpc('get_group_member_counts', { p_ids: ids });
+            if (error) throw error;
+            groupMemberCounts = Object.fromEntries((data || []).map(row => [row.conversation_id, Number(row.member_count) || 0]));
+        } catch (_) { groupMemberCounts = {}; }
+    }
+    window.setChatTab = function(tab) {
+        if (!TAB_META[tab]) return;
+        chatTab = tab;
+        document.querySelectorAll('#clTabs .cl-tab').forEach(button => {
+            const active = button.dataset.tab === tab;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-selected', String(active));
+        });
+        document.getElementById('sbTitle').textContent = TAB_META[tab].title;
+        document.getElementById('sbSub').textContent = TAB_META[tab].sub;
+        document.getElementById('sbSearchBox').style.display = TAB_META[tab].search ? '' : 'none';
+        convSearch.placeholder = TAB_META[tab].placeholder;
+        convSearch.value = '';
+        convList.scrollTop = 0;
+        renderConversations('');
+    };
+    function updateChatTabCounts() {
+        const available = conversations.filter(c => !(c.archived_by || []).includes(currentUserId) && !isIgnoredRequest(c));
+        const requestCount = available.filter(isIncomingRequest).length;
+        const unreadCount = available.filter(c => !isIncomingRequest(c) && c.unreadCount > 0).length;
+        [['tabUnreadCount', unreadCount], ['tabRequestCount', requestCount]].forEach(([id,count]) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = count > 99 ? '99+' : String(count);
+            el.classList.toggle('hidden', count === 0);
+        });
+    }
+    // Do not allow client-side request transition until authorized database
+    // RPCs are deployed; direct UPDATE would inherit overly broad legacy RLS.
+    async function respondToChatRequest(convId, action) {
+        const conv = conversations.find(c => c.id === convId);
+        if (!conv || !isIncomingRequest(conv)) return;
+        try {
+            const { data, error } = await sb.rpc('chat_respond_to_request', {
+                p_conversation_id: convId,
+                p_action: action
+            });
+            if (error) throw error;
+            if (data !== action) throw new Error('Request transition was not confirmed');
+            conv.request_status = action;
+            await loadConversations();
+            if (action === 'accepted') {
+                window.setChatTab('all');
+                await window.selectConversation(convId);
+            } else {
+                showToast(window.fuT('Request ignored'), 'g');
+            }
+        } catch (error) {
+            console.warn('Message request operation unavailable:', error);
+            showToast(window.fuT('Message requests are unavailable right now'), 'o');
+        }
+    }
+    window.acceptRequest = convId => respondToChatRequest(convId, 'accepted');
+    window.ignoreRequest = convId => respondToChatRequest(convId, 'ignored');
+    let chat3dFrame = null;
+    function updateChat3D() {
+        chat3dFrame = null;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const half = convList.clientHeight / 2;
+        if (!half) return;
+        const containerRect = convList.getBoundingClientRect();
+        convList.querySelectorAll('.conv-swipe-wrap').forEach(el => {
+            const rect = el.getBoundingClientRect();
+            // Geometry must not include this element's previous 3D transform.
+            const y = el.offsetTop - convList.offsetTop - convList.scrollTop + el.offsetHeight / 2;
+            const t = Math.max(-1, Math.min(1, (y - half) / Math.max(half, 1)));
+            const a = Math.abs(t);
+            el.style.setProperty('--rx', (-t * 10).toFixed(2) + 'deg');
+            el.style.setProperty('--tz', (-a * 24).toFixed(1) + 'px');
+            el.style.setProperty('--sc', (1 - a * 0.025).toFixed(3));
+            el.style.setProperty('--op', String(1 - a * 0.12));
+        });
+    }
+    function scheduleChat3D() {
+        if (chat3dFrame == null) chat3dFrame = requestAnimationFrame(updateChat3D);
+    }
+    convList.addEventListener('scroll', scheduleChat3D, { passive: true });
+    window.addEventListener('resize', scheduleChat3D);
+
     function renderConversations(filter = '') {
+        updateChatTabCounts();
         const q = filter.toLowerCase().trim();
         let html = '';
 
         let matchedConvs = conversations.filter(c =>
-            !(c.archived_by || []).includes(currentUserId)
+            !(c.archived_by || []).includes(currentUserId) && !isIgnoredRequest(c) &&
+            (chatTab === 'requests' ? isIncomingRequest(c) : !isIncomingRequest(c)) &&
+            (chatTab !== 'unread' || c.unreadCount > 0) &&
+            (chatTab !== 'groups' || (c.is_group && !c.is_note))
         );
         if (q) {
             matchedConvs = matchedConvs.filter(c => {
@@ -983,7 +1195,7 @@
         }
 
         let matchedFriends = [];
-        if (q) {
+        if (q && chatTab === 'all') {
             matchedFriends = friendProfiles.filter(function(u) {
                 const name = (u.display_name || u.username || '').toLowerCase();
                 const handle = (u.username || '').toLowerCase();
@@ -993,11 +1205,7 @@
         }
 
         if (matchedConvs.length === 0 && matchedFriends.length === 0) {
-            convList.innerHTML = `
-                        <div style="padding: 30px 16px; text-align: center; color: var(--muted);">
-                            <p>${q ? 'No results found.' : 'No conversations yet. Tap New to start one.'}</p>
-                        </div>
-                    `;
+            convList.innerHTML = `<div style="padding:30px 16px;text-align:center;color:var(--cl-muted)"><p>${q ? 'No results found.' : chatTab === 'unread' ? 'You are all caught up.' : chatTab === 'groups' ? 'No groups yet.' : chatTab === 'requests' ? 'No message requests.' : 'No conversations yet. Tap New to start one.'}</p></div>`;
             return;
         }
 
@@ -1015,13 +1223,13 @@
                 const avatar = c.is_note ? (c.note_avatar || DEFAULT_AVATAR)
                     : c.is_group ? (c.group_avatar || DEFAULT_AVATAR) : getAvatar(other);
 
-                let lastMsg = 'No messages yet';
+                let lastMsg = chatTab === 'requests' ? 'Wants to message you' : 'No messages yet';
                 let readTick = '';
                 if (c.lastMessage) {
                     const mine = c.lastMessage.sender_id === currentUserId;
                     const prefix = mine ? 'You: ' : '';
                     const vo = (c.lastMessage.metadata && c.lastMessage.metadata.view_once) ? '🔒 ' : '';
-                    lastMsg = prefix + vo + (c.lastMessage.text || mediaLabel(c.lastMessage.message_type));
+                    if (chatTab !== 'requests') lastMsg = prefix + vo + (c.lastMessage.text || mediaLabel(c.lastMessage.message_type));
                     if (mine) {
                         readTick =
                             `<svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--p);fill:none;stroke-width:2.4;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>`;
@@ -1041,19 +1249,23 @@
 
                 // ═══ CHANGE 2c ═══
                 const unreadDot = c.unreadCount > 0
-                    ? '<span class="conv-unread-dot" aria-label="Unread messages"></span>'
+                    ? '<span class="unread-pill" aria-label="Unread messages">' + (c.unreadCount > 99 ? '99+' : c.unreadCount) + '</span>'
                     : '';
+                const groupMeta = chatTab === 'groups' ? '<div class="grp-meta">' + (groupMemberCounts[c.id] === undefined ? 'Group' : groupMemberCounts[c.id] + ' member' + (groupMemberCounts[c.id] === 1 ? '' : 's')) + '</div>' : '';
+                const requestButtons = chatTab === 'requests' ? `<div class="req-actions"><button class="req-btn ignore" onclick="event.stopPropagation();ignoreRequest('${c.id}')">Ignore</button><button class="req-btn accept" onclick="event.stopPropagation();acceptRequest('${c.id}')">Accept</button></div>` : '';
 
                 return `
                             <div class="conv-swipe-wrap" data-conv-id="${c.id}">
-                                <div class="conv-item ${active}" onclick="handleConvTap('${c.id}')">
+                                <div class="conv-item ${active}" ${chatTab === 'requests' ? '' : `onclick="handleConvTap(\'${c.id}\')"`}>
                                     <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${hasDisappearing ? '<span class="disap-badge"><i class="ri-time-line"></i></span>' : ''}</div>
                                     <div class="conv-info">
                                         <div class="conv-name">${pinIcon} ${escapeHtml(name)} ${badge} ${muteIcon} ${unreadDot}</div>
+                                        ${groupMeta}
                                         <div class="conv-last-msg">${readTick}<span>${escapeHtml(lastMsg)}</span></div>
                                     </div>
                                     <div class="conv-time-row">
                                         <div class="conv-time">${time}</div>
+                                        ${requestButtons}
                                         <button class="conv-more-btn" onclick="event.stopPropagation();openConvActionSheet('${c.id}')" title="More options">
                                             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>
                                         </button>
@@ -1084,9 +1296,12 @@
         }
 
         convList.innerHTML = html;
+        scheduleChat3D();
     }
 
     window.filterConversations = function(value) { renderConversations(value); };
+    window.focusSidebarSearch = function() { if (selectedConversationId) window.closeChatView(); if (chatTab !== 'all' && chatTab !== 'groups') window.setChatTab('all'); convSearch.focus(); };
+    window.openMyProfile = function() { if (currentUserId && window.Router && window.Router.openProfile) window.Router.openProfile(currentUserId); };
 
     window.selectConversation = async function(convId) {
         if (chatSearch.open) closeChatSearch();
@@ -1123,7 +1338,7 @@
             chatPartnerStatus.textContent = window.fuT('Loading…');
             populateGroupHeaderSubtitle(conv.id);
         } else {
-            chatPartnerName.textContent = other.display_name || other.username || 'User';
+            chatPartnerName.innerHTML = escapeHtml(other.display_name || other.username || 'User') + ' ' + getVerifiedBadge(other.verified_status);
             chatPartnerAvatar.src = getAvatar(other);
             renderPartnerStatus(conv);
         }
@@ -1526,7 +1741,9 @@
 
             const isViewOnceMsg = !!(msg.metadata && msg.metadata.view_once);
 
-            if (msg.message_type === 'media' && msg.metadata && msg.metadata.media_items && msg.metadata.media_items.length) {
+            if (msg.message_type === 'media' && isViewOnceMsg && msg.metadata && msg.metadata.media_items && msg.metadata.media_items.length) {
+                contentHtml = renderViewOnceChip(msg);
+            } else if (msg.message_type === 'media' && msg.metadata && msg.metadata.media_items && msg.metadata.media_items.length) {
                 contentHtml = renderMixedMediaGallery(msg) + (textContent ? captionHtml(textContent) : '');
             } else if (msg.message_type === 'image' && msg.media_url) {
                 const uploadSpinner = msg.uploading ?
@@ -1653,7 +1870,7 @@
                 const info = groupSenderNameCache[msg.sender_id];
                 if (info) {
                     senderNameHtml =
-                        `<div class="group-sender-name" style="color:${info.color};" title="${escapeHtml(info.name)}">${escapeHtml(info.name)}</div>`;
+                        `<div class="group-sender-name" style="color:${info.color};" title="${escapeHtml(info.name)}"><span>${escapeHtml(info.name)}</span>${info.badge || ""}</div>`;
                 }
             }
 
@@ -1963,7 +2180,14 @@
     let forwardTargetMsgId = null;
     let forwardSelected = new Set();
 
-    window.forwardMessage = function(msgId) { openForwardModal(msgId); };
+    window.forwardMessage = function(msgId) {
+        const msg = messages.find(m => m.id === msgId);
+        if (msg && msg.metadata && msg.metadata.view_once) {
+            showToast(window.fuT('View-once media cannot be forwarded'), 'o');
+            return;
+        }
+        openForwardModal(msgId);
+    };
 
     function openForwardModal(msgId) {
         forwardTargetMsgId = msgId;
@@ -3135,26 +3359,9 @@
     };
 
     function renderUserSearchDefault() {
-        let html = `
-                    <div class="u-row" onclick="openCreateGroupModal()">
-                        <div class="u-av" style="display:flex;align-items:center;justify-content:center;background:var(--pdim);">
-                            <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--p);fill:none;stroke-width:2;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
-                        </div>
-                        <div class="u-info">
-                            <div class="u-name" data-i18n=&#78;&#101;&#119;&#32;&#71;&#114;&#111;&#117;&#112;>New Group</div>
-                            <div class="u-handle" data-i18n=&#67;&#114;&#101;&#97;&#116;&#101;&#32;&#97;&#32;&#103;&#114;&#111;&#117;&#112;&#32;&#99;&#104;&#97;&#116;>Create a group chat</div>
-                        </div>
-                    </div>
-                    <div class="u-row" onclick="openOrCreateFreeUpperNote()">
-                        <div class="u-av" style="display:flex;align-items:center;justify-content:center;background:var(--pdim);">
-                            <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--p);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                        </div>
-                        <div class="u-info">
-                            <div class="u-name" data-i18n=&#77;&#121;&#32;&#78;&#111;&#116;&#101;>My Note</div>
-                            <div class="u-handle" data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;&#32;&#111;&#110;&#108;&#121;&#32;&#121;&#111;&#117;&#114;&#115;&#101;&#108;&#102;>Message only yourself</div>
-                        </div>
-                    </div>
-                `;
+        // Persistent New Group and My Note buttons live outside #userSearchResults.
+        // Only dynamic friend/search results belong in this container.
+        let html = '';
         if (friendProfiles.length) {
             html += `<div class="search-section-header" data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</div>` +
                 friendProfiles.map(u => userRowHtml(u, true)).join('');
@@ -3219,26 +3426,7 @@
                         `;
                 return;
             }
-            let html = `
-                        <div class="u-row" onclick="openCreateGroupModal()">
-                            <div class="u-av" style="display:flex;align-items:center;justify-content:center;background:var(--pdim);">
-                                <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--p);fill:none;stroke-width:2;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
-                            </div>
-                            <div class="u-info">
-                                <div class="u-name" data-i18n=&#78;&#101;&#119;&#32;&#71;&#114;&#111;&#117;&#112;>New Group</div>
-                                <div class="u-handle" data-i18n=&#67;&#114;&#101;&#97;&#116;&#101;&#32;&#97;&#32;&#103;&#114;&#111;&#117;&#112;&#32;&#99;&#104;&#97;&#116;>Create a group chat</div>
-                            </div>
-                        </div>
-                        <div class="u-row" onclick="openOrCreateFreeUpperNote()">
-                            <div class="u-av" style="display:flex;align-items:center;justify-content:center;background:var(--pdim);">
-                                <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--p);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                            </div>
-                            <div class="u-info">
-                                <div class="u-name" data-i18n=&#77;&#121;&#32;&#78;&#111;&#116;&#101;>My Note</div>
-                                <div class="u-handle" data-i18n=&#77;&#101;&#115;&#115;&#97;&#103;&#101;&#32;&#111;&#110;&#108;&#121;&#32;&#121;&#111;&#117;&#114;&#115;&#101;&#108;&#102;>Message only yourself</div>
-                            </div>
-                        </div>
-                    `;
+            let html = '';
             const friendResults = results.filter(u => mutualFollowers.has(u.id));
             const otherResults = results.filter(u => !mutualFollowers.has(u.id));
             if (friendResults.length) {
@@ -4249,7 +4437,7 @@
                     <div class="member-row">
                         <img class="member-avatar" src="${getAvatar(p)}" ${avatarErrAttr()} onclick="window.Router.openProfile('${p.id}')">
                         <div class="member-info" onclick="window.Router.openProfile('${p.id}')">
-                            <div class="member-name">${escapeHtml(getDisplayName(p))} ${isSelf ? ' (You)' : ''}</div>
+                            <div class="member-name">${escapeHtml(getDisplayName(p))} ${getVerifiedBadge(p.verified_status)} ${isSelf ? ' (You)' : ''}</div>
                             <div class="member-role">${isOwner ? 'Owner' : (isAdmin ? 'Admin' : 'Member')}</div>
                         </div>
                         ${actionHtml}
@@ -4950,9 +5138,9 @@
     }
     function captionHtml(t) { return '<div class="msg-caption">' + renderMessageText(t) + '</div>'; }
     function hasMediaBubble(msg, text) {
-        return msg.message_type === 'document' ||
-            ((msg.message_type === 'image' || msg.message_type === 'video' || msg.message_type ===
-                'media') && !!text);
+        // View-once rows must not expose a large media preview.
+        if (msg.metadata && msg.metadata.view_once) return false;
+        return ['document', 'image', 'video', 'media'].includes(msg.message_type);
     }
 
     function fetchLinkPreview(url) {
@@ -5288,6 +5476,12 @@
     function addToComposer(files) {
         addToComposerRaw(files);
         composerIdx = composerItems.length - 1;
+        if (composerViewOnce && privateViewOnceEnabled() && composerItems.length > 1) {
+            composerViewOnce = false;
+            byId('cmpViewOnceCheck').checked = false;
+            byId('cmpVoToggle').classList.remove('active');
+            showToast(window.fuT('Private view once supports a single item'), 'o');
+        }
         renderComposer();
     }
     function renderComposer() {
@@ -5335,8 +5529,18 @@
 
     document.addEventListener('change', function(e) {
         if (e.target && e.target.id === 'cmpViewOnceCheck') {
+            if (e.target.checked && (
+                !composerItems.length ||
+                composerItems.some(x => !['image', 'video'].includes(x.kind)) ||
+                (privateViewOnceEnabled() && composerItems.length !== 1))) {
+                e.target.checked = false;
+                showToast(window.fuT('View once supports one photo or video'), 'o');
+                return;
+            }
             composerViewOnce = e.target.checked;
             byId('cmpVoToggle').classList.toggle('active', composerViewOnce);
+            showToast(composerViewOnce ? window.fuT('Set to view once') :
+                window.fuT('View once turned off'), 'p');
         }
     });
 
@@ -5359,6 +5563,7 @@
     };
 
     async function sendMixedMediaItems(items, caption, viewOnce) {
+        if (viewOnce && privateViewOnceEnabled()) return sendPrivateViewOnceItem(items, caption);
         const tempItems = items.map(item => ({ url: item.url, type: item.kind }));
         const tempMeta = { media_items: tempItems };
         if (viewOnce) tempMeta.view_once = true;
@@ -5371,6 +5576,8 @@
         });
         try {
             const uploaded = await Promise.all(items.map(async item => {
+                // Keep the historical view-once Cloudinary path for existing users
+                // until the private backend is verified and explicitly enabled.
                 const uploadKind = viewOnce
                     ? (item.kind === 'video' ? 'viewonce_video' : 'viewonce_image')
                     : (item.kind === 'video' ? 'video' : 'image');
@@ -5402,6 +5609,56 @@
             dropTemp(tempId);
             renderMessages();
             showToast('Media upload failed: ' + err.message, 'r');
+        }
+    }
+
+    async function sendPrivateViewOnceItem(items, caption) {
+        if (!privateViewOnceEnabled() || items.length !== 1 ||
+            !['image', 'video'].includes(items[0]?.kind)) {
+            showToast(window.fuT('Only one private photo or video is allowed'), 'o');
+            return;
+        }
+        const convId = selectedConversationId;
+        const conv = currentConv();
+        if (!conv || conv.is_group || conv.is_note) {
+            showToast(window.fuT('Private view once is currently available in direct chats only'), 'o');
+            return;
+        }
+        const item = items[0];
+        const tempId = pushTemp({
+            text: caption, message_type: 'media', media_url: null, media_urls: null,
+            metadata: { view_once: true, private_asset: true,
+                media_items: [{ type: item.kind }] }
+        });
+        try {
+            // No database message exists before the server uploads the file.
+            // The Edge Function publishes message + private asset in one transaction.
+            const form = new FormData();
+            form.append('conversation_id', convId);
+            form.append('caption', caption);
+            form.append('file', item.file);
+            const { data, error } = await sb.functions.invoke('chat-private-upload', { body: form });
+            if (error || data?.status !== 'published' || !data.message_id) {
+                throw error || new Error('Private-media publication failed');
+            }
+            dropTemp(tempId);
+            // Fetch the committed message rather than constructing one from
+            // optimistic metadata; realtime can race with the server response.
+            if (selectedConversationId === convId) {
+                const { data: stored, error: readError } = await sb.from('messages')
+                    .select('*').eq('id', data.message_id).maybeSingle();
+                if (!readError && stored) {
+                    const i = messages.findIndex(m => m.id === stored.id);
+                    if (i !== -1) messages[i] = stored;
+                    else messages.push(stored);
+                }
+                renderMessages();
+            }
+        } catch (err) {
+            dropTemp(tempId);
+            renderMessages();
+            console.warn('Private view-once send failed', err);
+            showToast(window.fuT('Private media could not be sent'), 'r');
         }
     }
 
@@ -5648,6 +5905,8 @@
 
         const { data: profile } = await sb.from('profiles').select('id, username, display_name, display_username, avatar_url, bio, verified_status, is_private, is_online, last_seen_at').eq('id', currentUserId).single();
         currentUserProfile = profile || {};
+        const headerAvatar = document.getElementById('myHeaderAvatar');
+        if (headerAvatar) { headerAvatar.onerror = () => { headerAvatar.onerror = null; headerAvatar.src = DEFAULT_AVATAR; }; headerAvatar.src = getAvatar(currentUserProfile); }
 
         await sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
         presenceHeartbeatInterval = setInterval(() => {
