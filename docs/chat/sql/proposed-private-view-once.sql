@@ -46,15 +46,12 @@ begin
   if not found or coalesce(c.is_note,false) then
     raise exception 'Conversation unavailable' using errcode='42501';
   end if;
-  if coalesce(c.is_group,false) then
-    if not exists (select 1 from public.conversation_members cm
-        where cm.conversation_id=c.id and cm.user_id=p_sender)
-        or not public.can_send_in_conversation(c.id) then
-      raise exception 'Group send not allowed' using errcode='42501';
-    end if;
-  elsif (p_sender is distinct from c.user1_id and p_sender is distinct from c.user2_id)
-        or public.is_blocked_between(c.user1_id,c.user2_id) then
-    raise exception 'DM send not allowed' using errcode='42501';
+  -- First private-media canary is DM-only. Group permission RPCs rely on
+  -- auth.uid() and must not be bypassed by the service-role publisher.
+  if coalesce(c.is_group,false) or
+     (p_sender is distinct from c.user1_id and p_sender is distinct from c.user2_id) or
+     public.is_blocked_between(c.user1_id,c.user2_id) then
+    raise exception 'Private DM sending unavailable' using errcode='42501';
   end if;
   insert into public.messages (
     conversation_id,sender_id,text,message_type,media_url,media_urls,metadata
