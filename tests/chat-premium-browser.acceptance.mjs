@@ -129,3 +129,47 @@ test('3D chat cards stay in reading order without overlap on mobile', async () =
     }
   });
 });
+
+
+test('polished header has only signed-in profile avatar and no unused search icon', () => {
+  const header = requireFragment(/<header class="chat-header">[\s\S]*?<\/header>/, 'chat header');
+  assert.doesNotMatch(header, /focusSidebarSearch|aria-label="Search conversations"/);
+  assert.match(header, /id="myHeaderAvatar"[^>]+alt="My profile photo"/);
+  assert.match(js, /headerAvatar\.src = currentUserProfile\.avatar_url/);
+  assert.match(js, /user\.user_metadata\?\.avatar_url/);
+  assert.match(html, /id="sbSearchBox"/);
+});
+test('New Message renders one pair of shortcut actions and no duplicate search rows', () => {
+  const modal = html.slice(html.indexOf('<div class="mfs" id="newChatModal">'),
+    html.indexOf('<div class="fu-screen" id="createGroupModal">'));
+  assert.equal((modal.match(/class="nm-card"/g) || []).length, 2);
+  assert.equal((modal.match(/>New Group<\/b>/g) || []).length, 1);
+  assert.equal((modal.match(/>My Note<\/b>/g) || []).length, 1);
+  const render = js.slice(js.indexOf('    function renderUserSearchDefault()'),
+    js.indexOf('    function userRowHtml(', js.indexOf('    function renderUserSearchDefault()')));
+  assert.doesNotMatch(render, /openCreateGroupModal\(|openOrCreateFreeUpperNote\(/);
+  assert.match(html, /chat\.js\?v=chat-ui-polish-20261110/);
+});
+test('Archive reuses themed, ordered, independent 3D conversation cards', async () => {
+  assert.match(html, /#fuArchivedModal \.conv-swipe-wrap\{/);
+  assert.match(html, /#fuArchivedModal \.conv-item\{/);
+  assert.match(html, /#fuArchivedModal\{background:linear-gradient/);
+  assert.match(js, /const updateArchived3D = \(\) => \{/);
+  await withPage({width:390,height:844}, async page => {
+    await page.evaluate(() => {
+      const el = document.createElement('div');
+      el.id = 'fuArchivedModal';
+      el.innerHTML = '<div class="fu-body">' + Array.from({length:4}, (_,i) =>
+        '<div class="conv-swipe-wrap"><div class="conv-item">Archived ' + i +
+        '</div></div>').join('') + '</div>';
+      document.body.appendChild(el);
+    });
+    const positions = await page.locator('#fuArchivedModal .conv-item').evaluateAll(nodes =>
+      nodes.map(el => {const r=el.getBoundingClientRect();return {top:r.top,bottom:r.bottom};})
+    );
+    assert.equal(positions.length,4);
+    for(let i=1;i<positions.length;i++)
+      assert.ok(positions[i].top >= positions[i-1].bottom - 1,
+        'Archived cards must remain individually ordered and non-overlapping');
+  });
+});
