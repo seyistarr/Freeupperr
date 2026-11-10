@@ -30,7 +30,7 @@ const markup = '<!doctype html><html lang="en"><head><meta name="viewport" conte
   tabs + search + '<div id="conversationList"></div>' +
   '<div id="newChatModal"><h2>New Message</h2>' + newActions +
   '<div id="userSearchResults"></div></div></div></body></html>';
-const harness = \`
+const harness = `
   const convSearch = document.getElementById('convSearch');
   const convList = document.getElementById('conversationList');
   let chatTab = 'all';
@@ -39,7 +39,7 @@ const harness = \`
   window.__action = '';
   window.openCreateGroupModal = () => { window.__action = 'group'; };
   window.openOrCreateFreeUpperNote = () => { window.__action = 'note'; };
-\` + productionHandlers;
+` + productionHandlers;
 
 async function withPage(viewport, callback, reducedMotion = 'no-preference') {
   const browser = await chromium.launch({ headless: true });
