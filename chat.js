@@ -448,13 +448,23 @@
         return `<div class="fu-media-grid-wrap ${cls}">${tiles}</div>`;
     }
 
+    // Off by default. Production must never enable before backend/RLS canary approval.
+    function privateViewOnceEnabled() {
+        return window.FREEUPPER_PRIVATE_VIEWONCE_ENABLED === true;
+    }
+    function markViewOnceConsumed(id, index = 0) {
+        if (!viewOnceStateByMsg.has(id)) viewOnceStateByMsg.set(id, new Set());
+        viewOnceStateByMsg.get(id).add(index);
+        renderMessages();
+    }
     function renderViewOnceChip(msg) {
         const items = msg.metadata?.media_items || [];
         const kind = items[0]?.type === 'video' ? 'Video' : 'Photo';
         const consumed = getConsumedIndicesForMsg(msg.id).has(0);
         const sentByMe = msg.sender_id === currentUserId;
         const label = msg.uploading ? 'Sending…' : (consumed && !sentByMe) ? 'Opened' : kind;
-        const click = msg.uploading || consumed && !sentByMe
+        const privatePending = msg.metadata?.private_asset === true && !privateViewOnceEnabled();
+        const click = privatePending || msg.uploading || consumed && !sentByMe
             ? ''
             : sentByMe
                 ? `onclick="event.stopPropagation();showToast(window.fuT('You cannot reopen your view-once media'), 'o')"`
@@ -523,46 +533,77 @@
         modal.classList.add('open');
     };
 
+    // Private delivery uses Supabase SDK's Blob response path. Errors are JSON.
+    // Legacy view-once messages remain on the old path until a separate migration.
     window.confirmViewOnce = async function(messageId, index) {
-        document.getElementById('fuViewOnceConfirm').classList.remove('open');
+        document.getElementById('fuViewOnceConfirm')?.classList.remove('open');
         const msg = messages.find(m => m.id === messageId);
         if (!msg) return;
-        const items = (msg.metadata && msg.metadata.media_items) || [];
-        const item = items[index];
+        const item = msg.metadata?.media_items?.[index];
         if (!item) { showToast(window.fuT('Media unavailable'), 'r'); return; }
-
         if (msg.sender_id === currentUserId) {
-            showToast(window.fuT('You sent this view-once media and cannot open it.'), 'o');
+            showToast(window.fuT('You cannot reopen your view-once media'), 'o');
             return;
         }
-
+        if (msg.metadata?.private_asset === true) {
+            if (!privateViewOnceEnabled()) {
+                showToast(window.fuT('Private media is temporarily unavailable'), 'o');
+                return;
+            }
+            if (index !== 0) return;
+            try {
+                const { data, error } = await sb.functions.invoke('view-once-open', {
+                    body: { message_id: messageId, media_index: 0 }
+                });
+                if (error) {
+                    // Invocation errors carry the HTTP response separately.
+                    const status = error.context?.status;
+                    if (status === 409) {
+                        markViewOnceConsumed(messageId);
+                        showToast(window.fuT('This media has already been opened'), 'o');
+                        return;
+                    }
+                    throw error;
+                }
+                if (!(data instanceof Blob) || !data.size ||
+                    !/^(image\/(jpeg|png|webp)|video\/(mp4|quicktime|webm))$/.test(data.type)) {
+                    throw new Error('Invalid private-media response');
+                }
+                const localUrl = URL.createObjectURL(data);
+                markViewOnceConsumed(messageId);
+                try {
+                    openMediaLightbox([{ url: localUrl, type: item.type }], 0, messageId,
+                        resolveMsgSenderName(msg.sender_id), msg.created_at,
+                        { viewOnce: true, expiresAt: null, blobUrl: localUrl });
+                } catch (e) {
+                    URL.revokeObjectURL(localUrl);
+                    throw e;
+                }
+                return;
+            } catch (err) {
+                console.warn('Private view-once open failed:', err);
+                showToast(window.fuT('Unable to open this private media'), 'r');
+                return;
+            }
+        }
+        // Historical messages only; this path still uses the legacy URL.
         try {
             const { data, error } = await sb.rpc('claim_view_once', {
-                p_message_id: messageId,
-                p_media_index: index
+                p_message_id: messageId, p_media_index: index
             });
             if (error) throw error;
             if (!data || data.status === 'already_viewed') {
-                if (!viewOnceStateByMsg.has(messageId)) viewOnceStateByMsg.set(messageId, new Set());
-                viewOnceStateByMsg.get(messageId).add(index);
-                renderMessages();
+                markViewOnceConsumed(messageId, index);
                 showToast(window.fuT('This media has already been opened'), 'o');
                 return;
             }
-            if (!viewOnceStateByMsg.has(messageId)) viewOnceStateByMsg.set(messageId, new Set());
-            viewOnceStateByMsg.get(messageId).add(index);
-            renderMessages();
-
-            openMediaLightbox(
-                [{ url: item.url, type: item.type }],
-                0, messageId,
-                resolveMsgSenderName(msg.sender_id),
-                msg.created_at,
-                { viewOnce: true, expiresAt: data.expires_at || null }
-            );
+            markViewOnceConsumed(messageId, index);
+            openMediaLightbox([{ url: item.url, type: item.type }], 0, messageId,
+                resolveMsgSenderName(msg.sender_id), msg.created_at,
+                { viewOnce: true, expiresAt: data.expires_at || null });
         } catch (err) {
-            console.error('claim_view_once failed:', err);
-            showToast(err.message || 'Could not open media', 'r');
+            console.warn('Legacy view-once open failed:', err);
+            showToast(window.fuT('Unable to open media'), 'r');
         }
     };
 
@@ -5432,6 +5473,12 @@
     function addToComposer(files) {
         addToComposerRaw(files);
         composerIdx = composerItems.length - 1;
+        if (composerViewOnce && composerItems.length > 1) {
+            composerViewOnce = false;
+            byId('cmpViewOnceCheck').checked = false;
+            byId('cmpVoToggle').classList.remove('active');
+            showToast(window.fuT('View once supports a single item'), 'o');
+        }
         renderComposer();
     }
     function renderComposer() {
@@ -5479,8 +5526,16 @@
 
     document.addEventListener('change', function(e) {
         if (e.target && e.target.id === 'cmpViewOnceCheck') {
+            if (e.target.checked && (composerItems.length !== 1 ||
+                !['image', 'video'].includes(composerItems[0].kind))) {
+                e.target.checked = false;
+                showToast(window.fuT('View once supports one photo or video'), 'o');
+                return;
+            }
             composerViewOnce = e.target.checked;
             byId('cmpVoToggle').classList.toggle('active', composerViewOnce);
+            showToast(composerViewOnce ? window.fuT('Set to view once') :
+                window.fuT('View once turned off'), 'p');
         }
     });
 
@@ -5491,6 +5546,10 @@
         const convId = selectedConversationId;
         const viewOnce = composerViewOnce;
         if (!convId || isBlockedConversation || !canSendMessages) return;
+        if (viewOnce && !privateViewOnceEnabled()) {
+            showToast(window.fuT('Private view-once sending is not available yet'), 'o');
+            return;
+        }
         closeComposer();
 
         if (items[0].kind === 'doc') {
@@ -5503,6 +5562,7 @@
     };
 
     async function sendMixedMediaItems(items, caption, viewOnce) {
+        if (viewOnce) return sendPrivateViewOnceItem(items, caption);
         const tempItems = items.map(item => ({ url: item.url, type: item.kind }));
         const tempMeta = { media_items: tempItems };
         if (viewOnce) tempMeta.view_once = true;
@@ -5515,9 +5575,7 @@
         });
         try {
             const uploaded = await Promise.all(items.map(async item => {
-                const uploadKind = viewOnce
-                    ? (item.kind === 'video' ? 'viewonce_video' : 'viewonce_image')
-                    : (item.kind === 'video' ? 'video' : 'image');
+                const uploadKind = item.kind === 'video' ? 'video' : 'image';
                 const result = await uploadToCloudinary(item.file, uploadKind);
                 return {
                     url: result.url,
@@ -5546,6 +5604,59 @@
             dropTemp(tempId);
             renderMessages();
             showToast('Media upload failed: ' + err.message, 'r');
+        }
+    }
+
+    async function sendPrivateViewOnceItem(items, caption) {
+        if (!privateViewOnceEnabled() || items.length !== 1 ||
+            !['image', 'video'].includes(items[0]?.kind)) {
+            showToast(window.fuT('Only one private photo or video is allowed'), 'o');
+            return;
+        }
+        const convId = selectedConversationId; // Capture before awaiting upload.
+        const item = items[0];
+        const tempId = pushTemp({
+            text: caption, message_type: 'media', media_url: null, media_urls: null,
+            metadata: { view_once: true, private_asset: true,
+                media_items: [{ type: item.kind }] }
+        });
+        let persistedId = null;
+        try {
+            const { data: stored, error: writeError } = await sb.from('messages')
+                .insert({
+                    conversation_id: convId, sender_id: currentUserId,
+                    text: caption, message_type: 'media', media_url: null,
+                    media_urls: null, metadata: {
+                        view_once: true, private_asset: true,
+                        media_items: [{ type: item.kind }]
+                    }
+                }).select().single();
+            if (writeError || !stored?.id) throw writeError || new Error('Message creation failed');
+            persistedId = stored.id;
+            const form = new FormData();
+            form.append('message_id', persistedId);
+            form.append('file', item.file);
+            const { data, error } = await sb.functions.invoke('chat-private-upload', { body: form });
+            if (error || data?.status !== 'registered') {
+                throw error || new Error('Private upload registration failed');
+            }
+            dropTemp(tempId);
+            if (selectedConversationId === convId) {
+                const i = messages.findIndex(m => m.id === persistedId);
+                if (i !== -1) messages[i] = stored;
+                else messages.push(stored);
+                renderMessages();
+            }
+        } catch (err) {
+            dropTemp(tempId);
+            // Best-effort removal of an incomplete placeholder; no public URL was ever stored.
+            if (persistedId) {
+                const { error: cleanupError } = await sb.from('messages').delete()
+                    .eq('id', persistedId).eq('sender_id', currentUserId);
+                if (cleanupError) console.warn('Private placeholder cleanup failed:', cleanupError);
+            }
+            renderMessages();
+            showToast(window.fuT('Private media could not be sent'), 'r');
         }
     }
 
