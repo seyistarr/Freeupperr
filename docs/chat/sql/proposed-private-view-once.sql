@@ -5,8 +5,9 @@ create schema if not exists chat_private;
 revoke all on schema chat_private from public, anon, authenticated;
 
 create table if not exists chat_private.view_once_assets (
-  message_id uuid primary key references public.messages(id) on delete cascade,
-  uploader_id uuid not null references auth.users(id),
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid unique references public.messages(id) on delete set null,
+  uploader_id uuid references auth.users(id) on delete set null,
   cloudinary_asset_id text not null unique,
   cloudinary_public_id text not null,
   resource_type text not null check (resource_type in ('image','video')),
@@ -14,10 +15,15 @@ create table if not exists chat_private.view_once_assets (
   byte_size bigint not null check (byte_size > 0 and byte_size <= 10485760),
   created_at timestamptz not null default now(),
   cleanup_after timestamptz not null default (now() + interval '7 days'),
-  deleted_at timestamptz
+  deleted_at timestamptz,
+  cleanup_attempts integer not null default 0,
+  cleanup_last_error text,
+  cleanup_locked_until timestamptz
 );
 create index if not exists view_once_assets_cleanup_idx on chat_private.view_once_assets(cleanup_after)
   where deleted_at is null;
+-- Rows survive message deletion with message_id set null, so cleanup can still delete Cloudinary files.
+create index if not exists view_once_assets_asset_id_idx on chat_private.view_once_assets(cloudinary_asset_id);
 revoke all on all tables in schema chat_private from public,anon,authenticated;
 
 -- Only the Edge Function's service-role connection can register an upload.
@@ -137,6 +143,53 @@ begin
 end $$;
 revoke all on function public.chat_check_private_asset(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.chat_check_private_asset(uuid,uuid) to service_role;
+
+-- Cleanup worker claims short leases to avoid multiple concurrent deletion attempts.
+-- These RPCs are service_role-only; never grant to authenticated or anon.
+create or replace function public.chat_claim_private_cleanup_batch(p_limit int default 25)
+returns table(asset_id text, public_id text, kind text)
+language plpgsql security definer set search_path = '' as $
+begin
+  if p_limit is null or p_limit < 1 or p_limit > 100 then
+    raise exception 'Invalid batch limit' using errcode='22023';
+  end if;
+  return query
+  with due as (
+    select a.id from chat_private.view_once_assets a
+    where a.deleted_at is null
+      and (a.message_id is null or a.cleanup_after <= now())
+      and (a.cleanup_locked_until is null or a.cleanup_locked_until < now())
+    order by a.cleanup_after asc
+    limit p_limit
+    for update skip locked
+  ), claimed as (
+    update chat_private.view_once_assets a set
+      cleanup_attempts = a.cleanup_attempts + 1,
+      cleanup_locked_until = now() + interval '3 minutes'
+    from due where a.id=due.id
+    returning a.cloudinary_asset_id,a.cloudinary_public_id,a.resource_type
+  )
+  select c.cloudinary_asset_id,c.cloudinary_public_id,c.resource_type from claimed c;
+end $;
+revoke all on function public.chat_claim_private_cleanup_batch(int) from public,anon,authenticated;
+grant execute on function public.chat_claim_private_cleanup_batch(int) to service_role;
+
+create or replace function public.chat_finish_private_cleanup(
+  p_asset_id text,p_success boolean,p_error text default null
+) returns boolean language plpgsql security definer set search_path = '' as $
+declare affected int;
+begin
+  update chat_private.view_once_assets a
+    set deleted_at = case when p_success then now() else a.deleted_at end,
+        cleanup_last_error = case when p_success then null else left(coalesce(p_error,'Delete failed'),512) end,
+        cleanup_locked_until = case when p_success then null else now()+interval '5 minutes' end
+    where a.cloudinary_asset_id = p_asset_id and a.deleted_at is null;
+  get diagnostics affected = row_count;
+  return affected=1;
+end $;
+revoke all on function public.chat_finish_private_cleanup(text,boolean,text) from public,anon,authenticated;
+grant execute on function public.chat_finish_private_cleanup(text,boolean,text) to service_role;
+
 commit;
 
 -- Cleanup must be a separate durable scheduled job, only marking deleted_at
