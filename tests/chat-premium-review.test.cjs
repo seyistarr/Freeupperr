@@ -56,14 +56,16 @@ test('private view-once is explicitly disabled by default', () => {
   assert.match(js, /sb\.functions\.invoke\('chat-private-upload'/);
   assert.match(js, /sb\.functions\.invoke\('view-once-open'/);
 });
-test('private message creation stores no media URLs and is limited to one item', () => {
+test('private sending uploads first and never creates an early database message', () => {
   const section = js.slice(js.indexOf('async function sendPrivateViewOnceItem('),
     js.indexOf('function pushTemp(', js.indexOf('async function sendPrivateViewOnceItem(')));
   assert.match(section, /items\.length !== 1/);
   assert.match(section, /media_url: null/);
   assert.match(section, /media_urls: null/);
   assert.match(section, /private_asset: true/);
-  assert.match(section, /form\.append\('message_id', persistedId\)/);
+  assert.match(section, /form\.append\('conversation_id', convId\)/);
+  assert.match(section, /data\?\.status !== 'published'/);
+  assert.doesNotMatch(section, /\.from\('messages'\)\s*\.insert/);
 });
 test('private opening checks Blob response and revokes on viewer failure', () => {
   assert.match(js, /data instanceof Blob/);
