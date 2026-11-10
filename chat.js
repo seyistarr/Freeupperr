@@ -5476,12 +5476,11 @@
     function addToComposer(files) {
         addToComposerRaw(files);
         composerIdx = composerItems.length - 1;
-        if (composerViewOnce && composerItems.length > 1) {
-            // The existing legacy view-once composer permits multiple items.
-            if (privateViewOnceEnabled()) composerViewOnce = false;
-            byId('cmpViewOnceCheck').checked = composerViewOnce;
+        if (composerViewOnce && privateViewOnceEnabled() && composerItems.length > 1) {
+            composerViewOnce = false;
+            byId('cmpViewOnceCheck').checked = false;
             byId('cmpVoToggle').classList.remove('active');
-            showToast(window.fuT('View once supports a single item'), 'o');
+            showToast(window.fuT('Private view once supports a single item'), 'o');
         }
         renderComposer();
     }
