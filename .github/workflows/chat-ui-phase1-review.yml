@@ -1,0 +1,31 @@
+name: Chat UI phase 1 review (no deployment)
+on:
+  pull_request:
+    paths:
+      - chat.html
+      - chat.js
+      - tests/chat-premium-browser.test.js
+      - .github/workflows/chat-ui-phase1-review.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chat-ui-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked browser-test dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install headless Chromium and required libraries
+        run: npx playwright install --with-deps chromium
+      - name: Verify chat JavaScript parses
+        run: node --check chat.js
+      - name: Run isolated chat UI acceptance
+        run: node --test tests/chat-premium-browser.test.js
