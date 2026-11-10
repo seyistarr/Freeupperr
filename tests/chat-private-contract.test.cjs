@@ -26,16 +26,20 @@ test('private upload authenticates user and never returns a Cloudinary URL',()=>
 test('one-time delivery requires JWT plus server-side membership and atomic claim',()=>{
   assert.match(open,/auth\.getUser\(authorization\.slice\(7\)\)/);
   assert.match(open,/chat_check_private_asset/);
-  assert.match(open,/chat_claim_private_asset/);
+  assert.match(open,/userDb\.rpc\('claim_view_once'/);
+  assert.match(open,/p_media_index:0/);
+  assert.doesNotMatch(open,/chat_claim_private_asset/);
   assert.match(open,/asset\/download/);
   assert.match(open,/new Uint8Array\(count\)/);
   assert.match(open,/Cache-Control/);
   assert.doesNotMatch(open,/unclaim_view_once/);
 });
 test('claims must not be accessible directly by authenticated clients',()=>{
-  for(const name of ['chat_check_private_asset','chat_claim_private_asset','chat_register_private_asset'])
+  for(const name of ['chat_check_private_asset','chat_register_private_asset'])
     assert.match(sql,new RegExp('grant execute on function public\\.'+name+'\\([^;]*to service_role;','s'));
   assert.match(sql,/revoke all on schema chat_private from public, anon, authenticated/);
+  assert.doesNotMatch(sql,/create or replace function public\.chat_claim_private_asset/);
+  assert.match(sql,/viewer_id = \(select auth\.uid\(\)\)/);
 });
 test('asset registry survives message deletion for scheduled cleanup',()=>{
   assert.match(sql,/references public\.messages\(id\) on delete set null/);
