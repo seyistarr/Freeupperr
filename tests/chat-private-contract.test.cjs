@@ -65,3 +65,13 @@ test('publication is atomic and occurs only after a private upload',()=>{
   assert.doesNotMatch(upload,/from\('messages'\)\s*\.insert/);
   assert.match(sql,/coalesce\(c\.is_group,false\)/);
 });
+
+test('private_asset markers cannot bypass registry or be rewritten later',()=>{
+  assert.match(sql,/create constraint trigger chat_private_asset_registered/);
+  assert.match(sql,/deferrable initially deferred for each row/);
+  assert.match(sql,/chat_private\.view_once_assets a/);
+  assert.match(sql,/a\.uploader_id = new\.sender_id/);
+  assert.match(sql,/create trigger chat_private_message_update_guard/);
+  assert.match(sql,/new\.metadata is distinct from old\.metadata/);
+  assert.match(sql,/new\.media_url is distinct from old\.media_url/);
+});
