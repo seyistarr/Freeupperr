@@ -1,7 +1,7 @@
 // REVIEW ONLY. NOT DEPLOYED.
 // Invoke with a private scheduled HTTP job supplying X-Chat-Cleanup-Key.
 // Never expose CHAT_CLEANUP_TOKEN in browser code, chat logs or GitHub.
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.110.8';
 
 const DB = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
