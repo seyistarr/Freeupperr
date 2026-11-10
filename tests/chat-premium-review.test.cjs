@@ -51,7 +51,8 @@ test('view-once shields have markup and reduced-motion design exists', () => {
 
 test('private view-once is explicitly disabled by default', () => {
   assert.match(js, /window\.FREEUPPER_PRIVATE_VIEWONCE_ENABLED === true/);
-  assert.match(js, /Private view-once sending is not available yet/);
+  assert.match(js, /if \(viewOnce && privateViewOnceEnabled\(\)\) return sendPrivateViewOnceItem/);
+  assert.doesNotMatch(js, /if \(viewOnce && !privateViewOnceEnabled\(\)\)/);
   assert.match(js, /async function sendPrivateViewOnceItem\(/);
   assert.match(js, /sb\.functions\.invoke\('chat-private-upload'/);
   assert.match(js, /sb\.functions\.invoke\('view-once-open'/);
@@ -71,4 +72,11 @@ test('private opening checks Blob response and revokes on viewer failure', () =>
   assert.match(js, /data instanceof Blob/);
   assert.match(js, /URL\.createObjectURL\(data\)/);
   assert.match(js, /URL\.revokeObjectURL\(localUrl\)/);
+});
+
+test('legacy view-once remains available while private rollout is disabled',()=>{
+  assert.match(js,/viewOnce\s*\?\s*\(item\.kind === 'video' \? 'viewonce_video' : 'viewonce_image'\)/);
+  assert.match(js,/if \(viewOnce && privateViewOnceEnabled\(\)\) return sendPrivateViewOnceItem/);
+  assert.match(js,/items\.map\(\(item, index\) =>/);
+  assert.match(js,/openViewOnceConfirm\('\$\{msg\.id\}',\$\{index\}\)/);
 });
