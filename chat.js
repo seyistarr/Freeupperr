@@ -1022,8 +1022,31 @@
     }
     // Do not allow client-side request transition until authorized database
     // RPCs are deployed; direct UPDATE would inherit overly broad legacy RLS.
-    window.acceptRequest = function() { showToast('Message requests are not enabled yet.', 'o'); };
-    window.ignoreRequest = function() { showToast('Message requests are not enabled yet.', 'o'); };
+    async function respondToChatRequest(convId, action) {
+        const conv = conversations.find(c => c.id === convId);
+        if (!conv || !isIncomingRequest(conv)) return;
+        try {
+            const { data, error } = await sb.rpc('chat_respond_to_request', {
+                p_conversation_id: convId,
+                p_action: action
+            });
+            if (error) throw error;
+            if (data !== action) throw new Error('Request transition was not confirmed');
+            conv.request_status = action;
+            await loadConversations();
+            if (action === 'accepted') {
+                window.setChatTab('all');
+                await window.selectConversation(convId);
+            } else {
+                showToast(window.fuT('Request ignored'), 'g');
+            }
+        } catch (error) {
+            console.warn('Message request operation unavailable:', error);
+            showToast(window.fuT('Message requests are unavailable right now'), 'o');
+        }
+    }
+    window.acceptRequest = convId => respondToChatRequest(convId, 'accepted');
+    window.ignoreRequest = convId => respondToChatRequest(convId, 'ignored');
     let chat3dFrame = null;
     function updateChat3D() {
         chat3dFrame = null;
@@ -1106,7 +1129,7 @@
                     const mine = c.lastMessage.sender_id === currentUserId;
                     const prefix = mine ? 'You: ' : '';
                     const vo = (c.lastMessage.metadata && c.lastMessage.metadata.view_once) ? '🔒 ' : '';
-                    lastMsg = prefix + vo + (c.lastMessage.text || mediaLabel(c.lastMessage.message_type));
+                    if (chatTab !== 'requests') lastMsg = prefix + vo + (c.lastMessage.text || mediaLabel(c.lastMessage.message_type));
                     if (mine) {
                         readTick =
                             `<svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--p);fill:none;stroke-width:2.4;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>`;
@@ -1128,12 +1151,12 @@
                 const unreadDot = c.unreadCount > 0
                     ? '<span class="unread-pill" aria-label="Unread messages">' + (c.unreadCount > 99 ? '99+' : c.unreadCount) + '</span>'
                     : '';
-                const groupMeta = chatTab === 'groups' ? '<div class="grp-meta">' + (groupMemberCounts[c.id] === undefined ? 'Group' : groupMemberCounts[c.id] + ' members') + '</div>' : '';
+                const groupMeta = chatTab === 'groups' ? '<div class="grp-meta">' + (groupMemberCounts[c.id] === undefined ? 'Group' : groupMemberCounts[c.id] + ' member' + (groupMemberCounts[c.id] === 1 ? '' : 's')) + '</div>' : '';
                 const requestButtons = chatTab === 'requests' ? `<div class="req-actions"><button class="req-btn ignore" onclick="event.stopPropagation();ignoreRequest('${c.id}')">Ignore</button><button class="req-btn accept" onclick="event.stopPropagation();acceptRequest('${c.id}')">Accept</button></div>` : '';
 
                 return `
                             <div class="conv-swipe-wrap" data-conv-id="${c.id}">
-                                <div class="conv-item ${active}" onclick="handleConvTap('${c.id}')">
+                                <div class="conv-item ${active}" ${chatTab === 'requests' ? '' : `onclick="handleConvTap(\'${c.id}\')"`}>
                                     <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${hasDisappearing ? '<span class="disap-badge"><i class="ri-time-line"></i></span>' : ''}</div>
                                     <div class="conv-info">
                                         <div class="conv-name">${pinIcon} ${escapeHtml(name)} ${badge} ${muteIcon} ${unreadDot}</div>
