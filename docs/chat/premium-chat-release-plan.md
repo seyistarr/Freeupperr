@@ -31,7 +31,7 @@ Status: **IN PROGRESS / NO PRODUCTION DEPLOY**. Review branch only. Base main: `
 8. Edge Function should authenticate JWT, return consistent binary-versus-JSON responses, use private no-store caching and conservative CORS. Confirm Cloudinary authenticated fetch signing against Cloudinary's currently deployed API settings.
 9. Use a durable cleanup table/queue and scheduled job rather than 90-second `waitUntil` sleep; cover group media, retries, failed uploads, message deletion and account deletion. A Cloudinary inventory reconciliation is still required for unregistered orphans. The draft cleanup worker is not scheduled.
 10. Do not strip historical media URLs or move existing messages without a separately reviewed legacy inventory and rollback plan.
-11. Resolve private-upload placeholder visibility before enabling: the draft inserts a message prior to Cloudinary registration, which can trigger realtime/push and expose an incomplete entry. Implement an authenticated, atomic publish-after-registration boundary that avoids premature notifications and unread counts.
+11. Review the new atomic publish-after-upload path: the Edge Function uploads to Cloudinary, then one service-role RPC creates the message and registers the asset in a single database transaction. It prevents premature message visibility but still needs database-trigger compatibility tests, failure-injection tests, and orphan reconciliation. First canary supports DMs only; groups require separate authorization testing.
 12. Audit deployed `send-push-notification` JWT-disabled webhook and signed triggering separately; keep message notification delivery functional.
 
 ## Verification gates
@@ -60,4 +60,4 @@ NO-GO until the blocking backend controls and regression tests are complete. Nev
 - It gets `auth.uid()`, checks sender exclusion, view-once message type and metadata, expiry, media-index bounds, DM blocking, group membership and note exclusion, then INSERTs into `view_once_consumptions` with conflict handling and returns `opened` or `already_viewed`.
 - `view_once_consumptions` has RLS and a SELECT grant but **zero active SELECT policies**; a new owner-only SELECT policy is proposed in the review SQL, not applied.
 - Historical messages can still contain media URLs. Improving one-time RPC behavior does **not** revoke a permanent public URL; private Cloudinary media and legacy asset inventory require a separate consented rollout.
-- The current private upload placeholder/notification race means the new feature flag **must remain disabled** until corrected and tested.
+- The earlier private upload placeholder/notification race was addressed in branch code with an upload-first and atomic publish RPC. **Feature flag must remain disabled** until actual SQL apply/rollback, trigger compatibility, integration tests and Cloudinary orphans are verified.
