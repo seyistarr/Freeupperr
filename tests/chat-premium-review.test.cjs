@@ -48,3 +48,25 @@ test('view-once shields have markup and reduced-motion design exists', () => {
   assert.match(html, /prefers-reduced-motion/);
   assert.match(html, /\.fu-lb\.vo-shielded \.fu-lb-vo-shield/);
 });
+
+test('private view-once is explicitly disabled by default', () => {
+  assert.match(js, /window\.FREEUPPER_PRIVATE_VIEWONCE_ENABLED === true/);
+  assert.match(js, /Private view-once sending is not available yet/);
+  assert.match(js, /async function sendPrivateViewOnceItem\(/);
+  assert.match(js, /sb\.functions\.invoke\('chat-private-upload'/);
+  assert.match(js, /sb\.functions\.invoke\('view-once-open'/);
+});
+test('private message creation stores no media URLs and is limited to one item', () => {
+  const section = js.slice(js.indexOf('async function sendPrivateViewOnceItem('),
+    js.indexOf('function pushTemp(', js.indexOf('async function sendPrivateViewOnceItem(')));
+  assert.match(section, /items\.length !== 1/);
+  assert.match(section, /media_url: null/);
+  assert.match(section, /media_urls: null/);
+  assert.match(section, /private_asset: true/);
+  assert.match(section, /form\.append\('message_id', persistedId\)/);
+});
+test('private opening checks Blob response and revokes on viewer failure', () => {
+  assert.match(js, /data instanceof Blob/);
+  assert.match(js, /URL\.createObjectURL\(data\)/);
+  assert.match(js, /URL\.revokeObjectURL\(localUrl\)/);
+});
