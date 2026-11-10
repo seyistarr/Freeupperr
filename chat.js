@@ -91,13 +91,15 @@
     async function ensureGroupSenderNames(convId, senderIds) {
         const missing = senderIds.filter(id => !groupSenderNameCache[id]);
         if (!missing.length) return;
-        const { data } = await sb.from('profiles').select('id, display_name, username').in('id', missing);
+        const { data } = await sb.from('profiles').select('id, display_name, username, verified_status').in('id', missing);
         (data || []).forEach(p => {
-            groupSenderNameCache[p.id] = { name: getDisplayName(p), color: senderColorFor(p.id) };
+            groupSenderNameCache[p.id] = { name: getDisplayName(p), color: senderColorFor(p.id), badge: getVerifiedBadge(p.verified_status) };
         });
     }
 
     let archivedRowShown = false;
+    let chatTab = 'all';
+    let groupMemberCounts = {};
     // ═══ CHANGE 1a ═══
     let returnToArchivedAfterChat = false;
     const CL_PULL_THRESHOLD = 170;
@@ -956,6 +958,7 @@
             conversations = conversations.filter(c =>
                 !(c.hidden_by || []).includes(currentUserId)
             );
+            await loadGroupMemberCounts();
             renderConversations(convSearch.value);
         } catch (err) {
             console.error('loadConversations error:', err);
@@ -964,12 +967,98 @@
         }
     }
 
+
+    // Review-branch tab navigation: existing chat data and interaction handlers remain intact.
+    const TAB_META = {
+        all: { title: 'Messages', sub: 'Your conversations, all in one place.', search: true, placeholder: 'Search conversations or friends...' },
+        unread: { title: 'Unread Messages', sub: 'Conversations with new messages.', search: false, placeholder: '' },
+        groups: { title: 'Groups', sub: 'All your group conversations.', search: true, placeholder: 'Search groups...' },
+        requests: { title: 'Message Requests', sub: 'People who want to chat with you.', search: false, placeholder: '' }
+    };
+    function isIncomingRequest(c) {
+        return !c.is_group && !c.is_note && c.request_status === 'pending' &&
+            c.initiated_by && c.initiated_by !== currentUserId;
+    }
+    function isIgnoredRequest(c) {
+        return !c.is_group && !c.is_note && c.request_status === 'ignored' &&
+            c.initiated_by !== currentUserId;
+    }
+    async function loadGroupMemberCounts() {
+        const ids = conversations.filter(c => c.is_group && !c.is_note).map(c => c.id);
+        if (!ids.length) { groupMemberCounts = {}; return; }
+        // RPC is introduced in a later, separately approved DB migration.
+        try {
+            const { data, error } = await sb.rpc('get_group_member_counts', { p_ids: ids });
+            if (error) throw error;
+            groupMemberCounts = Object.fromEntries((data || []).map(row => [row.conversation_id, Number(row.member_count) || 0]));
+        } catch (_) { groupMemberCounts = {}; }
+    }
+    window.setChatTab = function(tab) {
+        if (!TAB_META[tab]) return;
+        chatTab = tab;
+        document.querySelectorAll('#clTabs .cl-tab').forEach(button => {
+            const active = button.dataset.tab === tab;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-selected', String(active));
+        });
+        document.getElementById('sbTitle').textContent = TAB_META[tab].title;
+        document.getElementById('sbSub').textContent = TAB_META[tab].sub;
+        document.getElementById('sbSearchBox').style.display = TAB_META[tab].search ? '' : 'none';
+        convSearch.placeholder = TAB_META[tab].placeholder;
+        convSearch.value = '';
+        convList.scrollTop = 0;
+        renderConversations('');
+    };
+    function updateChatTabCounts() {
+        const available = conversations.filter(c => !(c.archived_by || []).includes(currentUserId) && !isIgnoredRequest(c));
+        const requestCount = available.filter(isIncomingRequest).length;
+        const unreadCount = available.filter(c => !isIncomingRequest(c) && c.unreadCount > 0).length;
+        [['tabUnreadCount', unreadCount], ['tabRequestCount', requestCount]].forEach(([id,count]) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = count > 99 ? '99+' : String(count);
+            el.classList.toggle('hidden', count === 0);
+        });
+    }
+    // Do not allow client-side request transition until authorized database
+    // RPCs are deployed; direct UPDATE would inherit overly broad legacy RLS.
+    window.acceptRequest = function() { showToast('Message requests are not enabled yet.', 'o'); };
+    window.ignoreRequest = function() { showToast('Message requests are not enabled yet.', 'o'); };
+    let chat3dFrame = null;
+    function updateChat3D() {
+        chat3dFrame = null;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const half = convList.clientHeight / 2;
+        if (!half) return;
+        const containerRect = convList.getBoundingClientRect();
+        convList.querySelectorAll('.conv-swipe-wrap').forEach(el => {
+            const rect = el.getBoundingClientRect();
+            // Geometry must not include this element's previous 3D transform.
+            const y = el.offsetTop - convList.offsetTop - convList.scrollTop + el.offsetHeight / 2;
+            const t = Math.max(-1, Math.min(1, (y - half) / Math.max(half, 1)));
+            const a = Math.abs(t);
+            el.style.setProperty('--rx', (-t * 10).toFixed(2) + 'deg');
+            el.style.setProperty('--tz', (-a * 24).toFixed(1) + 'px');
+            el.style.setProperty('--sc', (1 - a * 0.025).toFixed(3));
+            el.style.setProperty('--op', String(1 - a * 0.12));
+        });
+    }
+    function scheduleChat3D() {
+        if (chat3dFrame == null) chat3dFrame = requestAnimationFrame(updateChat3D);
+    }
+    convList.addEventListener('scroll', scheduleChat3D, { passive: true });
+    window.addEventListener('resize', scheduleChat3D);
+
     function renderConversations(filter = '') {
+        updateChatTabCounts();
         const q = filter.toLowerCase().trim();
         let html = '';
 
         let matchedConvs = conversations.filter(c =>
-            !(c.archived_by || []).includes(currentUserId)
+            !(c.archived_by || []).includes(currentUserId) && !isIgnoredRequest(c) &&
+            (chatTab === 'requests' ? isIncomingRequest(c) : !isIncomingRequest(c)) &&
+            (chatTab !== 'unread' || c.unreadCount > 0) &&
+            (chatTab !== 'groups' || (c.is_group && !c.is_note))
         );
         if (q) {
             matchedConvs = matchedConvs.filter(c => {
@@ -983,7 +1072,7 @@
         }
 
         let matchedFriends = [];
-        if (q) {
+        if (q && chatTab === 'all') {
             matchedFriends = friendProfiles.filter(function(u) {
                 const name = (u.display_name || u.username || '').toLowerCase();
                 const handle = (u.username || '').toLowerCase();
@@ -993,11 +1082,7 @@
         }
 
         if (matchedConvs.length === 0 && matchedFriends.length === 0) {
-            convList.innerHTML = `
-                        <div style="padding: 30px 16px; text-align: center; color: var(--muted);">
-                            <p>${q ? 'No results found.' : 'No conversations yet. Tap New to start one.'}</p>
-                        </div>
-                    `;
+            convList.innerHTML = `<div style="padding:30px 16px;text-align:center;color:var(--cl-muted)"><p>${q ? 'No results found.' : chatTab === 'unread' ? 'You are all caught up.' : chatTab === 'groups' ? 'No groups yet.' : chatTab === 'requests' ? 'No message requests.' : 'No conversations yet. Tap New to start one.'}</p></div>`;
             return;
         }
 
@@ -1015,7 +1100,7 @@
                 const avatar = c.is_note ? (c.note_avatar || DEFAULT_AVATAR)
                     : c.is_group ? (c.group_avatar || DEFAULT_AVATAR) : getAvatar(other);
 
-                let lastMsg = 'No messages yet';
+                let lastMsg = chatTab === 'requests' ? 'Wants to message you' : 'No messages yet';
                 let readTick = '';
                 if (c.lastMessage) {
                     const mine = c.lastMessage.sender_id === currentUserId;
@@ -1041,8 +1126,10 @@
 
                 // ═══ CHANGE 2c ═══
                 const unreadDot = c.unreadCount > 0
-                    ? '<span class="conv-unread-dot" aria-label="Unread messages"></span>'
+                    ? '<span class="unread-pill" aria-label="Unread messages">' + (c.unreadCount > 99 ? '99+' : c.unreadCount) + '</span>'
                     : '';
+                const groupMeta = chatTab === 'groups' ? '<div class="grp-meta">' + (groupMemberCounts[c.id] === undefined ? 'Group' : groupMemberCounts[c.id] + ' members') + '</div>' : '';
+                const requestButtons = chatTab === 'requests' ? `<div class="req-actions"><button class="req-btn ignore" onclick="event.stopPropagation();ignoreRequest('${c.id}')">Ignore</button><button class="req-btn accept" onclick="event.stopPropagation();acceptRequest('${c.id}')">Accept</button></div>` : '';
 
                 return `
                             <div class="conv-swipe-wrap" data-conv-id="${c.id}">
@@ -1050,10 +1137,12 @@
                                     <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${hasDisappearing ? '<span class="disap-badge"><i class="ri-time-line"></i></span>' : ''}</div>
                                     <div class="conv-info">
                                         <div class="conv-name">${pinIcon} ${escapeHtml(name)} ${badge} ${muteIcon} ${unreadDot}</div>
+                                        ${groupMeta}
                                         <div class="conv-last-msg">${readTick}<span>${escapeHtml(lastMsg)}</span></div>
                                     </div>
                                     <div class="conv-time-row">
                                         <div class="conv-time">${time}</div>
+                                        ${requestButtons}
                                         <button class="conv-more-btn" onclick="event.stopPropagation();openConvActionSheet('${c.id}')" title="More options">
                                             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>
                                         </button>
@@ -1084,9 +1173,12 @@
         }
 
         convList.innerHTML = html;
+        scheduleChat3D();
     }
 
     window.filterConversations = function(value) { renderConversations(value); };
+    window.focusSidebarSearch = function() { if (selectedConversationId) window.closeChatView(); if (chatTab !== 'all' && chatTab !== 'groups') window.setChatTab('all'); convSearch.focus(); };
+    window.openMyProfile = function() { if (currentUserId && window.Router && window.Router.openProfile) window.Router.openProfile(currentUserId); };
 
     window.selectConversation = async function(convId) {
         if (chatSearch.open) closeChatSearch();
@@ -5648,6 +5740,8 @@
 
         const { data: profile } = await sb.from('profiles').select('id, username, display_name, display_username, avatar_url, bio, verified_status, is_private, is_online, last_seen_at').eq('id', currentUserId).single();
         currentUserProfile = profile || {};
+        const headerAvatar = document.getElementById('myHeaderAvatar');
+        if (headerAvatar) { headerAvatar.onerror = () => { headerAvatar.onerror = null; headerAvatar.src = DEFAULT_AVATAR; }; headerAvatar.src = getAvatar(currentUserProfile); }
 
         await sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
         presenceHeartbeatInterval = setInterval(() => {
