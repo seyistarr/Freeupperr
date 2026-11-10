@@ -148,7 +148,7 @@ test('New Message renders one pair of shortcut actions and no duplicate search r
   const render = js.slice(js.indexOf('    function renderUserSearchDefault()'),
     js.indexOf('    function userRowHtml(', js.indexOf('    function renderUserSearchDefault()')));
   assert.doesNotMatch(render, /openCreateGroupModal\(|openOrCreateFreeUpperNote\(/);
-  assert.match(html, /chat\.js\?v=chat-ui-polish-20261110/);
+  assert.match(html, /chat\.js\?v=chat-ui-scroll-v2/);
 });
 test('Archive reuses themed, ordered, independent 3D conversation cards', async () => {
   assert.match(html, /#fuArchivedModal \.conv-swipe-wrap\{/);
@@ -171,5 +171,33 @@ test('Archive reuses themed, ordered, independent 3D conversation cards', async 
     for(let i=1;i<positions.length;i++)
       assert.ok(positions[i].top >= positions[i-1].bottom - 1,
         'Archived cards must remain individually ordered and non-overlapping');
+  });
+});
+
+
+test('unread count is beside the caret rather than the display name', () => {
+  assert.match(js, /<div class="conv-name">\$\{pinIcon\}<span class="conv-display-name">/);
+  assert.match(js, /<div class="conv-actions-inline">\s*\$\{unreadDot\}\s*<button class="conv-more-btn"/);
+  assert.match(html, /\.conv-item \.conv-actions-inline/);
+});
+test('New Message results use scrollable individual 3D cards', async () => {
+  assert.match(js, /function updateNewMessage3D\(\)/);
+  assert.match(js, /newMessageList\?\.addEventListener\('scroll', scheduleNewMessage3D/);
+  await withPage({width:390,height:844}, async page => {
+    await page.evaluate(() => {
+      const list=document.getElementById('userSearchResults');
+      list.style.height='350px';list.style.flex='none';
+      list.innerHTML=Array.from({length:12},(_,i)=>'<div class="u-row"><span>Friend '+i+'</span></div>').join('');
+    });
+    const result=await page.locator('#userSearchResults').evaluate(list=>{
+      const rows=[...list.querySelectorAll('.u-row')];
+      return {overflow:getComputedStyle(list).overflowY,scrollHeight:list.scrollHeight,height:list.clientHeight,
+        bounds:rows.map(e=>{let r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom};})};
+    });
+    assert.equal(result.overflow,'auto');
+    assert.ok(result.scrollHeight>result.height);
+    for(let i=1;i<result.bounds.length;i++)assert.ok(result.bounds[i].top>=result.bounds[i-1].bottom-1);
+    await page.locator('#userSearchResults').evaluate(el=>el.scrollTop=el.scrollHeight);
+    assert.ok(await page.locator('#userSearchResults').evaluate(el=>el.scrollTop)>0);
   });
 });
