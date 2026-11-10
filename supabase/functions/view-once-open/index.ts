@@ -2,7 +2,7 @@
 // Supabase Edge Function: view-once-open
 // Returns raw bytes on success; application/json on error.
 // Uses Cloudinary's documented asset-ID download endpoint; never exposes its URL.
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.110.8';
 
 const URL_BASE = Deno.env.get('SUPABASE_URL') ?? '';
 const ANON = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
