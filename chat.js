@@ -5613,49 +5613,46 @@
             showToast(window.fuT('Only one private photo or video is allowed'), 'o');
             return;
         }
-        const convId = selectedConversationId; // Capture before awaiting upload.
+        const convId = selectedConversationId;
+        const conv = currentConv();
+        if (!conv || conv.is_group || conv.is_note) {
+            showToast(window.fuT('Private view once is currently available in direct chats only'), 'o');
+            return;
+        }
         const item = items[0];
         const tempId = pushTemp({
             text: caption, message_type: 'media', media_url: null, media_urls: null,
             metadata: { view_once: true, private_asset: true,
                 media_items: [{ type: item.kind }] }
         });
-        let persistedId = null;
         try {
-            const { data: stored, error: writeError } = await sb.from('messages')
-                .insert({
-                    conversation_id: convId, sender_id: currentUserId,
-                    text: caption, message_type: 'media', media_url: null,
-                    media_urls: null, metadata: {
-                        view_once: true, private_asset: true,
-                        media_items: [{ type: item.kind }]
-                    }
-                }).select().single();
-            if (writeError || !stored?.id) throw writeError || new Error('Message creation failed');
-            persistedId = stored.id;
+            // No database message exists before the server uploads the file.
+            // The Edge Function publishes message + private asset in one transaction.
             const form = new FormData();
-            form.append('message_id', persistedId);
+            form.append('conversation_id', convId);
+            form.append('caption', caption);
             form.append('file', item.file);
             const { data, error } = await sb.functions.invoke('chat-private-upload', { body: form });
-            if (error || data?.status !== 'registered') {
-                throw error || new Error('Private upload registration failed');
+            if (error || data?.status !== 'published' || !data.message_id) {
+                throw error || new Error('Private-media publication failed');
             }
             dropTemp(tempId);
+            // Fetch the committed message rather than constructing one from
+            // optimistic metadata; realtime can race with the server response.
             if (selectedConversationId === convId) {
-                const i = messages.findIndex(m => m.id === persistedId);
-                if (i !== -1) messages[i] = stored;
-                else messages.push(stored);
+                const { data: stored, error: readError } = await sb.from('messages')
+                    .select('*').eq('id', data.message_id).maybeSingle();
+                if (!readError && stored) {
+                    const i = messages.findIndex(m => m.id === stored.id);
+                    if (i !== -1) messages[i] = stored;
+                    else messages.push(stored);
+                }
                 renderMessages();
             }
         } catch (err) {
             dropTemp(tempId);
-            // Best-effort removal of an incomplete placeholder; no public URL was ever stored.
-            if (persistedId) {
-                const { error: cleanupError } = await sb.from('messages').delete()
-                    .eq('id', persistedId).eq('sender_id', currentUserId);
-                if (cleanupError) console.warn('Private placeholder cleanup failed:', cleanupError);
-            }
             renderMessages();
+            console.warn('Private view-once send failed', err);
             showToast(window.fuT('Private media could not be sent'), 'r');
         }
     }
