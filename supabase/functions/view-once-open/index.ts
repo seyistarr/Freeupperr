@@ -47,7 +47,7 @@ function errorResponse(req:Request,status:string):Response {
     default:return json(req,{error:'Media access unavailable'},503);
   }
 }
-Deno.serve(async req=>{
+export async function handleViewOnceOpen(req:Request):Promise<Response> {
   if(req.method==='OPTIONS') return new Response(null,{status:204,headers:cors(req)});
   if(req.method!=='POST') return json(req,{error:'Method not allowed'},405);
   if(Deno.env.get('CHAT_PRIVATE_MEDIA_ENABLED')!=='true')
@@ -141,4 +141,6 @@ Deno.serve(async req=>{
       'Content-Length':String(bytes.byteLength)
     }
   });
-});
+}
+
+if (import.meta.main) Deno.serve(handleViewOnceOpen);
