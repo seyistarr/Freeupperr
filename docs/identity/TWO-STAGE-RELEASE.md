@@ -1,5 +1,7 @@
 # Two-stage identity privacy release approval packet
 
+> Current local candidate: [RECONCILED-RELEASE-REVIEW.md](RECONCILED-RELEASE-REVIEW.md), based on newer main ba35a24. The Google canary has passed. Old publication tip 66e9a78 is superseded and no longer authorized.
+
 > Stage 1 database migration was explicitly authorized and committed on 2026-11-12. See [STAGE1-PRODUCTION-RESULT.md](STAGE1-PRODUCTION-RESULT.md) for current status. The preparation evidence below is retained as reviewed; its pre-execution status and main commit are historical. Google canary, code publishing and Stage 2 remain unauthorized.
 
 Prepared 2026-11-10 UTC on `codex/default-identity`. Read-only refresh confirms latest main is `23d4d84bca1a6f94b058c6b5d1c3eaf50449738a`.
