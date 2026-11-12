@@ -128,7 +128,7 @@
       return getCurrentUser();
     }
 
-    const { data: profile, error: profileError } = await sb
+    let { data: profile, error: profileError } = await sb
       .from('profiles')
       .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
       .eq('id', user.id)
@@ -138,8 +138,8 @@
       console.warn('getAuthenticatedUser: profile fetch failed', profileError);
       return {
         id: user.id,
-        username: user.user_metadata?.username || '',
-        displayName: user.user_metadata?.display_name || 'User',
+        username: '',
+        displayName: 'FreeUpper User',
         bio: '',
         coverUrl: '',
         avatar: user.user_metadata?.avatar_url || defaultGuest().avatar,
@@ -162,24 +162,21 @@
     if (!profile) {
       const insertPayload = {
         id: user.id,
-        display_name: user.user_metadata?.display_name || user.email.split('@')[0],
-        username: user.user_metadata?.username || user.email.split('@')[0],
         avatar_url: user.user_metadata?.avatar_url || null,
         cover_url: null,
         verified_status: 'none',
-        account_type: 'personal',
-        account_icon_url: ''
       };
       const { data: newProfile, error: insertError } = await sb
         .from('profiles')
-        .insert(insertPayload)
+        .upsert(insertPayload, { onConflict: 'id', ignoreDuplicates: true })
         .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
-        .single();
+        .maybeSingle();
       if (insertError) {
         console.error('getAuthenticatedUser: could not create profile', insertError);
         return getCurrentUser();
       }
-      profile = newProfile;
+      profile = newProfile || (await sb.from('profiles').select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country').eq('id', user.id).single()).data;
+      if (!profile) return getCurrentUser();
     }
 
     const privateProfile = await readMyPrivateProfile();
@@ -231,24 +228,21 @@
       if (!profile) {
         const insertPayload = {
           id: authUser.id,
-          display_name: authUser.user_metadata?.display_name || authUser.email.split('@')[0],
-          username: authUser.user_metadata?.username || authUser.email.split('@')[0],
           avatar_url: authUser.user_metadata?.avatar_url || null,
           cover_url: null,
           verified_status: 'none',
-          account_type: 'personal',
-          account_icon_url: ''
         };
         const { data: inserted, error: insertError } = await sb
           .from('profiles')
-          .insert(insertPayload)
+          .upsert(insertPayload, { onConflict: 'id', ignoreDuplicates: true })
           .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
-          .single();
+          .maybeSingle();
         if (insertError) {
           console.error('syncSessionToLocal: could not create profile', insertError);
           return;
         }
-        finalProfile = inserted;
+        finalProfile = inserted || (await sb.from('profiles').select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country').eq('id', authUser.id).single()).data;
+        if (!finalProfile) return;
       }
 
       const privateProfile = await readMyPrivateProfile();
@@ -366,8 +360,8 @@
 
     if (mode === 'signup') {
       document.getElementById('fu-auth-title').textContent = 'Join FreeUpper';
-      document.getElementById('fu-auth-sub').textContent = 'Create an account to post, comment, and save favorites.';
-      nameField.style.display = 'block';
+      document.getElementById('fu-auth-sub').textContent = 'Start as FreeUpper User. Choose your public name and username in your profile.';
+      nameField.style.display = 'none';
       document.getElementById('fu-submit-btn').textContent = 'Create Account';
       document.getElementById('fu-auth-switch').innerHTML =
         'Already have an account? <button id="fu-switch-btn" type="button">Sign In</button>';
@@ -523,7 +517,7 @@
         <button id="fu-auth-close" type="button">&#10005;</button>
         <div id="fu-auth-logo">Free<span>Upper</span></div>
         <div id="fu-auth-title">Join FreeUpper</div>
-        <div id="fu-auth-sub">Create an account to post, comment, and save favorites.</div>
+        <div id="fu-auth-sub">Start as FreeUpper User. Choose your public name and username in your profile.</div>
         <div id="fu-auth-error"></div>
         <div id="fu-name-field" class="fu-field">
           <input id="fu-name" type="text" placeholder="Full name" autocomplete="name" />
@@ -625,7 +619,6 @@
     const errEl = document.getElementById('fu-auth-error');
     const email = document.getElementById('fu-email').value.trim();
     const password = document.getElementById('fu-password').value;
-    const name = document.getElementById('fu-name').value.trim();
     errEl.textContent = '';
 
     if (!email || !password) {
@@ -639,23 +632,9 @@
 
     try {
       if (mode === 'signup') {
-        const baseUsername = (name || email.split('@')[0])
-          .toLowerCase()
-          .replace(/\s+/g, '')
-          .replace(/[^a-z0-9]/g, '');
-        const randomSuffix = Math.floor(Math.random() * 10000);
-        const username = baseUsername + randomSuffix;
-
-        const result = await sb.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              display_name: name || email.split('@')[0],
-              username: username
-            }
-          }
-        });
+        // Public identity is assigned by the database from its existing FreeUpper ID.
+        // Personal names are chosen deliberately in the profile setup flow.
+        const result = await sb.auth.signUp({ email, password });
         if (result.error) throw result.error;
         if (result.data.session) await syncSessionToLocal(result.data.session);
       } else {

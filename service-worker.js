@@ -1,7 +1,7 @@
 importScripts('/js/freeupper-routes.js?v=clean-urls-v1');
 
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v33-fullscreen-authors';
+const CACHE_NAME = 'freeupper-pwa-v34-default-identity';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [

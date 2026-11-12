@@ -2415,6 +2415,7 @@
             </div>
             <div class="form-group">
                 <div class="form-lbl" data-i18n="Display Name">Display Name</div>
+                <p style="font-size:12px;color:var(--text2)">Choose a public name and username to make your profile your own.</p>
                 <input class="form-inp" id="eDN" type="text" placeholder="Display name" maxlength="40">
                 <div style="display:flex;justify-content:space-between;align-items:center">
                     <span class="cooldown-note" id="dnCooldown"></span>
@@ -2960,13 +2961,15 @@
 
             // ─── URL READER ────────────────────────────────────────────
             function getTargetUserFromUrl() {
+                var pathname = window.location.pathname || '';
+                try { pathname = decodeURIComponent(pathname); } catch (_) { throw new Error('Profile not found'); }
+                if (pathname.startsWith('/@') && !/^\/@[A-Za-z0-9_.]{1,30}\/?$/.test(pathname)) throw new Error('Profile not found');
                 var params = new URLSearchParams(window.location.search);
                 var freeupperId = params.get('freeupper_id');
                 if (freeupperId) {
                     return { type: 'freeupper_id', value: freeupperId.trim().toUpperCase() };
                 }
-                var pathname = window.location.pathname || '';
-                var usernameMatch = pathname.match(/^\/@([A-Za-z0-9_.]+)\/?$/);
+                var usernameMatch = pathname.match(/^\/@([A-Za-z0-9_.]{1,30})\/?$/);
                 if (usernameMatch) return { type: 'username', value: usernameMatch[1] };
                 var publicMatch = pathname.match(/^\/u\/(FU[A-Z0-9]+)\/?$/i);
                 if (publicMatch) {

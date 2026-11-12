@@ -31,21 +31,19 @@ export default async function handler(req, res) {
   let freeupperId = normalizeId(req.query?.freeupper_id || '');
   const usernameQuery = String(req.query?.username || '').trim().replace(/^@/, '');
   if (usernameQuery) {
-    if (!/^[A-Za-z0-9_.]{1,80}$/.test(usernameQuery)) return res.status(404).send('Profile not found');
+    if (!/^[A-Za-z0-9_.]{1,30}$/.test(usernameQuery)) return res.status(404).send('Profile not found');
     if (!SUPABASE_ANON_KEY) return res.status(503).send('Temporarily unavailable');
     try {
-      const params = new URLSearchParams({
-        select: 'freeupper_id,username',
-        username: 'ilike.' + usernameQuery,
-        is_private: 'eq.false',
-        limit: '2'
-      });
-      const response = await fetch(SUPABASE_URL + '/rest/v1/profiles?' + params, {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY }
+      // Exact current-handle lookup. Email handles and wildcard aliases never resolve.
+      const response = await fetch(SUPABASE_URL + '/rest/v1/rpc/get_public_profile_by_username', {
+        method: 'POST',
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_username: usernameQuery })
       });
       if (!response.ok) throw new Error('Username lookup failed: ' + response.status);
       const rows = await response.json();
-      const match = rows.find(row => String(row.username).toLowerCase() === usernameQuery.toLowerCase());
+      const match = Array.isArray(rows) ? rows[0] : rows;
       if (!match) return res.status(404).send('Profile not found');
       freeupperId = normalizeId(match.freeupper_id);
     } catch (error) {

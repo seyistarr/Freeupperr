@@ -120,7 +120,7 @@ test('the actual PWA worker replaces the old cache and serves v4 sound consumers
     await page.reload();
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     const keys = await page.evaluate(() => caches.keys());
-    assert.ok(keys.includes('freeupper-pwa-v33-fullscreen-authors'));
+    assert.ok(keys.includes('freeupper-pwa-v34-default-identity'));
     assert.ok(!keys.includes('freeupper-pwa-v29-sidebar'));
     await context.setOffline(true);
     const files = await page.evaluate(async () => {
