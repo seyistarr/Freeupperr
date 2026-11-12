@@ -19,6 +19,8 @@ const inlineStyles = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)]
 const tabs = requireFragment(/<div class="cl-tabs" id="clTabs"[\s\S]*?<\/div>/, 'chat tabs');
 const search = requireFragment(/<div class="search-box" id="sbSearchBox">[\s\S]*?<\/div>/, 'chat search');
 const newActions = requireFragment(/<div class="nm-actions">[\s\S]*?<\/div>/, 'New Message actions');
+const header = requireFragment(/<header class="chat-header">[\s\S]*?<\/header>/, 'chat header');
+const sidebarTop = requireFragment(/<div class="sidebar-top">[\s\S]*?<button[\s\S]*?<\/button><\/div>/, 'sidebar title and New button');
 const tabStart = js.indexOf('    const TAB_META = {');
 const tabEnd = js.indexOf('    function isIncomingRequest(', tabStart);
 const switchStart = js.indexOf('    window.setChatTab = function(tab)');
@@ -26,7 +28,7 @@ const switchEnd = js.indexOf('    function updateChatTabCounts()', switchStart);
 assert.ok(tabStart >= 0 && tabEnd > tabStart && switchStart >= 0 && switchEnd > switchStart);
 const productionHandlers = js.slice(tabStart, tabEnd) + '\n' + js.slice(switchStart, switchEnd);
 const markup = '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
-  '<style>' + inlineStyles + '</style><body><div class="conversations-sidebar"><div id="sbTitle">Messages</div><p id="sbSub">Your conversations</p>' +
+  '<style>' + inlineStyles + '</style><body>' + header + '<div class="conversations-sidebar">' + sidebarTop +
   tabs + search + '<div id="conversationList"></div>' +
   '<div id="newChatModal" class="mfs" style="position:static;visibility:visible;opacity:1;transform:none;z-index:auto"><h2>New Message</h2>' + newActions +
   '<div id="userSearchResults" class="fs-list"></div></div></div></body></html>';
@@ -42,12 +44,16 @@ const harness = `
 ` + productionHandlers;
 
 async function withPage(viewport, callback, reducedMotion = 'no-preference') {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true,
+    executablePath: process.env.FREEUPPER_CHROMIUM || undefined, args: ['--no-sandbox'] });
   try {
     const page = await browser.newPage({ viewport, reducedMotion });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
     await page.setContent(markup, { waitUntil: 'load' });
     await page.addScriptTag({ content: harness });
     await callback(page);
+    assert.deepEqual(errors, [], 'Production handlers must not throw browser errors');
   } finally {
     await browser.close();
   }
@@ -60,17 +66,24 @@ for (const [label, viewport] of [
   test('premium chat tabs and search visibility: ' + label, async () => {
     await withPage(viewport, async page => {
       assert.equal(await page.locator('#sbSearchBox').isVisible(), true);
+      assert.equal(await page.locator('#hdrSearch').isVisible(), true);
+      assert.equal(await page.locator('#hdrBack').isVisible(), false);
       await page.locator('[data-tab="unread"]').click();
+      assert.equal(await page.locator('#hdrSearch').isVisible(), false);
+      assert.equal(await page.locator('#newBtn').isVisible(), false);
+      assert.equal(await page.locator('#hdrBack').isVisible(), true);
       assert.equal(await page.locator('#sbSearchBox').isVisible(), false);
       assert.equal(await page.locator('#sbTitle').textContent(), 'Unread Messages');
       await page.locator('[data-tab="groups"]').click();
       assert.equal(await page.locator('#sbSearchBox').isVisible(), true);
+      assert.equal(await page.locator('#newBtn').isVisible(), false);
       assert.equal(await page.locator('#convSearch').getAttribute('placeholder'), 'Search groups...');
       await page.locator('[data-tab="requests"]').click();
       assert.equal(await page.locator('#sbSearchBox').isVisible(), false);
       assert.equal(await page.locator('#sbTitle').textContent(), 'Message Requests');
       await page.locator('[data-tab="all"]').click();
       assert.equal(await page.locator('#sbSearchBox').isVisible(), true);
+      assert.equal(await page.locator('#newBtn').isVisible(), true);
       const details = await page.evaluate(() => ({
         selected: [...document.querySelectorAll('#clTabs [aria-selected="true"]')].map(x => x.dataset.tab),
         renders: window.__renders
@@ -131,9 +144,9 @@ test('3D chat cards stay in reading order without overlap on mobile', async () =
 });
 
 
-test('polished header has only signed-in profile avatar and no unused search icon', () => {
-  const header = requireFragment(/<header class="chat-header">[\s\S]*?<\/header>/, 'chat header');
-  assert.doesNotMatch(header, /focusSidebarSearch|aria-label="Search conversations"/);
+test('current production header retains contextual back/search controls and signed-in avatar', () => {
+  assert.match(header, /id="hdrBack"[^>]+onclick="setChatTab\('all'\)"/);
+  assert.match(header, /id="hdrSearch"[^>]+onclick="focusSidebarSearch\(\)"/);
   assert.match(header, /id="myHeaderAvatar"[^>]+alt="My profile photo"/);
   assert.match(js, /headerAvatar\.src = currentUserProfile\.avatar_url/);
   assert.match(js, /user\.user_metadata\?\.avatar_url/);
