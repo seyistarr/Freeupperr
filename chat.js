@@ -13,6 +13,12 @@
     const DEFAULT_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="#E5E7EB"/><circle cx="50" cy="38" r="16" fill="#9CA3AF"/><ellipse cx="50" cy="75" rx="30" ry="22" fill="#9CA3AF"/></svg>'
     );
+    // ═══ CHANGE 1A ═══
+    const DEFAULT_GROUP_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a78bfa"/><stop offset="1" stop-color="#6d28d9"/></linearGradient></defs><rect width="100" height="100" fill="url(#g)"/><circle cx="38" cy="40" r="11" fill="#fff"/><circle cx="64" cy="44" r="9" fill="#fff" opacity=".8"/><path d="M18 76c0-12 9-20 20-20s20 8 20 20z" fill="#fff"/><path d="M58 76c0-9 5-15 13-15s12 6 12 15z" fill="#fff" opacity=".8"/></svg>');
+    const LOCK_SVG = '<svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+    const USERS_SVG = '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.5c2.2.7 3.5 2.6 3.5 5.5"/></svg>';
+    // ═══ end CHANGE 1A ═══
 
     // ============================================================
     // GLOBAL STATE
@@ -191,6 +197,13 @@
     function getDisplayName(profile) {
         return profile?.display_name || profile?.username || 'User';
     }
+
+    // ═══ CHANGE 1C ═══
+    function setChatHeaderName(name, badgeHtml) {
+        chatPartnerName.innerHTML =
+            '<span class="cpn-text">' + escapeHtml(name || 'User') + '</span>' + (badgeHtml || '');
+    }
+    // ═══ end CHANGE 1C ═══
 
     function mediaLabel(type) {
         return type === 'image' ? '📷 Photo' : type === 'video' ? '🎬 Video' :
@@ -1103,6 +1116,11 @@
         });
         document.getElementById('sbTitle').textContent = TAB_META[tab].title;
         document.getElementById('sbSub').textContent = TAB_META[tab].sub;
+        // ═══ CHANGE 1G ═══
+        document.getElementById('hdrBack').classList.toggle('hidden', tab === 'all');
+        document.getElementById('hdrSearch').classList.toggle('hidden', tab !== 'all');
+        document.getElementById('newBtn').classList.toggle('hidden', tab !== 'all');
+        // ═══ end CHANGE 1G ═══
         document.getElementById('sbSearchBox').style.display = TAB_META[tab].search ? '' : 'none';
         convSearch.placeholder = TAB_META[tab].placeholder;
         convSearch.value = '';
@@ -1221,7 +1239,7 @@
                 else name = other.display_name || other.username || 'User';
 
                 const avatar = c.is_note ? (c.note_avatar || DEFAULT_AVATAR)
-                    : c.is_group ? (c.group_avatar || DEFAULT_AVATAR) : getAvatar(other);
+                    : c.is_group ? (c.group_avatar || DEFAULT_GROUP_AVATAR) : getAvatar(other);
 
                 let lastMsg = chatTab === 'requests' ? 'Wants to message you' : 'No messages yet';
                 let readTick = '';
@@ -1235,7 +1253,14 @@
                             `<svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--p);fill:none;stroke-width:2.4;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>`;
                     }
                 }
-                const time = c.lastMessageTime ? formatDate(c.lastMessageTime) : '';
+                // ═══ CHANGE 2A ═══
+                let time = c.lastMessageTime ? formatDate(c.lastMessageTime) : '';
+                if (chatTab === 'requests' && time && !time.includes(',') && time !== 'Just now') time += ' ago';
+                const isGroupAv = c.is_group && !c.is_note;
+                const dot = (!c.is_group && !c.is_note && other.is_online)
+                    ? `<span class="online-dot ${chatTab === 'requests' ? 'purple' : ''}"></span>` : '';
+                const lockIcon = c.is_note ? `<span class="lock-ico">${LOCK_SVG}</span>` : '';
+                // ═══ end CHANGE 2A ═══
                 const active = c.id === selectedConversationId ? 'active' : '';
                 const badge = c.is_group ? '' : getVerifiedBadge(other.verified_status);
                 const isMuted = (c.muted_by || []).includes(currentUserId);
@@ -1251,31 +1276,36 @@
                 const unreadDot = c.unreadCount > 0
                     ? '<span class="unread-pill" aria-label="Unread messages">' + (c.unreadCount > 99 ? '99+' : c.unreadCount) + '</span>'
                     : '';
-                const groupMeta = chatTab === 'groups' ? '<div class="grp-meta">' + (groupMemberCounts[c.id] === undefined ? 'Group' : groupMemberCounts[c.id] + ' member' + (groupMemberCounts[c.id] === 1 ? '' : 's')) + '</div>' : '';
+                // ═══ CHANGE 2B ═══
+                const mc = groupMemberCounts[c.id];
+                const memberTxt = mc === undefined ? 'Group' : mc.toLocaleString() + ' member' + (mc === 1 ? '' : 's');
+                const isPriv = !!c.is_private;
+                const groupMeta = chatTab === 'groups'
+                    ? `<div class="grp-meta">${isPriv ? LOCK_SVG : USERS_SVG}<span>${memberTxt} • ${isPriv ? 'Private' : 'Public'}</span></div>` : '';
+                // ═══ end CHANGE 2B ═══
                 const requestButtons = chatTab === 'requests' ? `<div class="req-actions"><button class="req-btn ignore" onclick="event.stopPropagation();ignoreRequest('${c.id}')">Ignore</button><button class="req-btn accept" onclick="event.stopPropagation();acceptRequest('${c.id}')">Accept</button></div>` : '';
 
+                // ═══ CHANGE 2C ═══
                 return `
-                            <div class="conv-swipe-wrap" data-conv-id="${c.id}">
-                                <div class="conv-item ${active}" ${chatTab === 'requests' ? '' : `onclick="handleConvTap(\'${c.id}\')"`}>
-                                    <div class="av"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${hasDisappearing ? '<span class="disap-badge"><i class="ri-time-line"></i></span>' : ''}</div>
-                                    <div class="conv-info">
-                                        <div class="conv-name">${pinIcon}<span class="conv-display-name">${escapeHtml(name)}</span> ${badge} ${muteIcon}</div>
-                                        ${groupMeta}
-                                        <div class="conv-last-msg">${readTick}<span>${escapeHtml(lastMsg)}</span></div>
-                                    </div>
-                                    <div class="conv-time-row">
-                                        <div class="conv-time">${time}</div>
-                                        ${requestButtons}
-                                        <div class="conv-actions-inline">
-                                            ${unreadDot}
-                                            <button class="conv-more-btn" onclick="event.stopPropagation();openConvActionSheet('${c.id}')" title="More options">
-                                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
+<div class="conv-swipe-wrap" data-conv-id="${c.id}">
+  <div class="conv-item ${active} ${c.unreadCount > 0 && chatTab !== 'requests' ? 'has-unread' : ''}" ${chatTab === 'requests' ? '' : `onclick="handleConvTap('${c.id}')"`}>
+    <div class="av ${isGroupAv ? 'av-group' : ''}"><img src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${dot}${hasDisappearing ? '<span class="disap-badge"><i class="ri-time-line"></i></span>' : ''}</div>
+    <div class="conv-info">
+      <div class="conv-name">${pinIcon}<span class="conv-display-name">${escapeHtml(name)}</span>${badge}${lockIcon}${muteIcon}</div>
+      ${groupMeta}
+      <div class="conv-last-msg">${readTick}<span>${escapeHtml(lastMsg)}</span></div>
+    </div>
+    <div class="conv-time-row">
+      <div class="conv-time">${time}</div>
+      ${requestButtons}
+      ${chatTab === 'requests' ? '' : `<div class="conv-actions-inline">${unreadDot}
+        <button class="conv-more-btn" onclick="event.stopPropagation();openConvActionSheet('${c.id}')" title="More options">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button></div>`}
+    </div>
+  </div>
+</div>`;
+                // ═══ end CHANGE 2C ═══
             }).join('');
         }
 
@@ -1330,21 +1360,24 @@
             }
         }
 
+        // ═══ CHANGE 1D ═══
         const other = conv.otherUser || {};
+        chatPartnerAvatar.classList.toggle('av-group', !!conv.is_group && !conv.is_note);
         if (conv.is_note) {
-            chatPartnerName.textContent = conv.note_name || 'My Note';
+            setChatHeaderName(conv.note_name || 'My Note');
             chatPartnerAvatar.src = conv.note_avatar || DEFAULT_AVATAR;
             chatPartnerStatus.textContent = window.fuT('Only you can see this');
         } else if (conv.is_group) {
-            chatPartnerName.textContent = conv.group_name || 'Group';
-            chatPartnerAvatar.src = conv.group_avatar || DEFAULT_AVATAR;
+            setChatHeaderName(conv.group_name || 'Group');
+            chatPartnerAvatar.src = conv.group_avatar || DEFAULT_GROUP_AVATAR;
             chatPartnerStatus.textContent = window.fuT('Loading…');
             populateGroupHeaderSubtitle(conv.id);
         } else {
-            chatPartnerName.innerHTML = escapeHtml(other.display_name || other.username || 'User') + ' ' + getVerifiedBadge(other.verified_status);
+            setChatHeaderName(getDisplayName(other), getVerifiedBadge(other.verified_status));
             chatPartnerAvatar.src = getAvatar(other);
             renderPartnerStatus(conv);
         }
+        // ═══ end CHANGE 1D ═══
 
         if (window.innerWidth <= 768) {
             document.getElementById('conversationsSidebar').classList.add('hidden');
@@ -1650,7 +1683,7 @@
             const preview = {
                 id: data.id,
                 name: data.group_name || 'Group',
-                avatar: data.group_avatar || DEFAULT_AVATAR,
+                avatar: data.group_avatar || DEFAULT_GROUP_AVATAR,
                 description: data.group_description || '',
                 memberCount: count || 0
             };
@@ -2225,7 +2258,7 @@
     }
 
     function forwardRowAvatar(c) {
-        return c.is_note ? (c.note_avatar || DEFAULT_AVATAR) : (c.is_group ? (c.group_avatar || DEFAULT_AVATAR) :
+        return c.is_note ? (c.note_avatar || DEFAULT_AVATAR) : (c.is_group ? (c.group_avatar || DEFAULT_GROUP_AVATAR) :
             getAvatar(c.otherUser || {}));
     }
 
@@ -2719,7 +2752,7 @@
             const avatar = c.is_note
                 ? (c.note_avatar || DEFAULT_AVATAR)
                 : c.is_group
-                    ? (c.group_avatar || DEFAULT_AVATAR)
+                    ? (c.group_avatar || DEFAULT_GROUP_AVATAR)
                     : getAvatar(other);
             const last = c.lastMessage;
             let preview = 'No messages yet';
@@ -3043,7 +3076,10 @@
                 if (conv) {
                     conv.otherUser = { ...(conv.otherUser || {}), ...updated };
                     if (selectedConversationId === conv.id) {
+                        // ═══ CHANGE 1E ═══
+                        setChatHeaderName(getDisplayName(conv.otherUser), getVerifiedBadge(conv.otherUser.verified_status));
                         renderPartnerStatus(conv);
+                        // ═══ end CHANGE 1E ═══
                     }
                 }
             })
@@ -3414,8 +3450,10 @@
         // Only dynamic friend/search results belong in this container.
         let html = '';
         if (friendProfiles.length) {
-            html += `<div class="search-section-header" data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</div>` +
-                friendProfiles.map(u => userRowHtml(u, true)).join('');
+            // ═══ CHANGE 3 ═══
+            html += `<div class="search-section-header">Friends</div><div class="friends-rail">` +
+                friendProfiles.map(u => userRowHtml(u, true)).join('') + `</div>`;
+            // ═══ end CHANGE 3 ═══
         } else {
             html +=
                 `<div class="fw-empty"><div class="fw-empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><h3>Search FreeUpper</h3><p>Type a name or @username to find anyone on FreeUpper.</p></div>`;
@@ -3424,21 +3462,21 @@
         scheduleNewMessage3D();
     }
 
+    // ═══ CHANGE 3: userRowHtml with online dot + avatar wrap ═══
     function userRowHtml(u, isFriend) {
         const name = getDisplayName(u);
-        const avatar = getAvatar(u);
-        const badge = getVerifiedBadge(u.verified_status);
+        const dot = u.is_online ? '<span class="online-dot"></span>' : '';
         return `
-                    <div class="u-row${isFriend ? ' u-row-friend' : ''}" onclick="startConversationWith('${u.id}')">
-                        <img class="u-av" src="${avatar}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>
-                        <div class="u-info">
-                            <div class="u-name">${escapeHtml(name)} ${badge}</div>
-                            <div class="u-handle">@${escapeHtml(u.username || '')}</div>
-                        </div>
-                        ${isFriend ? '<span class="u-tag">Friend</span>' : ''}
-                    </div>
-                `;
+    <div class="u-row${isFriend ? ' u-row-friend' : ''}" onclick="startConversationWith('${u.id}')">
+        <span class="u-av-wrap"><img class="u-av" src="${getAvatar(u)}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${dot}</span>
+        <div class="u-info">
+            <div class="u-name">${escapeHtml(name)} ${getVerifiedBadge(u.verified_status)}</div>
+            <div class="u-handle">@${escapeHtml(u.username || '')}</div>
+        </div>
+        ${isFriend ? '<span class="u-tag">Friend</span>' : ''}
+    </div>`;
     }
+    // ═══ end CHANGE 3 ═══
 
     window.onUserSearchInput = function(value) {
         clearTimeout(userSearchDebounce);
@@ -3482,8 +3520,9 @@
             const friendResults = results.filter(u => mutualFollowers.has(u.id));
             const otherResults = results.filter(u => !mutualFollowers.has(u.id));
             if (friendResults.length) {
-                html += `<div class="search-section-header" data-i18n=&#70;&#114;&#105;&#101;&#110;&#100;&#115;>Friends</div>` + friendResults.map(u => userRowHtml(u,
-                    true)).join('');
+                // ═══ CHANGE 3 ═══
+                html += `<div class="search-section-header">Friends</div><div class="friends-rail">` + friendResults.map(u => userRowHtml(u, true)).join('') + `</div>`;
+                // ═══ end CHANGE 3 ═══
             }
             if (otherResults.length) {
                 html += `<div class="search-section-header" data-i18n=&#65;&#108;&#108;&#32;&#85;&#115;&#101;&#114;&#115;>All Users</div>` + otherResults.map(u => userRowHtml(u,
@@ -3794,6 +3833,9 @@
         if (!conv) return;
         const groupRows = document.querySelectorAll('.group-only');
         const dmRows = document.querySelectorAll('.dm-only');
+        // ═══ CHANGE 1F ═══
+        document.getElementById('cpAvatarWrapper').classList.toggle('av-group', !!conv.is_group && !conv.is_note);
+        // ═══ end CHANGE 1F ═══
 
         let isAdmin = false;
         if (conv.is_group) {
@@ -3831,7 +3873,7 @@
         if (conv.is_group) {
             groupRows.forEach(el => el.classList.remove('hidden'));
             dmRows.forEach(el => el.classList.add('hidden'));
-            document.getElementById('cpAvatar').src = conv.group_avatar || DEFAULT_AVATAR;
+            document.getElementById('cpAvatar').src = conv.group_avatar || DEFAULT_GROUP_AVATAR;
             document.getElementById('cpNameText').textContent = conv.group_name || 'Group';
             document.getElementById('cpEditIcon').style.display = 'inline';
             const badge = document.getElementById('cpUploadBadge');
