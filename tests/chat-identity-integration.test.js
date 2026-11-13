@@ -14,7 +14,7 @@ function section(start, end) {
 const functions = [
   section('    function getDisplayName(', '    function mediaLabel('),
   section('    async function loadConversations()', '    // Review-branch tab navigation:'),
-  section('    window.selectConversation =', '    // ═══════════════ UPDATED:'),
+  section('    window.selectConversation =', '    function renderPartnerStatus('),
   section('    async function deleteConversationForMe(', "    convList.addEventListener('touchstart'"),
   section('    window.startConversationWith =', '    // ═══════════════════════════════════════════════════════════════════'),
   section('    function userRowHtml(', '    window.onUserSearchInput =')
@@ -79,6 +79,7 @@ function fixture() {
     } },
     getAvatar: p => p.avatar_url || 'avatar', getVerifiedBadge: () => '', avatarErrAttr: () => '',
     escapeHtml(value) { return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); },
+    setChatHeaderName: (name) => { node('chatPartnerName').innerHTML = '<span class="cpn-text">' + name + '</span>'; },
     renderConversations: () => events.push('render'),
     loadGroupMemberCounts: async () => {},
     getBlockStatus: async () => ({ blocked: false }),
