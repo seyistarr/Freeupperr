@@ -6327,7 +6327,10 @@
             headerAvatar.alt = 'My profile photo';
         }
 
-        await sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
+        // Presence is best-effort: an RLS/network failure must not block chat loading.
+        Promise.resolve(sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId))
+            .then(({ error }) => { if (error) console.warn('Chat presence update failed:', error); })
+            .catch(err => console.warn('Chat presence update failed:', err));
         presenceHeartbeatInterval = setInterval(() => {
             sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId).then(()=>{}).catch(()=>{});
         }, 25000);
@@ -6344,8 +6347,11 @@
 
         setupFreeUpperNotifications();
 
-        await Promise.all([loadMutualFollowers(), loadMyBlockList()]);
+        // Conversations are the primary screen content. Auxiliary friend/block
+        // lookups must never delay or prevent the conversation list rendering.
         await loadConversations();
+        Promise.allSettled([loadMutualFollowers(), loadMyBlockList()])
+            .then(() => { if (currentUserId) renderConversations(convSearch?.value || ''); });
         subscribeToMessages();
         subscribeToConversations();
         subscribeToPartnerPresence();
