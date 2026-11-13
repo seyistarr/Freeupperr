@@ -94,14 +94,16 @@
         return member && (member.role === 'owner' || member.role === 'admin');
     }
 
+    // ═══ CHANGE B: include avatar in cache ═══
     async function ensureGroupSenderNames(convId, senderIds) {
         const missing = senderIds.filter(id => !groupSenderNameCache[id]);
         if (!missing.length) return;
-        const { data } = await sb.from('profiles').select('id, display_name, username, verified_status').in('id', missing);
+        const { data } = await sb.from('profiles').select('id, display_name, username, avatar_url, verified_status').in('id', missing);
         (data || []).forEach(p => {
-            groupSenderNameCache[p.id] = { name: getDisplayName(p), color: senderColorFor(p.id), badge: getVerifiedBadge(p.verified_status) };
+            groupSenderNameCache[p.id] = { name: getDisplayName(p), color: senderColorFor(p.id), badge: getVerifiedBadge(p.verified_status), avatar: getAvatar(p) };
         });
     }
+    // ═══ end CHANGE B ═══
 
     let archivedRowShown = false;
     let chatTab = 'all';
@@ -219,6 +221,44 @@
         return `<span class="mini-badge" title="${label}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>`;
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // ═══ CHANGE A: chat-space helpers (online + receipts + emoji run) ═══
+    // ═══════════════════════════════════════════════════════════════════
+    function isUserOnline(p) {
+        if (!p || !p.is_online) return false;
+        const t = window.FreeUpperTime.parseTimestamp(p.last_seen_at);
+        return !t || (Date.now() - t.getTime()) < 75000; // heartbeat is 25s
+    }
+
+    function receiptHtml(msg) {
+        if (msg.failed) return '';
+        const seen = (msg.message_reads || []).some(r => r.user_id !== currentUserId);
+        return seen
+            ? '<span class="read-receipt read" title="Seen"><svg viewBox="0 0 24 24"><path d="M2 12.5l4.5 4.5L17 7"/><path d="M11.5 16.5l1 1L23 7"/></svg></span>'
+            : '<span class="read-receipt" title="Sent"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>';
+    }
+
+    function isShortEmojiRun(text) {
+        const t = (text || '').replace(/\s+/g, '');
+        return /^(?:\p{Extended_Pictographic}\uFE0F?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*){2,3}$/u.test(t);
+    }
+
+    function wrapReceivedRow(inner, msg) {
+        const conv = currentConv();
+        if (!conv || conv.is_note) return inner;
+        let src, online = false;
+        if (conv.is_group) {
+            const info = groupSenderNameCache[msg.sender_id];
+            src = (info && info.avatar) || DEFAULT_AVATAR;
+        } else {
+            const o = conv.otherUser || {};
+            src = getAvatar(o);
+            online = isUserOnline(o);
+        }
+        return `<div class="msg-row received"><div class="msg-av"><img src="${src}" alt="" ${avatarErrAttr()}><span class="ring-dot${online ? ' on' : ''}"></span></div>${inner}</div>`;
+    }
+    // ═══ end CHANGE A ═══
+
     function scrollToBottom() {
         messagesArea.scrollTop = messagesArea.scrollHeight;
     }
@@ -288,17 +328,12 @@
         btn.textContent = isExpanded ? 'See more' : 'See less';
     };
 
+    // ═══ CHANGE C: single receiptHtml path ═══
     function mediaTimeOverlayHtml(msg, isSent) {
-        let receipt = '';
-        if (isSent && !msg.failed) {
-            const reads = msg.message_reads || [];
-            const otherRead = reads.some(r => r.user_id !== currentUserId);
-            receipt = otherRead ?
-                `<span class="read-receipt read"><svg viewBox="0 0 24 24"><path d="M18 6L7 17l-5-5"/><path d="M23 6L12 17l-1-1"/></svg></span>` :
-                `<span class="read-receipt"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>`;
-        }
+        const receipt = isSent ? receiptHtml(msg) : '';
         return `<div class="media-time-overlay">${formatTime(msg.created_at)}${receipt}</div>`;
     }
+    // ═══ end CHANGE C ═══
 
     const SINGLE_EMOJI_ANIMATIONS = {
         '😘': 'anim-kiss', '❤️': 'anim-heartbeat', '😂': 'anim-laugh',
@@ -316,16 +351,10 @@
         return trimmed;
     }
 
+    // ═══ CHANGE C: single receiptHtml path ═══
     function renderSingleEmojiBubble(emoji, msg, isSent) {
         const animClass = SINGLE_EMOJI_ANIMATIONS[emoji] || 'anim-pop';
-        let receipt = '';
-        if (isSent && !msg.failed) {
-            const reads = msg.message_reads || [];
-            const otherRead = reads.some(r => r.user_id !== currentUserId);
-            receipt = otherRead ?
-                `<span class="read-receipt read"><svg viewBox="0 0 24 24"><path d="M18 6L7 17l-5-5"/><path d="M23 6L12 17l-1-1"/></svg></span>` :
-                `<span class="read-receipt"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>`;
-        }
+        const receipt = isSent ? receiptHtml(msg) : '';
         return `
             <div class="emoji-msg-wrap ${isSent ? 'sent' : 'received'}">
                 <div class="emoji-msg-face ${animClass}">${emoji}${animClass === 'anim-kiss' ? '<span class="kiss-particle">💋</span>' : ''}</div>
@@ -333,6 +362,7 @@
             </div>
         `;
     }
+    // ═══ end CHANGE C ═══
 
     function renderReactionSlate(reactionList, msgId, mediaIndex) {
         if (!reactionList.length) return '';
@@ -709,6 +739,13 @@
         const isMine = msg && msg.sender_id === currentUserId;
         document.getElementById('lbDeleteBtn').style.display = (isMine && !lbViewOnce) ? 'flex' : 'none';
 
+        // ═══ CHANGE K.1: gate the dock buttons for view-once ═══
+        const hideAct = lbViewOnce;
+        byId('lbDownloadBtn').style.display = hideAct ? 'none' : 'flex';
+        byId('lbSaveBtn').style.display = hideAct ? 'none' : 'flex';
+        byId('lbShareBtn').style.display = (hideAct || !msgId) ? 'none' : 'flex';
+        // ═══ end CHANGE K.1 ═══
+
         renderLbThumbs();
         updateLbView();
 
@@ -816,6 +853,9 @@
         document.querySelector('.fu-lb-nav-prev').style.visibility = lbIndex > 0 ? 'visible' : 'hidden';
         document.querySelector('.fu-lb-nav-next').style.visibility = lbIndex < lbItems.length - 1 ? 'visible' :
             'hidden';
+        // ═══ CHANGE K.2: refresh save state per slide ═══
+        refreshLbSaveState();
+        // ═══ end CHANGE K.2 ═══
     }
 
     window.lbNav = function(dir) {
@@ -909,6 +949,28 @@
         closeLightbox();
         deleteMessage(lbMsgId, 'everyone');
     };
+
+    // ═══ CHANGE K.3: lightbox save state + save toggle ═══
+    function refreshLbSaveState() {
+        const b = byId('lbSaveBtn');
+        if (!b) return;
+        const it = lbItems[lbIndex];
+        const saved = !!(it && isSaved('media', it.url));
+        b.classList.toggle('saved', saved);
+        b.querySelector('span').textContent = saved ? 'Saved' : 'Save';
+    }
+    window.lbSaveCurrent = function() {
+        const it = lbItems[lbIndex];
+        if (!it || !selectedConversationId) return;
+        if (isSaved('media', it.url)) {
+            removeSaved(savedKey('media', it.url));
+            showToast('Removed from saved', 'o');
+        } else if (saveItem({ kind: 'media', url: it.url, mediaType: it.type, msgId: lbMsgId })) {
+            showToast('Saved to chat info', 'g');
+        }
+        refreshLbSaveState();
+    };
+    // ═══ end CHANGE K.3 ═══
 
     window.openImage = function(url, msgId) {
         const msg = messages.find(m => m.id === msgId);
@@ -1257,8 +1319,10 @@
                 let time = c.lastMessageTime ? formatDate(c.lastMessageTime) : '';
                 if (chatTab === 'requests' && time && !time.includes(',') && time !== 'Just now') time += ' ago';
                 const isGroupAv = c.is_group && !c.is_note;
-                const dot = (!c.is_group && !c.is_note && other.is_online)
+                // ═══ CHANGE D: online dot uses freshness check ═══
+                const dot = (!c.is_group && !c.is_note && isUserOnline(other))
                     ? `<span class="online-dot ${chatTab === 'requests' ? 'purple' : ''}"></span>` : '';
+                // ═══ end CHANGE D ═══
                 const lockIcon = c.is_note ? `<span class="lock-ico">${LOCK_SVG}</span>` : '';
                 // ═══ end CHANGE 2A ═══
                 const active = c.id === selectedConversationId ? 'active' : '';
@@ -1433,23 +1497,25 @@
         await setupTypingChannel(convId);
     };
 
-    // ═══════════════ UPDATED: header status works for DMs AND groups ═══════════════
+    // ═══ CHANGE D: header status with green dot + online check ═══
     function renderPartnerStatus(conv) {
-        if (!conv || conv.is_note) return;
+        const dot = byId('chatOnlineDot');
+        if (!conv || conv.is_note) { if (dot) dot.classList.add('hidden'); return; }
         if (selectedConversationId !== conv.id) return;
-        if (typingUsersMap.size > 0) {
-            chatPartnerStatus.textContent = window.fuT('Typing…');
-            return;
-        }
+        if (typingUsersMap.size > 0) { chatPartnerStatus.textContent = window.fuT('Typing…'); return; }
         if (conv.is_group) {
+            if (dot) dot.classList.add('hidden');
             populateGroupHeaderSubtitle(conv.id);
             return;
         }
         const other = conv.otherUser || {};
-        chatPartnerStatus.textContent = other.is_online
-            ? 'Online'
-            : formatLastSeen(other.last_seen_at);
+        const online = isUserOnline(other);
+        if (dot) dot.classList.toggle('hidden', !online);
+        chatPartnerStatus.innerHTML = online
+            ? '<span class="status-dot"></span>' + escapeHtml(window.fuT('Online'))
+            : escapeHtml(formatLastSeen(other.last_seen_at));
     }
+    // ═══ end CHANGE D ═══
 
     async function populateGroupHeaderSubtitle(convId) {
         try {
@@ -1880,6 +1946,7 @@
             .media_index === undefined);
             let reactionsHtml = renderReactionSlate(msgLevelReactions, msg.id, null);
 
+            // ═══ CHANGE E.1: single receiptHtml path ═══
             let footerHtml = '';
             if (msg.failed) {
                 footerHtml = `
@@ -1889,16 +1956,9 @@
                             </div>
                         `;
             } else {
-                let readReceiptHtml = '';
-                if (isSent) {
-                    const reads = msg.message_reads || [];
-                    const otherRead = reads.some(r => r.user_id !== currentUserId);
-                    readReceiptHtml = otherRead ?
-                        `<span class="read-receipt read"><svg viewBox="0 0 24 24"><path d="M18 6L7 17l-5-5"/><path d="M23 6L12 17l-1-1"/></svg></span>` :
-                        `<span class="read-receipt"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>`;
-                }
-                footerHtml = `<div class="msg-footer">${msg.edited_at ? '<span class="msg-edited">Edited</span>' : ''}<span class="msg-time">${formatTime(msg.created_at)}</span>${isSent ? readReceiptHtml : ''}</div>`;
+                footerHtml = `<div class="msg-footer">${msg.edited_at ? '<span class="msg-edited">Edited</span>' : ''}<span class="msg-time">${formatTime(msg.created_at)}</span>${isSent ? receiptHtml(msg) : ''}</div>`;
             }
+            // ═══ end CHANGE E.1 ═══
 
             const conv = conversations.find(c => c.id === selectedConversationId);
             let senderNameHtml = '';
@@ -1910,27 +1970,37 @@
                 }
             }
 
+            // ═══ CHANGE E.2: emoji run + type classes + received row wrapper ═══
             const soloEmojiVal = !msg.reply_to && msg.message_type === 'text' && !isViewOnceMsg ?
                 isSingleEmojiMessage(msg.text || '') : null;
+            const emojiRun = !soloEmojiVal && msg.message_type === 'text' && !msg.reply_to && !isViewOnceMsg &&
+                isShortEmojiRun(msg.text || '');
+            const typeCls =
+                (hasMediaBubble(msg, textContent) ? ' has-media' : '') +
+                (msg.message_type === 'voice' ? ' has-voice' : '') +
+                (msg.message_type === 'poll' ? ' has-poll' : '') +
+                (emojiRun ? ' emoji-only' : '');
+
+            let bubbleHtml;
             if (soloEmojiVal) {
-                html += `
-                        <div class="message-bubble-emoji-outer ${isSent ? 'sent' : 'received'}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:20px;' : ''}">
+                bubbleHtml = `
+                        <div class="message-bubble-emoji-outer ${msgClass}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:20px;' : ''}">
                             ${senderNameHtml}
                             ${renderSingleEmojiBubble(soloEmojiVal, msg, isSent)}
                             ${reactionsHtml ? `<div class="msg-reactions-row">${reactionsHtml}</div>` : ''}
-                        </div>
-                    `;
+                        </div>`;
             } else {
-                html += `
-                        <div class="message-bubble ${msgClass}${msg.failed ? ' failed' : ''}${isMediaOnly ? ' media-only' : ''}${hasMediaBubble(msg, textContent) ? ' has-media' : ''}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:20px;' : ''}">
+                bubbleHtml = `
+                        <div class="message-bubble ${msgClass}${msg.failed ? ' failed' : ''}${isMediaOnly ? ' media-only' : ''}${typeCls}" data-msg-id="${msg.id}" data-sender-id="${msg.sender_id}" oncontextmenu="openContextMenu(event, '${msg.id}')" style="${reactionsHtml ? 'margin-bottom:20px;' : ''}">
                             ${senderNameHtml}
                             ${replyHtml}
                             ${contentHtml}
                             ${reactionsHtml ? `<div class="msg-reactions-row">${reactionsHtml}</div>` : ''}
                             ${footerHtml}
-                        </div>
-                    `;
+                        </div>`;
             }
+            html += isSent ? bubbleHtml : wrapReceivedRow(bubbleHtml, msg);
+            // ═══ end CHANGE E.2 ═══
         });
 
         messagesArea.innerHTML = html;
@@ -1984,7 +2054,9 @@
     let currentAudioBtn = null;
     let voiceRAF = null;
 
-    const VOICE_WAVE_BAR_COUNT = 28;
+    // ═══ CHANGE F: bump waveform bar count ═══
+    const VOICE_WAVE_BAR_COUNT = 44;
+    // ═══ end CHANGE F ═══
     const voiceWaveCache = {};
 
     function seededWaveform(seed) {
@@ -2339,6 +2411,9 @@
         const conv = currentConv();
         const isPinned = conv && conv.pinned_message_id === msgId;
         const isViewOnce = !!(msg.metadata && msg.metadata.view_once);
+        // ═══ CHANGE L.1: gate the Save row ═══
+        const canSave = !isViewOnce && (['media', 'image', 'video', 'document'].includes(msg.message_type) || extractUrls(msg.text || '').length > 0);
+        // ═══ end CHANGE L.1 ═══
 
         let sheet = document.getElementById('fuMsgActionSheet');
         if (!sheet) {
@@ -2367,6 +2442,10 @@
                                 <svg viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
                                 Forward
                             </button>
+                            ${canSave ? `<button class="fu-sheet-item" onclick="saveMessageToChat('${msgId}');closeMessageActionSheet();">
+                                <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                                Save to chat info
+                            </button>` : ''}
                             <button class="fu-sheet-item" onclick="togglePinMessage('${msgId}');closeMessageActionSheet();">
                                 <svg viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.4-5.6a2 2 0 0 0-.6-1L15 8V4h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0-2h1v4l-2 2.4a2 2 0 0 0-.6 1L5 17z"/></svg>
                                 ${isPinned ? 'Unpin Message' : 'Pin Message'}
@@ -3086,6 +3165,40 @@
             .subscribe();
     }
 
+    // ═══ CHANGE H: realtime seen ticks + fallback poll ═══
+    let readsSubscription = null;
+
+    function applyReadRow(row) {
+        if (!row || row.user_id === currentUserId) return;
+        const msg = messages.find(m => m.id === row.message_id);
+        if (!msg) return;
+        if ((msg.message_reads || []).some(r => r.user_id === row.user_id)) return;
+        msg.message_reads = [...(msg.message_reads || []), { user_id: row.user_id, read_at: row.read_at }];
+        clearTimeout(applyReadRow._t);
+        applyReadRow._t = setTimeout(renderMessages, 80);
+    }
+
+    function subscribeToReads() {
+        if (readsSubscription) { sb.removeChannel(readsSubscription); readsSubscription = null; }
+        readsSubscription = sb.channel('reads-chat')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reads' }, p => applyReadRow(p.new))
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'message_reads' }, p => applyReadRow(p.new))
+            .subscribe();
+    }
+
+    // Fallback if realtime isn't enabled for message_reads
+    async function refreshSentReceipts() {
+        if (!selectedConversationId || document.hidden) return;
+        const pending = messages
+            .filter(m => m.sender_id === currentUserId && !String(m.id).startsWith('temp-') &&
+                !(m.message_reads || []).some(r => r.user_id !== currentUserId))
+            .map(m => m.id).slice(-100);
+        if (!pending.length) return;
+        const { data, error } = await sb.from('message_reads').select('message_id, user_id, read_at').in('message_id', pending);
+        if (!error && data) data.forEach(applyReadRow);
+    }
+    // ═══ end CHANGE H ═══
+
     async function setupTypingChannel(convId) {
         if (typingChannel) {
             try { await sb.removeChannel(typingChannel); } catch (e) {}
@@ -3465,7 +3578,9 @@
     // ═══ CHANGE 3: userRowHtml with online dot + avatar wrap ═══
     function userRowHtml(u, isFriend) {
         const name = getDisplayName(u);
-        const dot = u.is_online ? '<span class="online-dot"></span>' : '';
+        // ═══ CHANGE D: online dot freshness check ═══
+        const dot = isUserOnline(u) ? '<span class="online-dot"></span>' : '';
+        // ═══ end CHANGE D ═══
         return `
     <div class="u-row${isFriend ? ' u-row-friend' : ''}" onclick="startConversationWith('${u.id}')">
         <span class="u-av-wrap"><img class="u-av" src="${getAvatar(u)}" alt="${escapeHtml(name)}" ${avatarErrAttr()}>${dot}</span>
@@ -3831,6 +3946,9 @@
     async function populateChatProfileModal() {
         const conv = currentConv();
         if (!conv) return;
+        // ═══ CHANGE J: refresh saved count ═══
+        updateSavedCount();
+        // ═══ end CHANGE J ═══
         const groupRows = document.querySelectorAll('.group-only');
         const dmRows = document.querySelectorAll('.dm-only');
         // ═══ CHANGE 1F ═══
@@ -4006,9 +4124,46 @@
             'cpMuteToggle').checked = !muted;
     };
 
+    // ═══ CHANGE M: fuConfirm + blockUser async confirm ═══
+    window.fuConfirm = function({ title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false }) {
+        return new Promise(resolve => {
+            const old = document.getElementById('fuSaasConfirm');
+            if (old) old.remove();
+            const m = document.createElement('div');
+            m.id = 'fuSaasConfirm';
+            m.className = 'saas-modal';
+            m.innerHTML = `
+                <div class="saas-backdrop"></div>
+                <div class="saas-card" role="dialog" aria-modal="true">
+                    <div class="saas-ico ${danger ? 'danger' : ''}">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>
+                    </div>
+                    <h3>${escapeHtml(title)}</h3>
+                    <p>${escapeHtml(message)}</p>
+                    <div class="saas-actions">
+                        <button class="saas-btn ghost" data-r="0">${escapeHtml(cancelText)}</button>
+                        <button class="saas-btn ${danger ? 'danger' : 'primary'}" data-r="1">${escapeHtml(confirmText)}</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
+            const done = v => { m.classList.remove('open'); setTimeout(() => m.remove(), 220); resolve(v); };
+            m.addEventListener('click', e => {
+                if (e.target.classList.contains('saas-backdrop')) return done(false);
+                const b = e.target.closest('[data-r]');
+                if (b) done(b.dataset.r === '1');
+            });
+            requestAnimationFrame(() => m.classList.add('open'));
+        });
+    };
+
     window.blockUser = async function(targetUserId) {
-        if (!confirm(window.fuT('Block this user? They will no longer be able to message you, and you will not see their messages.')))
-            return;
+        const ok = await window.fuConfirm({
+            title: 'Block this user?',
+            message: "They won't be able to message you, and you won't see their messages. You can unblock them anytime from Settings → Blocked Users.",
+            confirmText: 'Block',
+            danger: true
+        });
+        if (!ok) return;
         try {
             const { error } = await sb.from('user_blocks').insert({ blocker_id: currentUserId,
             blocked_id: targetUserId });
@@ -4022,6 +4177,7 @@
             showToast(window.fuT('Failed to block user'), 'r');
         }
     };
+    // ═══ end CHANGE M ═══
 
     window.unblockUser = async function(targetUserId) {
         try {
@@ -4381,6 +4537,7 @@
     ];
     let selectedReportReason = null;
 
+    // ═══ CHANGE N.2: disable submit until a reason is picked ═══
     window.openReportModal = function() {
         const conv = currentConv();
         if (!conv) return;
@@ -4394,18 +4551,23 @@
                         <span>${r}</span>
                     </div>
                 `).join('');
+        byId('reportSubmitBtn').disabled = true;
         document.getElementById('reportModal').classList.add('open');
     };
+    // ═══ end CHANGE N.2 ═══
 
     window.closeReportModal = function() {
         document.getElementById('reportModal').classList.remove('open');
     };
 
+    // ═══ CHANGE N.3: enable submit once a reason is picked ═══
     window.selectReportReason = function(el, reason) {
         document.querySelectorAll('.report-reason-row').forEach(r => r.classList.remove('selected'));
         el.classList.add('selected');
         selectedReportReason = reason;
+        byId('reportSubmitBtn').disabled = false;
     };
+    // ═══ end CHANGE N.3 ═══
 
     window.submitReport = async function() {
         const conv = currentConv();
@@ -4867,6 +5029,141 @@
                 </div>`;
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // ═══ CHANGE J: Saved media, links, docs (UI-only, localStorage) ═══
+    // ═══════════════════════════════════════════════════════════════════
+    const SAVED_PREFIX = 'fu_saved_v1_';
+    let savedTab = 'media';
+    let savedView = [];
+
+    function readSaved() {
+        try { return JSON.parse(localStorage.getItem(SAVED_PREFIX + currentUserId) || '[]'); } catch (e) { return []; }
+    }
+    function writeSaved(list) {
+        try { localStorage.setItem(SAVED_PREFIX + currentUserId, JSON.stringify(list.slice(0, 500))); return true; }
+        catch (e) { showToast('Could not save on this device', 'r'); return false; }
+    }
+    function savedKey(kind, url) { return selectedConversationId + '|' + kind + '|' + url; }
+    function isSaved(kind, url) { const k = savedKey(kind, url); return readSaved().some(s => s.key === k); }
+    function saveItem(item) {
+        const list = readSaved();
+        const key = savedKey(item.kind, item.url);
+        if (list.some(s => s.key === key)) return true;
+        list.unshift({ ...item, key, convId: selectedConversationId, savedAt: new Date().toISOString() });
+        const ok = writeSaved(list);
+        updateSavedCount();
+        return ok;
+    }
+    function removeSaved(key) { writeSaved(readSaved().filter(s => s.key !== key)); updateSavedCount(); }
+    function savedForConv(kind) { return readSaved().filter(s => s.convId === selectedConversationId && s.kind === kind); }
+    function updateSavedCount() {
+        const el = byId('cpSavedCount');
+        if (el) el.textContent = readSaved().filter(s => s.convId === selectedConversationId).length;
+    }
+
+    window.openSavedScreen = function() {
+        byId('fuSavedScreen').classList.add('open');
+        window.switchSavedTab('media');
+    };
+    window.closeSavedScreen = function() {
+        byId('fuSavedScreen').classList.remove('open');
+        updateSavedCount();
+    };
+
+    window.switchSavedTab = function(tab) {
+        savedTab = tab;
+        document.querySelectorAll('#fuSavedTabs .fu-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        const idx = ['media', 'links', 'docs'].indexOf(tab);
+        const ind = byId('fuSavedTabIndicator');
+        ind.style.width = 'calc(33.333% - 4px)';
+        ind.style.left = `calc(${idx * 33.333}% + 4px)`;
+
+        const kind = tab === 'media' ? 'media' : tab === 'links' ? 'link' : 'doc';
+        savedView = savedForConv(kind);
+        const box = byId('fuSavedTabContent');
+        if (!savedView.length) {
+            box.innerHTML = `<div class="fu-empty-tab">Nothing saved yet.<br>Open a photo and tap Save, or long-press a message and choose “Save to chat info”.</div>`;
+            return;
+        }
+        const icons = { pdf: 'ri-file-pdf-2-line', doc: 'ri-file-word-2-line', docx: 'ri-file-word-2-line', xls: 'ri-file-excel-2-line', xlsx: 'ri-file-excel-2-line', ppt: 'ri-file-ppt-2-line', pptx: 'ri-file-ppt-2-line', txt: 'ri-file-text-line' };
+        if (tab === 'media') {
+            box.innerHTML = `<div class="fu-media-grid">${savedView.map((s, i) => `
+                <div class="fu-media-cell" data-sv-open="${i}">
+                    ${s.mediaType === 'video'
+                        ? `<video src="${s.url}" preload="metadata" muted></video><span class="dur"><i class="ri-play-fill"></i></span>`
+                        : `<img src="${s.url}" loading="lazy" alt="">`}
+                    <button class="sv-x" data-sv-rm="${i}" aria-label="Remove">×</button>
+                </div>`).join('')}</div>`;
+        } else if (tab === 'links') {
+            box.innerHTML = savedView.map((s, i) => `
+                <div class="fu-link-row" data-sv-open="${i}">
+                    ${s.image ? `<img class="fu-link-thumb" src="${s.image}" onerror="this.style.display='none'" alt="">` : `<div class="fu-doc-ico"><i class="ri-link"></i></div>`}
+                    <div class="fu-link-info">
+                        <div class="fu-link-title">${escapeHtml(s.title || s.url)}</div>
+                        <div class="fu-link-domain">${escapeHtml(s.domain || '')}</div>
+                    </div>
+                    <button class="sv-x" data-sv-rm="${i}" aria-label="Remove">×</button>
+                </div>`).join('');
+        } else {
+            box.innerHTML = savedView.map((s, i) => `
+                <div class="fu-doc-row" data-sv-open="${i}">
+                    <div class="fu-doc-ico"><i class="${icons[(s.ext || '').toLowerCase()] || 'ri-file-3-line'}"></i></div>
+                    <div class="fu-doc-info"><div class="fu-doc-title">${escapeHtml(s.name || 'Document')}</div><div class="fu-doc-meta">Tap to open</div></div>
+                    <button class="sv-x" data-sv-rm="${i}" aria-label="Remove">×</button>
+                </div>`).join('');
+        }
+    };
+
+    byId('fuSavedTabContent').addEventListener('click', function(e) {
+        const rm = e.target.closest('[data-sv-rm]');
+        if (rm) {
+            e.stopPropagation();
+            const s = savedView[+rm.dataset.svRm];
+            if (s) { removeSaved(s.key); window.switchSavedTab(savedTab); showToast('Removed from saved', 'o'); }
+            return;
+        }
+        const row = e.target.closest('[data-sv-open]');
+        if (!row) return;
+        const i = +row.dataset.svOpen;
+        const s = savedView[i];
+        if (!s) return;
+        if (s.kind === 'media') openMediaLightbox(savedView.map(x => ({ url: x.url, type: x.mediaType })), i, null, 'Saved', s.savedAt);
+        else if (s.kind === 'link') openInAppBrowser(s.url);
+        else openDocument(s.url, s.msgId);
+    });
+
+    window.saveMessageToChat = function(msgId) {
+        const msg = messages.find(m => m.id === msgId);
+        if (!msg || (msg.metadata && msg.metadata.view_once)) return;
+        let n = 0;
+        const mi = msg.metadata && msg.metadata.media_items;
+        if (msg.message_type === 'media' && mi && mi.length) {
+            mi.forEach(it => { if (saveItem({ kind: 'media', url: it.url, mediaType: it.type, msgId: msg.id })) n++; });
+        } else if (msg.message_type === 'image' || msg.message_type === 'video') {
+            const urls = msg.media_urls && msg.media_urls.length ? msg.media_urls : (msg.media_url ? [msg.media_url] : []);
+            urls.forEach(u => { if (saveItem({ kind: 'media', url: u, mediaType: msg.message_type, msgId: msg.id })) n++; });
+        } else if (msg.message_type === 'document' && msg.media_url) {
+            const meta = msg.metadata || {};
+            const name = meta.name || safeDecode(msg.media_url.split('?')[0].split('/').pop() || 'Document');
+            if (saveItem({ kind: 'doc', url: msg.media_url, name, ext: meta.ext || docExt(name), msgId: msg.id })) n++;
+        }
+        extractUrls(msg.text || '').slice(0, 5).forEach(u => {
+            const p = (msg.link_previews || []).find(l => l.url === u) || {};
+            let domain = p.domain || '';
+            if (!domain) { try { domain = new URL(u).hostname.replace(/^www\./, ''); } catch (e) {} }
+            if (saveItem({ kind: 'link', url: u, title: p.title || u, image: p.image || '', domain, msgId: msg.id })) n++;
+        });
+        showToast(n ? 'Saved to chat info' : 'Nothing to save in this message', n ? 'g' : 'o');
+    };
+
+    window.saveDocFromViewer = function(url, msgId) {
+        const msg = messages.find(m => m.id === msgId);
+        const meta = (msg && msg.metadata) || {};
+        const name = meta.name || safeDecode(url.split('?')[0].split('/').pop() || 'Document');
+        if (saveItem({ kind: 'doc', url, name, ext: meta.ext || docExt(name), msgId })) showToast('Saved to chat info', 'g');
+    };
+    // ═══ end CHANGE J ═══
+
     window.togglePinMessage = async function(msgId) {
         const conv = currentConv();
         if (!conv) return;
@@ -5085,6 +5382,7 @@
 
     function unlockBody() { document.body.classList.remove('modal-lock'); }
 
+    // ═══ CHANGE N.1: report sheet must not unlock on close ═══
     const modalPairs = [
         ['openChatProfile', 'closeChatProfileModal'],
         ['openChatThemeModal', 'closeChatThemeModal'],
@@ -5097,9 +5395,9 @@
         ['openAddMembersScreen', 'closeAddMembersScreen'],
         ['openDisappearingScreen', 'closeDisappearingScreen'],
         ['openCreateGroupModal', 'closeCreateGroupModal'],
-        ['openReportModal', 'closeReportModal'],
         ['openFuGroupPreviewScreen', 'closeFuGroupPreviewScreen'],
     ];
+    // ═══ end CHANGE N.1 ═══
 
     modalPairs.forEach(([openName, closeName]) => {
         const origOpen = window[openName];
@@ -5443,6 +5741,7 @@
         return { meta, thumbBlob };
     }
 
+    // ═══ CHANGE L.2: Save button in doc viewer header ═══
     window.openDocument = function(url, msgId) {
         const msg = messages.find(m => m.id === msgId);
         const meta = (msg && msg.metadata) || {};
@@ -5458,6 +5757,7 @@
             <div class="fu-screen-header">
                 <button onclick="closeDocViewer()"><i class="ri-arrow-left-line"></i></button>
                 <h3 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(fileName)}</h3>
+                <button onclick="saveDocFromViewer('${url}','${msgId}')"><i class="ri-bookmark-line"></i></button>
                 <button onclick="downloadMedia('${url}')"><i class="ri-download-2-line"></i></button>
                 ${isMine ? `<button onclick="closeDocViewer();deleteMessage('${msgId}','everyone')"><i class="ri-delete-bin-line"></i></button>` : ''}
             </div>
@@ -5467,6 +5767,7 @@
         requestAnimationFrame(() => modal.classList.add('open'));
         renderDocumentInto(byId('fuDocViewerBody'), url, ext);
     };
+    // ═══ end CHANGE L.2 ═══
     window.closeDocViewer = function() {
         const modal = byId('fuDocViewer');
         if (!modal) return;
@@ -5862,17 +6163,23 @@
         if (!isBlockedConversation) renderMessages();
     };
 
+    // ═══ CHANGE I: background fallback preserves gradient ═══
     function applyChatBackground(bg) {
         const isSolid = bg && bg.startsWith('solid:');
         if (isSolid) {
             messagesArea.style.backgroundImage = 'none';
             messagesArea.style.backgroundColor = bg.replace('solid:', '');
         } else {
-            messagesArea.style.backgroundImage = bg ? `url(${bg})` : 'none';
             messagesArea.style.backgroundColor = '';
-            messagesArea.style.backgroundSize = 'cover';
-            messagesArea.style.backgroundPosition = 'center';
-            messagesArea.style.backgroundRepeat = 'no-repeat';
+            if (bg) {
+                messagesArea.style.backgroundImage = `url(${bg})`;
+                messagesArea.style.backgroundSize = 'cover';
+                messagesArea.style.backgroundPosition = 'center';
+                messagesArea.style.backgroundRepeat = 'no-repeat';
+            } else {
+                ['backgroundImage', 'backgroundSize', 'backgroundPosition', 'backgroundRepeat']
+                    .forEach(p => { messagesArea.style[p] = ''; });
+            }
         }
         messagesArea.style.backgroundAttachment = 'scroll';
         document.querySelectorAll('.chat-view-header, .message-input-area').forEach(el => {
@@ -5881,6 +6188,7 @@
             el.style.removeProperty('--wp-color');
         });
     }
+    // ═══ end CHANGE I ═══
 
     function pollStats(poll) {
         const n = poll.options.length;
@@ -5895,6 +6203,7 @@
         return { counts, total: counts.reduce((a, b) => a + b, 0) };
     }
 
+    // ═══ CHANGE G: poll3 layout ═══
     function renderPollHtml(msg, textContent) {
         const poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
         const { counts, total } = pollStats(poll);
@@ -5903,26 +6212,29 @@
         const opts = poll.options.map((o, i) => {
             const pct = total ? Math.round(counts[i] / total * 100) : 0;
             return `
-                <div class="poll2-opt ${mine === i ? 'sel' : ''}" ${expired ? 'style="cursor:default"' : `onclick="handlePollOptionClick('${msg.id}',${i})"`}>
-                    <div class="poll2-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
-                    <div class="poll2-main">
-                        <div class="poll2-line"><span>${escapeHtml(o.text)}</span><span class="poll2-count">${counts[i]}</span></div>
-                        <div class="poll2-bar"><i style="width:${pct}%"></i></div>
-                    </div>
-                </div>`;
+            <div class="poll3-opt ${mine === i ? 'sel' : ''}" ${expired ? 'style="cursor:default"' : `onclick="handlePollOptionClick('${msg.id}',${i})"`}>
+                <div class="poll3-radio"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <div class="poll3-main">
+                    <div class="poll3-line"><span>${escapeHtml(o.text)}</span><span class="poll3-count">${counts[i]}</span></div>
+                    <div class="poll3-bar"><i style="width:${pct}%"></i></div>
+                </div>
+            </div>`;
         }).join('');
-        const foot = poll.expiresAt
-            ? (expired ? 'Poll ended' : 'Ends ' + new Date(poll.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))
+        const end = poll.expiresAt
+            ? (expired ? ' • Poll ended' : ' • Ends ' + new Date(poll.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))
             : '';
         return `
-            <div class="poll2">
-                <div class="poll2-q">${escapeHtml(poll.question)}</div>
-                <div class="poll2-hint">Select one</div>
-                ${opts}
-                <div class="poll2-foot">${total} vote${total !== 1 ? 's' : ''}${foot ? ' · ' + foot : ''}</div>
-                <button class="poll2-view" onclick="event.stopPropagation();showPollVoters('${msg.id}')">View votes</button>
-            </div>` + (textContent ? captionHtml(textContent) : '');
+        <div class="poll3">
+            <div class="poll3-head">
+                <div class="poll3-ico"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+                <div><div class="poll3-q">${escapeHtml(poll.question)}</div><div class="poll3-hint">Select one</div></div>
+            </div>
+            ${opts}
+            <div class="poll3-foot">${total} vote${total !== 1 ? 's' : ''}${end}</div>
+            <button class="poll3-view" onclick="event.stopPropagation();showPollVoters('${msg.id}')">View votes</button>
+        </div>` + (textContent ? captionHtml(textContent) : '');
     }
+    // ═══ end CHANGE G ═══
 
     window.showPollVoters = async function(msgId) {
         const msg = messages.find(m => m.id === msgId);
@@ -6037,6 +6349,15 @@
         subscribeToMessages();
         subscribeToConversations();
         subscribeToPartnerPresence();
+
+        // ═══ CHANGE H: realtime seen ticks + fallback polls ═══
+        subscribeToReads();
+        setInterval(refreshSentReceipts, 5000);
+        setInterval(() => {
+            const c = currentConv();
+            if (c && !c.is_group && !c.is_note) renderPartnerStatus(c);
+        }, 20000);
+        // ═══ end CHANGE H ═══
 
         const path = window.location.pathname;
         const match = path.match(/\/join\/([a-z0-9]+)/i);
