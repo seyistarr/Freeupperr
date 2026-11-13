@@ -944,18 +944,19 @@
         closeLightbox();
     };
 
-    window.lbDeleteCurrent = function() {
-        if (!lbMsgId) return;
-        closeLightbox();
-        deleteMessage(lbMsgId, 'everyone');
-    };
-
-    // ═══ CHANGE K.3: lightbox save state + save toggle ═══
+    // ═══ CHANGE K.3 (rev 2): Save colour matches bubble, undo toggle ═══
+    function lbSaveColor() {
+        const id = getMyBubbleColor(currentConv());
+        if (id === 'brand') return '#a78bfa';                       // default: light deep purple
+        const c = FU_BUBBLE_COLORS.find(x => x.id === id);
+        return c ? 'color-mix(in srgb, ' + c.preview + ' 70%, #fff)' : '#a78bfa'; // bubble colour, lightened so it shows on black
+    }
     function refreshLbSaveState() {
         const b = byId('lbSaveBtn');
         if (!b) return;
         const it = lbItems[lbIndex];
         const saved = !!(it && isSaved('media', it.url));
+        b.style.setProperty('--sv-c', lbSaveColor());
         b.classList.toggle('saved', saved);
         b.querySelector('span').textContent = saved ? 'Saved' : 'Save';
     }
@@ -965,10 +966,12 @@
         if (isSaved('media', it.url)) {
             removeSaved(savedKey('media', it.url));
             showToast('Removed from saved', 'o');
-        } else if (saveItem({ kind: 'media', url: it.url, mediaType: it.type, msgId: lbMsgId })) {
-            showToast('Saved to chat info', 'g');
+        } else if (saveItem({ kind: 'media', url: it.url, mediaType: it.type, msgId: lbMsgId, at: new Date().toISOString() })) {
+            showToast('Saved', 'g');
         }
         refreshLbSaveState();
+        const scr = document.getElementById('fuMediaScreen');
+        if (mediaMode === 'saved' && scr && scr.classList.contains('open')) window.switchMediaTab(mediaTab);
     };
     // ═══ end CHANGE K.3 ═══
 
@@ -1946,7 +1949,7 @@
             .media_index === undefined);
             let reactionsHtml = renderReactionSlate(msgLevelReactions, msg.id, null);
 
-            // ═══ CHANGE E.1: single receiptHtml path ═══
+            // ═══ CHANGE E.1 (B6): single receiptHtml path + star indicator ═══
             let footerHtml = '';
             if (msg.failed) {
                 footerHtml = `
@@ -1956,7 +1959,7 @@
                             </div>
                         `;
             } else {
-                footerHtml = `<div class="msg-footer">${msg.edited_at ? '<span class="msg-edited">Edited</span>' : ''}<span class="msg-time">${formatTime(msg.created_at)}</span>${isSent ? receiptHtml(msg) : ''}</div>`;
+                footerHtml = `<div class="msg-footer">${isStarred(msg.id) ? STAR_ICON : ''}${msg.edited_at ? '<span class="msg-edited">Edited</span>' : ''}<span class="msg-time">${formatTime(msg.created_at)}</span>${isSent ? receiptHtml(msg) : ''}</div>`;
             }
             // ═══ end CHANGE E.1 ═══
 
@@ -2400,6 +2403,7 @@
 
     let msgSheetTarget = null;
 
+    // ═══ B6: action sheet with Save toggle + Star ═══
     function openMessageActionSheet(msgId) {
         const msg = messages.find(m => m.id === msgId);
         if (!msg) return;
@@ -2411,9 +2415,10 @@
         const conv = currentConv();
         const isPinned = conv && conv.pinned_message_id === msgId;
         const isViewOnce = !!(msg.metadata && msg.metadata.view_once);
-        // ═══ CHANGE L.1: gate the Save row ═══
-        const canSave = !isViewOnce && (['media', 'image', 'video', 'document'].includes(msg.message_type) || extractUrls(msg.text || '').length > 0);
-        // ═══ end CHANGE L.1 ═══
+        const saveItems = isViewOnce ? [] : messageSaveItems(msg);
+        const canSave = saveItems.length > 0;
+        const alreadySaved = canSave && saveItems.every(i => isSaved(i.kind, i.url));
+        const starred = isStarred(msgId);
 
         let sheet = document.getElementById('fuMsgActionSheet');
         if (!sheet) {
@@ -2444,8 +2449,12 @@
                             </button>
                             ${canSave ? `<button class="fu-sheet-item" onclick="saveMessageToChat('${msgId}');closeMessageActionSheet();">
                                 <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-                                Save to chat info
+                                ${alreadySaved ? 'Remove from saved' : 'Save'}
                             </button>` : ''}
+                            ${isViewOnce ? '' : `<button class="fu-sheet-item" onclick="toggleStarMessage('${msgId}');closeMessageActionSheet();">
+                                <svg viewBox="0 0 24 24"><polygon points="12 2 15.1 8.6 22 9.3 16.8 14 18.2 21 12 17.5 5.8 21 7.2 14 2 9.3 8.9 8.6 12 2"/></svg>
+                                ${starred ? 'Unstar' : 'Star'}
+                            </button>`}
                             <button class="fu-sheet-item" onclick="togglePinMessage('${msgId}');closeMessageActionSheet();">
                                 <svg viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.4-5.6a2 2 0 0 0-.6-1L15 8V4h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0-2h1v4l-2 2.4a2 2 0 0 0-.6 1L5 17z"/></svg>
                                 ${isPinned ? 'Unpin Message' : 'Pin Message'}
@@ -2467,6 +2476,7 @@
                 `;
         requestAnimationFrame(() => sheet.classList.add('open'));
     }
+    // ═══ end B6 ═══
 
     window.closeMessageActionSheet = function() {
         const sheet = document.getElementById('fuMsgActionSheet');
@@ -2553,30 +2563,58 @@
         showToast(window.fuT('Editing message — tap send to save'), 'p');
     };
 
+    // ═══ B3: deleteMessage via SaaS confirm, returns true only if actually deleted ═══
     window.deleteMessage = async function(msgId, scope) {
         const msg = messages.find(m => m.id === msgId);
-        if (!msg) return;
+        if (!msg) return false;
 
         if (scope === 'everyone') {
-            if (msg.sender_id !== currentUserId) return;
-            if (!confirm(window.fuT('Delete this message for everyone?'))) return;
+            if (msg.sender_id !== currentUserId) return false;
+            const ok = await window.fuConfirm({
+                icon: 'trash',
+                title: 'Delete for everyone?',
+                message: 'This message will be removed for everyone in this chat. This can’t be undone.',
+                confirmText: 'Delete for everyone',
+                danger: true
+            });
+            if (!ok) return false;
             const { error } = await sb.from('messages').delete().eq('id', msgId);
-            if (error) { showToast(window.fuT('Failed to delete'), 'r'); return; }
+            if (error) { showToast(window.fuT('Failed to delete'), 'r'); return false; }
             messages = messages.filter(m => m.id !== msgId);
             renderMessages();
             showToast(window.fuT('Deleted for everyone'), 'g');
-            return;
+            return true;
         }
 
-        if (!confirm(window.fuT('Delete this message for you?'))) return;
+        const ok = await window.fuConfirm({
+            icon: 'trash',
+            title: 'Delete for you?',
+            message: 'This message will be removed from your chat only.',
+            confirmText: 'Delete for me',
+            danger: true
+        });
+        if (!ok) return false;
         const deletedFor = Array.from(new Set([...(msg.deleted_for || []), currentUserId]));
         const { error } = await sb.from('messages').update({ deleted_for: deletedFor }).eq('id', msgId);
-        if (error) { showToast(window.fuT('Failed to delete'), 'r'); return; }
+        if (error) { showToast(window.fuT('Failed to delete'), 'r'); return false; }
         msg.deleted_for = deletedFor;
         messages = messages.filter(m => !(m.deleted_for || []).includes(currentUserId));
         renderMessages();
         showToast(window.fuT('Deleted for you'), 'g');
+        return true;
     };
+
+    window.deleteFromDocViewer = async function(msgId) {
+        const done = await window.deleteMessage(msgId, 'everyone');
+        if (done) window.closeDocViewer();
+    };
+
+    window.lbDeleteCurrent = async function() {
+        if (!lbMsgId) return;
+        const done = await deleteMessage(lbMsgId, 'everyone');   // viewer stays open if cancelled
+        if (done) closeLightbox();
+    };
+    // ═══ end B3 ═══
 
     window.addReaction = async function(msgId, emoji, mediaIndex) {
         const msg = messages.find(m => m.id === msgId);
@@ -2747,12 +2785,18 @@
         showToast(window.fuT('Chat archived'), 'g');
     };
 
-    window.confirmDeleteConversation = function(convId) {
+    // ═══ B3: confirmDeleteConversation uses SaaS modal ═══
+    window.confirmDeleteConversation = async function(convId) {
         const conv = conversations.find(c => c.id === convId);
         if (!conv) return;
-        if (!confirm(window.fuT('Delete this chat? This only removes it from your list.'))) return;
-        deleteConversationForMe(convId);
+        const ok = await window.fuConfirm({
+            icon: 'trash', title: 'Delete this chat?',
+            message: 'This only removes the chat from your list. Other people aren’t affected.',
+            confirmText: 'Delete chat', danger: true
+        });
+        if (ok) deleteConversationForMe(convId);
     };
+    // ═══ end B3 ═══
 
     async function deleteConversationForMe(convId) {
         const conv = conversations.find(c => c.id === convId);
@@ -3946,9 +3990,9 @@
     async function populateChatProfileModal() {
         const conv = currentConv();
         if (!conv) return;
-        // ═══ CHANGE J: refresh saved count ═══
+        // ═══ CHANGE J2: refresh saved + starred counts ═══
         updateSavedCount();
-        // ═══ end CHANGE J ═══
+        // ═══ end CHANGE J2 ═══
         const groupRows = document.querySelectorAll('.group-only');
         const dmRows = document.querySelectorAll('.dm-only');
         // ═══ CHANGE 1F ═══
@@ -4124,8 +4168,16 @@
             'cpMuteToggle').checked = !muted;
     };
 
-    // ═══ CHANGE M: fuConfirm + blockUser async confirm ═══
-    window.fuConfirm = function({ title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false }) {
+    // ═══ B1: modern confirm modal with icons (CHANGE M2) ═══
+    const CONFIRM_ICONS = {
+        block: '<circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/>',
+        trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+        logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+        user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>',
+        info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'
+    };
+
+    window.fuConfirm = function({ title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, icon = 'info' }) {
         return new Promise(resolve => {
             const old = document.getElementById('fuSaasConfirm');
             if (old) old.remove();
@@ -4136,7 +4188,7 @@
                 <div class="saas-backdrop"></div>
                 <div class="saas-card" role="dialog" aria-modal="true">
                     <div class="saas-ico ${danger ? 'danger' : ''}">
-                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>
+                        <svg viewBox="0 0 24 24">${CONFIRM_ICONS[icon] || CONFIRM_ICONS.info}</svg>
                     </div>
                     <h3>${escapeHtml(title)}</h3>
                     <p>${escapeHtml(message)}</p>
@@ -4146,7 +4198,17 @@
                     </div>
                 </div>`;
             document.body.appendChild(m);
-            const done = v => { m.classList.remove('open'); setTimeout(() => m.remove(), 220); resolve(v); };
+            let finished = false;
+            const done = v => {
+                if (finished) return;
+                finished = true;
+                document.removeEventListener('keydown', onKey);
+                m.classList.remove('open');
+                setTimeout(() => m.remove(), 220);
+                resolve(v);
+            };
+            const onKey = e => { if (e.key === 'Escape') done(false); };
+            document.addEventListener('keydown', onKey);
             m.addEventListener('click', e => {
                 if (e.target.classList.contains('saas-backdrop')) return done(false);
                 const b = e.target.closest('[data-r]');
@@ -4158,15 +4220,15 @@
 
     window.blockUser = async function(targetUserId) {
         const ok = await window.fuConfirm({
+            icon: 'block',
             title: 'Block this user?',
-            message: "They won't be able to message you, and you won't see their messages. You can unblock them anytime from Settings → Blocked Users.",
+            message: 'They won’t be able to message you, and you won’t see their messages. You can unblock them anytime from Settings → Blocked Users.',
             confirmText: 'Block',
             danger: true
         });
         if (!ok) return;
         try {
-            const { error } = await sb.from('user_blocks').insert({ blocker_id: currentUserId,
-            blocked_id: targetUserId });
+            const { error } = await sb.from('user_blocks').insert({ blocker_id: currentUserId, blocked_id: targetUserId });
             if (error) throw error;
             showToast(window.fuT('User blocked'), 'g');
             closeChatProfileModal();
@@ -4177,9 +4239,15 @@
             showToast(window.fuT('Failed to block user'), 'r');
         }
     };
-    // ═══ end CHANGE M ═══
 
     window.unblockUser = async function(targetUserId) {
+        const ok = await window.fuConfirm({
+            icon: 'user',
+            title: 'Unblock this user?',
+            message: 'They’ll be able to message you again.',
+            confirmText: 'Unblock'
+        });
+        if (!ok) return;
         try {
             const { error } = await sb.from('user_blocks').delete()
                 .eq('blocker_id', currentUserId).eq('blocked_id', targetUserId);
@@ -4188,6 +4256,7 @@
             closeChatProfileModal();
         } catch (err) { showToast(window.fuT('Failed to unblock user'), 'r'); }
     };
+    // ═══ end CHANGE M2 ═══
 
     async function isUserBlocked(targetUserId) {
         const { data } = await sb.from('user_blocks').select('id')
@@ -4537,7 +4606,16 @@
     ];
     let selectedReportReason = null;
 
-    // ═══ CHANGE N.2: disable submit until a reason is picked ═══
+    // ═══ B2: report — enable submit when reason OR details typed ═══
+    function syncReportBtn() {
+        const typed = document.getElementById('reportDetailsInput').value.trim().length > 0;
+        const ready = !!selectedReportReason || typed;
+        const b = document.getElementById('reportSubmitBtn');
+        b.disabled = !ready;
+        b.classList.toggle('ready', ready);
+    }
+    window.onReportDetailsInput = syncReportBtn;
+
     window.openReportModal = function() {
         const conv = currentConv();
         if (!conv) return;
@@ -4546,40 +4624,37 @@
         document.getElementById('reportContextLabel').textContent =
             conv.is_group ? 'Why are you reporting this group?' : 'Why are you reporting this chat?';
         document.getElementById('reportReasonsList').innerHTML = REPORT_REASONS.map(r => `
-                    <div class="report-reason-row" onclick="selectReportReason(this, '${r.replace(/'/g, "\\'")}')">
-                        <div class="rr-radio"></div>
-                        <span>${r}</span>
-                    </div>
-                `).join('');
-        byId('reportSubmitBtn').disabled = true;
+            <div class="report-reason-row" onclick="selectReportReason(this, '${r.replace(/'/g, "\\'")}')">
+                <div class="rr-radio"></div>
+                <span>${r}</span>
+            </div>`).join('');
+        syncReportBtn();
         document.getElementById('reportModal').classList.add('open');
     };
-    // ═══ end CHANGE N.2 ═══
 
     window.closeReportModal = function() {
         document.getElementById('reportModal').classList.remove('open');
     };
 
-    // ═══ CHANGE N.3: enable submit once a reason is picked ═══
     window.selectReportReason = function(el, reason) {
         document.querySelectorAll('.report-reason-row').forEach(r => r.classList.remove('selected'));
         el.classList.add('selected');
         selectedReportReason = reason;
-        byId('reportSubmitBtn').disabled = false;
+        syncReportBtn();
     };
-    // ═══ end CHANGE N.3 ═══
 
     window.submitReport = async function() {
         const conv = currentConv();
         if (!conv) return;
-        if (!selectedReportReason) { showToast(window.fuT('Please select a reason'), 'o'); return; }
         const details = document.getElementById('reportDetailsInput').value.trim();
+        const reason = selectedReportReason || (details ? 'Something else' : null);
+        if (!reason) { showToast(window.fuT('Please select a reason'), 'o'); return; }
         try {
             const { error } = await sb.from('chat_reports').insert({
                 reporter_id: currentUserId,
                 conversation_id: conv.id,
                 reported_user_id: conv.is_group ? null : (conv.otherUser?.id || null),
-                reason: selectedReportReason,
+                reason: reason,
                 details: details || null
             });
             if (error) throw error;
@@ -4589,6 +4664,47 @@
             showToast(window.fuT('Failed to submit report'), 'r');
         }
     };
+
+    // Drag-down-to-dismiss for any .saas-sheet
+    function bindSheetSwipe(sheetId, onClose) {
+        const sheet = document.getElementById(sheetId);
+        const panel = sheet && sheet.querySelector('.saas-panel');
+        if (!panel) return;
+        let startY = 0, dy = 0, tracking = false, dragging = false;
+        panel.addEventListener('touchstart', e => {
+            if (e.touches.length !== 1) return;
+            startY = e.touches[0].clientY; dy = 0; tracking = true; dragging = false;
+        }, { passive: true });
+        panel.addEventListener('touchmove', e => {
+            if (!tracking) return;
+            const d = e.touches[0].clientY - startY;
+            if (!dragging) {
+                if (d > 6 && panel.scrollTop <= 0) dragging = true; else return;
+            }
+            dy = Math.max(0, d);
+            panel.style.transition = 'none';
+            panel.style.transform = 'translateY(' + dy + 'px)';
+            e.preventDefault();
+        }, { passive: false });
+        const end = () => {
+            if (!tracking) return;
+            tracking = false;
+            if (!dragging) return;
+            dragging = false;
+            panel.style.transition = '';
+            if (dy > 110) {
+                panel.style.transform = 'translateY(100%)';
+                onClose();
+                setTimeout(() => { panel.style.transform = ''; }, 320);
+            } else {
+                panel.style.transform = '';
+            }
+        };
+        panel.addEventListener('touchend', end);
+        panel.addEventListener('touchcancel', end);
+    }
+    bindSheetSwipe('reportModal', () => window.closeReportModal());
+    // ═══ end B2 ═══
 
     window.openDisappearingScreen = function() {
         const conv = currentConv();
@@ -4738,8 +4854,13 @@
         }
     };
 
+    // ═══ B3: removeMemberFromGroup uses SaaS confirm ═══
     window.removeMemberFromGroup = async function(userId, name) {
-        if (!confirm(`Remove ${name} from the group?`)) return;
+        if (!(await window.fuConfirm({
+            icon: 'user', title: 'Remove member?',
+            message: `${name} will be removed from this group.`,
+            confirmText: 'Remove', danger: true
+        }))) return;
         const conv = currentConv();
         if (!conv) return;
         try {
@@ -4751,10 +4872,15 @@
         } catch (err) { showToast(window.fuT('Failed to remove member'), 'r'); }
     };
 
+    // ═══ B3: leaveGroup uses SaaS confirm ═══
     window.leaveGroup = async function() {
         const conv = currentConv();
         if (!conv) return;
-        if (!confirm(`Leave "${conv.group_name || 'this group'}"?`)) return;
+        if (!(await window.fuConfirm({
+            icon: 'logout', title: 'Leave group?',
+            message: `You’ll stop receiving messages from “${conv.group_name || 'this group'}”.`,
+            confirmText: 'Leave', danger: true
+        }))) return;
         try {
             const { error } = await sb.from('conversation_members').delete().eq('conversation_id', conv.id).eq(
                 'user_id', currentUserId);
@@ -4765,6 +4891,7 @@
             await loadConversations();
         } catch (err) { showToast(window.fuT('Failed to leave group'), 'r'); }
     };
+    // ═══ end B3 ═══
 
     window.openChatThemeModal = function() {
         document.getElementById('fuThemeScreen').classList.add('open');
@@ -4906,120 +5033,8 @@
         messagesArea.style.setProperty('--bubble-color', c.preview);
     }
 
-    window.openMediaLinksDocsModal = function() {
-        document.getElementById('fuMediaScreen').classList.add('open');
-        switchMediaTab('media');
-    };
-    window.closeMediaLinksDocsModal = function() {
-        document.getElementById('fuMediaScreen').classList.remove('open');
-    };
-
-    window.switchMediaTab = async function(tab) {
-        document.querySelectorAll('#fuMediaTabs .fu-tab').forEach(t => t.classList.toggle('active', t.dataset.tab ===
-            tab));
-        const tabs = ['media', 'links', 'docs'];
-        const idx = tabs.indexOf(tab);
-        const indicator = document.getElementById('fuMediaTabIndicator');
-        indicator.style.width = 'calc(33.333% - 4px)';
-        indicator.style.left = `calc(${idx * 33.333}% + 4px)`;
-
-        const conv = currentConv();
-        const content = document.getElementById('fuMediaTabContent');
-        if (!conv) return;
-        content.innerHTML = `<div class="fu-empty-tab" data-i18n=&#76;&#111;&#97;&#100;&#105;&#110;&#103;&#8230;>Loading…</div>`;
-
-        if (tab === 'media') {
-            const { data } = await sb.from('messages').select('id, message_type, media_url, media_urls, metadata')
-                .eq('conversation_id', conv.id).in('message_type', ['image', 'video', 'media']).order(
-                    'created_at', { ascending: false });
-            const items = [];
-            (data || []).forEach(m => {
-                if (m.message_type === 'media') {
-                    const mi = (m.metadata && m.metadata.media_items) || [];
-                    const vo = !!(m.metadata && m.metadata.view_once);
-                    mi.forEach(it => items.push({ url: it.url, type: it.type, vo }));
-                } else {
-                    const urls = m.media_urls && m.media_urls.length ? m.media_urls : (m.media_url ? [m
-                        .media_url
-                    ] : []);
-                    urls.forEach(u => items.push({ url: u, type: m.message_type, vo: false }));
-                }
-            });
-            content.innerHTML = items.length ?
-                `<div class="fu-media-grid">${items.map(i => `
-                            <div class="fu-media-cell" onclick="${i.vo ? `showToast(window.fuT('View-once media'),'o')` : (i.type === 'image' ? `openImage('${i.url}')` : `openVideo('${i.url}')`)}">
-                                ${i.type === 'image' ? `<img src="${i.url}" loading="lazy">` : `<video src="${i.url}" preload="metadata"></video><span class="dur"><i class="ri-play-fill"></i></span>`}
-                                ${i.vo ? '<span class="dur" style="left:6px;right:auto;">🔒</span>' : ''}
-                            </div>`).join('')}</div>` :
-                `<div class="fu-empty-tab">No media shared yet.</div>`;
-        } else if (tab === 'links') {
-            let data = null;
-            try {
-                const res = await sb.from('messages').select('id, text, link_previews, created_at')
-                    .eq('conversation_id', conv.id).not('text', 'is', null).order('created_at', { ascending: false })
-                    .limit(200);
-                if (res.error) throw res.error;
-                data = res.data;
-            } catch (err) {
-                console.warn('link_previews query failed, falling back to text-only:', err);
-                const res2 = await sb.from('messages').select('id, text, created_at')
-                    .eq('conversation_id', conv.id).not('text', 'is', null).order('created_at', { ascending: false })
-                    .limit(200);
-                data = res2.data;
-            }
-            const urlRe = /(https?:\/\/[^\s"'<>]+)/gi;
-            const links = [];
-            (data || []).forEach(m => {
-                const found = (m.text || '').match(urlRe);
-                if (found) {
-                    found.forEach(u => {
-                        let preview = null;
-                        if (m.link_previews && m.link_previews.length) {
-                            const p = m.link_previews.find(l => l.url === u || l.url === u
-                                .replace(/\/$/, ''));
-                            if (p) preview = p;
-                        }
-                        links.push({ url: u, preview: preview });
-                    });
-                }
-            });
-            content.innerHTML = links.length ? links.map(item => {
-                const p = item.preview;
-                if (p) {
-                    return renderLinkPreviewItem(p, item.url);
-                }
-                let domain = item.url;
-                try { domain = new URL(item.url).hostname.replace('www.', ''); } catch (e) {}
-                return `<div class="fu-link-row" data-open-url="${escapeHtml(item.url).replace(/"/g, '&quot;')}">
-                            <div class="fu-doc-ico"><i class="ri-link"></i></div>
-                            <div class="fu-link-info">
-                                <div class="fu-link-title">${escapeHtml(item.url)}</div>
-                                <div class="fu-link-domain">${escapeHtml(domain)}</div>
-                            </div>
-                        </div>`;
-            }).join('') : `<div class="fu-empty-tab">No links shared yet.</div>`;
-        } else {
-            const { data } = await sb.from('messages').select('id, media_url, metadata').eq('conversation_id', conv.id)
-                .eq('message_type', 'document').order('created_at', { ascending: false });
-            content.innerHTML = (data && data.length) ? data.map(m => {
-                const name = (m.metadata && m.metadata.name) || (m.media_url || '').split('/').pop() || 'Document';
-                const ext = name.split('.').pop()?.toLowerCase() || '';
-                const icons = { pdf: 'ri-file-pdf-2-line', doc: 'ri-file-word-2-line',
-                    docx: 'ri-file-word-2-line',
-                    xls: 'ri-file-excel-2-line', xlsx: 'ri-file-excel-2-line', ppt: 'ri-file-ppt-2-line',
-                    pptx: 'ri-file-ppt-2-line', zip: 'ri-file-zip-line', txt: 'ri-file-text-line' };
-                return `<div class="fu-doc-row" onclick="openDocument('${m.media_url}','${m.id}')">
-                            <div class="fu-doc-ico"><i class="${icons[ext] || 'ri-file-3-line'}"></i></div>
-                            <div class="fu-doc-info"><div class="fu-doc-title">${escapeHtml(name)}</div><div class="fu-doc-meta">Tap to open</div></div>
-                        </div>`;
-            }).join('') : `<div class="fu-empty-tab">No documents shared yet.</div>`;
-        }
-    };
-
+    // ═══ B5: Shared media / Links / Docs / Voice + Saved + Starred ═══
     function renderLinkPreviewItem(preview, url) {
-        const img = preview.image ?
-            `<img class="lp-image" src="${preview.image}" alt="" loading="lazy" onerror="this.style.display='none'">` :
-            '';
         return `<div class="fu-link-row" data-open-url="${escapeHtml(url).replace(/"/g, '&quot;')}">
                     ${preview.image ? `<img class="fu-link-thumb" src="${preview.image}" onerror="this.style.display='none'">` : `<div class="fu-doc-ico"><i class="ri-link"></i></div>`}
                     <div class="fu-link-info">
@@ -5030,12 +5045,19 @@
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // ═══ CHANGE J: Saved media, links, docs (UI-only, localStorage) ═══
+    // ═══ CHANGE J2: Shared media screen, Saved, Starred (device storage) ═══
     // ═══════════════════════════════════════════════════════════════════
     const SAVED_PREFIX = 'fu_saved_v1_';
-    let savedTab = 'media';
-    let savedView = [];
+    const STARRED_PREFIX = 'fu_starred_v1_';
+    const MEDIA_TABS = ['media', 'links', 'docs', 'voice'];
+    const STAR_ICON = '<span class="msg-star" title="Starred"><svg viewBox="0 0 24 24"><polygon points="12 2 15.1 8.6 22 9.3 16.8 14 18.2 21 12 17.5 5.8 21 7.2 14 2 9.3 8.9 8.6 12 2"/></svg></span>';
+    let mediaMode = 'all';      // 'all' | 'saved'
+    let mediaTab = 'media';
+    let mediaView = [];
+    let starSetCache = null;
+    let starFilter = 'all';
 
+    // ---------- Saved storage ----------
     function readSaved() {
         try { return JSON.parse(localStorage.getItem(SAVED_PREFIX + currentUserId) || '[]'); } catch (e) { return []; }
     }
@@ -5056,113 +5078,428 @@
     }
     function removeSaved(key) { writeSaved(readSaved().filter(s => s.key !== key)); updateSavedCount(); }
     function savedForConv(kind) { return readSaved().filter(s => s.convId === selectedConversationId && s.kind === kind); }
+
+    // ---------- Starred storage ----------
+    function readStarred() {
+        try { return JSON.parse(localStorage.getItem(STARRED_PREFIX + currentUserId) || '[]'); } catch (e) { return []; }
+    }
+    function writeStarred(list) {
+        starSetCache = null;
+        try { localStorage.setItem(STARRED_PREFIX + currentUserId, JSON.stringify(list.slice(0, 1000))); return true; }
+        catch (e) { showToast('Could not star on this device', 'r'); return false; }
+    }
+    function starredSet() {
+        if (!starSetCache) starSetCache = new Set(readStarred().map(s => s.msgId));
+        return starSetCache;
+    }
+    function isStarred(msgId) { return starredSet().has(msgId); }
+    function starredIdsForConv() {
+        return new Set(readStarred().filter(s => s.convId === selectedConversationId).map(s => s.msgId));
+    }
     function updateSavedCount() {
-        const el = byId('cpSavedCount');
-        if (el) el.textContent = readSaved().filter(s => s.convId === selectedConversationId).length;
+        const s = document.getElementById('cpSavedCount');
+        if (s) s.textContent = readSaved().filter(x => x.convId === selectedConversationId).length;
+        const t = document.getElementById('cpStarredCount');
+        if (t) t.textContent = readStarred().filter(x => x.convId === selectedConversationId).length;
     }
 
-    window.openSavedScreen = function() {
-        byId('fuSavedScreen').classList.add('open');
-        window.switchSavedTab('media');
-    };
-    window.closeSavedScreen = function() {
-        byId('fuSavedScreen').classList.remove('open');
-        updateSavedCount();
-    };
-
-    window.switchSavedTab = function(tab) {
-        savedTab = tab;
-        document.querySelectorAll('#fuSavedTabs .fu-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-        const idx = ['media', 'links', 'docs'].indexOf(tab);
-        const ind = byId('fuSavedTabIndicator');
-        ind.style.width = 'calc(33.333% - 4px)';
-        ind.style.left = `calc(${idx * 33.333}% + 4px)`;
-
-        const kind = tab === 'media' ? 'media' : tab === 'links' ? 'link' : 'doc';
-        savedView = savedForConv(kind);
-        const box = byId('fuSavedTabContent');
-        if (!savedView.length) {
-            box.innerHTML = `<div class="fu-empty-tab">Nothing saved yet.<br>Open a photo and tap Save, or long-press a message and choose “Save to chat info”.</div>`;
-            return;
-        }
-        const icons = { pdf: 'ri-file-pdf-2-line', doc: 'ri-file-word-2-line', docx: 'ri-file-word-2-line', xls: 'ri-file-excel-2-line', xlsx: 'ri-file-excel-2-line', ppt: 'ri-file-ppt-2-line', pptx: 'ri-file-ppt-2-line', txt: 'ri-file-text-line' };
-        if (tab === 'media') {
-            box.innerHTML = `<div class="fu-media-grid">${savedView.map((s, i) => `
-                <div class="fu-media-cell" data-sv-open="${i}">
-                    ${s.mediaType === 'video'
-                        ? `<video src="${s.url}" preload="metadata" muted></video><span class="dur"><i class="ri-play-fill"></i></span>`
-                        : `<img src="${s.url}" loading="lazy" alt="">`}
-                    <button class="sv-x" data-sv-rm="${i}" aria-label="Remove">×</button>
-                </div>`).join('')}</div>`;
-        } else if (tab === 'links') {
-            box.innerHTML = savedView.map((s, i) => `
-                <div class="fu-link-row" data-sv-open="${i}">
-                    ${s.image ? `<img class="fu-link-thumb" src="${s.image}" onerror="this.style.display='none'" alt="">` : `<div class="fu-doc-ico"><i class="ri-link"></i></div>`}
-                    <div class="fu-link-info">
-                        <div class="fu-link-title">${escapeHtml(s.title || s.url)}</div>
-                        <div class="fu-link-domain">${escapeHtml(s.domain || '')}</div>
-                    </div>
-                    <button class="sv-x" data-sv-rm="${i}" aria-label="Remove">×</button>
-                </div>`).join('');
-        } else {
-            box.innerHTML = savedView.map((s, i) => `
-                <div class="fu-doc-row" data-sv-open="${i}">
-                    <div class="fu-doc-ico"><i class="${icons[(s.ext || '').toLowerCase()] || 'ri-file-3-line'}"></i></div>
-                    <div class="fu-doc-info"><div class="fu-doc-title">${escapeHtml(s.name || 'Document')}</div><div class="fu-doc-meta">Tap to open</div></div>
-                    <button class="sv-x" data-sv-rm="${i}" aria-label="Remove">×</button>
-                </div>`).join('');
-        }
-    };
-
-    byId('fuSavedTabContent').addEventListener('click', function(e) {
-        const rm = e.target.closest('[data-sv-rm]');
-        if (rm) {
-            e.stopPropagation();
-            const s = savedView[+rm.dataset.svRm];
-            if (s) { removeSaved(s.key); window.switchSavedTab(savedTab); showToast('Removed from saved', 'o'); }
-            return;
-        }
-        const row = e.target.closest('[data-sv-open]');
-        if (!row) return;
-        const i = +row.dataset.svOpen;
-        const s = savedView[i];
-        if (!s) return;
-        if (s.kind === 'media') openMediaLightbox(savedView.map(x => ({ url: x.url, type: x.mediaType })), i, null, 'Saved', s.savedAt);
-        else if (s.kind === 'link') openInAppBrowser(s.url);
-        else openDocument(s.url, s.msgId);
-    });
-
-    window.saveMessageToChat = function(msgId) {
-        const msg = messages.find(m => m.id === msgId);
-        if (!msg || (msg.metadata && msg.metadata.view_once)) return;
-        let n = 0;
+    // ---------- What can be saved from a message ----------
+    function messageSaveItems(msg) {
+        if (!msg || (msg.metadata && msg.metadata.view_once)) return [];
+        const out = [];
         const mi = msg.metadata && msg.metadata.media_items;
         if (msg.message_type === 'media' && mi && mi.length) {
-            mi.forEach(it => { if (saveItem({ kind: 'media', url: it.url, mediaType: it.type, msgId: msg.id })) n++; });
+            mi.forEach(it => out.push({ kind: 'media', url: it.url, mediaType: it.type, msgId: msg.id, at: msg.created_at }));
         } else if (msg.message_type === 'image' || msg.message_type === 'video') {
             const urls = msg.media_urls && msg.media_urls.length ? msg.media_urls : (msg.media_url ? [msg.media_url] : []);
-            urls.forEach(u => { if (saveItem({ kind: 'media', url: u, mediaType: msg.message_type, msgId: msg.id })) n++; });
+            urls.forEach(u => out.push({ kind: 'media', url: u, mediaType: msg.message_type, msgId: msg.id, at: msg.created_at }));
         } else if (msg.message_type === 'document' && msg.media_url) {
             const meta = msg.metadata || {};
             const name = meta.name || safeDecode(msg.media_url.split('?')[0].split('/').pop() || 'Document');
-            if (saveItem({ kind: 'doc', url: msg.media_url, name, ext: meta.ext || docExt(name), msgId: msg.id })) n++;
+            out.push({ kind: 'doc', url: msg.media_url, name, ext: meta.ext || docExt(name), msgId: msg.id, at: msg.created_at });
+        } else if (msg.message_type === 'voice' && msg.media_url) {
+            out.push({ kind: 'voice', url: msg.media_url, dur: msg.voice_duration || 0, msgId: msg.id,
+                who: resolveMsgSenderName(msg.sender_id), at: msg.created_at });
         }
         extractUrls(msg.text || '').slice(0, 5).forEach(u => {
             const p = (msg.link_previews || []).find(l => l.url === u) || {};
             let domain = p.domain || '';
             if (!domain) { try { domain = new URL(u).hostname.replace(/^www\./, ''); } catch (e) {} }
-            if (saveItem({ kind: 'link', url: u, title: p.title || u, image: p.image || '', domain, msgId: msg.id })) n++;
+            out.push({ kind: 'link', url: u, title: p.title || u, image: p.image || '', domain, msgId: msg.id, at: msg.created_at });
         });
-        showToast(n ? 'Saved to chat info' : 'Nothing to save in this message', n ? 'g' : 'o');
+        return out;
+    }
+
+    // Toggle: saves, or un-saves if everything in the message is already saved
+    window.saveMessageToChat = function(msgId) {
+        const items = messageSaveItems(messages.find(m => m.id === msgId));
+        if (!items.length) { showToast('Nothing to save in this message', 'o'); return; }
+        const allSaved = items.every(i => isSaved(i.kind, i.url));
+        if (allSaved) {
+            items.forEach(i => removeSaved(savedKey(i.kind, i.url)));
+            showToast('Removed from saved', 'o');
+        } else {
+            items.forEach(i => saveItem(i));
+            showToast('Saved', 'g');
+        }
     };
 
     window.saveDocFromViewer = function(url, msgId) {
         const msg = messages.find(m => m.id === msgId);
         const meta = (msg && msg.metadata) || {};
         const name = meta.name || safeDecode(url.split('?')[0].split('/').pop() || 'Document');
-        if (saveItem({ kind: 'doc', url, name, ext: meta.ext || docExt(name), msgId })) showToast('Saved to chat info', 'g');
+        if (isSaved('doc', url)) {
+            removeSaved(savedKey('doc', url));
+            showToast('Removed from saved', 'o');
+        } else if (saveItem({ kind: 'doc', url, name, ext: meta.ext || docExt(name), msgId, at: msg && msg.created_at })) {
+            showToast('Saved', 'g');
+        }
     };
-    // ═══ end CHANGE J ═══
+
+    // ---------- Star a message ----------
+    window.toggleStarMessage = function(msgId) {
+        const msg = messages.find(m => m.id === msgId);
+        if (!msg || (msg.metadata && msg.metadata.view_once)) return;
+        let list = readStarred();
+        const exists = list.some(s => s.msgId === msgId);
+        if (exists) list = list.filter(s => s.msgId !== msgId);
+        else list.unshift({ msgId, convId: selectedConversationId, starredAt: new Date().toISOString() });
+        if (!writeStarred(list)) return;
+        updateSavedCount();
+        const st = messagesArea.scrollTop;
+        renderMessages();
+        messagesArea.scrollTop = st;
+        showToast(exists ? 'Removed from starred' : 'Message starred', 'g');
+    };
+
+    // ---------- Shared Media / Links / Docs / Voice (also used by Saved) ----------
+    window.openMediaLinksDocsModal = function(mode) {
+        mediaMode = mode === 'saved' ? 'saved' : 'all';
+        document.getElementById('fuMediaTitle').textContent = mediaMode === 'saved' ? 'Saved' : 'Shared Content';
+        document.getElementById('fuMediaScreen').classList.add('open');
+        window.switchMediaTab('media');
+    };
+    window.closeMediaLinksDocsModal = function() {
+        document.getElementById('fuMediaScreen').classList.remove('open');
+        updateSavedCount();
+    };
+    window.openSavedScreen = function() { window.openMediaLinksDocsModal('saved'); };
+    window.closeSavedScreen = function() { window.closeMediaLinksDocsModal(); };
+
+    async function prepSenderNames(rows) {
+        const c = currentConv();
+        if (c && c.is_group) await ensureGroupSenderNames(c.id, [...new Set(rows.map(r => r.sender_id))]);
+    }
+
+    function savedItems(tab) {
+        const kind = { media: 'media', links: 'link', docs: 'doc', voice: 'voice' }[tab];
+        return savedForConv(kind);
+    }
+
+    async function fetchSharedItems(convId, tab) {
+        if (tab === 'media') {
+            const { data, error } = await sb.from('messages')
+                .select('id, sender_id, created_at, message_type, media_url, media_urls, metadata')
+                .eq('conversation_id', convId).in('message_type', ['image', 'video', 'media'])
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            await prepSenderNames(data || []);
+            const out = [];
+            (data || []).forEach(m => {
+                const who = resolveMsgSenderName(m.sender_id);
+                if (m.message_type === 'media') {
+                    const vo = !!(m.metadata && m.metadata.view_once);
+                    ((m.metadata && m.metadata.media_items) || []).forEach(it =>
+                        out.push({ kind: 'media', url: it.url, mediaType: it.type, vo, msgId: m.id, who, at: m.created_at }));
+                } else {
+                    const urls = m.media_urls && m.media_urls.length ? m.media_urls : (m.media_url ? [m.media_url] : []);
+                    urls.forEach(u => out.push({ kind: 'media', url: u, mediaType: m.message_type, vo: false, msgId: m.id, who, at: m.created_at }));
+                }
+            });
+            return out;
+        }
+        if (tab === 'links') {
+            let rows;
+            const res = await sb.from('messages').select('id, text, link_previews, created_at')
+                .eq('conversation_id', convId).not('text', 'is', null)
+                .order('created_at', { ascending: false }).limit(200);
+            if (res.error) {
+                const r2 = await sb.from('messages').select('id, text, created_at')
+                    .eq('conversation_id', convId).not('text', 'is', null)
+                    .order('created_at', { ascending: false }).limit(200);
+                rows = r2.data;
+            } else rows = res.data;
+            const re = /(https?:\/\/[^\s"'<>]+)/gi;
+            const seen = new Set(), out = [];
+            (rows || []).forEach(m => {
+                ((m.text || '').match(re) || []).forEach(u => {
+                    if (seen.has(u)) return;
+                    seen.add(u);
+                    const p = (m.link_previews || []).find(l => l.url === u || l.url === u.replace(/\/$/, '')) || {};
+                    let domain = p.domain || p.siteName || '';
+                    if (!domain) { try { domain = new URL(u).hostname.replace(/^www\./, ''); } catch (e) {} }
+                    out.push({ kind: 'link', url: u, title: p.title || u, image: p.image || '', domain, msgId: m.id, at: m.created_at });
+                });
+            });
+            return out;
+        }
+        if (tab === 'docs') {
+            const { data, error } = await sb.from('messages').select('id, media_url, metadata, created_at')
+                .eq('conversation_id', convId).eq('message_type', 'document')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return (data || []).filter(m => m.media_url).map(m => {
+                const name = (m.metadata && m.metadata.name) || safeDecode(m.media_url.split('?')[0].split('/').pop() || 'Document');
+                return { kind: 'doc', url: m.media_url, name, ext: (m.metadata && m.metadata.ext) || docExt(name), msgId: m.id, at: m.created_at };
+            });
+        }
+        // voice
+        const { data, error } = await sb.from('messages')
+            .select('id, sender_id, media_url, voice_duration, created_at')
+            .eq('conversation_id', convId).eq('message_type', 'voice')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        await prepSenderNames(data || []);
+        return (data || []).filter(m => m.media_url).map(m => ({
+            kind: 'voice', url: m.media_url, dur: m.voice_duration || 0, msgId: m.id,
+            who: resolveMsgSenderName(m.sender_id), at: m.created_at
+        }));
+    }
+
+    function renderMediaItems(tab, items, removable) {
+        const rm = i => removable ? `<button class="sv-x" data-mt-rm="${i}" aria-label="Remove">×</button>` : '';
+        const icons = { pdf: 'ri-file-pdf-2-line', doc: 'ri-file-word-2-line', docx: 'ri-file-word-2-line',
+            xls: 'ri-file-excel-2-line', xlsx: 'ri-file-excel-2-line', ppt: 'ri-file-ppt-2-line',
+            pptx: 'ri-file-ppt-2-line', zip: 'ri-file-zip-line', txt: 'ri-file-text-line' };
+        if (tab === 'media') {
+            return `<div class="fu-media-grid">${items.map((s, i) => `
+            <div class="fu-media-cell" data-mt-open="${i}">
+                ${s.mediaType === 'video'
+                    ? `<video src="${s.url}" preload="metadata" muted></video><span class="dur"><i class="ri-play-fill"></i></span>`
+                    : `<img src="${s.url}" loading="lazy" alt="">`}
+                ${s.vo ? '<span class="dur" style="left:6px;right:auto;">🔒</span>' : ''}
+                ${rm(i)}
+            </div>`).join('')}</div>`;
+        }
+        if (tab === 'links') {
+            return items.map((s, i) => `
+            <div class="fu-link-row" data-mt-open="${i}">
+                ${s.image ? `<img class="fu-link-thumb" src="${s.image}" onerror="this.style.display='none'" alt="">` : `<div class="fu-doc-ico"><i class="ri-link"></i></div>`}
+                <div class="fu-link-info">
+                    <div class="fu-link-title">${escapeHtml(s.title || s.url)}</div>
+                    <div class="fu-link-domain">${escapeHtml(s.domain || '')}</div>
+                </div>
+                ${rm(i)}
+            </div>`).join('');
+        }
+        if (tab === 'docs') {
+            return items.map((s, i) => `
+            <div class="fu-doc-row" data-mt-open="${i}">
+                <div class="fu-doc-ico"><i class="${icons[(s.ext || '').toLowerCase()] || 'ri-file-3-line'}"></i></div>
+                <div class="fu-doc-info"><div class="fu-doc-title">${escapeHtml(s.name || 'Document')}</div><div class="fu-doc-meta">Tap to open</div></div>
+                ${rm(i)}
+            </div>`).join('');
+        }
+        // voice
+        return items.map((s, i) => {
+            const vid = 'mv_' + s.msgId;
+            return `
+        <div class="vn-row">
+            <button class="vn-play" onclick="event.stopPropagation();toggleVoicePlay(this,'${s.url}','${vid}')">
+                <svg class="ic-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                <svg class="ic-pause" viewBox="0 0 24 24" style="display:none;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            </button>
+            <div class="vn-mid">
+                <div class="vn-wave" id="vwave-${vid}">${renderVoiceWaveformBars(vid)}</div>
+                <div class="vn-meta"><span>${escapeHtml(s.who || '')}</span><span>${s.at ? escapeHtml(formatDate(s.at)) : ''}</span></div>
+            </div>
+            <span class="vn-dur" id="vdur-${vid}">${formatVoiceTime(s.dur || 0)}</span>
+            ${rm(i)}
+        </div>`;
+        }).join('');
+    }
+
+    window.switchMediaTab = async function(tab) {
+        mediaTab = tab;
+        document.querySelectorAll('#fuMediaTabs .fu-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        document.getElementById('fuMediaTabIndicator').style.setProperty('--i', MEDIA_TABS.indexOf(tab));
+        stopCurrentVoice();
+        const conv = currentConv();
+        const box = document.getElementById('fuMediaTabContent');
+        if (!conv) return;
+        box.innerHTML = '<div class="fu-empty-tab">Loading…</div>';
+        let items;
+        try {
+            items = mediaMode === 'saved' ? savedItems(tab) : await fetchSharedItems(conv.id, tab);
+        } catch (err) {
+            console.warn('shared items failed:', err);
+            box.innerHTML = '<div class="fu-empty-tab">Could not load. Please try again.</div>';
+            return;
+        }
+        if (tab !== mediaTab) return;   // user switched tabs meanwhile
+        mediaView = items;
+        const label = { media: 'media', links: 'links', docs: 'documents', voice: 'voice notes' }[tab];
+        box.innerHTML = items.length
+            ? renderMediaItems(tab, items, mediaMode === 'saved')
+            : (mediaMode === 'saved'
+                ? '<div class="fu-empty-tab">Nothing saved here yet.<br>Open an item and tap Save, or long-press a message and choose Save.</div>'
+                : `<div class="fu-empty-tab">No ${label} shared yet.</div>`);
+    };
+
+    document.getElementById('fuMediaTabContent').addEventListener('click', function(e) {
+        const rm = e.target.closest('[data-mt-rm]');
+        if (rm) {
+            e.stopPropagation();
+            const s = mediaView[+rm.dataset.mtRm];
+            if (s && s.key) { removeSaved(s.key); window.switchMediaTab(mediaTab); showToast('Removed from saved', 'o'); }
+            return;
+        }
+        const row = e.target.closest('[data-mt-open]');
+        if (!row) return;
+        const i = +row.dataset.mtOpen, s = mediaView[i];
+        if (!s) return;
+        if (s.kind === 'media') {
+            if (s.vo) { showToast('View-once media', 'o'); return; }
+            if (mediaMode === 'saved') {
+                openMediaLightbox(mediaView.map(x => ({ url: x.url, type: x.mediaType })), i, null, 'Saved', s.savedAt);
+            } else {
+                openMediaLightbox([{ url: s.url, type: s.mediaType }], 0, s.msgId, s.who || '', s.at);
+            }
+        } else if (s.kind === 'link') openInAppBrowser(s.url);
+        else if (s.kind === 'doc') openDocument(s.url, s.msgId);
+    });
+
+    // ---------- Starred screen ----------
+    const STAR_FILTERS = [['all', 'All'], ['text', 'Text'], ['media', 'Media'], ['voice', 'Voice'], ['docs', 'Docs']];
+    const STAR_KIND_LABEL = { text: 'Text', media: 'Media', voice: 'Voice note', docs: 'Document' };
+    const STAR_BIG = '<svg viewBox="0 0 24 24"><polygon points="12 2 15.1 8.6 22 9.3 16.8 14 18.2 21 12 17.5 5.8 21 7.2 14 2 9.3 8.9 8.6 12 2"/></svg>';
+
+    function starKind(m) {
+        if (m.message_type === 'voice') return 'voice';
+        if (m.message_type === 'document') return 'docs';
+        if (['image', 'video', 'media'].includes(m.message_type)) return 'media';
+        return 'text';
+    }
+    function starredMessages() {
+        const ids = starredIdsForConv();
+        return messages.filter(m => ids.has(m.id) && !m.is_system).slice().reverse();
+    }
+    function dayLabel(d) {
+        const now = new Date();
+        if (d.toDateString() === now.toDateString()) return 'Today';
+        const y = new Date(now); y.setDate(now.getDate() - 1);
+        if (d.toDateString() === y.toDateString()) return 'Yesterday';
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+    }
+    function senderAvatarFor(m) {
+        if (m.sender_id === currentUserId) return getAvatar(currentUserProfile || {});
+        const conv = currentConv();
+        if (conv && conv.is_group) {
+            const i = groupSenderNameCache[m.sender_id];
+            return (i && i.avatar) || DEFAULT_AVATAR;
+        }
+        return getAvatar((conv && conv.otherUser) || {});
+    }
+    function starPreviewHtml(m) {
+        const t = m.text || '';
+        const cap = t ? `<div class="st-text">${escapeHtml(t.length > 260 ? t.slice(0, 260) + '…' : t)}</div>` : '';
+        const k = starKind(m);
+        if (k === 'media') {
+            const mi = (m.metadata && m.metadata.media_items) || [];
+            const thumbs = mi.length
+                ? mi.map(it => it.type === 'video' ? (it.thumb || videoThumbUrl(it.url)) : it.url)
+                : (m.media_urls && m.media_urls.length ? m.media_urls : (m.media_url ? [m.media_url] : []))
+                    .map(u => m.message_type === 'video' ? videoThumbUrl(u) : u);
+            const shown = thumbs.slice(0, 3), extra = thumbs.length - shown.length;
+            return `<div class="st-thumbs">${shown.map((u, i) => `<div><img src="${u}" loading="lazy" alt="">${extra > 0 && i === 2 ? `<span class="st-more">+${extra}</span>` : ''}</div>`).join('')}</div>${cap}`;
+        }
+        if (k === 'voice') {
+            return `<div class="st-line"><span class="st-line-ico"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg></span><div><b>Voice note</b><small>${formatVoiceTime(m.voice_duration || 0)}</small></div></div>`;
+        }
+        if (k === 'docs') {
+            const meta = m.metadata || {};
+            const name = meta.name || safeDecode((m.media_url || '').split('?')[0].split('/').pop() || 'Document');
+            return `<div class="st-line"><span class="st-line-ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span><div><b>${escapeHtml(name)}</b><small>${escapeHtml((meta.ext || docExt(name)).toUpperCase())}</small></div></div>${cap}`;
+        }
+        if (m.message_type === 'poll' && m.poll_data) {
+            let q = 'Poll';
+            try { const p = typeof m.poll_data === 'string' ? JSON.parse(m.poll_data) : m.poll_data; q = p.question || q; } catch (e) {}
+            return `<div class="st-line"><span class="st-line-ico"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><div><b>${escapeHtml(q)}</b><small>Poll</small></div></div>`;
+        }
+        return cap;
+    }
+
+    function renderStarredScreen() {
+        const all = starredMessages();
+        const counts = { all: all.length };
+        STAR_FILTERS.slice(1).forEach(([k]) => { counts[k] = all.filter(m => starKind(m) === k).length; });
+        document.getElementById('stCount').textContent = all.length;
+        const fEl = document.getElementById('stFilters');
+        fEl.style.display = all.length ? '' : 'none';
+        fEl.innerHTML = STAR_FILTERS.map(([k, l]) =>
+            `<button class="st-chip ${starFilter === k ? 'active' : ''}" data-st-f="${k}">${l}<em>${counts[k]}</em></button>`).join('');
+        const body = document.getElementById('stBody');
+        const list = starFilter === 'all' ? all : all.filter(m => starKind(m) === starFilter);
+        if (!list.length) {
+            body.innerHTML = `<div class="st-empty"><div class="st-empty-ico">${STAR_BIG}</div>
+                <h3>${all.length ? 'Nothing here' : 'No starred messages'}</h3>
+                <p>${all.length ? 'No starred messages in this category.' : 'Long-press any message and tap Star to keep it here for quick access.'}</p></div>`;
+            return;
+        }
+        let html = '', last = null;
+        list.forEach(m => {
+            const d = window.FreeUpperTime.parseTimestamp(m.created_at);
+            const label = d ? dayLabel(d) : '';
+            if (label !== last) { last = label; html += `<div class="st-day">${escapeHtml(label)}</div>`; }
+            html += `
+            <div class="st-card" data-st-go="${m.id}">
+                <div class="st-top">
+                    <img class="st-av" src="${senderAvatarFor(m)}" alt="" ${avatarErrAttr()}>
+                    <div class="st-who"><b>${escapeHtml(resolveMsgSenderName(m.sender_id))}</b><span>${escapeHtml(formatTime(m.created_at))}</span></div>
+                    <button class="st-unstar" data-st-un="${m.id}" aria-label="Remove star">${STAR_BIG}</button>
+                </div>
+                <div class="st-body">${starPreviewHtml(m)}</div>
+                <div class="st-foot"><span class="st-kind">${STAR_KIND_LABEL[starKind(m)]}</span><span class="st-go">Go to message ›</span></div>
+            </div>`;
+        });
+        body.innerHTML = html;
+    }
+
+    window.openStarredScreen = function() {
+        starFilter = 'all';
+        document.getElementById('fuStarredScreen').classList.add('open');
+        lockBody();
+        renderStarredScreen();
+    };
+    window.closeStarredScreen = function() {
+        document.getElementById('fuStarredScreen').classList.remove('open');
+        unlockBody();
+        updateSavedCount();
+    };
+
+    function goToStarred(msgId) {
+        window.closeStarredScreen();
+        window.closeChatProfileModal();
+        setTimeout(() => {
+            const el = messagesArea.querySelector('[data-msg-id="' + msgId + '"]');
+            if (!el) { showToast('Message not found', 'o'); return; }
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('flash-hit');
+            setTimeout(() => el.classList.remove('flash-hit'), 1600);
+        }, 280);
+    }
+
+    document.getElementById('stFilters').addEventListener('click', function(e) {
+        const c = e.target.closest('[data-st-f]');
+        if (c) { starFilter = c.dataset.stF; renderStarredScreen(); }
+    });
+    document.getElementById('stBody').addEventListener('click', function(e) {
+        const un = e.target.closest('[data-st-un]');
+        if (un) { e.stopPropagation(); window.toggleStarMessage(un.dataset.stUn); renderStarredScreen(); return; }
+        const card = e.target.closest('[data-st-go]');
+        if (card) goToStarred(card.dataset.stGo);
+    });
+    // ═══ end CHANGE J2 ═══
 
     window.togglePinMessage = async function(msgId) {
         const conv = currentConv();
@@ -5741,7 +6078,7 @@
         return { meta, thumbBlob };
     }
 
-    // ═══ CHANGE L.2: Save button in doc viewer header ═══
+    // ═══ B3: doc viewer delete button uses deleteFromDocViewer ═══
     window.openDocument = function(url, msgId) {
         const msg = messages.find(m => m.id === msgId);
         const meta = (msg && msg.metadata) || {};
@@ -5759,7 +6096,7 @@
                 <h3 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(fileName)}</h3>
                 <button onclick="saveDocFromViewer('${url}','${msgId}')"><i class="ri-bookmark-line"></i></button>
                 <button onclick="downloadMedia('${url}')"><i class="ri-download-2-line"></i></button>
-                ${isMine ? `<button onclick="closeDocViewer();deleteMessage('${msgId}','everyone')"><i class="ri-delete-bin-line"></i></button>` : ''}
+                ${isMine ? `<button onclick="deleteFromDocViewer('${msgId}')"><i class="ri-delete-bin-line"></i></button>` : ''}
             </div>
             <div class="fu-body" id="fuDocViewerBody" style="padding:0;background:#1a1a1a;"></div>`;
         document.body.appendChild(modal);
@@ -5767,7 +6104,7 @@
         requestAnimationFrame(() => modal.classList.add('open'));
         renderDocumentInto(byId('fuDocViewerBody'), url, ext);
     };
-    // ═══ end CHANGE L.2 ═══
+    // ═══ end B3 ═══
     window.closeDocViewer = function() {
         const modal = byId('fuDocViewer');
         if (!modal) return;
@@ -5775,12 +6112,27 @@
         unlockBody();
         setTimeout(() => modal.remove(), 250);
     };
-    window.downloadMedia = function(url) {
+
+    // ═══ B4: downloadMedia uses blob fetch for reliable download ═══
+    window.downloadMedia = async function(url) {
         if (!url) return;
-        const a = document.createElement('a');
-        a.href = url; a.download = ''; a.target = '_blank'; a.rel = 'noopener';
-        document.body.appendChild(a); a.click(); a.remove();
+        const name = safeDecode(url.split('?')[0].split('/').pop() || 'file');
+        try {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const obj = URL.createObjectURL(await r.blob());
+            const a = document.createElement('a');
+            a.href = obj; a.download = name;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(obj), 4000);
+            showToast('Download started', 'g');
+        } catch (e) {
+            const a = document.createElement('a');
+            a.href = url; a.download = ''; a.target = '_blank'; a.rel = 'noopener';
+            document.body.appendChild(a); a.click(); a.remove();
+        }
     };
+    // ═══ end B4 ═══
 
     window.openAttachModal = function() {
         const modal = document.getElementById('attachModal');
@@ -6203,17 +6555,19 @@
         return { counts, total: counts.reduce((a, b) => a + b, 0) };
     }
 
-    // ═══ CHANGE G: poll3 layout ═══
+    // ═══ B7: fixed poll bubble layout ═══
     function renderPollHtml(msg, textContent) {
         const poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
         const { counts, total } = pollStats(poll);
         const mine = pollVotesByMessage.get(msg.id);
         const expired = poll.expiresAt && new Date(poll.expiresAt) < new Date();
+        const CHECK = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        const BARS = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
         const opts = poll.options.map((o, i) => {
             const pct = total ? Math.round(counts[i] / total * 100) : 0;
             return `
             <div class="poll3-opt ${mine === i ? 'sel' : ''}" ${expired ? 'style="cursor:default"' : `onclick="handlePollOptionClick('${msg.id}',${i})"`}>
-                <div class="poll3-radio"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <div class="poll3-radio">${CHECK}</div>
                 <div class="poll3-main">
                     <div class="poll3-line"><span>${escapeHtml(o.text)}</span><span class="poll3-count">${counts[i]}</span></div>
                     <div class="poll3-bar"><i style="width:${pct}%"></i></div>
@@ -6221,58 +6575,104 @@
             </div>`;
         }).join('');
         const end = poll.expiresAt
-            ? (expired ? ' • Poll ended' : ' • Ends ' + new Date(poll.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))
+            ? (expired ? ' · Poll ended' : ' · Ends ' + new Date(poll.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))
             : '';
         return `
         <div class="poll3">
             <div class="poll3-head">
-                <div class="poll3-ico"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
-                <div><div class="poll3-q">${escapeHtml(poll.question)}</div><div class="poll3-hint">Select one</div></div>
+                <div class="poll3-ico">${BARS}</div>
+                <div style="min-width:0;"><div class="poll3-q">${escapeHtml(poll.question)}</div><div class="poll3-hint">${expired ? 'Poll ended' : 'Select one'}</div></div>
             </div>
             ${opts}
             <div class="poll3-foot">${total} vote${total !== 1 ? 's' : ''}${end}</div>
             <button class="poll3-view" onclick="event.stopPropagation();showPollVoters('${msg.id}')">View votes</button>
         </div>` + (textContent ? captionHtml(textContent) : '');
     }
-    // ═══ end CHANGE G ═══
+    // ═══ end B7 ═══
+
+    // ═══ B7: full-screen poll votes screen ═══
+    function ensurePollVotesScreen() {
+        let s = document.getElementById('fuPollVotesScreen');
+        if (!s) {
+            s = document.createElement('div');
+            s.id = 'fuPollVotesScreen';
+            s.className = 'fu-screen pv-screen';
+            s.innerHTML = `
+                <div class="fu-screen-header">
+                    <button onclick="closePollVotesScreen()"><i class="ri-arrow-left-line"></i></button>
+                    <h3>Poll votes</h3>
+                </div>
+                <div class="fu-body" id="pvBody"></div>`;
+            document.body.appendChild(s);
+        }
+        return s;
+    }
+    window.closePollVotesScreen = function() {
+        const s = document.getElementById('fuPollVotesScreen');
+        if (s) s.classList.remove('open');
+        unlockBody();
+    };
 
     window.showPollVoters = async function(msgId) {
         const msg = messages.find(m => m.id === msgId);
         if (!msg) return;
         const poll = typeof msg.poll_data === 'string' ? JSON.parse(msg.poll_data) : msg.poll_data;
-        const { data: voteRows } = await sb.from('chat_poll_votes')
+        if (!poll || !Array.isArray(poll.options)) return;
+
+        const scr = ensurePollVotesScreen();
+        const body = scr.querySelector('#pvBody');
+        body.innerHTML = '<div class="fu-empty-tab">Loading votes…</div>';
+        lockBody();
+        requestAnimationFrame(() => scr.classList.add('open'));
+
+        const { data, error } = await sb.from('chat_poll_votes')
             .select('user_id, option_index').eq('message_id', msgId);
-        const voters = {};
-        (voteRows || []).forEach(v => { voters[v.user_id] = v.option_index; });
-        const ids = Object.keys(voters);
-        if (!ids.length) { showToast(window.fuT('No votes yet'), 'p'); return; }
-        const { data } = await sb.from('profiles').select('id, display_name, username, avatar_url').in('id', ids);
+        if (error) { body.innerHTML = '<div class="fu-empty-tab">Could not load votes.</div>'; return; }
+
+        const rows = data || [];
+        const total = rows.length;
+        const ids = [...new Set(rows.map(r => r.user_id))];
         const pm = {};
-        (data || []).forEach(p => { pm[p.id] = p; });
-        let sheet = byId('fuPollVotersSheet');
-        if (!sheet) {
-            sheet = document.createElement('div');
-            sheet.id = 'fuPollVotersSheet';
-            sheet.className = 'fu-action-sheet-backdrop';
-            document.body.appendChild(sheet);
+        if (ids.length) {
+            const { data: profs } = await sb.from('profiles')
+                .select('id, display_name, username, avatar_url').in('id', ids);
+            (profs || []).forEach(p => { pm[p.id] = p; });
         }
-        const body = poll.options.map((o, i) => {
-            const who = ids.filter(id => voters[id] === i);
-            if (!who.length) return '';
-            return `<div style="padding:8px 12px 2px;font-weight:700;font-size:.82rem;color:var(--muted)">${escapeHtml(o.text)} · ${who.length}</div>` +
-                who.map(id => {
+
+        const perOption = poll.options.map((o, i) => rows.filter(r => r.option_index === i).map(r => r.user_id));
+        const top = Math.max(0, ...perOption.map(a => a.length));
+        const end = poll.expiresAt
+            ? (new Date(poll.expiresAt) < new Date() ? ' · Poll ended' : ' · Ends ' + new Date(poll.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))
+            : '';
+
+        body.innerHTML = `
+            <div class="pv-hero">
+                <small>Poll</small>
+                <h2>${escapeHtml(poll.question)}</h2>
+                <p>${total} vote${total !== 1 ? 's' : ''}${end}</p>
+            </div>` + poll.options.map((o, i) => {
+                const who = perOption[i];
+                const pct = total ? Math.round(who.length / total * 100) : 0;
+                const voters = who.length ? who.map(id => {
                     const p = pm[id] || {};
-                    return `<div class="u-row" style="padding:8px 12px"><img class="u-av" style="width:36px;height:36px" src="${getAvatar(p)}" ${avatarErrAttr()}>
-                        <div class="u-info"><div class="u-name">${escapeHtml(id === currentUserId ? 'You' : getDisplayName(p))}</div></div></div>`;
-                }).join('');
-        }).join('');
-        sheet.innerHTML = `
-            <div class="fu-action-sheet-backdrop-inner" onclick="document.getElementById('fuPollVotersSheet').classList.remove('open')"></div>
-            <div class="fu-action-sheet" style="max-height:70vh;overflow:auto;">
-                <div style="font-weight:800;padding:6px 12px 8px;">${escapeHtml(poll.question)}</div>${body}
-            </div>`;
-        requestAnimationFrame(() => sheet.classList.add('open'));
+                    return `<div class="pv-voter">
+                        <img src="${getAvatar(p)}" alt="" ${avatarErrAttr()}>
+                        <div><b>${escapeHtml(id === currentUserId ? 'You' : getDisplayName(p))}</b>${p.username ? `<span>@${escapeHtml(p.username)}</span>` : ''}</div>
+                    </div>`;
+                }).join('') : '<div class="pv-none">No votes yet</div>';
+                return `
+                <div class="pv-card">
+                    <div class="pv-head">
+                        <div class="pv-opt">${escapeHtml(o.text)}</div>
+                        ${who.length && who.length === top ? '<span class="pv-lead">Leading</span>' : ''}
+                        <div class="pv-num"><b>${who.length}</b><small>${pct}%</small></div>
+                    </div>
+                    <div class="pv-bar"><i style="width:${pct}%"></i></div>
+                    ${voters}
+                </div>`;
+            }).join('');
     };
+    // ═══ end B7 ═══
 
     const SIDE_PANELS = ['fuProfileScreen', 'fuThemeScreen', 'fuWallpaperScreen', 'fuBubbleScreen', 'disappearingScreen'];
     function closeSidePanels() {
