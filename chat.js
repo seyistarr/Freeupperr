@@ -1074,22 +1074,8 @@
             } else {
                 query = query.or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
             }
-            let { data, error } = await query;
-            if (error) {
-                // A broken embedded messages/read-receipts relationship must not hide
-                // otherwise accessible conversations. The base query still uses RLS.
-                console.warn('Conversation preview query failed; retrying without embeds:', error);
-                let fallback = sb.from('conversations').select('*').order('updated_at', { ascending: false });
-                if (groupIdList.length) {
-                    fallback = fallback.or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId},id.in.(${groupIdList.join(',')})`);
-                } else {
-                    fallback = fallback.or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
-                }
-                const recovered = await fallback;
-                if (recovered.error) throw recovered.error;
-                data = (recovered.data || []).map(conv => ({ ...conv, messages: [] }));
-            }
-            data = data || [];
+            const { data, error } = await query;
+            if (error) throw error;
 
             const userIds = [];
             data.forEach(conv => {
@@ -1147,19 +1133,12 @@
             conversations = conversations.filter(c =>
                 !(c.hidden_by || []).includes(currentUserId)
             );
+            await loadGroupMemberCounts();
             renderConversations(convSearch.value);
-            // Optional group counts must not hold up the initial inbox.
-            loadGroupMemberCounts().then(() => renderConversations(convSearch.value))
-                .catch(err => console.warn('Group counts unavailable:', err));
         } catch (err) {
             console.error('loadConversations error:', err);
             const detail = (err && (err.message || err.hint || err.code)) || JSON.stringify(err);
             showToast('Failed: ' + detail, 'r');
-            // Never report an API failure as a genuinely empty inbox.
-            if (convList) {
-                convList.innerHTML = '<div role="alert" style="padding:24px;text-align:center;color:var(--cl-muted)"><p>Conversations could not be loaded.</p><button type="button" id="retryChatConversations" style="margin-top:12px;padding:10px 18px;border-radius:12px;background:#7139df;color:white;border:0">Retry loading</button></div>';
-                document.getElementById('retryChatConversations')?.addEventListener('click', () => loadConversations());
-            }
         }
     }
 
@@ -6331,13 +6310,7 @@
 
         messageInputArea.dataset.defaultHtml = messageInputArea.innerHTML;
 
-        // Profile metadata is optional for inbox loading.
-        let profile = null;
-        try {
-            const profileResult = await sb.from('profiles').select('id, username, display_name, display_username, avatar_url, bio, verified_status, is_private, is_online, last_seen_at').eq('id', currentUserId).single();
-            if (profileResult.error) console.warn('Chat profile unavailable:', profileResult.error);
-            profile = profileResult.data;
-        } catch (err) { console.warn('Chat profile unavailable:', err); }
+        const { data: profile } = await sb.from('profiles').select('id, username, display_name, display_username, avatar_url, bio, verified_status, is_private, is_online, last_seen_at').eq('id', currentUserId).single();
         currentUserProfile = profile || {};
         const headerAvatar = document.getElementById('myHeaderAvatar');
         if (headerAvatar) {
@@ -6354,10 +6327,7 @@
             headerAvatar.alt = 'My profile photo';
         }
 
-        // Presence is best-effort: an RLS/network failure must not block chat loading.
-        Promise.resolve(sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId))
-            .then(({ error }) => { if (error) console.warn('Chat presence update failed:', error); })
-            .catch(err => console.warn('Chat presence update failed:', err));
+        await sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
         presenceHeartbeatInterval = setInterval(() => {
             sb.from('profiles').update({ is_online: true, last_seen_at: new Date().toISOString() }).eq('id', currentUserId).then(()=>{}).catch(()=>{});
         }, 25000);
@@ -6374,11 +6344,8 @@
 
         setupFreeUpperNotifications();
 
-        // Conversations are the primary screen content. Auxiliary friend/block
-        // lookups must never delay or prevent the conversation list rendering.
+        await Promise.all([loadMutualFollowers(), loadMyBlockList()]);
         await loadConversations();
-        Promise.allSettled([loadMutualFollowers(), loadMyBlockList()])
-            .then(() => { if (currentUserId) renderConversations(convSearch?.value || ''); });
         subscribeToMessages();
         subscribeToConversations();
         subscribeToPartnerPresence();
