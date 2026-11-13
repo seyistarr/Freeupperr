@@ -431,8 +431,9 @@ test('sidebar: desktop modal ownership, themes, accessible keyboard and account 
   await h.page.locator('side-nav [data-side-key=create]').focus();await h.page.keyboard.press('Enter');await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='create');await sidebarSelect(h,'create');
   await h.screen('create').locator('#postContent').fill('Private account A draft');
   await h.page.evaluate(()=>switchActor('other-viewer'));await h.page.waitForFunction(()=>document.querySelectorAll('iframe[data-fu-mounted]').length===0);
-  assert.equal(await h.page.evaluate(()=>[...document.querySelectorAll('textarea')].some(el=>el.value==='Private account A draft')),false);
-  await h.page.waitForFunction(()=>window.actor==='other-viewer' && !!window.FreeUpperProfileShell?.getSession());
+  // WebKit may replace the main document while auth listeners clear the old
+  // account. Wait for the new session before checking for private draft leaks.
+  await h.page.waitForFunction(()=>window.actor==='other-viewer' && !!window.FreeUpperProfileShell?.getSession() && ![...document.querySelectorAll('textarea')].some(el=>el.value==='Private account A draft'));
   await sidebarSelect(h,'create');assert.equal(await h.screen('create').locator('#postContent').inputValue(),'');assert.equal(await h.page.evaluate(()=>FreeUpperProfileShell.getSession().viewer),'other-viewer');assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
