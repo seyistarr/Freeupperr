@@ -1,4 +1,6 @@
-# Google full name initialization — release review
+# Google full name initialization — original preparation review
+
+**Current status (2026-11-14):** This migration is already installed and verified in production. Do not execute its SQL again. The execution instructions below are historical preparation evidence. See [the latest integration and publishing review](GOOGLE-FULL-NAME-FINAL-REVIEW.md).
 
 Prepared from production main `2f0363f485c8b9936bc532a2b23a256923d4447c` on branch `codex/google-full-name`. Local preparation only: no push, deployment, production DDL/data writes, Stage 2 execution, additional test accounts or repeat live canary.
 
