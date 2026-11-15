@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import {readFile} from './helpers/read-page.js';
 import { createServer } from 'node:http';
 import { chromium } from '@playwright/test';
 
@@ -120,7 +120,7 @@ test('the actual PWA worker replaces the old cache and serves v4 sound consumers
     await page.reload();
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     const keys = await page.evaluate(() => caches.keys());
-    assert.ok(keys.includes('freeupper-pwa-v34-default-identity'));
+    assert.ok(keys.includes('freeupper-pwa-v35-notes-gallery'));
     assert.ok(!keys.includes('freeupper-pwa-v29-sidebar'));
     await context.setOffline(true);
     const files = await page.evaluate(async () => {

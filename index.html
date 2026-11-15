@@ -62,7 +62,8 @@
     <script src="/js/freeupper-time.js"></script>
     <script src="global.js?v=author-header-v2" defer></script>
     <script src="auth.js?v=interaction-sounds-v4" defer></script>
-    <script src="posts.js?v=clean-urls-v1" data-fu-quotes defer></script>
+    <script src="posts.js?v=notes-gallery-v1" data-fu-quotes defer></script>
+    <script src="gallery-api.js?v=gallery-v1"></script>
     <script src="protected-media-client.js?v=clean-urls-v1" defer></script>
     <script src="header-badges.js?v=sounds-v3-clean-urls-v1" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js" defer></script>
@@ -4517,6 +4518,7 @@
 <script>window.fuT = window.fuT || function(key, values) { return window.FreeUpperI18n ? window.FreeUpperI18n.t(key, values) : key; };</script>
 <script>window.fuT = window.fuT || function(key, values) { return window.FreeUpperI18n ? window.FreeUpperI18n.t(key, values) : key; };</script>
 <script type="module" src="/js/freeupper-i18n.js"></script>
+<script src="inline-video.js"></script>
 </head>
 <body class="bottom-nav-scroll">
 
@@ -6587,7 +6589,7 @@
 
             function _pauseVideoEl(vid) {
                 if (!vid) return;
-                if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
+                window.FreeUpperInlineVideo.pause(vid);
                 vid.dataset.shouldPlay = '0';
                 if (currentlyPlayingVideo === vid) currentlyPlayingVideo = null;
             }
@@ -6597,7 +6599,7 @@
                 vid.dataset.shouldPlay = '1';
                 const attemptPlay = () => {
                     if (vid.dataset.shouldPlay !== '1') return;
-                    if (vid.plyr) { vid.plyr.play().catch(() => {}); } else { vid.play().catch(() => {}); }
+                    window.FreeUpperInlineVideo.play(vid).catch(() => {});
                 };
                 attemptPlay();
                 currentlyPlayingVideo = vid;
@@ -6605,7 +6607,7 @@
 
             function pauseAllVideos() {
                 document.querySelectorAll('video').forEach(vid => {
-                    if (vid.plyr) { vid.plyr.pause(); } else { vid.pause(); }
+                    window.FreeUpperInlineVideo.pause(vid);
                     vid.dataset.shouldPlay = '0';
                 });
                 document.querySelectorAll('iframe').forEach(iframe => {
@@ -8771,7 +8773,7 @@
                                         vid.muted = _resumeVideoState.muted;
                                     } catch (e) {}
                                 }
-                                if (vid.plyr) { vid.plyr.play().catch(() => {}); } else { vid.play().catch(() => {}); }
+                                window.FreeUpperInlineVideo.play(vid).catch(() => {});
                                 currentlyPlayingVideo = vid;
                             };
                             if (_resumeVideoState && vid.readyState < 1) {
@@ -9884,6 +9886,37 @@
             window.openGalleryLightbox = openGalleryLightbox;
             window.closeLightbox = closeLightbox;
 
+            window.addEventListener('fu-content-change',async event=>{
+                if(event.detail?.kind!=='post')return;
+                const post=await window.PostsAPI.loadPostById(event.detail.id,{requireLive:true}).catch(()=>null);
+                const index=allPosts.findIndex(p=>p.id===event.detail.id);
+                if(!post){if(index>=0)allPosts.splice(index,1);document.querySelectorAll('[data-post-id="'+CSS.escape(event.detail.id)+'"]').forEach(n=>n.remove());return;}
+                if(index>=0)allPosts[index]=post;
+                if(post.bookmarkedByMe)bookmarksSet.add(post.id);else bookmarksSet.delete(post.id);
+                window.FreeUpperFeed?.patchPost(post.id,post);updateReactionsUI(post.id);updateCommentCount(post.id);
+            });
+            window.ProfileNotesRenderer = {
+                async show(posts, viewer) {
+                    if (!profileDetailShell || viewer !== (getCurrentUser()?.isLoggedIn ? getCurrentUser().id : 'guest')) return false;
+                    pauseAllVideos(); allPosts = structuredClone(posts); appData.posts=allPosts;
+                    let root=document.getElementById('profile-notes-root');
+                    if(!root){root=document.createElement('main');root.id='profile-notes-root';document.body.append(root);
+                        const style=document.createElement('style');style.textContent='body{padding:0!important;min-height:0!important}body>header,body>side-nav,body>bottom-nav,#pull-indicator,#category-chips,#user-content,#fu-site-footer,#global-comment-bar,#refresh-spinner{display:none!important}#profile-notes-root{display:block;width:100%}';document.head.append(style);
+                        let previousOverlay=false;
+                        new MutationObserver(()=>{
+                            const ids=['share-modal','homeRepostOverlay','repostQuoteOverlay','lightbox','lightboxCommentsOverlay','commentImageViewer','tagsModal','repostersModalOverlay','inapp-webview-overlay'];
+                            const visible=ids.some(id=>{const el=document.getElementById(id);if(!el)return false;const css=getComputedStyle(el);return css.display!=='none'&&css.visibility!=='hidden'&&Number(css.opacity)>0&&el.getBoundingClientRect().height>0;});
+                            if(visible!==previousOverlay){previousOverlay=visible;parent.postMessage({type:'fu-notes-overlay',visible},location.origin);}
+                        }).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
+                        new ResizeObserver(()=>parent.postMessage({type:'fu-notes-height',height:root.scrollHeight},location.origin)).observe(root);
+                    }
+                    window.renderProfileNotes(root,allPosts);
+                    window.openExplorePost=(id)=>parent.postMessage({type:'fu-notes-open',id},location.origin);
+                    parent.postMessage({type:'fu-notes-height',height:root.scrollHeight},location.origin);
+                    return true;
+                },
+                pause:pauseAllVideos
+            };
             const initializePage = profileDetailEmbedded ? () => init().catch(error => {
                 console.warn('Profile detail could not load:', error);
                 profileDetailMessage('fu-profile-detail-ready', {available:false});
@@ -9897,7 +9930,8 @@
     <!-- Page modules (depend on functions defined in the main module) -->
     <script src="market.js?v=interaction-sounds-v4" defer></script>
     <script src="explore.js" defer></script>
-    <script src="foryou.js?v=author-header-v2" defer></script>
+    <script src="post-card.js?v=gallery-v1" defer></script>
+    <script src="foryou.js?v=author-header-v3-notes-gallery" defer></script>
 
     <!-- TAGS MODAL (reused for reposters) -->
     <div class="tags-modal" id="tagsModal">

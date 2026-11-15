@@ -1,7 +1,8 @@
 import '../js/freeupper-routes.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile, mkdir, writeFile} from 'node:fs/promises';
+import {mkdir, writeFile} from 'node:fs/promises';
+import {readFile} from './helpers/read-page.js';
 import {createServer} from 'node:http';
 import {execFileSync} from 'node:child_process';
 import {chromium} from '@playwright/test';

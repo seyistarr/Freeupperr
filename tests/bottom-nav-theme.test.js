@@ -1,7 +1,8 @@
 import '../js/freeupper-routes.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import {readdir} from 'node:fs/promises';
+import {readFile} from './helpers/read-page.js';
 import { createServer } from 'node:http';
 import { chromium } from '@playwright/test';
 
@@ -9,7 +10,7 @@ import { chromium } from '@playwright/test';
 test('bottom navigation follows persisted themes, live switches and page navigation', { timeout: 120000 }, async () => {
   const pages = [];
   for (const name of await readdir('.')) {
-    if (name.endsWith('.html') && (await readFile(name, 'utf8')).includes('bottom-nav.css')) pages.push(name);
+    if (name.endsWith('.html') && name!=='gallery-viewer.html' && (await readFile(name, 'utf8')).includes('bottom-nav.css')) pages.push(name);
   }
   for (const required of ['index.html', 'profile.html', 'search.html', 'video.html']) assert.ok(pages.includes(required));
   const server = createServer(async (req, res) => {
@@ -35,6 +36,8 @@ test('bottom navigation follows persisted themes, live switches and page navigat
     await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     const page = await context.newPage();
     async function check(theme) {
+      await page.waitForFunction(() => !document.documentElement.classList.contains('theme-initializing'));
+      await page.waitForTimeout(350);
       await page.waitForFunction(() => !!document.querySelector('.bottom-nav .nav-item'));
       const result = await page.evaluate(() => {
         const nav = document.querySelector('.bottom-nav');

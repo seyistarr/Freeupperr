@@ -1,10 +1,24 @@
 importScripts('/js/freeupper-routes.js?v=clean-urls-v1');
 
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v34-default-identity';
+const CACHE_NAME = 'freeupper-pwa-v35-notes-gallery';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
+  './posts.js?v=notes-gallery-v1',
+  './foryou.js?v=author-header-v3-notes-gallery',
+  './gallery-viewer.html',
+  './post-card.js?v=gallery-v1',
+  './profile-content.js?v=gallery-v1',
+  './gallery-api.js?v=gallery-v1',
+  './gallery-preview.js?v=gallery-v1',
+  './inline-video.js',
+  './gallery-session.js?v=gallery-v1',
+  './gallery.css?v=gallery-v1',
+  './video-player.css?v=gallery-v1',
+  './video-player.js?v=gallery-v1',
+  './video-shell.js?v=gallery-v1',
+
   './',
   './index.html',
   './create.html',
