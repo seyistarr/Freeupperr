@@ -322,7 +322,13 @@
     } else closeViewer();
   });
   window.addEventListener("pagehide", pause);
-  window.sb?.auth?.onAuthStateChange(() => {
+  let contentViewer = scope();
+  window.sb?.auth?.onAuthStateChange((event, session) => {
+    const nextViewer = session?.user?.id || "guest";
+    // Owned frames can announce SIGNED_IN for the already active account.
+    // Keep those viewers alive; all other auth events retain existing cleanup.
+    if (nextViewer === contentViewer && ["INITIAL_SESSION", "SIGNED_IN"].includes(event)) return;
+    contentViewer = nextViewer;
     ++generation;
     context = null;
     pause();
