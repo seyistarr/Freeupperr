@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,writeFile} from 'node:fs/promises';
+import {writeFile} from 'node:fs/promises';
+import {readFile} from './helpers/read-page.js';
 import {createServer} from 'node:http';
 import {chromium,webkit} from '@playwright/test';
 import {profileFixtureParts as profile} from './helpers/profile-navigation-fixture.js';

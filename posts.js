@@ -595,7 +595,7 @@
     offset = normalizeOffset(offset); limit = normalizeLimit(limit);
     const {data, count, error} = await sb.from('posts').select(POST_SELECT, {count: 'exact'})
       .eq('user_id', userId).eq('is_deleted', false).eq('is_hidden', false)
-      .eq('publishing_state', 'published').order('created_at', {ascending: false})
+      .eq('publishing_state', 'published').order('created_at', {ascending: false}).order('id', {ascending: false})
       .range(offset, offset + limit - 1);
     if (error) throw error;
     if (typeof count !== 'number') throw new Error('Profile post count unavailable');
@@ -1078,6 +1078,7 @@
     });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
+    window.GalleryAPI?.changed({kind:'post',id:postId,action:'like'});
     return { liked: !!row?.liked, count: safeNumber(row?.new_count) };
   }
 
@@ -1097,6 +1098,7 @@
 
     const row = Array.isArray(data) ? data[0] : data;
     clearFeedContext();
+    window.GalleryAPI?.changed({kind:'post',id:postId,action:'repost'});
 
     return {
       reposted: !!row?.reposted,
@@ -1129,6 +1131,7 @@
       .single();
 
     clearFeedContext();
+    window.GalleryAPI?.changed({kind:'post',id:postId,action:'repost'});
 
     return {
       reposted: true,
@@ -1152,6 +1155,7 @@
     if (error) throw error;
 
     const row = Array.isArray(data) ? data[0] : data;
+    window.GalleryAPI?.changed({kind:'post',id:postId,action:'bookmark'});
     return { bookmarked: !!row?.bookmarked, count: safeNumber(row?.count) };
   }
 
@@ -1620,6 +1624,12 @@
   // PUBLIC API
   // ===================================================================
   window.PostsAPI = {
+    async loadPostIds(ids) {
+      if(!ids?.length)return [];
+      const {data,error}=await sb.from('posts').select(POST_SELECT).in('id',ids.slice(0,200)).eq('is_deleted',false).eq('is_hidden',false).eq('publishing_state','published');
+      if(error)throw error;
+      const rows=await mapPostsWithInteractionState(data||[]);const byId=new Map(rows.map(p=>[p.id,p]));return ids.map(id=>byId.get(id)).filter(Boolean);
+    },
     // Feed data
     loadAllPosts,
     loadFeedCandidates,

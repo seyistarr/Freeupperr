@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile, readdir} from 'node:fs/promises';
+import {readdir} from 'node:fs/promises';
+import {readFile} from './helpers/read-page.js';
 import {createServer} from 'node:http';
 import {runInNewContext} from 'node:vm';
 import {chromium, webkit} from '@playwright/test';

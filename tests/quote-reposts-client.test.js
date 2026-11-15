@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile} from './helpers/read-page.js';
 import {createHash} from 'node:crypto';
 import {postsFixture,id,source} from './helpers/quote-posts-api-fixture.js';
 const contracts=JSON.parse(await readFile(new URL('./fixtures/quote-legacy-contracts.json',import.meta.url),'utf8'));
@@ -71,9 +71,12 @@ test('video and Explore legacy behavior remains unchanged apart from additive in
   const videoStrokeRule=/(\.v-action-btn svg \{[^}]*?stroke-width: )2\.75(;)/s;
   if(name==='video.html') assert.match(legacy,videoStrokeRule,'expected approved 2.75px video icon stroke');
   const behaviorBaseline=name==='video.html'?legacy.replace(videoStrokeRule,(_match,before,after)=>before+'2'+after):legacy;
-  assert.equal(createHash('sha256').update(behaviorBaseline).digest('hex'),contracts[name+'_sha256']);
+  // Extraction changes the document envelope. Keep a reviewed shared-document hash
+  // and retain the latest author-header and legacy API checks above/below.
+  assert.equal(createHash('sha256').update(behaviorBaseline).digest('hex'),contracts[name==='video.html'?'video.html_shared_sha256':name+'_sha256']);
  }
- for(const name of ['toggleRepostAPI','updateRepostComment','normalizeMedia','mapPost','incrementView'])assert(source.includes(contracts[name]),name+' legacy contract changed');
+ const canonicalSource=source.replace(/^.*window\.GalleryAPI\?\.changed.*\n/gm,'');
+ for(const name of ['toggleRepostAPI','updateRepostComment','normalizeMedia','mapPost','incrementView'])assert(canonicalSource.includes(contracts[name]),name+' legacy contract changed');
  const f=postsFixture({enabled:false,rows:[outer()],originals:new Map([[id(100),original]])});const [p]=await f.api.loadAllPosts();assert(!('isQuote' in p));assert(!f.calls.some(c=>c.rpc==='load_quote_references'));
  const result=await f.api.toggleRepostAPI(id(200),'Existing video note');assert.equal(result.reposted,true);assert.equal(result.count,3);const call=f.calls.find(c=>c.rpc==='toggle_repost');assert.equal(call.args.p_post_id,id(200));assert.equal(call.args.p_comment,'Existing video note');
 });

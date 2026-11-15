@@ -2091,6 +2091,8 @@
 <script>window.fuT = window.fuT || function(key, values) { return window.FreeUpperI18n ? window.FreeUpperI18n.t(key, values) : key; };</script>
 <script>window.fuT = window.fuT || function(key, values) { return window.FreeUpperI18n ? window.FreeUpperI18n.t(key, values) : key; };</script>
 <script type="module" src="/js/freeupper-i18n.js"></script>
+<link rel="stylesheet" href="gallery.css?v=gallery-v1">
+<script src="inline-video.js"></script>
 </head>
 <body>
 
@@ -2585,10 +2587,11 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/global.js?v=clean-urls-v1"></script>
     <script src="/auth.js?v=interaction-sounds-v4"></script>
-    <script src="/posts.js?v=clean-urls-v1" data-fu-quotes></script>
+    <script src="/posts.js?v=notes-gallery-v1" data-fu-quotes></script>
     <script src="/protected-media-client.js?v=clean-urls-v1"></script>
     <script src="/listings.js"></script>
-    <script src="/profile-detail.js?v=clean-urls-v1"></script>
+    <script src="/gallery-api.js?v=gallery-v1"></script><script src="/gallery-preview.js?v=gallery-v1"></script><script src="/profile-content.js?v=gallery-v1"></script>
+<script src="/profile-detail.js?v=clean-urls-v1"></script>
     <script src="/profile-cache.js?v=3"></script>
     <script src="/settings.js?v=interaction-sounds-v4"></script>
     <script src="/bottom-nav.js?v=interaction-sounds-v4" defer></script>
@@ -2780,7 +2783,7 @@
             var currentUser = null;
             var targetUser = null;
             var allPosts = [];
-            var activeTab = 'posts';
+            var activeTab = ['posts','love','share','star','market'].includes(new URLSearchParams(location.search).get('tab')) ? new URLSearchParams(location.search).get('tab') : 'posts';
             var viewerIsBlockedByPrivacy = false;
             var selAvIdx = -1;
             var selCountry = '';
@@ -3555,7 +3558,7 @@
                 targetUserId = targetUser ? targetUser.id : null;
                 isOwner = !!(viewer && viewer.isLoggedIn && viewer.id === targetUserId);
                 _profileRestore = entry && entry.view || null;
-                activeTab = _profileRestore ? _profileRestore.tab : 'posts';
+                activeTab = _profileRestore ? _profileRestore.tab : (['posts','love','share','star','market'].includes(new URLSearchParams(location.search).get('tab'))?new URLSearchParams(location.search).get('tab'):'posts');
                 _profilePrimaryLoaded=false;_ownerAuthorizedAt=0;_ownerTotal=null;
                 allPosts=[]; _profileUserPosts=[]; likedPostIds=[];bookmarkedPostIds=[];repostedPostIds=[];
                 marketItemsCache=[];savedMarketItemsCache=[];savedMarketLoaded=false;
@@ -4035,7 +4038,7 @@
                 } else {
                     document.querySelectorAll('#tabsBar .tab').forEach(function(tabBtn) {
                         var key = tabBtn.getAttribute('data-tab');
-                        var isHidden = (key === 'posts' ? postsForceHidden : (!isOwner && profile._tabAllowed ? !profile._tabAllowed[key] : hiddenTabs.indexOf(key) !== -1));
+                        var isHidden = (key==='star' && !isOwner) || (key === 'posts' ? postsForceHidden : (!isOwner && profile._tabAllowed ? !profile._tabAllowed[key] : hiddenTabs.indexOf(key) !== -1));
                         tabBtn.style.display = isHidden ? 'none' : '';
                         if (isHidden && tabBtn.classList.contains('active')) {
                             var fallback = document.querySelector('#tabsBar .tab:not([style*="display: none"])');
@@ -4051,6 +4054,13 @@
 
             // ─── RENDER TAB ────────────────────────────────────────────
             function renderTab(tab, data) {
+                if(viewerIsBlockedByPrivacy)return;
+                window.ProfileContent?.pause();
+                if(window.ProfileContent && tab!=='market'){
+                    var container=document.getElementById('panel-'+tab);
+                    if(container){window.ProfileContent.render({container,tab,owner:targetUserId,cardHTML:buildGridPostCard,openPost:window.openPostFromGrid});return;}
+                }
+
                 var container = document.getElementById('panel-' + tab);
                 if (!container) return;
                 if (viewerIsBlockedByPrivacy) return;
@@ -4075,6 +4085,8 @@
             }
 
             function renderOwnerPosts(container,posts){
+                if(window.ProfileContent){window.ProfileContent.render({container,tab:'posts',owner:targetUserId,cardHTML:buildGridPostCard,openPost:window.openPostFromGrid});return;}
+
                 if(!posts.length){renderPosts(container,posts);return;}
                 var sorted=posts.slice().sort(function(a,b){return Number(!!b.pinned)-Number(!!a.pinned) || new Date(b.timestamp || b.date)-new Date(a.timestamp || a.date);});
                 var grid=container.querySelector('.grid-3');
@@ -4458,6 +4470,7 @@
 
             // ─── TABS SWITCH ──────────────────────────────────────────
             window.switchTab = function(el, tab) {
+                window.ProfileContent?.pause();
                 window.FUSound?.interaction?.('tap');
                 document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
                 el.classList.add('active');

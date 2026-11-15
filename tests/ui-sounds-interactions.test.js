@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { readFileSync } from 'node:fs';
+import {readFileSync} from './helpers/read-page.js';
 import { fixture } from './helpers/sound-fixture.js';
 
 const tap = () => ({ isTrusted: true, eventPhase: 2 });

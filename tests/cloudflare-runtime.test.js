@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdir, readFile } from 'node:fs/promises';
+import {readdir} from 'node:fs/promises';
+import {readFile} from './helpers/read-page.js';
 import { resolve } from 'node:path';
 
 const bundle = process.env.FREEUPPER_TEST_BUNDLE;
