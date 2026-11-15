@@ -30,11 +30,12 @@ test(`${engine}${pwa?'/PWA':''}: relationship tabs hydrate synchronously and Bac
  assert.equal(h.documents(),baseline);assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
-test(`${engine}: nested modal destinations retain virtual-list scroll, rows, query and viewer identity`,{timeout:60000},async()=>{
+test(`${engine}: nested modal destinations retain virtual-list scroll, rows, query and viewer identity`,{timeout:180000},async()=>{
+ for(let attempt=0;attempt<12;attempt++){
  const h=await profileHarness({pwa});const {page}=h;try{
  await page.evaluate(()=>openFollowModal('friends'));
  await page.evaluate(()=>{const input=document.getElementById('fsSearch2');input.value='FrIeNd';filterUsersPage(2);document.getElementById('fsList2').scrollTop=720;onFollowScrollPage(2);window.listScroll=document.getElementById('fsList2').scrollTop;window.listCalls=calls.filter(c=>c.kind==='lists'&&c.id==='viewer').length;});
- const id=await page.locator('#fsVirtualContent2 .u-info').evaluateAll(rows=>{const bounds=document.getElementById('fsList2').getBoundingClientRect();return rows.find(row=>{const r=row.getBoundingClientRect();return r.top>=bounds.top&&r.bottom<=bounds.bottom;}).dataset.profileId;});// DOM activation avoids Playwright's scroll-into-view changing the source position before the click.
+ const id=await page.locator('#fsVirtualContent2 .u-info').evaluateAll(rows=>{const bounds=document.getElementById('fsList2').getBoundingClientRect();const visible=rows.find(row=>{const r=row.getBoundingClientRect();return r.top>=bounds.top&&r.bottom<=bounds.bottom;});if(!visible)throw Error('Friends visible-row diagnostic '+JSON.stringify({bounds:bounds.toJSON(),scrollTop:document.getElementById('fsList2').scrollTop,transform:getComputedStyle(document.getElementById('followModal')).transform,rows:rows.map(row=>({id:row.dataset.profileId,connected:row.isConnected,rect:row.getBoundingClientRect().toJSON()})),freshRows:[...document.querySelectorAll('#fsVirtualContent2 .u-info')].map(row=>({id:row.dataset.profileId,rect:row.getBoundingClientRect().toJSON()}))}));return visible.dataset.profileId;});// DOM activation avoids Playwright's scroll-into-view changing the source position before the click.
  await page.locator('#fsVirtualContent2 .u-info[data-profile-id="'+id+'"]').evaluate(row=>row.click());
  await page.waitForFunction(id=>document.getElementById('panel-posts').textContent.includes(id+' post'),id);
  await page.evaluate(()=>openFollowModal('followers'));await page.locator('#fsVirtualContent0 .u-info[data-profile-id="viewer"]').click();
@@ -48,6 +49,7 @@ test(`${engine}: nested modal destinations retain virtual-list scroll, rows, que
  assert.equal(await page.evaluate(()=>calls.filter(c=>c.kind==='lists'&&c.id==='viewer').length),await page.evaluate(()=>listCalls));
  assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
+ }
 });
 test(`${engine}: invalid self-edges are excluded without hiding the viewer in another owner's lists`,{timeout:60000},async()=>{
  const h=await profileHarness();const {page}=h;try{
