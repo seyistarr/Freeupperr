@@ -34,8 +34,34 @@ test(`${engine}: nested modal destinations retain virtual-list scroll, rows, que
  const h=await profileHarness({pwa});const {page}=h;try{
  await page.evaluate(()=>openFollowModal('friends'));
  await page.evaluate(()=>{const input=document.getElementById('fsSearch2');input.value='FrIeNd';filterUsersPage(2);document.getElementById('fsList2').scrollTop=720;onFollowScrollPage(2);window.listScroll=document.getElementById('fsList2').scrollTop;window.listCalls=calls.filter(c=>c.kind==='lists'&&c.id==='viewer').length;});
- const id=await page.locator('#fsVirtualContent2 .u-info').evaluateAll(rows=>{const bounds=document.getElementById('fsList2').getBoundingClientRect();return rows.find(row=>{const r=row.getBoundingClientRect();return r.top>=bounds.top&&r.bottom<=bounds.bottom;}).dataset.profileId;});// DOM activation avoids Playwright's scroll-into-view changing the source position before the click.
- await page.locator('#fsVirtualContent2 .u-info[data-profile-id="'+id+'"]').evaluate(row=>row.click());
+ // Virtualization replaces nodes between evaluateAll's query and evaluation.
+ // Query, measure and activate atomically; never scroll a row into visibility.
+ const selected=await page.waitForFunction(()=>{
+  const list=document.getElementById('fsList2');
+  if(!document.getElementById('followModal').classList.contains('open')||!list)return false;
+  const bounds=list.getBoundingClientRect();
+  const row=[...list.querySelectorAll('.u-info')].find(row=>{
+   const r=row.getBoundingClientRect();
+   return row.isConnected&&r.width>0&&r.height>0&&
+    r.top>=Math.max(0,bounds.top)&&r.bottom<=Math.min(innerHeight,bounds.bottom)&&
+    r.left>=Math.max(0,bounds.left)&&r.right<=Math.min(innerWidth,bounds.right)&&
+    row.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));
+  });
+  if(!row)return false;
+  const id=row.dataset.profileId;row.click();return id;
+ },null,{timeout:5000}).catch(async error=>{
+  const geometry=await page.evaluate(()=>{
+   const list=document.getElementById('fsList2');
+   return {viewport:{width:innerWidth,height:innerHeight},scrollTop:list?.scrollTop,
+    bounds:list?.getBoundingClientRect().toJSON(),
+    rows:[...document.querySelectorAll('#fsVirtualContent2 .u-info')].map(row=>({
+     id:row.dataset.profileId,connected:row.isConnected,bounds:row.getBoundingClientRect().toJSON()
+    }))};
+  });
+  assert.fail('No fully visible, connected Friends row appeared within 5s; '+
+   JSON.stringify(geometry)+'; '+error.message);
+ });
+ const id=await selected.jsonValue();await selected.dispose();
  await page.waitForFunction(id=>document.getElementById('panel-posts').textContent.includes(id+' post'),id);
  await page.evaluate(()=>openFollowModal('followers'));await page.locator('#fsVirtualContent0 .u-info[data-profile-id="viewer"]').click();
  await page.waitForFunction(()=>document.getElementById('displayName').textContent==='viewer name');
