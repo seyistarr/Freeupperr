@@ -17,6 +17,6 @@ test('shared Video uses latest main CSS and DOM; Gallery changes are a separate 
 test('cache manifest preserves every main pin and adds shared static assets only',async()=>{
  const source=await readFile('service-worker.js','utf8');
  const urls=s=>Array.from(s.matchAll(/  '(\.\/[^']+)'/g),m=>m[1]);for(const url of approved.cacheUrls)assert(urls(source).includes(url),url);
- assert(source.includes('freeupper-pwa-v35-notes-gallery'));
+ assert(source.includes('freeupper-pwa-v36-gallery-navigation'));
  for(const file of ['posts.js?v=notes-gallery-v1','foryou.js?v=author-header-v3-notes-gallery','post-card.js','inline-video.js','video-player.js','video-player.css','gallery-viewer.html'])assert(source.includes(file));
 });

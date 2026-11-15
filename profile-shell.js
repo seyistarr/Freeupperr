@@ -367,7 +367,9 @@
   window.addEventListener('fu-app-hydrated',schedulePrefetch);
   window.addEventListener('fu-profile-view-ready',schedulePrefetch);
   document.addEventListener('profileUpdated',bind); document.addEventListener('userRefreshed',bind);
-  window.addEventListener('storage',e => { if (e.key==='freeupper_user_profile' || /auth-token/.test(e.key||'')) { if (!valid()) clear(true); bind(); } });
+  // Owned guest renderers refresh the local profile mirror too. With no
+  // authenticated lease/screens, that is not an account boundary to reset.
+  window.addEventListener('storage',e => { if (e.key==='freeupper_user_profile' || /auth-token/.test(e.key||'')) { if (!valid() && (session || frames.size)) clear(true); bind(); } });
   document.addEventListener('visibilitychange',() => { if (!valid() && session) clear(true); });
   window.AuthUser?.onChange?.(() => { if (!valid() && session) clear(true); bind(); });
   if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind,{once:true}); else bind();
