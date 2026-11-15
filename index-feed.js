@@ -155,20 +155,19 @@
   // Called by index.html once, right after onboarding chips are submitted.
   // This writes immediately (no debounce) since it's a deliberate one-time action.
   async function saveOnboardingInterests(interestsObject) {
-    if (!state.profile || !state.profile.id) return false;
-    try {
-      await window.sb
-        .from('profiles')
-        .update({ interests: interestsObject, onboarding_completed: true })
-        .eq('id', state.profile.id);
-      state.profile.interests = interestsObject;
-      state.profile.onboarding_completed = true;
-      emit('onboarding-completed', { interests: interestsObject });
-      return true;
-    } catch (err) {
-      console.error('index-feed.js: failed to save onboarding interests:', err);
-      return false;
-    }
+    if (!state.profile?.id) throw new Error('Sign in before saving your interests.');
+    const profile = state.profile;
+    const { data, error } = await window.sb
+      .from('profiles')
+      .update({ interests: interestsObject, onboarding_completed: true })
+      .eq('id', profile.id).select('id').single();
+    if (error) throw error;
+    if (!data || data.id !== profile.id) throw new Error('Your interests could not be saved. Please retry.');
+    if (state.profile !== profile) throw new Error('Your account changed. Please retry.');
+    profile.interests = interestsObject;
+    profile.onboarding_completed = true;
+    emit('onboarding-completed', { interests: interestsObject });
+    return true;
   }
 
   // ===================================================================

@@ -28,10 +28,10 @@ test('auth UI: email registration/login and Google redirect retain normal authen
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  let browser;try{
  browser=await chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']});
- const page=await browser.newPage();await page.goto('http://127.0.0.1:'+server.address().port);
+ const page=await browser.newPage();await page.route(url=>url.hostname!=='127.0.0.1',route=>route.abort());await page.goto('http://127.0.0.1:'+server.address().port);
  await page.evaluate(()=>AuthUser.openModal('signup'));await page.locator('#fu-email').fill('private@example.test');await page.locator('#fu-password').fill('Test-Only-Password123!');
  await page.locator('#fu-submit-btn').click();await page.waitForFunction(()=>calls.some(c=>c[0]==='signup'));
- assert.deepEqual(await page.evaluate(()=>calls.find(c=>c[0]==='signup')[1]),{email:'private@example.test',password:'Test-Only-Password123!'});
+ assert.deepEqual(await page.evaluate(()=>calls.find(c=>c[0]==='signup')[1]),{email:'private@example.test',password:'Test-Only-Password123!',options:{emailRedirectTo:'http://127.0.0.1:'+server.address().port+'/'}});
  await page.waitForFunction(()=>AuthUser.getCurrentUser().displayName==='Custom Display');
  assert.equal(await page.evaluate(()=>AuthUser.getCurrentUser().username),'my_custom_name');
  await page.evaluate(()=>AuthUser.openModal('signin'));await page.locator('#fu-email').fill('private@example.test');await page.locator('#fu-password').fill('Test-Only-Password123!');await page.locator('#fu-submit-btn').click();
