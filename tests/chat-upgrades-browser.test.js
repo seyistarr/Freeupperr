@@ -7,18 +7,19 @@ let js=readFileSync('chat.js','utf8');
 js=js.slice(0,js.lastIndexOf('    waitForSupabase(function(client)'))+`
     window.__chat = {
       seed(data) { currentUserId='self'; conversations=data.conversations; selectedConversationId=data.selected; messages=data.messages || []; },
-      setClient(client) { sb=client; },
+      setClient(client) { sb={rpc:window.__fixtureRPC,...client}; },
       setMessages(value) { messages=value; }, getMessages:()=>messages,
       setReply(value) { replyTargetMessage=value; renderReplyPreviewBar(); },
       switchTo(id) { stopActivity(); activitySession++; activityConnected=false; clearAllActivity(); selectedConversationId=id; messages=[]; },
       renderMessages, receiptHtml, replyPreviewInfo, replyThumbHtml, activitySummary,
       setupTypingChannel, startActivity, stopActivity, setActivityStage, applyActivityEvent, onRemoteTyping,
       session:()=>activitySession, entries:activityEntries, clearActivityFor,
-      setChannel(channel) { typingChannel=channel; activityConnected=true; activityChannelConvId=selectedConversationId; },
+      setChannel(channel) { window.__activitySink=channel.send; if (!sb) sb={rpc:window.__fixtureRPC}; typingChannel=channel; activityConnected=true; activityChannelConvId=selectedConversationId; },
       sendMixedMediaItems, sendMessageToConv, pushTemp,
       renderTypingIndicator, uploadRowHtml,
       setUpload(fn) { uploadToCloudinary=fn; },
-      privateViewOnceEnabled, uploadToCloudinary
+      privateViewOnceEnabled, uploadToCloudinary, receiveActivityRow, readActivitySnapshot, verifyPrivateViewOnceCapability,
+      flushActivity:()=>activitySendQueue
     };
 })();`;
 const convs=[{id:'a',otherUserId:'peer',otherUser:{id:'peer',display_name:'Ada'},is_group:false},
@@ -32,7 +33,18 @@ async function fixture(viewport,run){
   await page.route('**/*',r=>r.abort()); // No production requests, credentials or writes.
   await page.setContent(html);
   await page.addScriptTag({content:readFileSync('js/freeupper-time.js','utf8')});
-  await page.addScriptTag({content:'window.fuT=x=>x; window.FreeUpperSounds={};'});
+  await page.addScriptTag({content:`window.fuT=x=>x; window.FreeUpperSounds={};
+   // Fixture adapter records authenticated RPC calls for the existing lifecycle assertions.
+   // Production never calls channel.send and never supplies userId to the RPC.
+   window.__fixtureRPC=async(name,args)=>{
+    if(name==='get_chat_activity') return {data:[],error:null};
+    if(name==='publish_chat_activity') {
+     window.__lastActivityArgs=args;
+     await window.__activitySink?.({conversation_id:args.p_conversation_id,event:args.p_event,payload:{userId:'self',kind:args.p_kind,stage:args.p_stage,plural:args.p_plural,isTyping:args.p_active}});
+     return {data:true,error:null};
+    }
+    return {data:null,error:{code:'PGRST202'}};
+   };`});
   await page.addScriptTag({content:js});
   await page.evaluate(conversations=>{
    __chat.seed({conversations,selected:'a'});
@@ -84,9 +96,9 @@ test('media upload retains destination/reply and stale callbacks cannot affect n
   assert.equal(await page.locator('.upl-pct').textContent(),'25%');
   await page.evaluate(async()=>{
    __chat.switchTo('b');
-   __chat.setChannel({send:event=>{events.push({...event,room:'b'});return Promise.resolve();}});
+   __chat.setChannel({send:event=>{events.push({...event,room:event.conversation_id});return Promise.resolve();}});
    __chat.startActivity('recording');
-   progress(75);finish();await upload;
+   progress(75);finish();await upload;await __chat.flushActivity();
   });
   const result=await page.evaluate(()=>({writes,events,messages:__chat.getMessages()}));
   assert.equal(result.writes.length,1); assert.equal(result.writes[0].conversation_id,'a');assert.equal(result.writes[0].reply_to,'original');
@@ -144,7 +156,7 @@ test('upload failure and explicit cancellation clear activity and never insert a
    window.writes=[]; window.events=[];
    __chat.setChannel({send:event=>{events.push(event);return Promise.resolve();}});
    __chat.setUpload(async()=>{throw new Error('Network offline');});
-   await __chat.sendMixedMediaItems([{url:'blob:fixture',kind:'video',file:{size:100}}],'',false,'a');
+   await __chat.sendMixedMediaItems([{url:'blob:fixture',kind:'video',file:{size:100}}],'',false,'a');await __chat.flushActivity();
   });
   assert.equal(await page.locator('.upl-row').count(),0);
   assert.equal(await page.evaluate(()=>events.at(-1).payload.kind),null);
@@ -154,21 +166,22 @@ test('upload failure and explicit cancellation clear activity and never insert a
    }));
    window.upload=__chat.sendMixedMediaItems([{url:'blob:fixture',kind:'image',file:{size:100}}],'',false,'a');
    const id=__chat.getMessages().find(m=>m.uploading).id;
-   cancelMediaUpload(id); await upload;
+   cancelMediaUpload(id); await upload;await __chat.flushActivity();
   });
   assert.equal(await page.locator('.upl-row').count(),0);
   assert.equal(await page.evaluate(()=>events.at(-1).payload.kind),null);
  });
 });
 
-test('private channel auth, disconnect/reconnect, and delayed profile stop races',async()=>{
+test('RLS activity transport auth, disconnect/reconnect, and delayed profile stop races',async()=>{
  await fixture({width:390,height:844},async page=>{
   const result=await page.evaluate(async()=>{
-   window.authCalls=0; window.channelOptions=null; window.reconnectEvents=[];
+   window.authCalls=0; window.channelOptions=null; window.reconnectEvents=[]; window.registeredEvents=[];
    __chat.setClient({realtime:{setAuth:async()=>{authCalls++;}},removeChannel:async()=>{},
+    rpc:async(name,args)=>{if(name==='publish_chat_activity')reconnectEvents.push({payload:{kind:args.p_kind}});return {data:name==='get_chat_activity'?[]:true,error:null};},
     channel:(topic,options)=>{
      channelOptions={topic,...options};
-     return {on(){return this;},subscribe(cb){window.channelStatus=cb;cb('SUBSCRIBED');return this;},send:async event=>{reconnectEvents.push(event);}};
+     return {on(type){registeredEvents.push(type);return this;},subscribe(cb){window.channelStatus=cb;cb('SUBSCRIBED');return this;},send:async event=>{reconnectEvents.push(event);}};
     }});
    await __chat.setupTypingChannel('a');
    await __chat.onRemoteTyping({userId:'peer',isTyping:true},__chat.session());
@@ -180,9 +193,10 @@ test('private channel auth, disconnect/reconnect, and delayed profile stop races
    await __chat.onRemoteTyping({userId:'peer',isTyping:true},__chat.session());
    const reconnected=__chat.entries().length;
    __chat.clearActivityFor('peer');
-   return {authCalls,channelOptions,typing,disconnected,reconnected,resumed:reconnectEvents.filter(e=>e.payload.kind==='recording').length};
+   await __chat.flushActivity();
+   return {registeredEvents,authCalls,channelOptions,typing,disconnected,reconnected,resumed:reconnectEvents.filter(e=>e.payload.kind==='recording').length};
   });
-  assert.equal(result.authCalls,1);assert.equal(result.channelOptions.topic,'chat-activity:a');assert.equal(result.channelOptions.config.private,true);
+  assert.equal(result.authCalls,1);assert.equal(result.channelOptions.topic,'chat-activity-db:a');assert.equal(result.channelOptions.config.private,true);assert.deepEqual(result.registeredEvents,['postgres_changes','postgres_changes']);
   assert.equal(result.typing,1);assert.equal(result.disconnected,0);assert.equal(result.reconnected,1);assert.equal(result.resumed,2);
   const race=await page.evaluate(async()=>{
    __chat.seed({selected:'a',conversations:[{id:'a',otherUserId:'peer',is_group:false}],messages:[]});
@@ -257,7 +271,7 @@ test('voice recording broadcasts on start and clears on cancel/send with immutab
    await startVoiceRecording();cancelVoiceRecording();await recordingStop;
    const cancelledWrites=writes.length;
    await startVoiceRecording();sendVoiceRecording();
-   __chat.switchTo('b');await recordingStop;
+   __chat.switchTo('b');await recordingStop;await __chat.flushActivity();
    return {events,writes,tracksStopped,cancelledWrites};
   });
   assert.equal(result.cancelledWrites,0);assert.equal(result.tracksStopped,2);assert.equal(result.writes.length,1);
@@ -278,5 +292,108 @@ test('date ordering/de-duplication and thumbnail attribute escaping',async()=>{
    const node=document.createElement('div');node.innerHTML=__chat.replyThumbHtml({thumb:'x" onload="window.injected=true',count:1});
    return node.querySelector('img').hasAttribute('onload');
   }),false);
+ });
+});
+
+test('only server row identity is rendered; independent sources and replay sequence remain scoped',async()=>{
+ await fixture({width:390,height:844},async page=>{
+  await page.evaluate(()=>{
+   __chat.setChannel({send:()=>{throw new Error('Broadcast must not be used');}});
+   window.serverRow=(source,sequence,kind,active=true)=>({conversation_id:'a',user_id:'peer',userId:'outsider',source_id:source,event:'activity',kind,stage:null,plural:false,active,sequence,updated_at:new Date().toISOString(),expires_at:new Date(Date.now()+6500).toISOString()});
+   __chat.receiveActivityRow(serverRow('source-1',1,'recording'),__chat.session());
+  });
+  await page.waitForFunction(()=>document.getElementById('fuActivityBar')?.textContent.includes('Ada is recording'));
+  await page.evaluate(()=>{
+   __chat.receiveActivityRow(serverRow('source-2',2,'photo'),__chat.session());
+   __chat.receiveActivityRow(serverRow('source-2',3,null,false),__chat.session());
+   __chat.receiveActivityRow(serverRow('source-2',2,'video'),__chat.session());
+  });
+  await page.waitForFunction(()=>document.getElementById('fuActivityBar')?.textContent.includes('Ada is recording'));
+  assert.doesNotMatch(await page.locator('#fuActivityBar').textContent(),/outsider|video/);
+ });
+});
+
+test('revoked snapshot clears UI and terminates official subscription; outsider cannot set one up',async()=>{
+ await fixture({width:390,height:844},async page=>{
+  const result=await page.evaluate(async()=>{
+   __chat.setChannel({});
+   await __chat.applyActivityEvent({userId:'peer',kind:'recording'},__chat.session());
+   window.removed=0;window.created=0;
+   __chat.setClient({rpc:async()=>({data:null,error:{code:'42501'}}),removeChannel:async()=>{removed++;},
+    realtime:{setAuth:async()=>{}},channel:()=>{created++;throw new Error('must not join');}});
+   await __chat.readActivitySnapshot('a',__chat.session());
+   const remaining=__chat.entries().length;
+   await __chat.setupTypingChannel('a');
+   return {remaining,removed,created};
+  });
+  assert.deepEqual(result,{remaining:0,removed:1,created:0});
+ });
+});
+
+test('new view-once sends fail closed without a verified backend and never use Cloudinary fallback',async()=>{
+ await fixture({width:390,height:844},async page=>{
+  const result=await page.evaluate(async()=>{
+   window.uploads=0;window.invocations=0;window.inserts=0;
+   __chat.setUpload(async()=>{uploads++;return {url:'https://not-private.test/plaintext'};});
+   __chat.setClient({rpc:async()=>({data:null,error:{code:'PGRST202'}}),
+    from:()=>({insert:()=>{inserts++;throw new Error('must not insert');}}),functions:{invoke:async()=>{invocations++;}}});
+   const items=[{kind:'image',file:new Blob(['private']),url:'blob:fixture'}];
+   await __chat.sendMixedMediaItems(items,'private',true,'a','reply');
+   window.FREEUPPER_PRIVATE_VIEWONCE_ENABLED=true;
+   await __chat.sendMixedMediaItems(items,'private',true,'a','reply');
+   return {uploads,invocations,inserts,messages:__chat.getMessages().length};
+  });
+  assert.deepEqual(result,{uploads:0,invocations:0,inserts:0,messages:0});
+ });
+});
+
+test('publisher sends no caller UID and captures the original conversation across queued RPCs',async()=>{
+ await fixture({width:390,height:844},async page=>{
+  const result=await page.evaluate(async()=>{
+   window.rpcCalls=[];window.broadcasts=0;
+   __chat.setClient({rpc:async(name,args)=>{rpcCalls.push({name,args});return {data:true,error:null};}});
+   __chat.setChannel({send:()=>{broadcasts++;}});
+   const operation=__chat.startActivity('photo','preparing',false,'a');
+   __chat.stopActivity(operation);__chat.switchTo('b');
+   await __chat.flushActivity();
+   return {rpcCalls,broadcasts};
+  });
+  assert.equal(result.broadcasts,0);assert.equal(result.rpcCalls.length,2);
+  assert.ok(result.rpcCalls.every(c=>c.name==='publish_chat_activity'&&c.args.p_conversation_id==='a'&&!('userId' in c.args)&&!('p_user_id' in c.args)));
+  assert.ok(result.rpcCalls[0].args.p_sequence<result.rpcCalls[1].args.p_sequence);
+ });
+});
+
+test('disabled private view-once reader requires capability and a valid server expiry of at most 30 seconds',async()=>{
+ await fixture({width:390,height:844},async page=>{
+  const result=await page.evaluate(async()=>{
+   __chat.setMessages([{id:'secret',conversation_id:'a',sender_id:'peer',message_type:'media',metadata:{view_once:true,private_asset:true,media_items:[{type:'image'}]}}]);
+   window.FREEUPPER_PRIVATE_VIEWONCE_ENABLED=true;window.objectURLs=0;
+   const original=URL.createObjectURL;URL.createObjectURL=()=>{objectURLs++;return 'blob:should-not-open';};
+   try{
+    for(const value of [null,new Date(Date.now()-1000).toISOString(),new Date(Date.now()+45000).toISOString()]){
+     __chat.setClient({rpc:async()=>({data:{enabled:true,protocol_version:1,encrypted_storage:true,atomic_claim:true,atomic_reply:true,server_expiry:true},error:null}),
+      functions:{invoke:async()=>({data:new Blob(['not-real-media'],{type:'image/png'}),error:null,response:{headers:new Headers(value?{'x-freeupper-view-once-expires-at':value}:{})}})}});
+     await confirmViewOnce('secret',0);
+    }
+    return objectURLs;
+   }finally{URL.createObjectURL=original;}
+  });
+  assert.equal(result,0);
+ });
+});
+
+test('legacy view-once claim cannot open media after a conversation switch',async()=>{
+ await fixture({width:390,height:844},async page=>{
+  const result=await page.evaluate(async()=>{
+   __chat.setMessages([{id:'legacy',conversation_id:'a',sender_id:'peer',message_type:'media',metadata:{view_once:true,media_items:[{type:'image',url:'https://legacy.test/photo'}]}}]);
+   __chat.setClient({rpc:()=>new Promise(resolve=>window.finishClaim=resolve)});
+   const pending=confirmViewOnce('legacy',0);
+   __chat.switchTo('b');
+   finishClaim({data:{status:'opened',expires_at:new Date(Date.now()+30000).toISOString()},error:null});
+   await pending;
+   return lbCurrentMsgId();
+  });
+  assert.equal(result,null);
  });
 });

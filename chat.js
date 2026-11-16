@@ -87,18 +87,39 @@
     let activityConnected = false;
     let activityChannelConvId = null;
     let myActivity = null;
+    const activitySourceId = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+    let activitySequence = 0;
+    let activitySendQueue = Promise.resolve();
+    let activityRecheckTimer = null;
+    const activitySources = new Map();
+    const activityRowSequences = new Map();
 
-    function sendActivityEvent(channel, event, payload) {
-        if (!channel) return;
-        try { Promise.resolve(channel.send({ type: 'broadcast', event, payload })).catch(() => {}); }
-        catch (e) { /* activity is best effort */ }
+    function sendActivityEvent(channel, event, payload, convId = activityChannelConvId) {
+        if (!channel || !convId || !sb || typeof sb.rpc !== 'function') return Promise.resolve();
+        // Identity is assigned by the authenticated RPC, never from payload.userId.
+        const args = { p_conversation_id: convId, p_source_id: activitySourceId,
+            p_sequence: ++activitySequence, p_event: event,
+            p_kind: event === 'activity' ? payload.kind || null : null,
+            p_stage: event === 'activity' ? payload.stage || null : null,
+            p_plural: event === 'activity' && !!payload.plural,
+            p_active: event === 'typing' ? !!payload.isTyping : !!payload.kind };
+        const senderId = currentUserId;
+        const queuedAt = Date.now();
+        // Keep start/stop order even when requests take different amounts of time.
+        activitySendQueue = activitySendQueue.catch(() => {}).then(async () => {
+            if (currentUserId !== senderId || (args.p_active && Date.now() - queuedAt > ACTIVITY_TTL_MS)) return;
+            const { error } = await sb.rpc('publish_chat_activity', args);
+            if (error) throw error;
+        }).catch(() => { /* cosmetic activity fails closed; messaging is independent */ });
+        return activitySendQueue;
     }
     function broadcastActivity(kind, stage, plural, operation = myActivity) {
         if (!operation || !currentUserId || operation.session !== activitySession ||
             operation.channel !== typingChannel || !activityConnected) return;
         sendActivityEvent(operation.channel, 'activity', {
-            userId: currentUserId, kind: kind || null, stage: stage || null, plural: !!plural
-        });
+            kind: kind || null, stage: stage || null, plural: !!plural
+        }, operation.convId);
     }
     function startActivity(kind, stage, plural, convId = selectedConversationId) {
         const conv = conversations.find(c => c.id === convId);
@@ -153,6 +174,9 @@
         refreshActivityUI();
     }
     function clearActivityFor(uid) {
+        activitySources.forEach((state, key) => {
+            if (state.user_id === uid) { clearTimeout(state.timer); activitySources.delete(key); }
+        });
         // Invalidate pending profile fetches as well as rendered state.
         for (const event of ['typing', 'activity']) {
             const key = event + ':' + uid;
@@ -165,6 +189,9 @@
         refreshActivityUI();
     }
     function clearAllActivity() {
+        clearInterval(activityRecheckTimer); activityRecheckTimer = null;
+        activitySources.forEach(state => clearTimeout(state.timer)); activitySources.clear();
+        activityRowSequences.clear();
         activityMap.forEach(a => clearTimeout(a.timer)); activityMap.clear();
         typingExpiryTimers.forEach(t => clearTimeout(t)); typingExpiryTimers.clear();
         typingUsersMap.clear();
@@ -183,7 +210,7 @@
         let profile = activityMap.get(uid)?.profile || await activityProfile(uid);
         if (session !== activitySession || !activityConnected || !activityPeerAllowed(uid) ||
             activityEventVersions.get(key) !== version || !profile) return;
-        const remaining = ACTIVITY_TTL_MS - (Date.now() - receivedAt);
+        const remaining = Math.min(ACTIVITY_TTL_MS, payload.ttlMs ?? ACTIVITY_TTL_MS) - (Date.now() - receivedAt);
         if (remaining <= 0) return;
         const prev = activityMap.get(uid);
         if (prev) clearTimeout(prev.timer);
@@ -203,7 +230,7 @@
             const receivedAt = Date.now();
             const profile = typingUsersMap.get(uid) || await activityProfile(uid);
             if (session !== activitySession || !activityConnected || !activityPeerAllowed(uid) || activityEventVersions.get(key) !== version) return;
-            const remaining = 4000 - (Date.now() - receivedAt);
+            const remaining = Math.min(4000, payload.ttlMs ?? 4000) - (Date.now() - receivedAt);
             if (remaining <= 0) return;
             typingUsersMap.set(uid, profile || { id: uid, display_name: 'Member' });
             clearTimeout(typingExpiryTimers.get(uid));
@@ -217,6 +244,60 @@
         }
         refreshActivityUI();
     }
+    function renderActivitySources(uid, session) {
+        if (session !== activitySession || !activityConnected) return;
+        const states = [...activitySources.values()].filter(s => s.user_id === uid && s.active && s.deadline > Date.now());
+        const activity = states.filter(s => s.event === 'activity').sort((a,b) => b.timestamp - a.timestamp)[0];
+        applyActivityEvent({ userId: uid, kind: activity?.kind || null, stage: activity?.stage || null,
+            plural: !!activity?.plural, ttlMs: activity ? activity.deadline - Date.now() : 0 }, session).catch(() => {});
+        const typing = states.filter(s => s.event === 'typing').sort((a,b) => b.deadline - a.deadline)[0];
+        onRemoteTyping({ userId: uid, isTyping: !!typing, ttlMs: typing ? typing.deadline - Date.now() : 0 }, session).catch(() => {});
+    }
+    function receiveActivityRow(row, session) {
+        if (session !== activitySession || !activityConnected || !row || row.conversation_id !== selectedConversationId ||
+            row.user_id === currentUserId || typeof row.user_id !== 'string' || typeof row.source_id !== 'string' ||
+            !activityPeerAllowed(row.user_id) || !['typing','activity'].includes(row.event) ||
+            !Number.isSafeInteger(row.sequence) || row.sequence < 1) return;
+        const key = row.user_id + ':' + row.source_id + ':' + row.event;
+        if ((activityRowSequences.get(key) || 0) >= row.sequence) return;
+        activityRowSequences.set(key, row.sequence);
+        const previous = activitySources.get(key);
+        if (previous) clearTimeout(previous.timer);
+        const expires = Date.parse(row.expires_at), timestamp = Date.parse(row.updated_at);
+        const ttl = Math.min(row.event === 'typing' ? 4000 : ACTIVITY_TTL_MS, expires - Date.now());
+        const state = { ...row, active: row.active === true && ttl > 0, timestamp,
+            deadline: Date.now() + Math.max(0, ttl), receivedAt: Date.now(), timer: null };
+        activitySources.set(key, state);
+        if (state.active) state.timer = setTimeout(() => {
+            state.active = false; renderActivitySources(row.user_id, session);
+        }, ttl);
+        renderActivitySources(row.user_id, session);
+    }
+    async function readActivitySnapshot(convId, session) {
+        const started = Date.now();
+        const { data, error } = await sb.rpc('get_chat_activity', { p_conversation_id: convId });
+        if (session !== activitySession || convId !== selectedConversationId) return false;
+        if (error || !Array.isArray(data)) {
+            // Authorization failures terminate our subscription; transient errors clear display only.
+            clearAllActivity();
+            if (error?.code === '42501') {
+                const old = typingChannel;
+                stopActivity(); myTypingActive = false; activityConnected = false;
+                typingChannel = null; activityChannelConvId = null;
+                if (old) Promise.resolve(sb.removeChannel(old)).catch(() => {});
+            }
+            return false;
+        }
+        const present = new Set(data.map(row => row.user_id + ':' + row.source_id + ':' + row.event));
+        activitySources.forEach((state,key) => {
+            if (state.receivedAt <= started && !present.has(key)) {
+                clearTimeout(state.timer); state.active = false; renderActivitySources(state.user_id,session);
+            }
+        });
+        data.forEach(row => receiveActivityRow(row, session));
+        return true;
+    }
+
     function activityEntries() {
         const out = [];
         activityMap.forEach((a, uid) => out.push({ uid, name: getDisplayName(a.profile), avatar: getAvatar(a.profile),
@@ -719,6 +800,15 @@
     function privateViewOnceEnabled() {
         return window.FREEUPPER_PRIVATE_VIEWONCE_ENABLED === true;
     }
+    async function verifyPrivateViewOnceCapability() {
+        if (!privateViewOnceEnabled() || !sb || typeof sb.rpc !== 'function') return false;
+        try {
+            const { data, error } = await sb.rpc('chat_private_view_once_capabilities');
+            return !error && data?.enabled === true && data.protocol_version === 1 &&
+                data.encrypted_storage === true && data.atomic_claim === true &&
+                data.atomic_reply === true && data.server_expiry === true;
+        } catch (e) { return false; }
+    }
     function markViewOnceConsumed(id, index = 0) {
         if (!viewOnceStateByMsg.has(id)) viewOnceStateByMsg.set(id, new Set());
         viewOnceStateByMsg.get(id).add(index);
@@ -811,6 +901,8 @@
         document.getElementById('fuViewOnceConfirm')?.classList.remove('open');
         const msg = messages.find(m => m.id === messageId);
         if (!msg) return;
+        const openSession = activitySession;
+        const openConversationId = selectedConversationId;
         const item = msg.metadata?.media_items?.[index];
         if (!item) { showToast(window.fuT('Media unavailable'), 'r'); return; }
         if (msg.sender_id === currentUserId) {
@@ -818,13 +910,13 @@
             return;
         }
         if (msg.metadata?.private_asset === true) {
-            if (!privateViewOnceEnabled()) {
+            if (!await verifyPrivateViewOnceCapability()) {
                 showToast(window.fuT('Private media is temporarily unavailable'), 'o');
                 return;
             }
-            if (index !== 0) return;
+            if (index !== 0 || openSession !== activitySession || openConversationId !== selectedConversationId) return;
             try {
-                const { data, error } = await sb.functions.invoke('view-once-open', {
+                const { data, error, response } = await sb.functions.invoke('view-once-open', {
                     body: { message_id: messageId, media_index: 0 }
                 });
                 if (error) {
@@ -841,12 +933,18 @@
                     !/^(image\/(jpeg|png|webp)|video\/(mp4|quicktime|webm))$/.test(data.type)) {
                     throw new Error('Invalid private-media response');
                 }
+                if (openSession !== activitySession || openConversationId !== selectedConversationId) return;
+                const expiresAt = response?.headers?.get('x-freeupper-view-once-expires-at');
+                const expiry = Date.parse(expiresAt || '');
+                if (!Number.isFinite(expiry) || expiry <= Date.now() || expiry > Date.now() + 30000) {
+                    throw new Error('Missing or invalid private-media expiry');
+                }
                 const localUrl = URL.createObjectURL(data);
                 markViewOnceConsumed(messageId);
                 try {
                     openMediaLightbox([{ url: localUrl, type: item.type }], 0, messageId,
                         resolveMsgSenderName(msg.sender_id), msg.created_at,
-                        { viewOnce: true, expiresAt: null, blobUrl: localUrl });
+                        { viewOnce: true, expiresAt, blobUrl: localUrl });
                 } catch (e) {
                     URL.revokeObjectURL(localUrl);
                     throw e;
@@ -864,6 +962,7 @@
                 p_message_id: messageId, p_media_index: index
             });
             if (error) throw error;
+            if (openSession !== activitySession || openConversationId !== selectedConversationId) return;
             if (!data || data.status === 'already_viewed') {
                 markViewOnceConsumed(messageId, index);
                 showToast(window.fuT('This media has already been opened'), 'o');
@@ -3582,20 +3681,30 @@
                 activityAllowedIds = new Set(members.map(m => m.user_id));
                 if (!activityAllowedIds.has(currentUserId)) return;
             }
-            // setAuth uses the current authenticated session; never fall back to a public topic.
+            // Bind Postgres Changes to the authenticated session; no Broadcast fallback.
             await sb.realtime.setAuth();
             if (session !== activitySession || convId !== selectedConversationId) return;
-            const ch = sb.channel('chat-activity:' + convId, {
+            // Private join gates admission; every database event ALSO checks current
+            // table RLS after joining. No Broadcast handlers or client Broadcast sends.
+            const { error: accessError } = await sb.rpc('get_chat_activity', { p_conversation_id: convId });
+            if (accessError || session !== activitySession || convId !== selectedConversationId) return;
+            const ch = sb.channel('chat-activity-db:' + convId, {
                 config: { private: true, broadcast: { self: false } }
             });
-            ch.on('broadcast', { event: 'typing' }, ({ payload }) => { onRemoteTyping(payload, session).catch(() => {}); });
-            ch.on('broadcast', { event: 'activity' }, ({ payload }) => { applyActivityEvent(payload, session).catch(() => {}); });
+            for (const event of ['INSERT','UPDATE']) ch.on('postgres_changes', {
+                event, schema: 'public', table: 'chat_activity', filter: 'conversation_id=eq.' + convId
+            }, ({ new: row }) => receiveActivityRow(row, session));
             typingChannel = ch;
             activityChannelConvId = convId;
             ch.subscribe(status => {
                 if (session !== activitySession || typingChannel !== ch) return;
                 activityConnected = status === 'SUBSCRIBED';
                 if (activityConnected) {
+                    readActivitySnapshot(convId, session).catch(() => { if (session === activitySession) clearAllActivity(); });
+                    clearInterval(activityRecheckTimer);
+                    activityRecheckTimer = setInterval(() => {
+                        readActivitySnapshot(convId, session).catch(() => { if (session === activitySession) clearAllActivity(); });
+                    }, 4000);
                     if (myActivity) broadcastActivity(myActivity.kind, myActivity.stage, myActivity.plural, myActivity);
                     return;
                 }
@@ -3603,7 +3712,7 @@
                 if (status === 'CLOSED') stopActivity();
                 myTypingActive = false;
                 clearAllActivity();
-                if (status === 'CHANNEL_ERROR') console.warn('chat-activity channel refused: check the realtime.messages policies');
+                if (status === 'CHANNEL_ERROR') console.warn('chat activity unavailable: check table RLS/publication');
             });
         } catch (err) {
             if (session === activitySession) { stopActivity(); activityConnected = false; clearAllActivity(); }
@@ -3613,7 +3722,7 @@
 
     function broadcastTyping(isTyping) {
         if (!typingChannel || !currentUserId || !activityConnected || activityChannelConvId !== selectedConversationId) return;
-        sendActivityEvent(typingChannel, 'typing', { userId: currentUserId, isTyping: !!isTyping });
+        sendActivityEvent(typingChannel, 'typing', { isTyping: !!isTyping }, activityChannelConvId);
     }
 
     function startTypingBroadcast() {
@@ -6624,6 +6733,11 @@
         const viewOnce = composerViewOnce;
         const replyTo = replyTargetMessage?.id || null;
         if (!convId || isBlockedConversation || !canSendMessages) return;
+        if (viewOnce && !await verifyPrivateViewOnceCapability()) {
+            showToast(window.fuT('Private view once is temporarily unavailable'), 'o');
+            return;
+        }
+        if (convId !== selectedConversationId) return;
         closeComposer();
         cancelReplyPreview();
 
@@ -6655,10 +6769,16 @@
     async function sendMixedMediaItems(items, caption, viewOnce, convId = selectedConversationId,
         replyTo = replyTargetMessage?.id || null) {
         if (!convId || !items.length) return;
-        if (viewOnce && privateViewOnceEnabled()) return sendPrivateViewOnceItem(items, caption, convId, replyTo);
+        if (viewOnce) {
+            if (!privateViewOnceEnabled()) {
+                showToast(window.fuT('Private view once is temporarily unavailable'), 'o');
+                return;
+            }
+            return sendPrivateViewOnceItem(items, caption, convId, replyTo);
+        }
         const tempItems = items.map(item => ({ url: item.url, type: item.kind }));
         const tempMeta = { media_items: tempItems };
-        if (viewOnce) tempMeta.view_once = true;
+
         const tempId = pushTemp({
             conversation_id: convId, reply_to: replyTo,
             message_type: 'media', media_url: tempItems[0].url,
@@ -6680,9 +6800,7 @@
         };
         try {
             const uploaded = await Promise.all(items.map(async (item, idx) => {
-                const uploadKind = viewOnce
-                    ? (item.kind === 'video' ? 'viewonce_video' : 'viewonce_image')
-                    : (item.kind === 'video' ? 'video' : 'image');
+                const uploadKind = item.kind === 'video' ? 'video' : 'image';
                 const result = await uploadToCloudinary(item.file, uploadKind, progressFor(idx), controller.signal);
                 return {
                     url: result.url, type: item.kind,
@@ -6694,7 +6812,7 @@
             dropTemp(tempId);
             const urls = uploaded.map(item => item.url);
             const finalMeta = { media_items: uploaded };
-            if (viewOnce) finalMeta.view_once = true;
+
             await sendMessageToConv(caption, 'media', urls[0], replyTo, null, urls, null, finalMeta, convId);
         } catch (err) {
             controller.abort(); // abort sibling XHRs; their progress cannot revive the indicator
@@ -6708,7 +6826,7 @@
     }
 
     async function sendPrivateViewOnceItem(items, caption, convId = selectedConversationId, replyTo = null) {
-        if (!privateViewOnceEnabled() || items.length !== 1 ||
+        if (!await verifyPrivateViewOnceCapability() || items.length !== 1 ||
             !['image', 'video'].includes(items[0]?.kind)) {
             showToast(window.fuT('Only one private photo or video is allowed'), 'o');
             return;
@@ -6731,16 +6849,11 @@
             const form = new FormData();
             form.append('conversation_id', convId);
             form.append('caption', caption);
+            if (replyTo) form.append('reply_to', replyTo);
             form.append('file', item.file);
             const { data, error } = await sb.functions.invoke('chat-private-upload', { body: form });
             if (error || data?.status !== 'published' || !data.message_id) {
                 throw error || new Error('Private-media publication failed');
-            }
-            if (replyTo) {
-                const { data: linked, error: replyError } = await sb.from('messages').update({ reply_to: replyTo })
-                    .eq('id', data.message_id).eq('conversation_id', convId).eq('sender_id', currentUserId)
-                    .select('id, reply_to').single();
-                if (replyError || linked?.reply_to !== replyTo) throw new Error('Media sent, but reply link could not be saved');
             }
             dropTemp(tempId);
             // Fetch the committed message rather than constructing one from

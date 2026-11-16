@@ -1,3 +1,5 @@
+> Historical implementation report for commit `7528928`. Security findings, corrected migration, current transport and release gates are superseded by [SECURITY-HARDENING.md](SECURITY-HARDENING.md).
+
 # FreeUpper exact chat replacements — review package
 
 **Recommendation: NO-GO for production.** Implementation is on local feature branch `feature/chat-exact-replacements`, based on freshly fetched main `4a19c659a1928b4d1ad39938ed05c5e7931f2d0b`. No push, merge, deployment, production SQL writes, staging writes, or production data changes were performed.
