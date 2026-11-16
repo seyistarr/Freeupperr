@@ -369,7 +369,9 @@ let galleryAccountEpoch=0;
                 window.dispatchEvent(new Event('fu-video-resume'));
                 queueMicrotask(()=>restoreProtectedVideoCards().catch(()=>{}));
                 const video=document.getElementById('vid-'+_curIdx);
-                if(video && retainedVideoTime)video.currentTime=retainedVideoTime;
+                // Pausing normally preserves the native timeline. Re-seeking an
+                // already-correct frame is unnecessary and can reset WebKit media.
+                if(video && retainedVideoTime && Math.abs(video.currentTime-retainedVideoTime)>0.01)video.currentTime=retainedVideoTime;
                 // Playback follows the existing card observer and user controls.
             },
             snapshot() {

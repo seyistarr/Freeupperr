@@ -3,7 +3,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import {rea
 const approved=JSON.parse(await readFile(new URL('./fixtures/gallery-main-baseline.json',import.meta.url),'utf8'));
 const sha=value=>createHash('sha256').update(value).digest('hex');
 test('unrelated identity, Chat, publishing and backend remain byte-identical',async()=>{
- for(const [file,expected] of Object.entries(approved.files).filter(([file])=>file!=='auth.js'))assert.equal(sha(await readFile(file)),expected,file);
+ for(const [file,expected] of Object.entries(approved.files).filter(([file])=>!['auth.js','.github/workflows/cloudflare-tests.yml'].includes(file)))assert.equal(sha(await readFile(file)),expected,file);
 });
 test('shared Home renderer is extracted exactly from current main',async()=>{
  const actual={};vm.runInNewContext(await readFile('post-card.js','utf8'),{window:actual});

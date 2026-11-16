@@ -49,7 +49,9 @@ test('controller handles unavailable storage and ignores repeated or invalid upd
 for (const engine of ['chromium', 'webkit']) {
   test(`${engine}: theme transitions, first paint, persistence, events, tabs, reduced motion and no reloads`,
     {skip: engine === 'chromium' ? !process.env.FREEUPPER_CHROMIUM : !process.env.FREEUPPER_WEBKIT, timeout:120000}, async () => {
+    let transportOffline = false;
     const server = createServer(async (req,res) => {
+      if (transportOffline) { req.socket.destroy(); return; }
       const pathname = new URL(req.url,'http://local').pathname;
       const path = pathname === '/' ? '/index.html' : pathname;
       try {
@@ -139,13 +141,19 @@ for (const engine of ['chromium', 'webkit']) {
       await page.evaluate(async()=>{await navigator.serviceWorker.register('/service-worker.js');await navigator.serviceWorker.ready;});
       await page.reload();
       await page.evaluate(()=>applyTheme('light'));
-      await context.setOffline(true);
+      await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+      assert.equal(await page.evaluate(async()=>!!await caches.match('/video.html')),true);
+      // WebKit offline emulation rejects cached navigations on both main and
+      // feature. Fail the actual fixture transport instead; do not mock cache
+      // responses or weaken the offline theme assertions.
+      if (engine === 'webkit') transportOffline = true;
+      else await context.setOffline(true);
       await page.goto(origin+'/video.html');
       assert.equal(await page.evaluate(()=>getCurrentTheme()),'light');
       await page.evaluate(()=>applyTheme('dark'));
       await page.reload();
       assert.equal(await page.evaluate(()=>getCurrentTheme()),'dark');
       await context.close();
-    } finally { await browser?.close(); await new Promise(r=>server.close(r)); }
+    } finally { await browser?.close(); server.closeAllConnections(); await new Promise(r=>server.close(r)); }
   });
 }

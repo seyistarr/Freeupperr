@@ -18,11 +18,11 @@ f.listeners = [];
 window.supabase = {createClient(url,key,options){
   record('createClient',{url,options});
   return {auth:{
-    onAuthStateChange(fn){f.listeners.push(fn); if(f.recovery) queueMicrotask(()=>{f.session={user:f.user};fn('PASSWORD_RECOVERY',f.session);}); else queueMicrotask(()=>fn('INITIAL_SESSION',f.session)); return {};},
+    onAuthStateChange(fn){f.listeners.push(fn); if(f.recovery) queueMicrotask(()=>{f.session={user:f.user,access_token:'fixture.'+btoa(JSON.stringify({session_id:'recovery-session'}))+'.fixture'};fn('PASSWORD_RECOVERY',f.session);}); else queueMicrotask(()=>fn('INITIAL_SESSION',f.session)); return {};},
     async getSession(){record('getSession'); if(f.sessionDelay)await new Promise(r=>setTimeout(r,f.sessionDelay));return {data:{session:f.session},error:f.sessionError};},
     async getUser(){return {data:{user:f.session?.user},error:null};},
     async signUp(args){record('signUp',args); if(f.signupError)return {error:f.signupError}; if(f.signupSession)f.session={user:f.user};return {data:{session:f.session},error:null};},
-    async signInWithPassword(args){record('signInWithPassword',args);if(f.loginError)return {error:f.loginError};f.session={user:f.user};return {data:{session:f.session},error:null};},
+    async signInWithPassword(args){record('signInWithPassword',args);if(f.loginDelay)await new Promise(r=>setTimeout(r,f.loginDelay));if(f.loginError)return {error:f.loginError};f.session={user:f.user};return {data:{session:f.session},error:null};},
     async resend(args){record('resend',args);return {error:f.emailError};},
     async resetPasswordForEmail(...args){record('resetPasswordForEmail',args);return {error:f.emailError};},
     async signInWithOAuth(args){record('signInWithOAuth',args);return {error:f.oauthError};},

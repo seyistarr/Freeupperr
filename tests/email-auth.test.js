@@ -2,11 +2,11 @@ import test, {before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
-import {chromium} from '@playwright/test';
+import {chromium,webkit} from '@playwright/test';
 import {startFixture} from './helpers/email-auth-fixture.js';
 
 let fixture,browser;
-before(async()=>{fixture=await startFixture();browser=await chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']});});
+before(async()=>{fixture=await startFixture();browser=process.env.FREEUPPER_AUTH_ENGINE==='webkit'?await webkit.launch():await chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']});});
 after(async()=>{await browser?.close();await fixture?.close();});
 async function pageFor(t,options={},path='/') {
   const page=await browser.newPage();
@@ -14,7 +14,7 @@ async function pageFor(t,options={},path='/') {
   page.on('pageerror',e=>errors.push(e.message));
   // Block ALL non-fixture requests, including production and CDNs.
   await page.route(url=>url.origin!==fixture.origin,route=>route.abort());
-  await page.addInitScript(options=>window.fixtureOptions=options,options);
+  await page.addInitScript(options=>{window.fixtureOptions=options;if(options.marker)sessionStorage.setItem('freeupper_password_recovery',JSON.stringify(options.marker));},options);
   t.after(async()=>{assert.deepEqual(errors,[]);await page.close();});
   await page.goto(fixture.origin+path);
   return page;
@@ -92,6 +92,7 @@ for(const missingProfile of [false,true])test('profile failure preserves session
  await page.evaluate(()=>{window.resumed=0;AuthUser.openModal('signin',()=>resumed++);});
  await page.locator('#fu-submit-btn').click();await page.waitForFunction(()=>document.getElementById('fu-submit-btn').textContent==='Retry profile loading');
  assert.match(await page.locator('#fu-auth-error').textContent(),/You are signed in/);
+ assert.equal(await page.locator('#fu-password').inputValue(),'','accepted credentials must not remain in a hidden retry form');
  assert.equal(await page.evaluate(()=>resumed),0);
  assert.equal(await page.evaluate(()=>fixture.session.user.id),'fixture-uuid');
  await page.evaluate(()=>{fixture.profileError=false;fixture.missingProfile=false;});
@@ -232,4 +233,64 @@ test('initial guest session does not dismiss the recovery entry point',async t=>
  await page.waitForTimeout(50);
  assert.equal(await page.locator('#fu-auth-overlay').evaluate(el=>el.classList.contains('open')),true);
  assert.equal(await page.locator('#fu-auth-title').textContent(),'Reset your password');
+});
+
+
+for(const action of ['confirm','recover'])test(action+' email requests do not disclose whether an account exists',async t=>{
+ const page=await pageFor(t,{emailError:{code:'user_not_found',message:'private account information'}});await form(page,'signin');
+ if(action==='recover')await page.locator('#fu-forgot-btn').click();
+ await page.locator(action==='recover'?'#fu-submit-btn':'#fu-resend-btn').click();
+ await page.waitForFunction(()=>document.getElementById('fu-auth-status').textContent.includes('If this address is eligible'));
+ assert.equal(await page.locator('#fu-auth-error').textContent(),'');
+});
+
+test('duplicate signup uses the same neutral confirmation state without password login or linking',async t=>{
+ const page=await pageFor(t,{signupError:{code:'user_already_exists',message:'Account exists'}});await form(page);
+ await page.locator('#fu-submit-btn').click();await page.waitForFunction(()=>document.getElementById('fu-auth-title').textContent==='Check your email');
+ assert.equal(await page.locator('#fu-auth-error').textContent(),'');
+ assert.equal(await page.evaluate(()=>fixture.calls.filter(c=>c.method==='signInWithPassword').length),0);
+});
+
+test('unknown backend diagnostics are not rendered',async t=>{
+ const page=await pageFor(t,{loginError:{code:'unexpected',message:'password=private access_token=private'}});await form(page,'signin');
+ await page.locator('#fu-submit-btn').click();await page.waitForFunction(()=>document.getElementById('fu-auth-error').textContent.length>0);
+ assert.equal(await page.locator('#fu-auth-error').textContent(),'Something went wrong. Please try again.');
+});
+
+test('closing and replacing a pending login cannot resume the replacement modal action',async t=>{
+ const page=await pageFor(t,{loginDelay:250});await form(page,'signin');
+ await page.evaluate(()=>{window.resumed=0;AuthUser.openModal('signin',()=>resumed++);});
+ await page.locator('#fu-submit-btn').click();await page.waitForFunction(()=>fixture.calls.some(c=>c.method==='signInWithPassword'));
+ await page.evaluate(()=>{AuthUser.closeModal();AuthUser.openModal('signin',()=>resumed++);});
+ await page.waitForTimeout(350);assert.equal(await page.evaluate(()=>resumed),0);
+});
+
+const recoveryToken=id=>'fixture.'+Buffer.from(JSON.stringify({session_id:id})).toString('base64url')+'.fixture';
+for(const scenario of ['valid','different_session','expired','bad_callback'])test('recovery marker is session bound with fixed expiry: '+scenario,async t=>{
+ const expires=Date.now()+(scenario==='expired'?-1000:60000);
+ const options={session:{user:{id:'fixture-uuid'},access_token:recoveryToken(scenario==='different_session'?'new-session':'recovery-session')},marker:{id:'fixture-uuid',sessionId:'recovery-session',expires}};
+ const page=await pageFor(t,options,'/reset-password.html'+(scenario==='bad_callback'?'#error=access_denied&error_code=otp_expired':''));
+ if(scenario==='valid'){
+  await page.waitForFunction(()=>!document.getElementById('pwNew').disabled);
+  assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('freeupper_password_recovery')).expires),expires);
+ }else{
+  await page.waitForFunction(()=>document.getElementById('recoveryStatus').textContent.includes('invalid or expired'));
+  assert.equal(await page.locator('#pwNew').isDisabled(),true);
+ }
+});
+
+test('recovery rechecks same-user session replacement immediately before password update',async t=>{
+ const page=await pageFor(t,{recovery:true},'/reset-password.html');await page.waitForFunction(()=>!document.getElementById('pwNew').disabled);
+ await page.locator('#pwNew').fill('New-Test-Password123!');await page.locator('#pwConf').fill('New-Test-Password123!');
+ await page.evaluate(token=>fixture.session.access_token=token,recoveryToken('another-session'));
+ await page.locator('#submitBtn').click();await page.waitForFunction(()=>document.getElementById('recoveryStatus').textContent.includes('invalid or expired'));
+ assert.equal(await page.evaluate(()=>fixture.calls.filter(c=>c.method==='updateUser').length),0);
+});
+
+test('CI preserves production deployment gate while budgeting every mandatory regression stage',async()=>{
+ const workflow=await readFile('.github/workflows/cloudflare-tests.yml','utf8');
+ assert.match(workflow,/timeout-minutes: 30/);
+ assert.match(workflow,/if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
+ assert.doesNotMatch(workflow,/pull_request_target/);
+ for(const command of ['tests/*.test.js tests/*.test.cjs','playwright install --with-deps webkit','tests/five-tab-navigation.test.js tests/profile-mounted-navigation.test.js','wrangler dev --local','tests/gallery-offline-browser.test.js','FREEUPPER_WEBKIT:'])assert.ok(workflow.includes(command));
 });

@@ -43,11 +43,18 @@ test('quote RPC batches are bounded and retries preserve the request ID',async()
  const calls=f.calls.filter(c=>c.rpc==='create_quote_post');assert.equal(calls.length,2);assert.equal(calls[0].args.p_post_id,calls[1].args.p_post_id);assert(!('user_id' in calls[0].args.p_fields));
  await f.api.createPost({quotedPostId:id(100),quotePostId:id(800),content:'New quote'});assert.equal(f.writes,1);
 });
-test('video and Explore legacy behavior remains unchanged apart from additive interaction feedback',async()=>{
+test('video and Explore legacy behavior remains unchanged apart from reviewed feedback and redundant-seek guard',async()=>{
  // Ignore only the additive sound hooks/loader and versioned consumer URLs.
  // The legacy player bytes and API contracts must otherwise remain identical.
  for(const name of ['video.html','explore.js']){
-  const bytes=await readFile(new URL('../'+name,import.meta.url),'utf8');
+  let bytes=await readFile(new URL('../'+name,import.meta.url),'utf8');
+  if(name==='video.html'){
+   // Native playback regressions cover this exact resume guard. Normalize only
+   // this reviewed block; retain the whole-file legacy hash for everything else.
+   const guard='                // Pausing normally preserves the native timeline. Re-seeking an\n                // already-correct frame is unnecessary and can reset WebKit media.\n                if(video && retainedVideoTime && Math.abs(video.currentTime-retainedVideoTime)>0.01)video.currentTime=retainedVideoTime;';
+   assert.equal(bytes.split(guard).length-1,1,'expected exactly one reviewed retained-time guard');
+   bytes=bytes.replace(guard,'                if(video && retainedVideoTime)video.currentTime=retainedVideoTime;');
+  }
   const soundNeutral=bytes
    .replace(/^[ \t]*window\.FUSound\?\.interaction\?\.\('[a-z]+'\);\n/gm,'')
    .replace('    <script src="/ui-sounds.js?v=4" data-fu-sounds></script>\n','')

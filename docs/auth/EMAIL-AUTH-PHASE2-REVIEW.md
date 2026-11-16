@@ -1,5 +1,8 @@
 # Email authentication repair — Phase 2 review
 
+> Historical Phase 2 report. See [the 2026-11-16 PR readiness review](PR-READINESS-REVIEW.md)
+> for the subsequent security fixes, timeout investigation, final checks and manual configuration checklist.
+
 Review date: 2026-11-15. Local feature branch: `fix/email-auth-confirmation-recovery`.
 Baseline: GitHub main `b943598eeb6cac1a6ab06b3235254f0c38581be1`. A final read-only fetch confirmed main has not advanced.
 
@@ -64,7 +67,8 @@ The timed-out runs were stopped and their local test processes cleaned up. That 
 fixture passed the first complete run in 75.5 seconds and its application files are unchanged.
 No unrelated timeout threshold or layout code was changed to conceal this result.
 
-**Validation limitation:** there is no clean final all-repository run. The completed broad run
+**Historical validation limitation at `0c8d5ee`:** there was no clean final all-repository run.
+This was subsequently resolved; see the linked PR readiness review for the clean mandatory results. The completed broad run
 and green final focused reruns are the available evidence. Rerun the full command below in CI
 or a dedicated environment before merging. The 55 final auth checks and six PWA/cache checks
 have no failures or skips; all three obsolete assertions from the completed broad run are
@@ -125,8 +129,9 @@ profile-network failure/retry, onboarding persistence, both hostnames, and insta
 Use approved isolated accounts and infrastructure. Production accounts must not be recreated,
 automatically linked, mass-confirmed, or reset as part of this change.
 
-No merge, remote push, Cloudflare upload/deployment, or production Supabase mutation is authorized
-by this review artifact. The branch is for review only.
+This initial phase did not authorize remote publication. The subsequent user request authorizes
+pushing the feature branch and opening a PR only after mandatory checks pass. Merge, deployment,
+production Supabase mutation and real-user authentication remain prohibited.
 
 ## References
 

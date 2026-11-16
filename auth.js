@@ -245,6 +245,7 @@
   let mode = 'signup';
   let pendingAction = null;
   let modalInitialized = false;
+  let modalGeneration = 0;
   let submitting = false;
   let cooldownTimer;
   const emailCooldowns = new Map();
@@ -292,31 +293,13 @@
     if (err.code === 'email_not_confirmed') return 'Confirm your email before signing in. You can resend the confirmation below.';
     if (err.code === 'weak_password') return 'Choose a stronger password that meets the account password requirements.';
     if (err.code === 'signup_disabled') return 'Registration is currently unavailable. Please try again later.';
-    if (err.code === 'user_already_exists') return 'Please sign in or request a password reset for this email.';
+    if (err.code === 'user_already_exists') return 'Unable to complete this request. Try signing in or request a password reset.';
     if (err.name === 'AuthRetryableFetchError' || err instanceof TypeError) return 'Could not connect. Check your connection and try again.';
 
 
-    const candidate =
-      err?.message ||
-      err?.error_description ||
-      err?.error?.message ||
-      err?.error ||
-      err?.msg ||
-      '';
-
-    if (candidate && candidate !== '{}' && candidate !== '') {
-      return candidate;
-    }
-
-    if (typeof err === 'object') {
-      try {
-        const str = JSON.stringify(err, Object.getOwnPropertyNames(err));
-        if (str && str !== '{}' && str !== '') return str;
-      } catch (_) {
-        // ignore
-      }
-    }
-
+    if (err.code === 'profile_unavailable') return 'You are signed in, but your profile could not load. Retry without signing in again.';
+    // Do not serialize arbitrary backend error objects, which may contain
+    // request details, credentials or provider/account diagnostics.
     return 'Something went wrong. Please try again.';
   }
 
@@ -390,6 +373,7 @@
   }
 
   function openModal(startMode, onSuccess) {
+    modalGeneration++;
     console.log('Opening auth modal, mode:', startMode);
     mode = ['signup', 'signin', 'recover'].includes(startMode) ? startMode : 'signup';
     pendingAction = onSuccess || null;
@@ -409,6 +393,7 @@
   }
 
   function closeModal() {
+    modalGeneration++;
     const overlay = document.getElementById('fu-auth-overlay');
     if (overlay) {
       overlay.classList.remove('open');
@@ -626,6 +611,7 @@
   // ─── AUTH HANDLERS ──────────────────────────────────────────
   async function sendEmail(action) {
     if (submitting) return;
+    const generation = modalGeneration;
     const emailInput = document.getElementById('fu-email');
     const email = emailInput.value.trim();
     const errEl = document.getElementById('fu-auth-error');
@@ -638,12 +624,13 @@
       const result = action === 'recover'
         ? await sb.auth.resetPasswordForEmail(email, { redirectTo: recoveryRedirect() })
         : await sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: emailRedirect() } });
-      if (result.error) throw result.error;
+      if (result.error && !['user_not_found', 'user_already_exists', 'email_not_found'].includes(result.error.code)) throw result.error;
       cooldown(action, email);
+      if (generation !== modalGeneration) return;
       setStatus(action === 'recover' ? 'If this address is eligible, a password reset link has been requested. Check your inbox and spam folder.' : 'If this address is eligible, a confirmation email has been requested. Check your inbox and spam folder.');
     } catch (error) {
       if (error.status === 429 || ['over_email_send_rate_limit', 'over_request_rate_limit'].includes(error.code)) cooldown(action, email, error);
-      errEl.textContent = extractErrorMessage(error);
+      if (generation === modalGeneration) errEl.textContent = extractErrorMessage(error);
     } finally { submitting = false; updateEmailButtons(); }
   }
 
@@ -651,6 +638,7 @@
     if (submitting) return;
     if (mode === 'recover') return sendEmail('recover');
     if (mode === 'confirm') return;
+    const generation = modalGeneration;
     const errEl = document.getElementById('fu-auth-error');
     const emailInput = document.getElementById('fu-email');
     const email = emailInput.value.trim();
@@ -673,8 +661,9 @@
       } else if (mode === 'signup') {
         // No metadata or identity linking: the database retains identity ownership.
         const result = await sb.auth.signUp({ email, password, options: { emailRedirectTo: emailRedirect() } });
-        if (result.error) throw result.error;
-        session = result.data.session;
+        if (result.error && result.error.code !== 'user_already_exists') throw result.error;
+        if (generation !== modalGeneration) return;
+        session = result.data?.session;
         if (!session) {
           cooldown('confirm', email);
           mode = 'confirm';
@@ -687,9 +676,12 @@
         if (result.error) throw result.error;
         session = result.data.session;
       }
+      if (generation !== modalGeneration) return;
+      document.getElementById('fu-password').value = '';
       await syncSessionToLocal(session);
-      completeAuthentication();
+      if (generation === modalGeneration) completeAuthentication();
     } catch (error) {
+      if (generation !== modalGeneration) return;
       if (error.code === 'profile_unavailable') showProfileFailure(error);
       else {
         if (mode === 'profile') { mode = 'signin'; renderAuthForm(); }
@@ -715,7 +707,7 @@
       });
       if (error) throw error;
     } catch (error) {
-      document.getElementById('fu-auth-error').textContent = extractErrorMessage(error);
+      document.getElementById('fu-auth-error').textContent = 'Google login could not finish. Please try again.';
     } finally { submitting = false; button.disabled = false; }
   }
 

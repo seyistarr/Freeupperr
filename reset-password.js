@@ -9,39 +9,6 @@
                 auth: { detectSessionInUrl: true, persistSession: true, storageKey: 'sb-jmjtqidirpmnegzvmiaq-auth-token' }
             });
 
-            // ─── Theme ───
-
-            // ─── Toast ───
-            function showToast(message, type = 'g') {
-                // Ensure message is a string
-                if (typeof message !== 'string') {
-                    try {
-                        message = JSON.stringify(message);
-                    } catch {
-                        message = String(message);
-                    }
-                }
-                // If still empty, fallback
-                if (!message.trim()) message = 'Something happened.';
-                const container = document.getElementById('tw');
-                const toast = document.createElement('div');
-                toast.className = 'toast';
-                toast.textContent = message;
-                // Dismiss on click
-                toast.addEventListener('click', function() {
-                    this.classList.add('out');
-                    setTimeout(() => this.remove(), 260);
-                });
-                container.appendChild(toast);
-                // Auto dismiss after 4s
-                setTimeout(() => {
-                    if (toast.parentNode) {
-                        toast.classList.add('out');
-                        setTimeout(() => toast.remove(), 260);
-                    }
-                }, 4000);
-            }
-
             // ─── DOM refs ───
             const pwNew = document.getElementById('pwNew');
             const pwConf = document.getElementById('pwConf');
@@ -100,12 +67,30 @@
             let updating = false;
             const recoveryStatus = document.getElementById('recoveryStatus');
             const markerKey = 'freeupper_password_recovery';
+            let recoveryExpires = 0;
+            let recoverySessionId = null;
+            // This decoded ID only binds a UI marker to one session. Supabase
+            // authenticates every update; decoded claims never authorize it.
+            function sessionId(session) {
+                try {
+                    const payload = session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+                    const id = JSON.parse(atob(payload)).session_id;
+                    return typeof id === 'string' && id ? id : null;
+                } catch (_) { return null; }
+            }
+            const invalidCallback = new URLSearchParams(location.hash.slice(1)).has('error') || new URLSearchParams(location.search).has('error');
             let ready;
             const recoveryReady = new Promise(resolve => { ready = resolve; });
-            function rememberRecovery(session) {
-                if (!session?.user) return;
+            function rememberRecovery(session, expires = Date.now() + 15 * 60 * 1000) {
+                const id = sessionId(session);
+                if (!session?.user || !id || invalidCallback || expires <= Date.now()) { rejectRecovery(); return; }
                 recoveryUserId = session.user.id;
-                try { sessionStorage.setItem(markerKey, JSON.stringify({ id: recoveryUserId, expires: Date.now() + 15 * 60 * 1000 })); } catch (_) {}
+                recoveryExpires = expires;
+                recoverySessionId = id;
+                try {
+                    if (id) sessionStorage.setItem(markerKey, JSON.stringify({ id: recoveryUserId, sessionId: id, expires }));
+                    else sessionStorage.removeItem(markerKey);
+                } catch (_) {}
                 pwNew.disabled = false;
                 pwConf.disabled = false;
                 recoveryStatus.textContent = 'Choose your new password.';
@@ -113,6 +98,8 @@
             }
             function rejectRecovery() {
                 recoveryUserId = null;
+                recoveryExpires = 0;
+                recoverySessionId = null;
                 pwNew.disabled = true;
                 pwConf.disabled = true;
                 submitBtn.disabled = true;
@@ -141,8 +128,9 @@
                     }
                     let marker;
                     try { marker = JSON.parse(sessionStorage.getItem(markerKey)); } catch (_) {}
-                    if (data.session && recoveryUserId === data.session.user.id) rememberRecovery(data.session);
-                    else if (data.session && marker?.id === data.session.user.id && marker.expires > Date.now()) rememberRecovery(data.session);
+                    if (invalidCallback) rejectRecovery();
+                    else if (data.session && recoveryUserId === data.session.user.id) rememberRecovery(data.session, recoveryExpires);
+                    else if (data.session && marker?.id === data.session.user.id && marker.sessionId && marker.sessionId === sessionId(data.session) && marker.expires > Date.now()) rememberRecovery(data.session, marker.expires);
                     else rejectRecovery();
                 } catch (_) { rejectRecovery(); }
                 finally { ready(); }
@@ -152,7 +140,7 @@
                 await recoveryReady;
                 if (updating) return;
                 const pw = pwNew.value;
-                if (!recoveryUserId) { rejectRecovery(); return; }
+                if (!recoveryUserId || recoveryExpires <= Date.now()) { rejectRecovery(); return; }
                 if (pw.length < 8 || pw !== pwConf.value) {
                     recoveryStatus.textContent = 'Enter matching passwords with at least 8 characters.';
                     return;
@@ -161,7 +149,7 @@
                 updateSubmitButton();
                 try {
                     const { data, error: sessionError } = await sb.auth.getSession();
-                    if (sessionError || !data.session || data.session.user.id !== recoveryUserId) { rejectRecovery(); return; }
+                    if (sessionError || !data.session || data.session.user.id !== recoveryUserId || sessionId(data.session) !== recoverySessionId) { rejectRecovery(); return; }
                     const { error } = await sb.auth.updateUser({ password: pw });
                     if (error) throw error;
                     try { sessionStorage.removeItem(markerKey); } catch (_) {}

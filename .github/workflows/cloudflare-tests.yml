@@ -9,7 +9,8 @@ jobs:
   worker:
     # Playwright 1.56 WebKit is not supported on the ubuntu-26.04 latest image.
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # Full repository, two browser engines and local workerd acceptance.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,9 +32,18 @@ jobs:
       - name: Install iPhone-compatible WebKit
         run: npx playwright install --with-deps webkit
       - name: Verify retained navigation in mobile WebKit
-        run: node --test --test-isolation=none tests/five-tab-navigation.test.js tests/profile-mounted-navigation.test.js
+        run: node --test --test-isolation=none tests/five-tab-navigation.test.js tests/profile-mounted-navigation.test.js tests/email-auth.test.js tests/theme.test.js
         env:
           FREEUPPER_PROFILE_ENGINE: webkit
+          FREEUPPER_AUTH_ENGINE: webkit
+          FREEUPPER_WEBKIT: '1'
+      - name: Verify cached navigation in both engines
+        run: |
+          git fetch --depth=1 origin main
+          node --test --test-isolation=none --test-name-pattern='chromium|webkit.*transport' tests/gallery-offline-browser.test.js
+        env:
+          FREEUPPER_OFFLINE_MATRIX: '1'
+          FREEUPPER_CHROMIUM: /usr/bin/google-chrome
       - name: Verify static assets and disabled routes in workerd
         run: |
           npx wrangler dev --local --port 8787 > /tmp/freeupper-dev.log 2>&1 &
