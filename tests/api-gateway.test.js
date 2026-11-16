@@ -104,7 +104,7 @@ test('upstream network errors do not disclose tokens or internal errors', async 
 
 test('all production browser clients use the gateway and preserve the original session storage key', async () => {
   const auth = await readFile('auth.js', 'utf8');
-  const reset = await readFile('reset-password.html', 'utf8');
+  const reset = await readFile('reset-password.js', 'utf8');
   const composer = await readFile('privacy-v2-composer.js', 'utf8');
   for (const source of [auth, reset]) {
     assert.match(source, /const SUPABASE_URL = 'https:\/\/api\.freeupper\.com'/);

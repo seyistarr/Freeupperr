@@ -121,130 +121,39 @@
     }
   }
 
-  // ─── AUTHENTICATED USER (async) ───────────────────────────
+  // Profile reads never create or replace accounts or public identities.
+  let authGeneration = 0;
+  let activeAuthId = null;
+  const profileLoads = new Map();
   async function getAuthenticatedUser() {
-    const { data: { user }, error } = await sb.auth.getUser();
-    if (error || !user) {
-      return getCurrentUser();
-    }
-
-    let { data: profile, error: profileError } = await sb
-      .from('profiles')
-      .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profileError) {
-      console.warn('getAuthenticatedUser: profile fetch failed', profileError);
-      return {
-        id: user.id,
-        username: '',
-        displayName: 'FreeUpper User',
-        bio: '',
-        coverUrl: '',
-        avatar: user.user_metadata?.avatar_url || defaultGuest().avatar,
-        email: user.email,
-        isLoggedIn: true,
-        verified: false,
-        verificationStatus: 'none',
-        accountType: 'personal',
-        accountIconUrl: '',
-        isPrivate: false,
-        hideFollowerCount: false,
-        activityStatus: true,
-        gender: '',
-        country: '',
-        phone: '',
-        dob: null
-      };
-    }
-
-    if (!profile) {
-      const insertPayload = {
-        id: user.id,
-        avatar_url: user.user_metadata?.avatar_url || null,
-        cover_url: null,
-        verified_status: 'none',
-      };
-      const { data: newProfile, error: insertError } = await sb
-        .from('profiles')
-        .upsert(insertPayload, { onConflict: 'id', ignoreDuplicates: true })
-        .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
-        .maybeSingle();
-      if (insertError) {
-        console.error('getAuthenticatedUser: could not create profile', insertError);
-        return getCurrentUser();
-      }
-      profile = newProfile || (await sb.from('profiles').select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country').eq('id', user.id).single()).data;
-      if (!profile) return getCurrentUser();
-    }
-
-    const privateProfile = await readMyPrivateProfile();
-    const localUser = {
-      id: user.id,
-      username: profile.username || '',
-      displayName: profile.display_name || 'User',
-      bio: profile.bio || '',
-      coverUrl: profile.cover_url || '',
-      avatar: profile.avatar_url || defaultGuest().avatar,
-      email: user.email,
-      isLoggedIn: true,
-      verified: profile.verified_status === 'verified' ||
-                 profile.verified_status === 'official' ||
-                 profile.verified_status === 'staff' ||
-                 profile.verified_status === 'business',
-      verificationStatus: profile.verified_status || 'none',
-      isPrivate: profile.is_private || false,
-      hideFollowerCount: profile.hide_follower_count || false,
-      activityStatus: profile.activity_status !== undefined ? profile.activity_status : true,
-      gender: privateProfile.gender || '',
-      country: profile.country || '',
-      phone: privateProfile.phone || '',
-      dob: privateProfile.dob || null
-    };
-
-    writeLocalUser(localUser);
-    return localUser;
+    const generation = authGeneration;
+    const { data, error } = await sb.auth.getUser();
+    if (generation !== authGeneration) throw new Error('Your session changed. Please try again.');
+    if (error) throw error;
+    if (!data.user) return defaultGuest();
+    return syncSessionToLocal({ user: data.user });
   }
 
-  // ─── SYNC SESSION ──────────────────────────────────────────
   async function syncSessionToLocal(session) {
-    if (!session || !session.user) return;
+    if (!session?.user) throw new Error('Please sign in again.');
     const authUser = session.user;
-
-    try {
-      const { data: profile, error } = await sb
-        .from('profiles')
+    if (activeAuthId !== authUser.id) {
+      activeAuthId = authUser.id;
+      authGeneration++;
+    }
+    const generation = authGeneration;
+    const key = generation + ':' + authUser.id;
+    if (profileLoads.has(key)) return profileLoads.get(key);
+    const load = (async () => {
+      const { data: finalProfile, error } = await sb.from('profiles')
         .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
-        .eq('id', authUser.id)
-        .maybeSingle();
-
-      if (error) {
-        console.warn('syncSessionToLocal: profile fetch failed', error);
-        return;
+        .eq('id', authUser.id).maybeSingle();
+      if (error || !finalProfile) {
+        const failure = new Error('You are signed in, but your profile could not load. Retry without signing in again.');
+        failure.code = 'profile_unavailable';
+        failure.generation = generation;
+        throw failure;
       }
-
-      let finalProfile = profile;
-      if (!profile) {
-        const insertPayload = {
-          id: authUser.id,
-          avatar_url: authUser.user_metadata?.avatar_url || null,
-          cover_url: null,
-          verified_status: 'none',
-        };
-        const { data: inserted, error: insertError } = await sb
-          .from('profiles')
-          .upsert(insertPayload, { onConflict: 'id', ignoreDuplicates: true })
-          .select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country')
-          .maybeSingle();
-        if (insertError) {
-          console.error('syncSessionToLocal: could not create profile', insertError);
-          return;
-        }
-        finalProfile = inserted || (await sb.from('profiles').select('id, username, display_name, bio, cover_url, avatar_url, verified_status, is_private, hide_follower_count, activity_status, country').eq('id', authUser.id).single()).data;
-        if (!finalProfile) return;
-      }
-
       const privateProfile = await readMyPrivateProfile();
       const localUser = {
         id: authUser.id,
@@ -268,10 +177,21 @@
         phone: privateProfile.phone || '',
         dob: privateProfile.dob || null
       };
+      if (generation !== authGeneration || activeAuthId !== authUser.id) throw new Error('Your session changed. Please try again.');
       writeLocalUser(localUser);
-    } catch (err) {
-      console.error('syncSessionToLocal: unexpected error', err);
-    }
+      return localUser;
+    })();
+    const guarded = load.catch(error => {
+      if (generation !== authGeneration) throw new Error('Your session changed. Please try again.');
+      if (error.code === 'profile_unavailable') throw error;
+      const failure = new Error('You are signed in, but your profile could not load. Retry without signing in again.');
+      failure.code = 'profile_unavailable';
+      failure.generation = generation;
+      throw failure;
+    });
+    profileLoads.set(key, guarded);
+    try { return await guarded; }
+    finally { profileLoads.delete(key); }
   }
 
   // ─── REGISTER SESSION LOCATION ────────────────────────────
@@ -302,56 +222,92 @@
 
   // ─── SUPABASE AUTH STATE ──────────────────────────────────
   sb.auth.onAuthStateChange((_event, session) => {
-    if (session) {
-      syncSessionToLocal(session).then(() => {
-        checkLegalUpdate(session);
-      });
-      if (_event === 'SIGNED_IN') {
-        registerSessionLocation();
+    const id = session?.user?.id || null;
+    if (activeAuthId !== id) { activeAuthId = id; authGeneration++; }
+    const generation = authGeneration;
+    // Supabase callbacks run under the auth lock. Do SDK work after returning.
+    setTimeout(() => {
+      if (generation !== authGeneration) return;
+      if (session) {
+        syncSessionToLocal(session).then(() => {
+          if (mode === 'confirm' && session.user.email?.toLowerCase() === document.getElementById('fu-email').value.trim().toLowerCase()) completeAuthentication();
+          checkLegalUpdate(session);
+        }).catch(showProfileFailure);
+        if (_event === 'SIGNED_IN') registerSessionLocation();
+      } else {
+        if (_event === 'SIGNED_OUT') closeModal();
+        writeLocalUser(defaultGuest());
       }
-    } else {
-      const guest = defaultGuest();
-      localStorage.setItem(USER_KEY, JSON.stringify(guest));
-      updateAvatarEls(guest.avatar);
-    }
+    }, 0);
   });
 
   // ─── AUTH MODAL ──────────────────────────────────────────────
   let mode = 'signup';
   let pendingAction = null;
   let modalInitialized = false;
+  let modalGeneration = 0;
+  let submitting = false;
+  let cooldownTimer;
+  const emailCooldowns = new Map();
+  const emailRedirect = () => window.location.origin + '/';
+  const recoveryRedirect = () => window.location.origin + '/reset-password.html';
+
+  function setStatus(message) {
+    document.getElementById('fu-auth-status').textContent = message;
+  }
+  function updateEmailButtons() {
+    clearTimeout(cooldownTimer);
+    const email = document.getElementById('fu-email').value.trim().toLowerCase();
+    const action = mode === 'recover' ? 'recover' : 'confirm';
+    const remaining = Math.max(0, Math.ceil(((emailCooldowns.get(action + ':' + email) || 0) - Date.now()) / 1000));
+    const button = document.getElementById(mode === 'recover' ? 'fu-submit-btn' : 'fu-resend-btn');
+    button.disabled = submitting || remaining > 0;
+    button.textContent = remaining ? `Try again in ${remaining}s` : mode === 'recover' ? 'Send reset link' : 'Resend confirmation';
+    if (remaining) cooldownTimer = setTimeout(updateEmailButtons, 1000);
+  }
+  function cooldown(action, email, error) {
+    const seconds = Number(error?.retryAfter || error?.retry_after || 60);
+    emailCooldowns.set(action + ':' + email.toLowerCase(), Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000);
+  }
+  function showProfileFailure(error) {
+    if (error?.code !== 'profile_unavailable' || error.generation !== authGeneration) return;
+    if (!modalInitialized) createAuthModal();
+    mode = 'profile';
+    renderAuthForm();
+    document.getElementById('fu-auth-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('fu-auth-error').textContent = extractErrorMessage(error);
+  }
+  function completeAuthentication() {
+    const action = pendingAction;
+    closeModal();
+    if (action) action();
+  }
+
 
   // ─── HELPER: extract Supabase error message ────────────────
   function extractErrorMessage(err) {
-    if (!err) return 'Unknown error.';
+    if (!err) return 'Something went wrong. Please try again.';
+    if (err.status === 429 || ['over_email_send_rate_limit', 'over_request_rate_limit'].includes(err.code)) return 'Too many requests. Please wait before trying again.';
+    if (err.code === 'invalid_credentials') return 'Email or password is incorrect. If you joined with Google, continue with Google or request a password reset.';
+    if (err.code === 'email_not_confirmed') return 'Confirm your email before signing in. You can resend the confirmation below.';
+    if (err.code === 'weak_password') return 'Choose a stronger password that meets the account password requirements.';
+    if (err.code === 'signup_disabled') return 'Registration is currently unavailable. Please try again later.';
+    if (err.code === 'user_already_exists') return 'Unable to complete this request. Try signing in or request a password reset.';
+    if (err.name === 'AuthRetryableFetchError' || err instanceof TypeError) return 'Could not connect. Check your connection and try again.';
 
-    const candidate =
-      err?.message ||
-      err?.error_description ||
-      err?.error?.message ||
-      err?.error ||
-      err?.msg ||
-      '';
 
-    if (candidate && candidate !== '{}' && candidate !== '') {
-      return candidate;
-    }
-
-    if (typeof err === 'object') {
-      try {
-        const str = JSON.stringify(err, Object.getOwnPropertyNames(err));
-        if (str && str !== '{}' && str !== '') return str;
-      } catch (_) {
-        // ignore
-      }
-    }
-
+    if (err.code === 'profile_unavailable') return 'You are signed in, but your profile could not load. Retry without signing in again.';
+    // Do not serialize arbitrary backend error objects, which may contain
+    // request details, credentials or provider/account diagnostics.
     return 'Something went wrong. Please try again.';
   }
 
   // ─── RENDER AUTH FORM ──────────────────────────────────────
   function renderAuthForm() {
     document.getElementById('fu-auth-error').textContent = '';
+    setStatus('');
+    clearTimeout(cooldownTimer);
 
     const nameField = document.getElementById('fu-name-field');
     const nameInput = document.getElementById('fu-name');
@@ -389,18 +345,37 @@
       passwordInput.setAttribute('autocomplete', 'current-password');
     }
 
-    const switchBtn = document.getElementById('fu-switch-btn');
-    if (switchBtn) {
-      switchBtn.addEventListener('click', () => {
-        mode = mode === 'signup' ? 'signin' : 'signup';
-        renderAuthForm();
-      });
+    const confirm = mode === 'confirm';
+    const recover = mode === 'recover';
+    const profile = mode === 'profile';
+    passwordInput.closest('.fu-password-wrapper').hidden = confirm || recover || profile;
+    emailInput.closest('.fu-field').hidden = profile;
+    document.getElementById('fu-submit-btn').hidden = confirm;
+    document.getElementById('fu-google-btn').hidden = confirm || recover || profile;
+    document.getElementById('fu-auth-divider').hidden = confirm || recover || profile;
+    document.getElementById('fu-forgot-btn').hidden = mode !== 'signin';
+    document.getElementById('fu-resend-btn').hidden = !(confirm || mode === 'signin');
+    document.getElementById('fu-submit-btn').disabled = submitting;
+    if (confirm || recover || profile) {
+      document.getElementById('fu-auth-title').textContent = profile ? 'Load your profile' : recover ? 'Reset your password' : 'Check your email';
+      document.getElementById('fu-auth-sub').textContent = profile ? 'Your sign-in session is preserved.' : recover ? 'Enter your email to request a password reset link.' : 'Open the confirmation link in your inbox to finish signing up. Check your spam folder too.';
+      document.getElementById('fu-submit-btn').textContent = profile ? 'Retry profile loading' : 'Send reset link';
+      document.getElementById('fu-auth-switch').innerHTML = '<button id="fu-switch-btn" type="button">Back to Sign In</button>';
+      if (confirm) setStatus('If this address is eligible, a confirmation email has been requested.');
     }
+    document.getElementById('fu-switch-btn').addEventListener('click', () => {
+      if (submitting) return;
+      mode = mode === 'signin' ? 'signup' : 'signin';
+      passwordInput.value = '';
+      renderAuthForm();
+    });
+    if (confirm || recover || mode === 'signin') updateEmailButtons();
   }
 
   function openModal(startMode, onSuccess) {
+    modalGeneration++;
     console.log('Opening auth modal, mode:', startMode);
-    mode = startMode || 'signup';
+    mode = ['signup', 'signin', 'recover'].includes(startMode) ? startMode : 'signup';
     pendingAction = onSuccess || null;
 
     if (!modalInitialized) {
@@ -418,12 +393,16 @@
   }
 
   function closeModal() {
+    modalGeneration++;
     const overlay = document.getElementById('fu-auth-overlay');
     if (overlay) {
       overlay.classList.remove('open');
       document.body.style.overflow = '';
     }
     pendingAction = null;
+    clearTimeout(cooldownTimer);
+    const password = document.getElementById('fu-password');
+    if (password) password.value = '';
   }
 
   function createAuthModal() {
@@ -470,6 +449,9 @@
       background:linear-gradient(135deg,#8b5cf6,#6c3fc5);color:#fff;font-weight:800;font-size:14px;
       box-shadow:0 4px 18px rgba(108,63,197,.45)}
     .fu-btn-primary:disabled{opacity:.5;cursor:default}
+    #fu-auth-overlay [hidden]{display:none!important}
+    #fu-forgot-btn,#fu-resend-btn{border:0;background:transparent;color:var(--pl,#a78bfa);padding:10px;cursor:pointer;font:inherit}
+    #fu-resend-btn:disabled{opacity:.6;cursor:wait}
     .fu-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted2,rgba(255,255,255,.35));font-size:12px}
     .fu-divider::before,.fu-divider::after{content:'';flex:1;height:1px;background:var(--brd2,rgba(255,255,255,.12))}
     .fu-btn-google{width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--brd2,rgba(255,255,255,.15));
@@ -518,13 +500,14 @@
         <div id="fu-auth-logo">Free<span>Upper</span></div>
         <div id="fu-auth-title">Join FreeUpper</div>
         <div id="fu-auth-sub">Start as FreeUpper User. Choose your public name and username in your profile.</div>
-        <div id="fu-auth-error"></div>
+        <div id="fu-auth-error" role="alert"></div>
+        <div id="fu-auth-status" role="status" aria-live="polite" style="margin:12px 0"></div>
         <div id="fu-name-field" class="fu-field">
           <input id="fu-name" type="text" placeholder="Full name" autocomplete="name" />
         </div>
-        <div class="fu-field"><input id="fu-email" type="email" placeholder="Email address" /></div>
+        <div class="fu-field"><input id="fu-email" aria-label="Email address" type="email" placeholder="Email address" /></div>
         <div class="fu-field fu-password-wrapper">
-          <input id="fu-password" type="password" placeholder="Password" />
+          <input id="fu-password" aria-label="Password" type="password" placeholder="Password" />
           <button id="fu-password-toggle" type="button" class="fu-password-toggle" aria-label="Toggle password visibility">
             <svg class="icon-eye" viewBox="0 0 24 24">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -537,7 +520,9 @@
           </button>
         </div>
         <button class="fu-btn-primary" id="fu-submit-btn" type="button">Create Account</button>
-        <div class="fu-divider">OR</div>
+        <div class="fu-divider" id="fu-auth-divider">OR</div>
+        <button id="fu-forgot-btn" type="button">Forgot password?</button>
+        <button id="fu-resend-btn" type="button" hidden>Resend confirmation</button>
         <button class="fu-btn-google" id="fu-google-btn" type="button">
           <svg width="18" height="18" viewBox="0 0 256 262" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -589,6 +574,15 @@
 
     document.getElementById('fu-submit-btn').addEventListener('click', handleAuthSubmit);
     document.getElementById('fu-google-btn').addEventListener('click', handleGoogleAuth);
+    document.getElementById('fu-forgot-btn').addEventListener('click', () => { if (!submitting) { mode = 'recover'; renderAuthForm(); } });
+    document.getElementById('fu-resend-btn').addEventListener('click', () => sendEmail('confirm'));
+    document.getElementById('fu-email').addEventListener('input', updateEmailButtons);
+    overlay.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && ['fu-email', 'fu-password'].includes(event.target.id)) {
+        event.preventDefault();
+        if (mode === 'confirm') sendEmail('confirm'); else handleAuthSubmit();
+      }
+    });
 
     // Password visibility toggle
     const passwordInput = document.getElementById('fu-password');
@@ -615,54 +609,106 @@
   }
 
   // ─── AUTH HANDLERS ──────────────────────────────────────────
-  async function handleAuthSubmit() {
+  async function sendEmail(action) {
+    if (submitting) return;
+    const generation = modalGeneration;
+    const emailInput = document.getElementById('fu-email');
+    const email = emailInput.value.trim();
     const errEl = document.getElementById('fu-auth-error');
-    const email = document.getElementById('fu-email').value.trim();
+    errEl.textContent = '';
+    if (!email || !emailInput.checkValidity()) { errEl.textContent = 'Enter a valid email address.'; return; }
+    if ((emailCooldowns.get(action + ':' + email.toLowerCase()) || 0) > Date.now()) { updateEmailButtons(); return; }
+    submitting = true;
+    updateEmailButtons();
+    try {
+      const result = action === 'recover'
+        ? await sb.auth.resetPasswordForEmail(email, { redirectTo: recoveryRedirect() })
+        : await sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: emailRedirect() } });
+      if (result.error && !['user_not_found', 'user_already_exists', 'email_not_found'].includes(result.error.code)) throw result.error;
+      cooldown(action, email);
+      if (generation !== modalGeneration) return;
+      setStatus(action === 'recover' ? 'If this address is eligible, a password reset link has been requested. Check your inbox and spam folder.' : 'If this address is eligible, a confirmation email has been requested. Check your inbox and spam folder.');
+    } catch (error) {
+      if (error.status === 429 || ['over_email_send_rate_limit', 'over_request_rate_limit'].includes(error.code)) cooldown(action, email, error);
+      if (generation === modalGeneration) errEl.textContent = extractErrorMessage(error);
+    } finally { submitting = false; updateEmailButtons(); }
+  }
+
+  async function handleAuthSubmit() {
+    if (submitting) return;
+    if (mode === 'recover') return sendEmail('recover');
+    if (mode === 'confirm') return;
+    const generation = modalGeneration;
+    const errEl = document.getElementById('fu-auth-error');
+    const emailInput = document.getElementById('fu-email');
+    const email = emailInput.value.trim();
     const password = document.getElementById('fu-password').value;
     errEl.textContent = '';
-
-    if (!email || !password) {
-      errEl.textContent = 'Please fill in email and password.';
+    if (mode !== 'profile' && (!email || !emailInput.checkValidity() || !password)) {
+      errEl.textContent = 'Enter a valid email address and password.';
       return;
     }
-
     const btn = document.getElementById('fu-submit-btn');
+    submitting = true;
     btn.disabled = true;
     btn.textContent = 'Please wait...';
-
     try {
-      if (mode === 'signup') {
-        // Public identity is assigned by the database from its existing FreeUpper ID.
-        // Personal names are chosen deliberately in the profile setup flow.
-        const result = await sb.auth.signUp({ email, password });
+      let session;
+      if (mode === 'profile') {
+        const result = await sb.auth.getSession();
         if (result.error) throw result.error;
-        if (result.data.session) await syncSessionToLocal(result.data.session);
+        session = result.data.session;
+      } else if (mode === 'signup') {
+        // No metadata or identity linking: the database retains identity ownership.
+        const result = await sb.auth.signUp({ email, password, options: { emailRedirectTo: emailRedirect() } });
+        if (result.error && result.error.code !== 'user_already_exists') throw result.error;
+        if (generation !== modalGeneration) return;
+        session = result.data?.session;
+        if (!session) {
+          cooldown('confirm', email);
+          mode = 'confirm';
+          document.getElementById('fu-password').value = '';
+          renderAuthForm();
+          return;
+        }
       } else {
-        const signInResult = await sb.auth.signInWithPassword({ email, password });
-        if (signInResult.error) throw signInResult.error;
-        await syncSessionToLocal(signInResult.data.session);
+        const result = await sb.auth.signInWithPassword({ email, password });
+        if (result.error) throw result.error;
+        session = result.data.session;
       }
-      closeModal();
-      if (pendingAction) {
-        const fn = pendingAction;
-        pendingAction = null;
-        fn();
+      if (generation !== modalGeneration) return;
+      document.getElementById('fu-password').value = '';
+      await syncSessionToLocal(session);
+      if (generation === modalGeneration) completeAuthentication();
+    } catch (error) {
+      if (generation !== modalGeneration) return;
+      if (error.code === 'profile_unavailable') showProfileFailure(error);
+      else {
+        if (mode === 'profile') { mode = 'signin'; renderAuthForm(); }
+        errEl.textContent = extractErrorMessage(error);
       }
-    } catch (e) {
-      const msg = extractErrorMessage(e);
-      errEl.textContent = msg;
-      console.error('Auth error:', e);
     } finally {
+      submitting = false;
       btn.disabled = false;
-      btn.textContent = mode === 'signup' ? 'Create Account' : 'Sign In';
+      btn.textContent = mode === 'profile' ? 'Retry profile loading' : mode === 'signup' ? 'Create Account' : 'Sign In';
+      if (mode === 'confirm') updateEmailButtons();
     }
   }
 
   async function handleGoogleAuth() {
-    await sb.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.href }
-    });
+    if (submitting) return;
+    submitting = true;
+    const button = document.getElementById('fu-google-btn');
+    button.disabled = true;
+    try {
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.href }
+      });
+      if (error) throw error;
+    } catch (error) {
+      document.getElementById('fu-auth-error').textContent = 'Google login could not finish. Please try again.';
+    } finally { submitting = false; button.disabled = false; }
   }
 
   // ─── PROTECTED ACTION WRAPPER ────────────────────────────
@@ -1020,17 +1066,36 @@
   window.getCurrentUser = getCurrentUser;
 
   initAuth();
+  const authQuery = new URLSearchParams(window.location.search);
+  const authHash = new URLSearchParams(window.location.hash.slice(1));
+  if (authQuery.get('auth') === 'recover' || authHash.has('error')) {
+    openModal(authQuery.get('auth') === 'recover' ? 'recover' : 'signin');
+    if (authHash.has('error')) {
+      document.getElementById('fu-auth-error').textContent = authHash.get('error_code') === 'otp_expired'
+        ? 'This confirmation link is invalid or expired. Enter your email to resend confirmation.'
+        : 'Sign-in or email verification could not finish. Please try again. If you used an expired email link, resend confirmation.';
+    }
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete('auth');
+    if (authHash.has('error')) clean.hash = '';
+    window.history.replaceState(window.history.state, '', clean.pathname + clean.search + clean.hash);
+  }
+
 
   // ─── SESSION CHECK & FIRST-VISIT TRIGGER ──────────────────
-  sb.auth.getSession().then(({ data }) => {
+  const restorationGeneration = authGeneration;
+  sb.auth.getSession().then(({ data, error }) => {
+    if (restorationGeneration !== authGeneration) return;
+    if (error) throw error;
     if (data.session) {
-      syncSessionToLocal(data.session).then(() => {
-        checkLegalUpdate(data.session);
-      });
+      syncSessionToLocal(data.session).then(() => checkLegalUpdate(data.session)).catch(showProfileFailure);
       registerSessionLocation();
     } else {
       maybeShowFirstVisitPrompt();
     }
+  }).catch(() => {
+    openModal('signin');
+    document.getElementById('fu-auth-error').textContent = 'Your session could not be restored. Please sign in again.';
   });
 
   console.log('AuthUser is ready:', window.AuthUser);

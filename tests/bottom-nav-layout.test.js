@@ -1,5 +1,5 @@
 import '../js/freeupper-routes.js';
-import test from 'node:test';
+import test, {describe, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {readFile} from './helpers/read-page.js';
@@ -8,9 +8,11 @@ import {execFileSync} from 'node:child_process';
 import {chromium} from '@playwright/test';
 
 // Real page CSS/markup, isolated from authentication and backend availability.
-test('shared navigation clearance, video hit areas, keyboard and native history', {timeout:120000}, async t => {
- let baseline=false;
- const server=createServer(async(req,res)=>{
+describe('shared navigation clearance, video hit areas, keyboard and native history', {concurrency:false}, () => {
+ let baseline=false, server, browser, context, origin;
+ const measurements=[];
+ before(async()=>{
+ server=createServer(async(req,res)=>{
   const requestedPath=new URL(req.url,'http://local').pathname;
   const path=/^\/(?:u\/|@)/.test(requestedPath)?'/profile.html':globalThis.FreeUpperRoutes.documentPath(requestedPath) || requestedPath;
   try {
@@ -21,14 +23,19 @@ test('shared navigation clearance, video hit areas, keyboard and native history'
   } catch {res.writeHead(404);res.end();}
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
- const origin=`http://127.0.0.1:${server.address().port}`;
- const browser=await chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']});
- const context=await browser.newContext();
+ origin=`http://127.0.0.1:${server.address().port}`;
+ browser=await chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']});
+ context=await browser.newContext();
  await context.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());
- const page=await context.newPage();const measurements=[];
- try {
-  await mkdir('/tmp/freeupper-navigation',{recursive:true});
-  if(process.env.FREEUPPER_NAV_BASELINE_REF) {
+ await mkdir('/tmp/freeupper-navigation',{recursive:true});
+ });
+ after(async()=>{
+  await browser?.close();
+  if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}
+  await writeFile('/tmp/freeupper-navigation/geometry.json',JSON.stringify(measurements,null,2));
+ });
+ if(process.env.FREEUPPER_NAV_BASELINE_REF) test('explicit baseline screenshots',{timeout:30000},async t=>{
+  const page=await context.newPage();t.after(()=>page.close());
   baseline=true;await page.setViewportSize({width:390,height:844});
   const before=[];
   for(const name of ['index','search','create','video','profile']) {
@@ -41,8 +48,11 @@ test('shared navigation clearance, video hit areas, keyboard and native history'
    await page.screenshot({path:`/tmp/freeupper-navigation/before-${name}.png`});
   }
   await writeFile('/tmp/freeupper-navigation/before.json',JSON.stringify(before,null,2));baseline=false;
-  }
-  for(const [width,height] of [[375,667],[390,844],[430,932],[360,800],[667,375]]) for(const theme of ['light','dark']) for(const safe of [0,34]) {
+ });
+  for(const [width,height] of [[375,667],[390,844],[430,932],[360,800],[667,375]]) for(const theme of ['light','dark']) for(const safe of [0,34]) test(`geometry ${width}x${height} ${theme} safe=${safe}`,{timeout:30000},async t=>{
+   const page=await context.newPage();
+   // Cancellation closes this case's page; a timed-out matrix cannot keep running.
+   t.after(()=>page.close());
    await page.setViewportSize({width,height});
    for(const name of ['index','search','create','video','profile']) {
     await page.goto(`${origin}/${name}.html`);
@@ -68,7 +78,9 @@ test('shared navigation clearance, video hit areas, keyboard and native history'
     measurements.push({page:name,width,height,theme,safe,...m});
     if(width===390 && theme==='light' && safe===34)await page.screenshot({path:`/tmp/freeupper-navigation/after-${name}.png`});
    }
-  }
+  });
+  test('keyboard, native history, composer guard and video scrubbing',{timeout:60000},async t=>{
+  const page=await context.newPage();t.after(()=>page.close());
   await page.setViewportSize({width:390,height:844});
   // Use a VisualViewport test double: this verifies our response, not a physical keyboard.
   for(const name of ['search','create']) {
@@ -111,5 +123,5 @@ test('shared navigation clearance, video hit areas, keyboard and native history'
   assert(Math.abs(await page.locator('#vid-0').evaluate(v=>v.currentTime)-80)<2);assert(page.url().endsWith('/video.html'));
   await mkdir('/tmp/freeupper-navigation',{recursive:true});await writeFile('/tmp/freeupper-navigation/geometry.json',JSON.stringify(measurements,null,2));
   t.diagnostic(`${measurements.length} page/viewport/theme/safe-area geometry cases passed; measurements in /tmp/freeupper-navigation/geometry.json`);
- } finally {await browser.close();await new Promise(r=>server.close(r));}
+ });
 });

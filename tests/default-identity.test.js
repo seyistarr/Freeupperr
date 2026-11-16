@@ -34,8 +34,8 @@ test('many registration requests stay unique; duplicate IDs and usernames fail a
 });
 test('browser signup and recovery never derive names from email or manufacture a FreeUpper ID',async()=>{
  const auth=await readFile('auth.js','utf8');assert.doesNotMatch(auth,/email\.split|baseUsername|randomSuffix|display_name:.*metadata|username:.*metadata/);
- assert.match(auth,/signUp\(\{ email, password \}\)/);assert.match(auth,/provider: 'google'/);
- assert.equal((auth.match(/ignoreDuplicates: true/g)||[]).length,2);
+ assert.match(auth,/signUp\(\{ email, password, options: \{ emailRedirectTo: emailRedirect\(\) \} \}\)/);assert.match(auth,/provider: 'google'/);
+ assert.doesNotMatch(auth, /\.upsert\(/, 'profile loading must not write replacement identities');
  const schema=await readFile('supabase/migrations/20261015000000_profile_setup_completion.sql','utf8');assert.match(schema,/profile_setup_completed_at IS NOT NULL/);
  const mentions=await readFile('mentions.js','utf8');assert.match(mentions,/data-userid="\$\{m.userId\}"/);
 });

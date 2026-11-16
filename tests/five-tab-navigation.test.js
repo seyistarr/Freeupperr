@@ -42,7 +42,14 @@ async function harness({root='home',pwa=false,delay=100,route=null,guest=false,p
    if(url.pathname==='/service-worker.js' && legacyWorker){res.setHeader('Content-Type','text/javascript');res.setHeader('Cache-Control','no-cache');res.end(await readFile(workerUpdated?'service-worker.js':'tests/fixtures/service-worker-v26.js'));return;}
    if(url.searchParams.has('fixtureRenderer')){res.setHeader('Content-Type','text/html');res.end('<!doctype html><head><script src="/js/freeupper-routes.js?v=clean-urls-v1"></script><script src="/js/screen-lifecycle.js?v=sidebar-v1"></script></head><body><input id="rendererInput"><main>Owned renderer</main></body>');return;}
    const key=Object.keys(names).find(key=>url.pathname==='/'+names[key]+'.html' || url.pathname===routes[key]) || (url.pathname.startsWith('/u/')||url.pathname.startsWith('/@')?'profile':null);
-   if(!key){if(url.pathname==='/profile-shell.js' && coordinatorDelay)await new Promise(r=>setTimeout(r,coordinatorDelay));const path=url.pathname==='/'?'/index.html':url.pathname;const body=await readFile('.'+path);res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'application/octet-stream');res.end(body);return;}
+   if(!key){if(url.pathname==='/profile-shell.js' && coordinatorDelay)await new Promise(r=>setTimeout(r,coordinatorDelay));const path=url.pathname==='/'?'/index.html':url.pathname;const body=await readFile('.'+path);
+    res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.mp4')?'video/mp4':'application/octet-stream');
+    if(path.endsWith('.mp4')){
+     res.setHeader('Accept-Ranges','bytes');
+     const range=req.headers.range?.match(/^bytes=(\d+)-(\d*)$/);
+     if(range){const start=Number(range[1]),end=Math.min(Number(range[2]||body.length-1),body.length-1);res.writeHead(206,{'Content-Range':`bytes ${start}-${end}/${body.length}`,'Content-Length':end-start+1});res.end(body.subarray(start,end+1));return;}
+    }
+    res.end(body);return;}
    documents.push({url:req.url,time:Date.now()});
    let html=sources[key].replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<link\b[^>]*https:[^>]*>/gi,'');
    // Keep decorative share icons local, like the fixture's mocked backend
@@ -467,12 +474,16 @@ test('sidebar: guest navigation stays native and modified links retain browser b
 test('sidebar: Video suspends native media and retains feed position on return',{timeout:30000},async()=>{
  const h=await harness({prefetch:false});try{
   await h.page.setViewportSize({width:1024,height:768});await sidebarSelect(h,'video');const video=h.screen('video');
-  const wav=Buffer.alloc(44+8000*2*6);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
-  await video.evaluate(async src=>{const media=document.createElement('video');media.id='vid-0';media.src=src;media.muted=true;media.loop=true;document.body.append(media);await media.play();window.savedFeed=document.getElementById('feedTrack');},'data:audio/wav;base64,'+wav.toString('base64'));
+  // Native MP4 playback exercises both engines without a synthetic time getter.
+  await video.evaluate(async src=>{const media=document.createElement('video');media.id='vid-0';media.src=src;media.muted=true;media.loop=true;document.body.append(media);window.mediaTrace=[];for(const name of ['pause','play','seeking','seeked','loadedmetadata','emptied'])media.addEventListener(name,()=>mediaTrace.push({event:name,time:media.currentTime,seeking:media.seeking,ready:media.readyState}));await media.play();window.savedFeed=document.getElementById('feedTrack');},h.origin+'/tests/fixtures/gallery-ui-video.mp4');
+  await video.waitForFunction(()=>document.getElementById('vid-0').currentTime>0.4);
   await sidebarSelect(h,'search');assert(await video.locator('#vid-0').evaluate(v=>v.paused));
   const position=await video.locator('#vid-0').evaluate(v=>v.currentTime);
   const count=h.documents.length;await sidebarSelect(h,'video');
   assert.equal(h.documents.length,count);assert(await video.evaluate(()=>savedFeed===document.getElementById('feedTrack')));
+  if(process.env.FREEUPPER_DEBUG)console.log('sidebar media',JSON.stringify(await video.evaluate(position=>({position,actual:document.getElementById('vid-0').currentTime,events:mediaTrace}),position)));
+  await video.waitForFunction(position=>Math.abs(document.getElementById('vid-0').currentTime-position)<0.25,position,{timeout:2000});
+  assert.equal(await video.evaluate(()=>mediaTrace.filter(event=>event.event==='seeking').length),0,'an already retained timeline must not be re-seeked');
   assert(Math.abs(await video.locator('#vid-0').evaluate(v=>v.currentTime)-position)<0.25);assert.equal(await video.evaluate(()=>FreeUpperScreen.isActive()),true);assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });

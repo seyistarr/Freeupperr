@@ -181,12 +181,18 @@
       updateNextBtn();
     };
 
+    let saving = false;
     async function finishOnboarding(interestsObj) {
+      if (saving) return;
+      saving = true;
+      nextBtn.disabled = true;
+      skipBtn.disabled = true;
       try {
         if (!window.FreeUpperFeed || typeof window.FreeUpperFeed.saveOnboardingInterests !== 'function') {
           throw new Error('FreeUpperFeed.saveOnboardingInterests is not available.');
         }
         const saved = await window.FreeUpperFeed.saveOnboardingInterests(interestsObj);
+        if (!saved) throw new Error('Your interests could not be saved. Please retry.');
         overlay.classList.remove('open');
         document.body.style.overflow = '';
         if (saved && typeof window.refreshHome === 'function') {
@@ -197,6 +203,9 @@
         ERR('Failed to save onboarding interests:', err);
         alert(window.fuT('Something went wrong saving your interests. Please try again.'));
         // Restore the button instead of leaving it stuck on "Saving…"
+      } finally {
+        saving = false;
+        skipBtn.disabled = false;
         updateNextBtn();
       }
     }
