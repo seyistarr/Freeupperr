@@ -1,8 +1,11 @@
 # Email authentication PR readiness review
 
 Date: 2026-11-16. Branch: `fix/email-auth-confirmation-recovery`.
-Starting feature commit: `0c8d5ee`. Latest fetched main: `b943598eeb6cac1a6ab06b3235254f0c38581be1`.
-Main has not advanced; the feature branch contains that main commit and has no merge conflicts.
+Starting feature commit: `0c8d5ee`. Latest integrated main: `4a19c659a1928b4d1ad39938ed05c5e7931f2d0b`.
+The final pre-publication fetch found PR #38 after the initial baseline review. Its profile asset
+paths and gallery fixture/tests merged cleanly into this feature branch (`051505d`); main was not
+modified. Mandatory checks were repeated against the combined code. Historical comparisons below
+use the original `b943598` baseline, as explicitly labelled.
 This review supersedes the incomplete validation status in the initial Phase 2 report.
 
 ## Navigation timeout: investigation and correction
@@ -57,6 +60,33 @@ retained time, retained document/feed and active screen, plus absence of a redun
 The corrected native WebKit case passed independently. No synthetic time getter or increased
 position tolerance was used. This does not claim to fix every codec/seek behavior in WebKit.
 
+## Combined-main WebKit follow-up
+
+The first repeated combined-main WebKit gate had 73 passes and two failures: the cold-profile
+readiness helper timed out at 10 seconds although its diagnostic then showed `ready: true`, and
+offline theme navigation lacked the expected initialized controller. A focused cold-profile run
+passed unchanged (3.1-second completion), but this alone was not accepted as proof of no problem.
+A focused theme run also hit its suite timeout; temporary request/navigation/cache diagnostics
+were used and then removed.
+
+The theme fixture retained its animated Chat page after finishing the cross-tab storage assertion.
+Process inspection showed that unused WebKit document consuming substantial CPU. It now closes
+immediately after the same assertion. The readiness helper uses 100 ms clock polling instead of
+animation-frame polling, preserving its 10-second limit; cached offline navigation explicitly
+waits for theme initialization before checking the same light/dark values. Synchronous first-paint,
+transition, reduced-motion and cross-tab assertions are retained. The exact scheduling condition
+of every transient failure is not claimed as proven. These are fixture lifecycle/readiness changes,
+not production retries, relaxed geometry/media tolerances or removed failure cases.
+
+The subsequent 75-case WebKit gate passed, but the offline matrix exposed another internal WebKit
+error on cached-shell reload after an artificial per-request socket reset. The transport fixture
+now closes its listening server and connections before navigation instead of resetting each
+incoming request. This represents an actually unavailable server and retains real cache reads,
+initial navigation and reload assertions on both main and feature. All six variants passed in
+three consecutive validation runs after this change; the theme fixture uses the same shutdown.
+No automatic retry was added. All mandatory
+gates were rerun after these changes; final results below supersede the failed run.
+
 ## Security findings and fixes
 
 - Recovery marker lifetime previously renewed on reload and only matched the user UUID. It is now
@@ -109,9 +139,9 @@ All mandatory local gates are clean:
 
 | Check | Final result |
 | --- | --- |
-| Complete repository, including local Worker routes and WebKit theme | 614 tests: 606 passed, 0 failed, 8 opt-in matrix entries skipped; 546.9 seconds |
-| WebKit authentication, five-tab and mounted-profile navigation | 71 passed, 0 failed, 0 skipped; 271.6 seconds |
-| Supported offline matrix (both main and feature) | 6 passed, 0 failed, 0 skipped |
+| Complete repository, including local Worker routes and WebKit theme | 616 tests: 608 passed, 0 failed, 8 opt-in matrix entries skipped; 683.6 seconds |
+| WebKit authentication, five-tab, mounted-profile navigation and theme | 75 passed, 0 failed, 0 skipped; 288.5 seconds |
+| Supported offline matrix (both main and feature) | 6 passed, 0 failed, 0 skipped in three consecutive validation runs |
 | WebKit theme with actual transport outage | Passed independently and in the complete suite |
 | Legacy video/Explore contracts and quote client checks | 7 passed; also passed in complete suite |
 | Syntax, whitespace and generated/source parity | Passed |
@@ -134,7 +164,7 @@ WRANGLER_SEND_METRICS=false npx --no-install wrangler deploy --dry-run --outdir 
 WRANGLER_SEND_METRICS=false npx --no-install wrangler deploy --config cloudflare/api/wrangler.jsonc --dry-run --outdir .wrangler/api-test-build
 # Start wrangler dev --local on 127.0.0.1:8787, without .env/.dev.vars production credentials.
 FREEUPPER_TEST_BUNDLE=.wrangler/test-build FREEUPPER_TEST_ORIGIN=http://127.0.0.1:8787 FREEUPPER_CHROMIUM=/usr/bin/chromium FREEUPPER_WEBKIT=1 node --test --test-isolation=none --test-concurrency=1 tests/*.test.js tests/*.test.cjs
-FREEUPPER_PROFILE_ENGINE=webkit FREEUPPER_AUTH_ENGINE=webkit node --test --test-isolation=none --test-concurrency=1 tests/five-tab-navigation.test.js tests/profile-mounted-navigation.test.js tests/email-auth.test.js
+FREEUPPER_PROFILE_ENGINE=webkit FREEUPPER_AUTH_ENGINE=webkit FREEUPPER_WEBKIT=1 FREEUPPER_CHROMIUM=/usr/bin/chromium node --test --test-isolation=none --test-concurrency=1 tests/five-tab-navigation.test.js tests/profile-mounted-navigation.test.js tests/email-auth.test.js tests/theme.test.js
 FREEUPPER_CHROMIUM=/usr/bin/chromium FREEUPPER_OFFLINE_MATRIX=1 node --test --test-isolation=none --test-name-pattern='chromium|webkit.*transport' tests/gallery-offline-browser.test.js
 ```
 
@@ -142,6 +172,10 @@ CI now includes the WebKit auth and theme cases, the supported offline matrix, a
 acceptance. Its production deployment condition is unchanged and tested: only a push to main can
 enter that job. Feature-branch publication and PR checks do not authorize production deployment.
 GitHub Actions status is reported on the PR; these local results do not substitute for it.
+The integration returned HTTP 403 for branch-protection required-status settings; no hidden
+required-check list is claimed as verified. All applicable observable PR workflows are checked.
+The combined-main repository run includes both new mobile/desktop profile-content consistency
+cases from PR #38, which passed with owner, visitor and guest coverage.
 
 ## Changed files after the Phase 2 checkpoint
 
@@ -150,7 +184,11 @@ GitHub Actions status is reported on the PR; these local results do not substitu
 - `tests/email-auth.test.js`, `tests/helpers/email-auth-fixture.js`: security cases and WebKit runner.
 - `tests/bottom-nav-layout.test.js`: bounded cases and cancellation cleanup, same geometry coverage.
 - `tests/five-tab-navigation.test.js`: native MP4/range fixture and retained-time regression.
-- `tests/theme.test.js`: real WebKit fixture-transport outage instead of broken offline emulation.
+- `tests/theme.test.js`: real transport outage, release the completed cross-tab page, and explicit
+  cached-controller readiness; first-paint assertions unchanged.
+- `tests/profile-mounted-navigation.test.js`: clock-poll readiness at the same 10-second bound.
+- `tests/gallery-offline-browser.test.js`: actual server shutdown instead of per-request socket resets;
+  same cached navigation/reload assertions on both main and feature.
 - `tests/quote-reposts-client.test.js`: exact reviewed guard normalization, same remaining hash.
 - `tests/gallery-main-preservation.test.js`: allow reviewed CI edits; other fingerprints unchanged.
 - `.github/workflows/cloudflare-tests.yml`: sufficient job budget and explicit browser/offline gates.

@@ -57,7 +57,9 @@ async function mountedHarness({root='home',delay=120,hydrated=true,sidebar=false
  const profile=()=>root==='profile'?page.mainFrame():page.frames().find(f=>f!==page.mainFrame()&&new URL(f.url()).pathname==='/profile.html');
  return {page,context,errors,documents,profile,setPrimaryFailure:value=>{failPrimary=value;},close:async()=>{await browser.close();await new Promise(r=>server.close(r));}};
 }
-async function ready(h){await h.page.waitForFunction(()=>{const win=document.querySelector('iframe[data-fu-mounted="profile"]')?.contentWindow;return win?.ProfileMounted?.status().ready;},null,{timeout:10000}).catch(async error=>{console.error(await h.page.evaluate(()=>[...document.querySelectorAll('iframe')].map(f=>({src:f.src,status:f.contentWindow.ProfileMounted?.status(),text:f.contentDocument?.body?.textContent.slice(-300)}))));throw error;});return h.profile();}
+// Readiness is not an animation-frame assertion: a mounted document may still
+// be hidden during a cold handoff. Poll on a clock without relaxing the bound.
+async function ready(h){await h.page.waitForFunction(()=>{const win=document.querySelector('iframe[data-fu-mounted="profile"]')?.contentWindow;return win?.ProfileMounted?.status().ready;},null,{polling:100,timeout:10000}).catch(async error=>{console.error(await h.page.evaluate(()=>[...document.querySelectorAll('iframe')].map(f=>({src:f.src,status:f.contentWindow.ProfileMounted?.status(),text:f.contentDocument?.body?.textContent.slice(-300)}))));throw error;});return h.profile();}
 test(`${engine}${pwa?'/PWA':''}: Home → Profile → Home restores complete first-frame DOM without documents or grid flashes`,{timeout:90000},async t=>{
  const h=await mountedHarness();try{
  const f=await ready(h);await f.waitForFunction(()=>document.querySelectorAll('#panel-posts .grid-card').length===24);

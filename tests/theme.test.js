@@ -49,9 +49,7 @@ test('controller handles unavailable storage and ignores repeated or invalid upd
 for (const engine of ['chromium', 'webkit']) {
   test(`${engine}: theme transitions, first paint, persistence, events, tabs, reduced motion and no reloads`,
     {skip: engine === 'chromium' ? !process.env.FREEUPPER_CHROMIUM : !process.env.FREEUPPER_WEBKIT, timeout:120000}, async () => {
-    let transportOffline = false;
     const server = createServer(async (req,res) => {
-      if (transportOffline) { req.socket.destroy(); return; }
       const pathname = new URL(req.url,'http://local').pathname;
       const path = pathname === '/' ? '/index.html' : pathname;
       try {
@@ -106,6 +104,9 @@ for (const engine of ['chromium', 'webkit']) {
       await page.evaluate(()=>applyTheme('light'));
       await second.waitForFunction(()=>getCurrentTheme()==='light');
       assert.equal(await second.locator('meta[name="theme-color"]').getAttribute('content'),'#ffffff');
+      // The storage-event assertion is complete; release this animated page
+      // before the remaining navigation and offline checks.
+      await second.close();
       await page.reload();
       assert.equal(await page.evaluate(()=>localStorage.getItem('freeupper_theme')),'light');
       // Capture the theme synchronously immediately after the blocking head controller.
@@ -146,12 +147,16 @@ for (const engine of ['chromium', 'webkit']) {
       // WebKit offline emulation rejects cached navigations on both main and
       // feature. Fail the actual fixture transport instead; do not mock cache
       // responses or weaken the offline theme assertions.
-      if (engine === 'webkit') transportOffline = true;
+      if (engine === 'webkit') { server.closeAllConnections(); await new Promise(r=>server.close(r)); }
       else await context.setOffline(true);
       await page.goto(origin+'/video.html');
+      // Wait for the cached controller to initialize after WebKit's failed
+      // network navigation. First-paint assertions above remain synchronous.
+      await page.waitForFunction(()=>typeof getCurrentTheme==='function' && !document.documentElement.classList.contains('theme-initializing'),null,{polling:100,timeout:10000});
       assert.equal(await page.evaluate(()=>getCurrentTheme()),'light');
       await page.evaluate(()=>applyTheme('dark'));
       await page.reload();
+      await page.waitForFunction(()=>typeof getCurrentTheme==='function' && !document.documentElement.classList.contains('theme-initializing'),null,{polling:100,timeout:10000});
       assert.equal(await page.evaluate(()=>getCurrentTheme()),'dark');
       await context.close();
     } finally { await browser?.close(); server.closeAllConnections(); await new Promise(r=>server.close(r)); }
