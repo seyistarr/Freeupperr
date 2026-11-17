@@ -73,6 +73,10 @@
     let typingUsersMap = new Map();
     let typingExpiryTimers = new Map();
     let myTypingActive = false;
+    let myChatActivity = null;
+    let chatActivityHeartbeat = null;
+    const CHAT_ACTIVITY_TTL = 6500;
+    const CHAT_ACTIVITY_TYPES = new Set(['recording_voice', 'sending_image', 'sending_video']);
 
     const viewOnceStateByMsg = new Map();
 
@@ -3252,6 +3256,7 @@
         typingUsersMap.clear();
         typingExpiryTimers.clear();
         myTypingActive = false;
+        stopChatActivity();
         renderTypingIndicator(false);
         const c0 = currentConv();
         if (c0 && !c0.is_note) renderPartnerStatus(c0);
@@ -3291,6 +3296,36 @@
                     if (c && !c.is_note) renderPartnerStatus(c);
                 }
             });
+            typingChannel.on('broadcast', { event: 'chat_activity' }, async ({ payload }) => {
+                if (!payload || payload.userId === currentUserId ||
+                    (payload.activity !== null && !CHAT_ACTIVITY_TYPES.has(payload.activity))) return;
+                const uid = payload.userId;
+                if (!uid || typeof uid !== 'string') return;
+                if (payload.activity === null) {
+                    const previous = typingUsersMap.get(uid);
+                    if (previous?.activity) typingUsersMap.delete(uid);
+                } else {
+                    let user = typingUsersMap.get(uid);
+                    if (!user) {
+                        const { data } = await sb.from('profiles')
+                            .select('id, display_name, username, avatar_url')
+                            .eq('id', uid).maybeSingle();
+                        if (selectedConversationId !== convId) return;
+                        user = data || { id: uid, display_name: 'Member' };
+                    }
+                    typingUsersMap.set(uid, { ...user, activity: payload.activity });
+                }
+                clearTimeout(typingExpiryTimers.get(uid));
+                typingExpiryTimers.delete(uid);
+                if (payload.activity !== null) {
+                    typingExpiryTimers.set(uid, setTimeout(() => {
+                        typingUsersMap.delete(uid);
+                        typingExpiryTimers.delete(uid);
+                        renderTypingIndicator(typingUsersMap.size > 0);
+                    }, CHAT_ACTIVITY_TTL));
+                }
+                renderTypingIndicator(typingUsersMap.size > 0);
+            });
             await typingChannel.subscribe();
         } catch (err) {
             console.warn('typing channel setup failed:', err);
@@ -3306,6 +3341,35 @@
                 payload: { userId: currentUserId, isTyping: !!isTyping }
             });
         } catch (e) { /* ignore */ }
+    }
+
+    function broadcastChatActivity(activity) {
+        if (!typingChannel || !currentUserId || !selectedConversationId) return;
+        Promise.resolve(typingChannel.send({
+            type: 'broadcast', event: 'chat_activity',
+            payload: { userId: currentUserId, activity }
+        })).catch(() => {});
+    }
+
+    function startChatActivity(activity) {
+        if (!CHAT_ACTIVITY_TYPES.has(activity)) return;
+        stopChatActivity();
+        myChatActivity = activity;
+        broadcastChatActivity(activity);
+        chatActivityHeartbeat = setInterval(() => {
+            if (document.hidden || !selectedConversationId) {
+                stopChatActivity();
+                return;
+            }
+            broadcastChatActivity(activity);
+        }, 3000);
+    }
+
+    function stopChatActivity() {
+        if (chatActivityHeartbeat) clearInterval(chatActivityHeartbeat);
+        chatActivityHeartbeat = null;
+        if (myChatActivity) broadcastChatActivity(null);
+        myChatActivity = null;
     }
 
     function startTypingBroadcast() {
@@ -3342,7 +3406,13 @@
             el.className = 'typing-indicator';
             messagesArea.appendChild(el);
         }
-        el.innerHTML = inner;
+        const activity = users.find(u => u.activity)?.activity;
+        const label = activity === 'recording_voice' ? 'Recording a voice note' :
+            activity === 'sending_video' ? 'Sending a video' :
+            activity === 'sending_image' ? 'Sending an image' : '';
+        el.innerHTML = label
+            ? `<div class="typing-avatars">${avatarsHtml}</div><div class="typing-bubble" aria-live="polite"><span>${label}…</span><div class="dots"><span></span><span></span><span></span></div></div>`
+            : inner;
         scrollToBottom();
     }
 
@@ -3468,6 +3538,7 @@
             mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
 
             mediaRecorder.onstop = async () => {
+                stopChatActivity();
                 stream.getTracks().forEach(t => t.stop());
                 clearInterval(recordTimerInterval);
                 cancelAnimationFrame(recAnimFrame);
@@ -3490,6 +3561,7 @@
             };
 
             mediaRecorder.start();
+            startChatActivity('recording_voice');
             recordStartTime = Date.now();
             document.getElementById('voiceRecordBar').classList.add('active');
             document.getElementById('messageInputArea').classList.add('recording-mode');
@@ -5600,6 +5672,7 @@
         returnToArchivedAfterChat = false;
 
         if (chatSearch.open) closeChatSearch();
+        stopChatActivity();
         if (typingChannel) {
             try { sb.removeChannel(typingChannel); } catch (e) {}
             typingChannel = null;
@@ -6300,7 +6373,10 @@
         const viewOnce = composerViewOnce;
         if (!convId || isBlockedConversation || !canSendMessages) return;
         closeComposer();
+        if (items.some(item => item.kind === 'video')) startChatActivity('sending_video');
+        else if (items.some(item => item.kind === 'image')) startChatActivity('sending_image');
 
+        try {
         if (items[0].kind === 'doc') {
             await sendDocumentItem(items[0], caption);
         } else {
@@ -6308,6 +6384,7 @@
         }
         await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId);
         loadConversations();
+        } finally { stopChatActivity(); }
     };
 
     async function sendMixedMediaItems(items, caption, viewOnce) {
