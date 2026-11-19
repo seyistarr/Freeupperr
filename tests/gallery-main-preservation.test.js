@@ -3,8 +3,8 @@ import test from 'node:test';import assert from 'node:assert/strict';import {rea
 const approved=JSON.parse(await readFile(new URL('./fixtures/gallery-main-baseline.json',import.meta.url),'utf8'));
 const sha=value=>createHash('sha256').update(value).digest('hex');
 test('approved authentication, identity, Chat, publishing and backend fingerprints remain intact',async()=>{
- // Only the explicitly reviewed chat assets and Chat UI workflow may supersede Gallery's original pins.
- assert.deepEqual(Object.keys(approved.chatUpgrade.files).sort(),['.github/workflows/chat-ui-release-checks.yml','chat.html','chat.js']);
+ // Only reviewed chat assets and CI compatibility updates supersede Gallery's original pins.
+ assert.deepEqual(Object.keys(approved.chatUpgrade.files).sort(),['.github/workflows/chat-ui-release-checks.yml','.github/workflows/cloudflare-tests.yml','chat.html','chat.js']);
  for(const [file,expected] of Object.entries(approved.files))assert.equal(sha(await readFile(file)),approved.chatUpgrade.files[file] || expected,file);
 });
 test('shared Home renderer is extracted exactly from current main',async()=>{
