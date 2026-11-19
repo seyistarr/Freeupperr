@@ -502,3 +502,23 @@ test('sidebar: a native History SecurityError cannot block screen activation',{t
   await h.page.goBack();await h.page.waitForFunction(()=>FreeUpperProfileShell.getActive()==='create');assert.equal(new URL(h.page.url()).pathname,'/create');assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
+
+test('retained Search renews expired results and memory pressure preserves drafts',{timeout:60000},async()=>{
+ const h=await harness();try{
+  await h.select('search');const search=h.screen('search');
+  await search.evaluate(()=>Search.runSearch('freshness lease'));
+  await search.waitForFunction(()=>document.getElementById('resultsContainer').textContent.includes('freshness lease'));
+  const calls=await search.evaluate(()=>queryCalls);
+  await h.select('create');await h.screen('create').locator('#postContent').fill('Pressure-safe draft');
+  await search.evaluate(()=>{const now=Date.now;Date.now=()=>now()+61000;});
+  await h.select('search');await search.waitForFunction(n=>queryCalls>n,calls);
+  assert.equal(await search.locator('#searchInput').inputValue(),'freshness lease');
+  await h.select('video');await h.select('create');
+  await h.page.evaluate(()=>dispatchEvent(new Event('fu-memory-pressure')));
+  assert.equal(await h.screen('create').locator('#postContent').inputValue(),'Pressure-safe draft');
+  assert.equal(await h.page.locator('iframe[data-fu-mounted=search]').count(),0);
+  assert.equal(await h.page.locator('iframe[data-fu-mounted=video]').count(),0);
+  await h.select('search');assert.equal(await h.screen('search').locator('#searchInput').inputValue(),'freshness lease');
+  assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});

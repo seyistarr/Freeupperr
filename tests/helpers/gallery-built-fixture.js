@@ -4,7 +4,7 @@ import {createServer} from 'node:http';
 import {chromium,webkit} from '@playwright/test';
 import {originalAudioWav} from './original-audio-fixture.js';
 export const owner='11111111-1111-4111-8111-111111111111';
-export async function builtGalleryHarness({authenticated=false,viewerId=owner,viewport={width:390,height:844}}={}){
+export async function builtGalleryHarness({authenticated=false,enableServiceWorker=false,viewerId=owner,viewport={width:390,height:844}}={}){
  const root=new URL('../../cloudflare/generated/public/',import.meta.url);
  const profile={id:owner,freeupper_id:'FUABCDEF123456',username:'fixture_creator',display_username:'fixture_creator',display_name:'Fixture Creator',bio:'Synthetic creator',avatar_url:'/freeupper.png',cover_url:'/freeupper.png',verified:true,verified_status:'verified',is_private:false,hidden_tabs:[],hide_all_posts:false,created_at:'2026-11-01T00:00:00Z'};
  const soundId='22222222-2222-4222-8222-222222222222';
@@ -13,7 +13,7 @@ export async function builtGalleryHarness({authenticated=false,viewerId=owner,vi
   const url=new URL(req.url,'http://fixture');let path=url.pathname;
   if(['/profile','/@fixture_creator','/@fixture_creator/','/u/FUABCDEF123456','/u/FUABCDEF123456/'].includes(path))path='/profile.html';
   if(path==='/home')path='/index.html';if(path==='/videos')path='/video.html';
-  if(path.endsWith('.html')&&['document','iframe'].includes(req.headers['sec-fetch-dest']))documents.push(path);
+  if(!enableServiceWorker&&path.endsWith('.html')&&['document','iframe'].includes(req.headers['sec-fetch-dest']))documents.push(path);
   if(path==='/original.wav'){res.setHeader('Content-Type','audio/wav');res.end(originalAudioWav());return;}
   const body=await readFile(path==='/fixture.mp4'?new URL('../fixtures/gallery-ui-video.mp4',import.meta.url):new URL('.'+path,root));
   res.setHeader('Content-Type',path.endsWith('.js')?'application/javascript':path.endsWith('.css')?'text/css':path.endsWith('.png')?'image/png':path.endsWith('.mp4')?'video/mp4':path.endsWith('.webmanifest')?'application/manifest+json':'text/html');
@@ -33,8 +33,14 @@ export async function builtGalleryHarness({authenticated=false,viewerId=owner,vi
  const session={access_token:jwt,refresh_token:'synthetic-refresh',expires_in:3600,expires_at:exp,token_type:'bearer',user};
  const wk=process.env.FREEUPPER_PROFILE_ENGINE==='webkit';
  const browser=await(wk?webkit:chromium).launch(wk?{executablePath:process.env.FREEUPPER_WEBKIT_EXECUTABLE||undefined}:{executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']});
- const context=await browser.newContext({viewport,isMobile:viewport.width<768,hasTouch:viewport.width<768,serviceWorkers:'block'});
- await context.exposeBinding('__galleryTrace',({frame},event)=>trace.push({frame:new URL(frame.url()||origin).pathname,...event}));
+ const context=await browser.newContext({viewport,isMobile:viewport.width<768,hasTouch:viewport.width<768,serviceWorkers:enableServiceWorker?'allow':'block'});
+ await context.exposeBinding('__galleryTrace',({frame},event)=>{
+  const path=new URL(frame.url()||origin).pathname;
+  trace.push({frame:path,...event});
+  // A cache hit has no server document request. Count actual DOM initialization
+  // in SW mode so the same no-reload assertions still detect duplicate heaps.
+  if(enableServiceWorker&&event.event==='DOMContentLoaded')documents.push(['/profile','/@fixture_creator','/u/FUABCDEF123456'].includes(path)?'/profile.html':path);
+ });
  await context.addInitScript(({authenticated,storageKey,session,profile})=>{
   if(authenticated&&!localStorage.getItem('__fixture_session_seeded')){localStorage.setItem('__fixture_session_seeded','1');localStorage.setItem(storageKey,JSON.stringify(session));localStorage.setItem('freeupper_user_profile',JSON.stringify({id:session.user.id,isLoggedIn:true,displayName:profile.display_name,username:profile.username,avatar:profile.avatar_url}));}
   const emit=event=>window.__galleryTrace(event).catch(()=>{});
@@ -74,5 +80,12 @@ export async function builtGalleryHarness({authenticated=false,viewerId=owner,vi
  });
  await context.routeWebSocket('**/*',s=>s.close());
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
- return {page,context,browser,origin,posts,documents,trace,errors,requests,close:async()=>{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}};
+ if(enableServiceWorker){
+  // Install the actual generated policy before Profile's first navigation.
+  // This is a fixture bootstrap; production never reloads a running draft.
+  await page.goto(origin+'/offline.html');
+  await page.evaluate(async()=>{await navigator.serviceWorker.register('/service-worker.js',{updateViaCache:'none'});await navigator.serviceWorker.ready;});
+ }
+
+ return {page,context,browser,origin,posts,documents,trace,errors,requests,enableServiceWorker,close:async()=>{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}};
 }

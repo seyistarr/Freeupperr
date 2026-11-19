@@ -12,10 +12,22 @@ if (window === window.top && window.isSecureContext && 'serviceWorker' in naviga
   const installWorker = async () => {
     try {
       const existing = await navigator.serviceWorker.getRegistration('/');
+      const registration = existing || await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/', updateViaCache: 'none' });
+      const announce = () => {
+        if (registration.waiting) window.dispatchEvent?.(new CustomEvent('fu-cache-update-ready'));
+      };
+      const watchInstalling = () => registration.installing?.addEventListener('statechange', announce);
+      registration.addEventListener?.('updatefound', watchInstalling);
+      watchInstalling();
       if (existing) await existing.update();
-      // Chat already uses this root registration. Its script also imports the
-      // offline policy, so a first chat visit does not replace an app-only worker.
-      else await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/', updateViaCache: 'none' });
+      announce();
+      let lastCheck = Date.now();
+      document.addEventListener?.('visibilitychange', () => {
+        if (!document.hidden && Date.now() - lastCheck >= 3600000) {
+          lastCheck = Date.now();
+          registration.update().then(announce).catch(error => console.warn('FreeUpper update check unavailable', error));
+        }
+      });
     } catch (error) { console.warn('FreeUpper offline support unavailable', error); }
   };
   if (document.readyState === 'complete') installWorker();

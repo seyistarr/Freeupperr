@@ -17,7 +17,8 @@
   'use strict';
 
   // ─── CONSTANTS ────────────────────────────────────────────
-  const RECENT_KEY = 'freeupper_recent_searches';
+  let recentScope = null, recentSearches = [];
+  try { localStorage.removeItem('freeupper_recent_searches'); } catch (_) {}
   const CVK = 'freeupper_comments_visible';
   const PAGE_SIZE = 30;
   const REPLY_BATCH = 3;
@@ -38,6 +39,7 @@
   let bookmarksSet = new Set();
   let followSetsLoaded = false;
   let _searchReqToken = 0;
+  let searchFreshAt = Date.now();
 
   const paging = {
     top:      { offset: 0, hasMore: true, cache: null, scrollY: 0 },
@@ -1851,7 +1853,11 @@
   window._searchOpenProfile = openProfileSafe;
 
   // ─── SEARCH UI ────────────────────────────────────────────
-  function getRecentSearches() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { return []; } }
+  function getRecentSearches() {
+    const scope = window.AuthUser?.getCurrentUser?.()?.id || 'guest';
+    if (scope !== recentScope) { recentScope = scope; recentSearches = []; }
+    return recentSearches;
+  }
   // ★ FIX: collapse prefix duplicates so typing "Monis" replaces "Mon", "Moni", etc.
   function addRecentSearch(q) {
     if (!q || q.trim().length < 2) return;
@@ -1864,13 +1870,13 @@
       return true;
     });
     list.unshift(val);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 10)));
+    recentSearches = list.slice(0, 10);
   }
   function removeRecentSearch(q) {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(getRecentSearches().filter(x => x.toLowerCase() !== q.toLowerCase())));
+    recentSearches = getRecentSearches().filter(x => x.toLowerCase() !== q.toLowerCase());
     renderDiscovery();
   }
-  function clearAllRecent() { localStorage.removeItem(RECENT_KEY); renderDiscovery(); }
+  function clearAllRecent() { recentSearches = []; renderDiscovery(); }
 
   function showNormalHeader(show) { const el = document.getElementById('normalHeader'); if (el) el.style.display = show ? 'block' : 'none'; }
   function showTabs(show) { const el = document.getElementById('searchTabs'); if (el) el.classList.toggle('visible', show); }
@@ -1959,7 +1965,7 @@
 
   async function renderDiscovery() {
     if(window.FreeUpperScreen?.isDisposed())return;
-    ++_searchReqToken;
+    const myToken = ++_searchReqToken;
     showNormalHeader(true);
     if (!currentQuery && !hashtagMode) showTabs(false);
     disconnectObserver();
@@ -1980,6 +1986,7 @@
       fetchTrendingHashtags(4), fetchSuggestedUsers(6), fetchTrendingPosts(3),
       fetchTrendingVideos(10), fetchTrendingPhotos(9), fetchTrendingMarket(6)
     ]);
+    if (myToken !== _searchReqToken || window.FreeUpperScreen?.isDisposed()) return;
     let html = recentHtml;
     html += `<div class="discovery-block"><div class="section-title">${ICON.fire}Trending Hashtags</div><div class="trend-tag-grid">${hashtags.map(h => `<div class="trend-tag-card" onclick="Search.openHashtag('${escapeHtml(h.tag)}')"><div class="box">${ICON.hashtag}</div><div class="name">#${escapeHtml(h.tag)}</div><div class="cnt">${formatCount(h.count)} posts</div></div>`).join('')}</div></div>`;
     if (users.length) {
@@ -2001,6 +2008,7 @@
     if (photos.length) html += `<div class="discovery-block"><div class="section-title">${ICON.photo}Trending Photos</div>${renderSquareGrid(photos, false)}</div>`;
     if (market.length) html += `<div class="discovery-block"><div class="section-title">${ICON.market}Trending Marketplace</div><div class="sugg-scroll">${market.map(m => `<div style="flex-shrink:0;width:132px;cursor:pointer;" onclick="window.Router.openListing('${m.id}')"><div style="width:132px;height:132px;border-radius:16px;overflow:hidden;background:#eee;"><img src="${(m.images&&m.images[0]&&m.images[0].url)||''}" style="width:100%;height:100%;object-fit:cover;"></div><div style="font-size:14px;font-weight:800;margin-top:7px;color:var(--p);">₦${Number(m.price||0).toLocaleString()}</div><div style="font-size:12px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(m.title||'')}</div></div>`).join('')}</div></div>`;
     c.innerHTML = html || (recentHtml + emptyState('Nothing to discover yet'));
+    searchFreshAt = Date.now();
     window.FreeUpperScreen?.ready();
   }
 
@@ -2077,6 +2085,7 @@
     createSentinel();
     if (!ts.hasMore) showEndResults(); else showLoadMoreIdle();
     startInfiniteScroll();
+    searchFreshAt = Date.now();
     window.FreeUpperScreen?.ready();
   }
 
@@ -2152,6 +2161,7 @@
     createSentinel();
     if (!ts.hasMore) showEndResults(); else showLoadMoreIdle();
     startInfiniteScroll();
+    searchFreshAt = Date.now();
     window.FreeUpperScreen?.ready();
   }
 
@@ -2318,6 +2328,20 @@
   // Retained Search owns its query/results; the shell never re-runs init.
   const searchSnapshot = window.FreeUpperScreen?.takeSnapshot();
   window.FreeUpperScreen?.register({
+    resume() {
+      if (Date.now() - searchFreshAt < 60000) return;
+      for (const value of Object.values(paging)) value.cache = null;
+      _postStore.clear(); followingSet.clear(); followerSet.clear(); bookmarksSet.clear();
+      followSetsLoaded = false;
+      if (navigator.onLine === false) {
+        ++_searchReqToken; disconnectObserver();
+        document.getElementById('resultsContainer').textContent = 'Connect to refresh search results.';
+        return;
+      }
+      if (hashtagMode) loadHashtagResults(true);
+      else if (currentQuery) renderSearchResults(currentQuery, true);
+      else renderDiscovery();
+    },
     snapshot() {
       const controls = {currentTab,currentQuery,hashtagMode,currentHashtag,hashtagSort,hashtagView,scroll:document.getElementById('mainScroll').scrollTop};
       const container = document.getElementById('resultsContainer');
@@ -2345,7 +2369,8 @@
       const header=document.getElementById('hashtagHeader');header.innerHTML=snapshot.header;header.style.display=hashtagMode?'block':'none';
       document.getElementById('resultsContainer').innerHTML=snapshot.html;
       if (currentQuery || hashtagMode) { createSentinel();startInfiniteScroll(); }
-      window.FreeUpperScreen?.ready();
+      searchFreshAt = Date.now();
+    window.FreeUpperScreen?.ready();
     }
     requestAnimationFrame(()=>{document.getElementById('mainScroll').scrollTop=c.scroll;});
     return true;

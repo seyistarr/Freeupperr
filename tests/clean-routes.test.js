@@ -198,3 +198,25 @@ test('local Worker serves every clean/legacy route without redirects or URL chan
     assert.equal((await fetch(origin + path)).status, 404, path);
   }
 });
+
+test('update discovery observes installs that start during registration.update', async () => {
+  const source = await readFile('global.js', 'utf8');
+  const setup = source.slice(source.indexOf('// Register once'), source.indexOf('// ============================================================'));
+  const callbacks = {}, emitted = [];
+  const registration = {
+    addEventListener: (name, fn) => { callbacks[name] = fn; },
+    async update() {
+      this.installing = { addEventListener: (name, fn) => { callbacks[name] = fn; } };
+      callbacks.updatefound();
+    }
+  };
+  const window = { isSecureContext: true, dispatchEvent: event => emitted.push(event.type) }; window.top = window;
+  runInNewContext(setup, { window, document: { readyState: 'complete' }, console,
+    CustomEvent: class { constructor(type) { this.type = type; } },
+    navigator: { serviceWorker: { getRegistration: async () => registration } }
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(emitted, []);assert.equal(typeof callbacks.statechange, 'function');
+  registration.waiting = {}; callbacks.statechange();
+  assert.deepEqual(emitted, ['fu-cache-update-ready']);
+});
