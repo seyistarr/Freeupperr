@@ -1,6 +1,6 @@
 # Chat reconciliation review — 2026-11-19
 
-Production remains **NO-GO**. This branch is for review and CI only. No SQL, database migration, Auth seeding, staging cleanup, merge or deployment was performed in this review.
+Production remains **NO-GO**. This branch is for review and CI only. No SQL against either hosted project, database migration, Auth seeding, staging cleanup, merge or deployment was performed in this review.
 
 ## Provenance and scope
 
@@ -85,4 +85,4 @@ FREEUPPER_CHROMIUM=/usr/bin/chromium node --test \
   tests/ui-sounds-interactions.test.js tests/theme.test.js
 ```
 
-**99 tests: 95 passed, zero failed, four skipped** (opt-in local JWT integration, opt-in local Realtime integration, deployed Workers runtime and unconfigured WebKit theme). No SQL suite was executed in this review. All 20 chat-upgrade browser tests plus six premium browser acceptance tests passed using Chromium automation, not physical devices. Syntax checks for chat.js/service-worker.js and `git diff --check` passed. Full output: `evidence/reconciliation-20261119.txt`. Required hosted GitHub checks are evaluated separately on the PR head.
+**99 tests: 95 passed, zero failed, four skipped** (opt-in local JWT integration, opt-in local Realtime integration, deployed Workers runtime and unconfigured WebKit theme). No SQL suite was executed in this review. All 20 chat-upgrade browser tests plus 11 premium acceptance tests (eight browser and three static checks) passed using Chromium automation, not physical devices. Syntax checks for chat.js/service-worker.js and `git diff --check` passed. Full output: `evidence/reconciliation-20261119.txt`. Required hosted GitHub checks are evaluated separately on the PR head.
