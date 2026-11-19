@@ -1,3 +1,7 @@
+# Release follow-up
+
+Fresh production inspection, additional receipt/metadata/membership fixes and current release gates are recorded in [RELEASE-CANDIDATE.md](RELEASE-CANDIDATE.md). The report below records the original hardening work; it is not a claim that SQL has been applied.
+
 # Chat security hardening after 7528928
 
 **Production recommendation: NO-GO pending the release gates below.** Work continues on `feature/chat-exact-replacements`; the approved HTML/CSS layout, cards, composer and activity presentation are retained. No production data, schema, policies or services were changed. Nothing was pushed, merged or deployed.
@@ -104,7 +108,3 @@ Production remains NO-GO until:
 For immediate feature disable, review/apply `disable-activity.REVIEW.sql` only after approval. It revokes publishing; existing indicators expire in at most 7 seconds after the last accepted in-flight write. Normal messaging is independent of activity RPC failures.
 
 Prefer leaving the hardened frontend fail-closed, bumping the service-worker cache version forward for any forward patch. Do not blindly revert `chat.js` to `7528928`: that would restore the plaintext view-once send fallback. Any frontend rollback must retain the new private-media gates. `rollback.REVIEW.sql` removes only activity-specific RPCs/table/helper state. It preserves all messages/conversations, unrelated policies, the fixed group-role RPC, conversation identity/permission guards, and quarantine of obsolete Broadcast topics. No CASCADE is used by the production rollback. The test harness may reset disposable local schemas; those test-only operations are not production instructions.
-# Release follow-up
-
-Fresh production inspection, additional receipt/metadata/membership fixes and current release gates are recorded in [RELEASE-CANDIDATE.md](RELEASE-CANDIDATE.md). The report below records the original hardening work; it is not a claim that SQL has been applied.
-
