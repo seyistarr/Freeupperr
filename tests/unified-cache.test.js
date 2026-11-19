@@ -6,7 +6,7 @@ import {webcrypto,createHash} from 'node:crypto';
 const source=await readFile(process.env.FREEUPPER_CACHE_SOURCE||'service-worker.js','utf8');
 const routes=await readFile('js/freeupper-routes.js','utf8');
 const digest=body=>createHash('sha256').update(body).digest('hex');
-function harness({bodies={'/global.js':'release-A'},fault=null,clientURL=null}={}) {
+function harness({bodies={'/global.js':'release-A'},fault=null,clientURL=null,clientUnavailable=false}={}) {
  const listeners={},stores=new Map(),calls=[];let online=true,now=100000,privateResponse=false;
  const integrity=Object.fromEntries(Object.entries(bodies).map(([path,body])=>[path,digest(body)]));
  const key=request=>typeof request==='string'?request:new URL(request.url).pathname;
@@ -20,7 +20,7 @@ function harness({bodies={'/global.js':'release-A'},fault=null,clientURL=null}={
  }};
  const context={URL,Response,Request,Headers,Blob,Uint8Array,crypto:webcrypto,console,caches,
   Date:class extends Date{static now(){return now;}},location:new URL('https://freeupper.com/service-worker.js'),
-  clients:{get:async()=>({url:clientURL||'https://freeupper.com/home'})},addEventListener:(name,fn)=>listeners[name]=fn,
+  clients:{get:async()=>clientUnavailable?null:({url:clientURL||'https://freeupper.com/home'})},addEventListener:(name,fn)=>listeners[name]=fn,
   fetch:async request=>{calls.push(request);if(!online)throw Error('offline');const path=new URL(request.url).pathname;
    return new Response(bodies[path]??'public-image',{headers:privateResponse?{'Cache-Control':'private, no-store'}:{'Cache-Control':'public, max-age=120','Content-Type':'image/png','X-FreeUpper-Public-Cache':'image-v1'}});
   }};
@@ -82,4 +82,15 @@ test('public-image opt-in cache is bounded, expires and rejects private/oversize
  await h.request('/public-cache/images/51.png',{credentials:'omit'});assert.equal(h.calls.length,0);h.advance(121000);await h.request('/public-cache/images/51.png',{credentials:'omit'});assert.equal(h.calls.length,1);
  h.setPrivate(true);await h.request('/public-cache/images/private.png',{credentials:'omit'});assert(!images.has('/public-cache/images/private.png'));
  h.setPrivate(false);h.bodies['/public-cache/images/large.png']='x'.repeat(2*1024*1024+1);await h.request('/public-cache/images/large.png',{credentials:'omit'});assert(!images.has('/public-cache/images/large.png'));
+});
+
+test('verified public dictionaries load lazily and remain available offline',async()=>{
+ const text=JSON.stringify({hello:'Bonjour'});const h=harness({bodies:{'/locales/fr.json':text}});
+ assert.equal(await(await h.request('/locales/fr.json')).text(),text);h.setOnline(false);
+ assert.equal(await(await h.request('/locales/fr.json')).text(),text);assert.equal(h.calls.length,1);
+});
+
+test('an unidentifiable client fails closed instead of mixing a cached shell with network scripts',async()=>{
+ const h=harness({clientURL:'https://freeupper.com/home',clientUnavailable:true});await h.install();h.bodies['/global.js']='release-B';h.calls.length=0;
+ assert.equal((await h.request('/global.js')).type,'error');assert.equal(h.calls.length,0);
 });

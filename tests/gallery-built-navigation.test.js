@@ -48,7 +48,9 @@ test(`${engine}${enableServiceWorker?" [SW enabled]":""}: built Profile keeps it
  assert(scopedReads.length>0);assert(scopedReads.every(r=>r.owner==='eq.'+owner),'Gallery queries only this profile');
  await frame.locator('#card-2').evaluate(el=>el.scrollIntoView());
  await frame.waitForFunction(id=>FreeUpperVideoPlayer.snapshot().post===id,selected);
- if(await frame.locator('#vid-2').evaluate(v=>v.paused))await frame.locator('#tap-2').click({position:{x:100,y:180}});
+ // Ask native media to play explicitly: a toggle tap can race the card's
+ // autoplay observer and pause it. Nonzero native playback remains required.
+ await frame.locator('#vid-2').evaluate(video=>video.play());
  await frame.waitForFunction(()=>document.getElementById('vid-2').currentTime>.7);
  await frame.evaluate(()=>{const original=FreeUpperVideoPlayer.snapshot;FreeUpperVideoPlayer.snapshot=()=>{const state=original();window.soundPosition ||= state;return state;};});
  await frame.locator('#card-2 .v-disc-wrap').click();await frame.waitForSelector('iframe[title="Sound details"]');
@@ -88,6 +90,13 @@ test(`${engine}${enableServiceWorker?" [SW enabled]":""}: built authenticated Ga
  const before=h.documents.filter(p=>p==='/profile.html').length;
  await page.evaluate(()=>{void sb.auth.signOut();});
  await page.waitForFunction(()=>window.AuthUser&&!window.privateHeapMarker&&!AuthUser.getCurrentUser().isLoggedIn);
+ if(h.enableServiceWorker){
+  // AuthUser initializes before DOMContentLoaded. Wait for the actual new
+  // document's initialization trace rather than racing its binding delivery.
+  await page.waitForLoadState('domcontentloaded');
+  const deadline=Date.now()+5000;
+  while(h.documents.filter(p=>p==='/profile.html').length<=before&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
+ }
  assert(h.documents.filter(p=>p==='/profile.html').length>before,'real authenticated boundary resets launch heap');
  assert.equal(await page.evaluate(()=>document.body.classList.contains('is-owner')),false);
  assert(h.trace.some(e=>e.event==='viewer-disposed'&&e.paused),'media is paused on authenticated disposal');

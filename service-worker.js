@@ -164,10 +164,11 @@ async function releaseAsset(event, path) {
       const client = await self.clients.get(event.clientId);
       // Dynamic share/unknown documents are network-backed, so their mutable
       // assets must also bypass old pinned bytes (including HTTP cache reuse).
-      if (!client || !releaseDocument(new URL(client.url).pathname)) {
+      if (!client) return Response.error();
+      if (!releaseDocument(new URL(client.url).pathname)) {
         return fetch(new Request(event.request, {cache:'reload'}));
       }
-    } catch (_) { return fetch(new Request(event.request, {cache:'reload'})); }
+    } catch (_) { return Response.error(); }
   }
   return releaseResource(path, event.request);
 }
