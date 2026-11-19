@@ -7,6 +7,10 @@ on:
       - 'chat.html'
       - 'chat.js'
       - 'tests/chat-premium-browser.acceptance.mjs'
+      - 'tests/chat-upgrades-browser.test.js'
+      - 'tests/chat-identity-integration.test.js'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/chat-ui-release-checks.yml'
   push:
     branches:
@@ -20,13 +24,14 @@ permissions:
   contents: read
 jobs:
   ui-acceptance:
-    runs-on: ubuntu-latest
+    # Playwright 1.56 dependency installation does not support Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -37,4 +42,4 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run isolated browser acceptance
-        run: node --test tests/chat-premium-browser.acceptance.mjs
+        run: node --test tests/chat-premium-browser.acceptance.mjs tests/chat-upgrades-browser.test.js tests/chat-identity-integration.test.js

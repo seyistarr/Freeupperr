@@ -26,7 +26,7 @@ const convs=[{id:'a',otherUserId:'peer',otherUser:{id:'peer',display_name:'Ada'}
  {id:'b',otherUserId:'other',otherUser:{id:'other',display_name:'Bob'},is_group:false}];
 const msg=(id,fields={})=>({id,conversation_id:'a',sender_id:'self',created_at:'2026-11-15T10:00:00Z',text:'Hello',message_type:'text',message_reads:[],...fields});
 async function fixture(viewport,run){
- const browser=await chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox']});
+ const browser=await chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||undefined,args:['--no-sandbox']});
  try{
   const page=await browser.newPage({viewport});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
