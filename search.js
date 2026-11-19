@@ -2346,7 +2346,7 @@
       const controls = {currentTab,currentQuery,hashtagMode,currentHashtag,hashtagSort,hashtagView,scroll:document.getElementById('mainScroll').scrollTop};
       const container = document.getElementById('resultsContainer');
       if (container.querySelector('.center-loading')) return {controls};
-      return {controls, paging, html:container.innerHTML, posts:[..._postStore], following:[...followingSet], followers:[...followerSet], bookmarks:[...bookmarksSet], header:document.getElementById('hashtagHeader').innerHTML};
+      return {controls, freshAt:searchFreshAt, paging, html:container.innerHTML, posts:[..._postStore], following:[...followingSet], followers:[...followerSet], bookmarks:[...bookmarksSet], header:document.getElementById('hashtagHeader').innerHTML};
     },
     dispose() { clearTimeout(searchDebounce); ++_searchReqToken; disconnectObserver(); _postStore.clear(); }
   });
@@ -2357,7 +2357,8 @@
     currentHashtag=c.currentHashtag;hashtagSort=c.hashtagSort;hashtagView=c.hashtagView;
     document.getElementById('searchInput').value=currentQuery;
     document.getElementById('clearBtn').classList.toggle('show',!!currentQuery);
-    if (snapshot.html === undefined) {
+    const age=Date.now()-Number(snapshot.freshAt);
+    if (snapshot.html === undefined || !Number.isFinite(age) || age<0 || age>=60000) {
       if (hashtagMode) { showNormalHeader(false);showTabs(false);renderHashtagHeaderShell();loadHashtagResults(true); }
       else if (currentQuery) renderSearchResults(currentQuery,true);
       else renderDiscovery();
@@ -2369,8 +2370,8 @@
       const header=document.getElementById('hashtagHeader');header.innerHTML=snapshot.header;header.style.display=hashtagMode?'block':'none';
       document.getElementById('resultsContainer').innerHTML=snapshot.html;
       if (currentQuery || hashtagMode) { createSentinel();startInfiniteScroll(); }
-      searchFreshAt = Date.now();
-    window.FreeUpperScreen?.ready();
+      searchFreshAt = snapshot.freshAt;
+      window.FreeUpperScreen?.ready();
     }
     requestAnimationFrame(()=>{document.getElementById('mainScroll').scrollTop=c.scroll;});
     return true;

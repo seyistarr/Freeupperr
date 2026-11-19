@@ -522,3 +522,19 @@ test('retained Search renews expired results and memory pressure preserves draft
   assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
+
+test('evicted Search does not renew an expired result lease',{timeout:45000},async()=>{
+ const h=await harness();try{
+  await h.select('search');const search=h.screen('search');await search.evaluate(()=>Search.runSearch('leased query'));
+  await search.waitForFunction(()=>document.getElementById('resultsContainer').textContent.includes('leased query'));
+  await search.evaluate(()=>document.getElementById('resultsContainer').insertAdjacentHTML('beforeend','<p>STALE_RESULT_SENTINEL</p>'));
+  await h.select('create');await h.screen('create').locator('#postContent').fill('Draft survives expired search');
+  await h.page.context().addInitScript(()=>{const original=Date.now;Date.now=()=>original()+61000;});
+  await h.page.evaluate(()=>{const original=Date.now;Date.now=()=>original()+61000;dispatchEvent(new Event('fu-memory-pressure'));});
+  await h.select('search');const restored=h.screen('search');
+  await restored.waitForFunction(()=>document.getElementById('resultsContainer').textContent.includes('leased query')&&!document.getElementById('resultsContainer').textContent.includes('STALE_RESULT_SENTINEL'));
+  assert.equal(await restored.locator('#searchInput').inputValue(),'leased query');assert(await restored.evaluate(()=>queryCalls)>0);
+  await h.select('create');assert.equal(await h.screen('create').locator('#postContent').inputValue(),'Draft survives expired search');
+  assert.deepEqual(h.errors,[]);
+ }finally{await h.close();}
+});

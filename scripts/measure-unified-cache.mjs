@@ -18,6 +18,7 @@ async function measure(worker){const requests=[];const docs={'/':'index','/home'
   const shellFetch=await page.evaluate(async()=>{const rows=[];for(const path of ['/home','/search','/create','/videos','/profile']){const ms=[];for(let i=0;i<3;i++){const t=performance.now();await(await fetch(path)).arrayBuffer();ms.push(performance.now()-t);}rows.push({path,ms});}return rows;});
   const documentNetworkRequests=requests.filter(path=>Object.hasOwn(docs,path)).length;
   const scriptFetchMs=await page.evaluate(async()=>{const ms=[];for(let i=0;i<5;i++){const t=performance.now();await(await fetch('/global.js?v=author-header-v2')).arrayBuffer();ms.push(performance.now()-t);}return ms;});
-  return {installMs,shellFetch,documentNetworkRequests,scriptFetchMs};
+  const stored=await page.evaluate(async()=>{let bytes=0,entries=0;for(const name of await caches.keys()){const cache=await caches.open(name);for(const key of await cache.keys()){bytes+=(await(await cache.match(key)).arrayBuffer()).byteLength;entries++;}}return {bytes,entries};});
+  return {installMs,shellFetch,documentNetworkRequests,scriptFetchMs,stored};
  }finally{await context.close();server.closeAllConnections();await new Promise(r=>server.close(r));}}
 try{const output=process.env.FREEUPPER_CACHE_MEASUREMENTS||'/tmp/freeupper-cache-comparison.json';await writeFile(output,JSON.stringify({baseline,definition:'Same reconciled payloads; local 150ms HTML delay; response-body completion through each SW policy, not navigation paint',before:await measure(old),after:await measure(current)},null,2)+'\n');console.log(output);}finally{await browser.close();}
