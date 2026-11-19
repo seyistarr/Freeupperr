@@ -13,9 +13,9 @@ function sql(text){
 }
 test('isolated PostgREST validates signed user JWTs, actor identity and continuing-session revocation',{skip:!enabled,timeout:30000},async t=>{
  const settings=Object.fromEntries(readFileSync('/tmp/fu-security.env','utf8').trim().split('\n').map(line=>{const i=line.indexOf('=');return [line.slice(0,i),line.slice(i+1)];}));
- function jwt(user,secret=settings.API_JWT_SECRET){
+ function jwt(user,secret=settings.API_JWT_SECRET,expiresInSeconds=600){
   const enc=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
-  const data=enc({alg:'HS256',typ:'JWT'})+'.'+enc({sub:user,role:user?'authenticated':'anon',iss:'freeupper-isolated-test',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+600});
+  const data=enc({alg:'HS256',typ:'JWT'})+'.'+enc({sub:user,role:user?'authenticated':'anon',iss:'freeupper-isolated-test',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+expiresInSeconds});
   return data+'.'+createHmac('sha256',secret).update(data).digest('base64url');
  }
  if(process.env.FREEUPPER_LOCAL_ACTIVITY_REUSE!=='1') {
@@ -47,6 +47,7 @@ test('isolated PostgREST validates signed user JWTs, actor identity and continui
  await t.test('signed identity accepted; forged signature, anonymous and unknown user rejected',async()=>{
   assert.equal((await call(uid(1),'/rpc/publish_chat_activity',args())).status,200);
   assert.equal((await call(uid(1),'/rpc/publish_chat_activity',args(),jwt(uid(1),'wrong-isolated-secret-000000000000000'))).status,401);
+  assert.equal((await call(uid(1),'/rpc/publish_chat_activity',args(),jwt(uid(1),settings.API_JWT_SECRET,-60))).status,401);
   assert.notEqual((await call(null,'/rpc/publish_chat_activity',args())).status,200);
   assert.equal((await call(uid(4),'/rpc/publish_chat_activity',args())).status,403);
  });
@@ -85,5 +86,21 @@ test('isolated PostgREST validates signed user JWTs, actor identity and continui
   sql(`INSERT INTO blocks VALUES('${uid(2)}','${uid(1)}');`);
   assert.equal((await call(uid(1),'/rpc/publish_chat_activity',args(uid(10),2))).status,403);
   assert.equal((await call(uid(2),'/rpc/get_chat_activity',{p_conversation_id:uid(10)})).status,403);
+ });
+ await t.test('concurrent authenticated typing/recording/media declarations preserve actors and reject revoked peers',async()=>{
+  const elapsed=[];const kinds=['recording','photo','video','media'];
+  await Promise.all(Array.from({length:32},async(_,i)=>{
+   const user=uid(i%2+1),start=performance.now();
+   const typing=i%5===0;
+   const r=await call(user,'/rpc/publish_chat_activity',{...args(uid(11),100+i),
+    p_event:typing?'typing':'activity',p_kind:typing?null:kinds[i%4],p_stage:typing||i%4===0?null:'uploading'});
+   elapsed.push(performance.now()-start);assert.equal(r.status,200);assert.equal(typeof r.data,'boolean');
+  }));
+  const snapshot=await call(uid(2),'/rpc/get_chat_activity',{p_conversation_id:uid(11)});
+  assert.equal(snapshot.status,200);assert(snapshot.data.length>=2);
+  assert(snapshot.data.every(row=>[uid(1),uid(2)].includes(row.user_id)&&row.conversation_id===uid(11)));
+  for(const user of [uid(3),uid(4)])assert.equal((await call(user,'/rpc/publish_chat_activity',args(uid(11),200))).status,403);
+  elapsed.sort((a,b)=>a-b);
+  console.log('Local 32-request authenticated burst, p95 '+Math.round(elapsed[Math.ceil(elapsed.length*.95)-1])+'ms; not a hosted capacity benchmark');
  });
 });
