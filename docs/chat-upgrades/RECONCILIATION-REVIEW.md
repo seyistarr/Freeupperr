@@ -86,3 +86,9 @@ FREEUPPER_CHROMIUM=/usr/bin/chromium node --test \
 ```
 
 **99 tests: 95 passed, zero failed, four skipped** (opt-in local JWT integration, opt-in local Realtime integration, deployed Workers runtime and unconfigured WebKit theme). No SQL suite was executed in this review. All 20 chat-upgrade browser tests plus 11 premium acceptance tests (eight browser and three static checks) passed using Chromium automation, not physical devices. Syntax checks for chat.js/service-worker.js and `git diff --check` passed. Full output: `evidence/reconciliation-20261119.txt`. Required hosted GitHub checks are evaluated separately on the PR head.
+
+### Full-suite integration follow-up
+
+The first hosted broad run on `af06863` executed 591 checks: 574 passed, three failed, 14 skipped. All three failures were stale integration pins: Gallery's pre-upgrade chat fingerprints/cache URL and the PWA sound test's v36 cache name. The Gallery fixture now carries a narrow, explicitly sourced overlay for chat.html/chat.js from `4d2cb95` and the reviewed Chat UI workflow from `af06863`; every unrelated original fingerprint stays enforced. Cache checks retain all unrelated main pins, require the new chat URL in both HTML and precache, and reject the obsolete chat URL. The PWA browser test now expects v38 while still verifying old-cache removal and offline sound consumers. No application code or SQL changed to satisfy these tests.
+
+Hosted Chat UI on `af06863` passed 37/37; Privacy V2 passed 102/102. The existing Cloudflare Git integration automatically built a branch preview after push; no deployment command was invoked and the production deploy job remains main-push-only. Final-head results are recorded in the PR body to avoid regenerating CI runs solely to update result documentation. Broad CI runs disposable PGlite SQL fixtures; no SQL is sent to either hosted Supabase project.
