@@ -94,3 +94,9 @@ test('an unidentifiable client fails closed instead of mixing a cached shell wit
  const h=harness({clientURL:'https://freeupper.com/home',clientUnavailable:true});await h.install();h.bodies['/global.js']='release-B';h.calls.length=0;
  assert.equal((await h.request('/global.js')).type,'error');assert.equal(h.calls.length,0);
 });
+
+test('failed same-release reinstall preserves valid entries for the active worker',async()=>{
+ const h=harness();await h.install();h.bodies['/global.js']='release-B';
+ await assert.rejects(h.install(),/Release mismatch/);h.setOnline(false);
+ assert.equal(await(await h.request('/global.js')).text(),'release-A');
+});

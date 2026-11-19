@@ -94,6 +94,7 @@ async function verified(response, path) {
 }
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
+    const alreadyExisted = (await caches.keys()).includes(CACHE_NAME);
     const cache = await caches.open(CACHE_NAME);
     if (!RELEASE_INTEGRITY) {
       if (!['localhost', '127.0.0.1', '[::1]'].includes(self.location.hostname)) throw new Error('Build a verified shell release before publishing');
@@ -110,7 +111,9 @@ self.addEventListener('install', event => {
         }));
       }
     } catch (error) {
-      await caches.delete(CACHE_NAME);
+      // An app-only/Firebase entry-point switch can install the same release
+      // again. Never delete an existing active cache if that reinstall fails.
+      if (!alreadyExisted) await caches.delete(CACHE_NAME);
       throw error;
     }
   })());
