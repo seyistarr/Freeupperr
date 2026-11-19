@@ -1,0 +1,62 @@
+# Advanced Chat release candidate — 2026-11-19
+
+**Production is not released. Production SQL and merging each require the explicit approvals requested in the release brief.** No hosted project was modified during this review. PR #41 retains the approved UI; PR #40's duplicate client-authored Broadcast is excluded.
+
+## Current GitHub and production evidence
+
+Fresh fetch: main `4a19c659a1928b4d1ad39938ed05c5e7931f2d0b`; PR #41 base remains compatible. All required checks on prior head `0ba7aca` passed: Chat UI, Privacy V2 and the full Cloudflare regression/WebKit/runtime job. The production deployment job was skipped, correctly, on the PR. New candidate checks must pass independently before release.
+
+Fresh SELECT-only inspection of production **`jmjtqidirpmnegzvmiaq`** confirms the existing schema, constraints, foreign keys, helper signatures, triggers, publication, table/column grants and policy definitions. Evidence: `production-release-readonly.json`, `production-invite-readonly.json`, `production-membership-readonly.json`. No chat contents or user rows were inspected; no exploit or user login was attempted against production. Migration history still ends at `20261112174353_google_signup_display_name`; activity objects are absent and Realtime has no policies. The API gateway accepts public-schema RPC routes; private schema access remains blocked. Its Realtime upgrade route is unchanged.
+
+## Blockers addressed in the proposed SQL
+
+1. **Role assignment:** existing activity migration replaces the confirmed NULL-owner bypass in `set_member_role`. The wrapper becomes SECURITY INVOKER; private implementation has fixed empty search path, current owner/target validation, membership locks and admin/member-only transitions. Anonymous/PUBLIC execution is removed.
+2. **Receipt privacy/integrity:** new follow-up replaces `members can view reads USING(true)` with current-conversation authorization. Restrictive guards also constrain legacy own-row SELECT and any additional permissive policies. Inserts and conflict updates require the JWT actor to be the receipt owner and still authorized for the message's conversation. Removed users cannot retain access through their old receipt; blocked direct-chat peers and outsiders are denied; note receipts stay owner-only. Existing authorized upserts and recipient-specific historical receipts remain visible to current participants. New receipt times use the server clock; conflict updates preserve the original read time. Identity changes/deletion are denied to browser roles.
+3. **Conversation protection:** the original identity/permission guard is retained. New guard also protects primary identity/creation time, invite administration, group edit rules, group retention settings, other users' preference entries and last-message metadata. Pins must reference the same conversation. Ordinary theme, color, own mute/archive/hide/pin preference changes, direct-chat settings, note owner edits and authorized group edits remain possible. The actual production message-insert trigger is tested against the guard. Browser callers cannot use broad table UPDATE grants to bypass it.
+4. **RPC bypasses found in fresh audit:** `update_group_info` and `get_or_create_invite_code` had unset search paths and allowed non-admin behavior when permission keys were missing. Secure wrappers/private implementations retain signatures, default missing permissions to admins, require current authenticated group membership and respect explicit `everyone` settings. Existing invite codes are retained; newly generated codes use random UUID entropy. No code is rotated at installation.
+5. **Additional membership bypass:** `resolve_join_request` used `v_caller_role NOT IN (...)`; NULL callers could pass this check, allowing unauthorized approval and defeating activity membership authorization. It now requires authenticated current owner/admin membership and a real pending request. Invite joins reject anonymous/NULL actors, direct chats, notes and disabled codes. Authorized pending/approved/rejected/already-member behavior remains; approvals grant only member role. These fixes operate on future authorized requests, not existing membership rows at installation.
+6. **Activity identity/revocation:** existing server-authored RPC plus private admission and per-change row RLS remains. Direct Broadcast injection is not an identity source. Real local Realtime verifies that an already-connected removed member receives no later activity and cannot reconnect; direct-chat blocks also stop row delivery without JWT renewal. Already-authorized in-flight data cannot be recalled. Account identity is authenticated; actual microphone activity is not hardware-attested.
+
+### Explicit compatibility changes
+
+- Missing group edit/invite permissions now mean admins, matching the existing default schema intent. Explicit `everyone` remains supported.
+- Ordinary group members can no longer change disappearing-message duration or invite administration. Existing UI operations receive the existing failure toast if unauthorized; admins and direct participants retain legitimate settings. No UI redesign is made.
+- Receipt upserts get an explicit authorized UPDATE path, needed for multi-tab races. First-read time is preserved instead of accepting a caller's arbitrary timestamp.
+- Re-resolving an already-processed join request is rejected. Existing memberships and historical request statuses are not rewritten.
+- Privileged backend operations still run under their trusted server role. Newly audited group/invite/request entrypoints are hardened; service-role keys must never be supplied to browsers.
+
+## Migration execution package — NOT APPLIED
+
+Apply in this order only after environment-specific approval and a final drift check:
+
+1. `20261116172043_chat_activity_authorization.sql` — activity state/RPCs/RLS/publication, obsolete Broadcast quarantine, conversation identity/permission guard and secure role assignment.
+2. `20261119192845_chat_receipts_metadata_hardening.sql` — existing receipt policies/grants/triggers, metadata guard and secure group/invite/request RPCs. Requires existing `group_join_requests` and the activity foundation. It has a five-second lock timeout and thirty-second statement timeout; lock contention aborts rather than waiting indefinitely.
+
+The follow-up is repeatable and verified twice against fixtures. Row snapshots prove installation does not change conversations, memberships, messages, receipts or requests. Neither migration recreates existing chat tables, rewrites messages, seeds users or changes existing relationships at installation. Runtime RPCs perform only their documented authorized future operations. The original activity migration's runtime pruning is confined to ephemeral activity rows.
+
+Existing production RLS replacement: `members can view reads` and `reads_insert_policy` on `message_reads` intentionally become stricter. `reads_select_policy` is retained but bounded by a restrictive guard. Existing conversation/message/member policies remain, with triggers enforcing protected changes. Realtime policy names are managed by the original migration; there are no current production policies to overwrite in the fresh snapshot. Capture definitions again immediately before execution and stop on unexpected drift/name collisions.
+
+Supabase CLI scaffolding was attempted but unavailable in this workspace: v3 attempted to write a read-only home directory and the pinned v2 fallback exited unsuccessfully. The follow-up filename uses the UTC timestamp captured from the workspace clock. No CLI linked/project mutation was attempted.
+
+## Tests and limitations
+
+- Current syntax checks for chat.js/service-worker.js and `git diff --check`: pass.
+- Current relevant Chromium/identity/timestamps/sounds/Gallery/PWA suite: **96 passed, zero failed/skipped**; includes media upload/recording lifecycle, switching, receipts, replies, group wording, reconnect/expiry and narrow/tablet/desktop layouts.
+- Current existing isolated activity SQL suite: **11 passed**. New receipt/metadata/group-request suite: **13 passed**, including repeated install with unchanged row snapshots, permissive-policy bypass attempts, receipt upsert/identity, current membership/blocks, note ownership, RPC permissions, message-trigger integration and rollback. Disposable PGlite only.
+- Current real signed-JWT PostgREST integration: **6 passed**. Current real Realtime WebSocket integration: **7 passed**. Local PostgreSQL 17.6/PostgREST/Realtime with a local test issuer, not hosted GoTrue accounts. Existing activity transport verified; new receipt/RPC changes additionally require hosted acceptance before release.
+- Frontend build and both Worker dry-run bundles: pass. Dry runs do not deploy.
+- Privacy V2/current-head GitHub results are recorded in the PR body when complete; historical counts are not final-head evidence. Counts across runs overlap and must not be summed.
+- One initial new assertion expected different error wording for an already-denied identity update; corrected to require SQLSTATE 42501. Final new suite is green. No production exploit test was performed.
+
+No hosted authenticated canary, hosted load/fan-out/WAL-lag benchmark, real Cloudinary failure transfer, real microphone, physical iPhone/Android/PWA, VoiceOver/TalkBack or device background behavior is claimed. Chromium viewport tests are automation, not device tests. Previous CI WebKit checks cover the existing navigation flows; broad automated mobile-WebKit chat acceptance still needs verification. New private view-once sends remain fail-closed; no backend is enabled. An encrypted private backend is a separate project, or availability must explicitly be accepted for release.
+
+## Controlled rollout and rollback
+
+1. Finish final-head CI and code review. Confirm main has not drifted. Obtain explicit database authorization; do not infer it from the overall release objective.
+2. Prefer hosted staging canaries before production: staging `tagkrhvgcbnybiuyvjxt` has only the old partial baseline and fourteen preexisting Auth users in the saved audit. It lacks `group_join_requests` and the hardening. Do not rerun its baseline or seed accounts implicitly. A separately approved, scoped fixture/dependency preparation and disposable-account plan is needed; existing users must not be repurposed. No staging change is performed here.
+3. With approved production SQL, capture rollback metadata, recheck drift and apply the two reviewed transactions in order. Verify resulting definitions, grants, RLS, publication and schema cache. Complete authorized multi-user hosted acceptance, including still-open removed-member sockets, reconnects, block changes, expired/refreshing Auth, impersonation, receipt visibility/upserts, pending-request approval and normal message metadata updates. Stop on failure; do not loosen RLS.
+4. Only after those checks and separate **release approval**, merge PR #41. The existing main-push Cloudflare workflow deploys after its checks. Monitor that production run, then smoke-test auth, conversation list, sending, receipts, group updates, activity, upload/recording cleanup and cache refresh. Never enable the missing private view-once backend.
+5. Immediate approved rollback: revoke activity publishing with `disable-activity.REVIEW.sql`; allow existing indicators to expire after the last accepted write. Normal messaging is independent. Retain hardened frontend privacy gates and use a forward cache version for fixes.
+6. `rollback.REVIEW.sql` removes only activity-specific transient state/RPCs. It preserves the role fix, receipt guards, metadata guards, hardened group/invite/request RPCs and obsolete Broadcast quarantine. It does not restore known vulnerable policies/functions. If a legitimate operation fails, disable the feature and prepare a reviewed forward authorization correction; do not automatically restore `USING(true)` or NULL-role checks. Do not use CASCADE or reset schemas.
+
+**Assessment:** code and migration candidates are reviewable; **production NO-GO** until explicit SQL approval, resulting database verification/hosted acceptance, final CI and separate merge/release approval. This report does not authorize changes to either hosted project.

@@ -13,6 +13,7 @@ AS $function$ SELECT false; $function$;
 DROP FUNCTION IF EXISTS public.can_read_chat_activity(uuid);
 DROP FUNCTION IF EXISTS chat_activity_private.can_use(uuid,boolean);
 -- Preserve conversation identity/permission trigger and corrected group-role RPC.
+-- Preserve follow-up receipt guards, metadata trigger and secure group/invite/request RPCs.
 -- Preserve public.can_use_chat_activity(text)=false and realtime.messages restrictive guards.
 -- Leave the private schema in place; no CASCADE and no unrelated-policy changes.
 COMMIT;

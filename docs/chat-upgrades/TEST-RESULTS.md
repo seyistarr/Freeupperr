@@ -94,3 +94,7 @@ The signed-JWT test uses a random local issuer secret stored in `/tmp/fu-securit
 - Entire unrelated repository test suite; only relevant suites were run.
 
 **Production recommendation remains NO-GO** until the documented canary, private-media availability/security decision and device/release gates are resolved.
+# Current release verification
+
+See [RELEASE-CANDIDATE.md](RELEASE-CANDIDATE.md) and PR #41 for the fresh release checks and receipt/metadata/join-request coverage. Results below are historical and should not be added to newer totals.
+
