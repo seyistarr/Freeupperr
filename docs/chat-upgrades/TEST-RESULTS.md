@@ -1,6 +1,6 @@
 # Current release verification
 
-See [RELEASE-CANDIDATE.md](RELEASE-CANDIDATE.md) and PR #41 for the fresh release checks and receipt/metadata/join-request coverage. Results below are historical and should not be added to newer totals.
+See [HOSTED-READINESS.md](HOSTED-READINESS.md) and PR #41 for the fresh release checks and receipt/metadata/join-request coverage. Results below are historical and should not be added to newer totals.
 
 # Security hardening verification — 2026-11-16
 

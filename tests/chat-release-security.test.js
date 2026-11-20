@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {setup,asUser,uid} from './helpers/chat-activity-fixture.js';
-const hardening=readFileSync('supabase/migrations/20261119192845_chat_receipts_metadata_hardening.sql','utf8');
+const hardening=readFileSync('supabase/migrations/20261120113401_chat_receipts_metadata_hardening.sql','utf8');
 test('release receipt and conversation protections preserve authorized operations under broad legacy grants',async t=>{
  const db=new PGlite();
  try {

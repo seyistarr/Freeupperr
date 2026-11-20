@@ -1,5 +1,5 @@
 import {readFileSync} from 'node:fs';
-export const migration=readFileSync('supabase/migrations/20261116172043_chat_activity_authorization.sql','utf8');
+export const migration=readFileSync('supabase/migrations/20261120113353_chat_activity_authorization.sql','utf8');
 export const uid=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
 const catalog=JSON.parse(readFileSync('docs/chat-upgrades/production-hardening-readonly.json','utf8')).catalog;
 export const productionHelpers=['is_blocked_between','can_send_in_conversation'].map(name=>catalog.find(x=>x.section==='functions').detail.find(x=>x.proname===name).definition.trim()+';').join('\n');

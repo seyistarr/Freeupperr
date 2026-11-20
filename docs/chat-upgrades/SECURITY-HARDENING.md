@@ -1,6 +1,6 @@
 # Release follow-up
 
-Fresh production inspection, additional receipt/metadata/membership fixes and current release gates are recorded in [RELEASE-CANDIDATE.md](RELEASE-CANDIDATE.md). The report below records the original hardening work; it is not a claim that SQL has been applied.
+Fresh production inspection, additional receipt/metadata/membership fixes and current release gates are recorded in [HOSTED-READINESS.md](HOSTED-READINESS.md). The report below records the original hardening work; it is not a claim that SQL has been applied.
 
 # Chat security hardening after 7528928
 

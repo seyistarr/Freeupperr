@@ -1,0 +1,755 @@
+{
+  "project": "jmjtqidirpmnegzvmiaq",
+  "inspection": "2026-11-20",
+  "method": "SELECT-only migration history and catalogs",
+  "verification": {
+    "history": [
+      {
+        "name": "chat_activity_authorization",
+        "version": "20261120113353",
+        "statements": [
+          "-- REVIEW ONLY. Replaces the never-applied 7528928 Broadcast proposal.\n-- Production catalog checked read-only. Apply only after explicit approval.\n-- Activity uses Postgres Changes: RLS is evaluated for EACH change, not a cached Broadcast join.\nBEGIN;\nDO $preflight$\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_class WHERE oid='realtime.messages'::regclass AND relrowsecurity) THEN\n    RAISE EXCEPTION 'Expected realtime.messages RLS';\n  END IF;\n  IF to_regprocedure('public.is_blocked_between(uuid,uuid)') IS NULL OR\n     to_regprocedure('public.can_send_in_conversation(uuid)') IS NULL THEN\n    RAISE EXCEPTION 'Required production authorization helpers are absent';\n  END IF;\n  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname='supabase_realtime') THEN\n    RAISE EXCEPTION 'Expected existing Realtime publication';\n  END IF;\nEND\n$preflight$;\n\nCREATE SCHEMA IF NOT EXISTS chat_activity_private;\nREVOKE ALL ON SCHEMA chat_activity_private FROM PUBLIC, anon, authenticated;\nGRANT USAGE ON SCHEMA chat_activity_private TO authenticated;\n\nCREATE TABLE IF NOT EXISTS public.chat_activity (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  conversation_id uuid NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,\n  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,\n  source_id uuid NOT NULL,\n  event text NOT NULL CHECK(event IN ('typing','activity')),\n  kind text CHECK(kind IN ('recording','photo','video','media')),\n  stage text CHECK(stage IN ('preparing','uploading')),\n  plural boolean NOT NULL DEFAULT false,\n  active boolean NOT NULL,\n  sequence bigint NOT NULL CHECK(sequence BETWEEN 1 AND 9007199254740991),\n  updated_at timestamptz NOT NULL,\n  expires_at timestamptz NOT NULL,\n  UNIQUE(conversation_id,user_id,source_id,event),\n  CHECK(expires_at > updated_at AND expires_at <= updated_at + interval '7 seconds'),\n  CHECK((event='typing' AND kind IS NULL AND stage IS NULL) OR\n        (event='activity' AND ((active AND kind IS NOT NULL) OR NOT active)))\n);\n-- DEFAULT replica identity exposes only opaque id on DELETE, not conversation/user keys.\nALTER TABLE public.chat_activity REPLICA IDENTITY DEFAULT;\nALTER TABLE public.chat_activity ENABLE ROW LEVEL SECURITY;\nREVOKE ALL ON public.chat_activity FROM PUBLIC, anon, authenticated;\nGRANT SELECT ON public.chat_activity TO authenticated;\nCREATE INDEX IF NOT EXISTS chat_activity_user_expiry_idx ON public.chat_activity(user_id,expires_at);\nCREATE INDEX IF NOT EXISTS chat_activity_expiry_idx ON public.chat_activity(expires_at);\n\n-- Legacy conversation UPDATE policies are permissive. A removed user1 owner must\n-- not regain activity access by changing a group into a direct conversation.\nCREATE OR REPLACE FUNCTION chat_activity_private.protect_conversation_identity()\nRETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=''\nAS $function$\nBEGIN\n IF current_user IN ('anon','authenticated') THEN\n  IF ROW(NEW.user1_id,NEW.user2_id,NEW.is_group,NEW.is_note,NEW.owner_id,NEW.created_by)\n      IS DISTINCT FROM ROW(OLD.user1_id,OLD.user2_id,OLD.is_group,OLD.is_note,OLD.owner_id,OLD.created_by) THEN\n   RAISE EXCEPTION 'Conversation identity requires an authorized server operation' USING ERRCODE='42501';\n  END IF;\n  IF NEW.permissions IS DISTINCT FROM OLD.permissions AND coalesce(OLD.is_group,false) AND\n     NOT (coalesce(OLD.is_note,false) AND OLD.owner_id=auth.uid()) AND NOT EXISTS(\n      SELECT 1 FROM public.conversation_members m WHERE m.conversation_id=OLD.id\n       AND m.user_id=auth.uid() AND m.role IN ('owner','admin')) THEN\n   RAISE EXCEPTION 'Only current group administrators can change permissions' USING ERRCODE='42501';\n  END IF;\n END IF;\n RETURN NEW;\nEND;\n$function$;\nREVOKE ALL ON FUNCTION chat_activity_private.protect_conversation_identity() FROM PUBLIC,anon,authenticated;\nDROP TRIGGER IF EXISTS chat_activity_protect_conversation_identity ON public.conversations;\nCREATE TRIGGER chat_activity_protect_conversation_identity\n BEFORE UPDATE OF user1_id,user2_id,is_group,is_note,owner_id,created_by,permissions ON public.conversations\n FOR EACH ROW EXECUTE FUNCTION chat_activity_private.protect_conversation_identity();\n\n-- Fix confirmed production null-owner bypass; preserve the approved group-role RPC signature.\nCREATE OR REPLACE FUNCTION chat_activity_private.set_member_role(p_conversation_id uuid,p_target_user_id uuid,p_new_role text)\nRETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=''\nAS $function$\nDECLARE v_role text; v_target text;\nBEGIN\n IF auth.uid() IS NULL OR p_new_role IS NULL OR p_new_role NOT IN ('admin','member') THEN\n  RAISE EXCEPTION 'Invalid group-role request' USING ERRCODE='42501';\n END IF;\n SELECT m.role INTO v_role FROM public.conversation_members m JOIN public.conversations c ON c.id=m.conversation_id\n WHERE m.conversation_id=p_conversation_id AND m.user_id=auth.uid()\n  AND coalesce(c.is_group,false) AND NOT coalesce(c.is_note,false) FOR UPDATE OF m;\n IF v_role IS DISTINCT FROM 'owner' THEN\n  RAISE EXCEPTION 'Only the current group owner can change roles' USING ERRCODE='42501';\n END IF;\n SELECT m.role INTO v_target FROM public.conversation_members m\n WHERE m.conversation_id=p_conversation_id AND m.user_id=p_target_user_id FOR UPDATE;\n IF v_target IS NULL OR v_target='owner' THEN\n  RAISE EXCEPTION 'Invalid target group member' USING ERRCODE='42501';\n END IF;\n UPDATE public.conversation_members SET role=p_new_role\n WHERE conversation_id=p_conversation_id AND user_id=p_target_user_id;\nEND;\n$function$;\nREVOKE ALL ON FUNCTION chat_activity_private.set_member_role(uuid,uuid,text) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION chat_activity_private.set_member_role(uuid,uuid,text) TO authenticated;\nCREATE OR REPLACE FUNCTION public.set_member_role(p_conversation_id uuid,p_target_user_id uuid,p_new_role text)\nRETURNS void LANGUAGE sql SECURITY INVOKER SET search_path=''\nAS $function$ SELECT chat_activity_private.set_member_role(p_conversation_id,p_target_user_id,p_new_role); $function$;\nREVOKE ALL ON FUNCTION public.set_member_role(uuid,uuid,text) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.set_member_role(uuid,uuid,text) TO authenticated;\n\n-- Explicit identity lookup avoids recursive legacy membership RLS. No caller-selected UID.\nCREATE OR REPLACE FUNCTION chat_activity_private.can_use(p_conversation_id uuid,p_sending boolean)\nRETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=''\nAS $function$\n SELECT auth.uid() IS NOT NULL AND EXISTS (\n  SELECT 1 FROM public.conversations c WHERE c.id=p_conversation_id\n   AND NOT coalesce(c.is_note,false)\n   AND CASE WHEN coalesce(c.is_group,false) THEN\n    EXISTS(SELECT 1 FROM public.conversation_members m WHERE m.conversation_id=c.id AND m.user_id=auth.uid())\n    AND (NOT p_sending OR public.can_send_in_conversation(c.id))\n   ELSE (auth.uid()=c.user1_id OR auth.uid()=c.user2_id)\n    AND NOT public.is_blocked_between(c.user1_id,c.user2_id) END\n );\n$function$;\nREVOKE ALL ON FUNCTION chat_activity_private.can_use(uuid,boolean) FROM PUBLIC, anon, authenticated;\nGRANT EXECUTE ON FUNCTION chat_activity_private.can_use(uuid,boolean) TO authenticated;\n\nCREATE OR REPLACE FUNCTION public.can_read_chat_activity(p_conversation_id uuid)\nRETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path=''\nAS $function$ SELECT chat_activity_private.can_use(p_conversation_id,false); $function$;\nREVOKE ALL ON FUNCTION public.can_read_chat_activity(uuid) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.can_read_chat_activity(uuid) TO authenticated;\n\nDROP POLICY IF EXISTS chat_activity_read ON public.chat_activity;\nCREATE POLICY chat_activity_read ON public.chat_activity FOR SELECT TO authenticated\nUSING(public.can_read_chat_activity(conversation_id));\nDROP POLICY IF EXISTS chat_activity_read_guard ON public.chat_activity;\nCREATE POLICY chat_activity_read_guard ON public.chat_activity AS RESTRICTIVE FOR SELECT TO authenticated\nUSING(public.can_read_chat_activity(conversation_id) AND expires_at > statement_timestamp());\n-- Even an accidental future direct write grant + permissive policy cannot forge activity.\nDROP POLICY IF EXISTS chat_activity_insert_guard ON public.chat_activity;\nCREATE POLICY chat_activity_insert_guard ON public.chat_activity AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK(false);\nDROP POLICY IF EXISTS chat_activity_update_guard ON public.chat_activity;\nCREATE POLICY chat_activity_update_guard ON public.chat_activity AS RESTRICTIVE FOR UPDATE TO authenticated USING(false) WITH CHECK(false);\nDROP POLICY IF EXISTS chat_activity_delete_guard ON public.chat_activity;\nCREATE POLICY chat_activity_delete_guard ON public.chat_activity AS RESTRICTIVE FOR DELETE TO authenticated USING(false);\nDROP POLICY IF EXISTS chat_activity_anon_guard ON public.chat_activity;\nCREATE POLICY chat_activity_anon_guard ON public.chat_activity AS RESTRICTIVE FOR ALL TO anon USING(false) WITH CHECK(false);\n\nCREATE OR REPLACE FUNCTION chat_activity_private.publish(\n p_conversation_id uuid,p_source_id uuid,p_sequence bigint,p_event text,\n p_kind text,p_stage text,p_plural boolean,p_active boolean)\nRETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=''\nAS $function$\nDECLARE v_uid uuid := auth.uid(); v_now timestamptz := clock_timestamp(); v_count integer;\nBEGIN\n IF NOT chat_activity_private.can_use(p_conversation_id,true) THEN\n  RAISE EXCEPTION 'Activity unavailable' USING ERRCODE='42501';\n END IF;\n IF p_source_id IS NULL OR p_sequence IS NULL OR p_sequence NOT BETWEEN 1 AND 9007199254740991 OR\n    p_event IS NULL OR p_event NOT IN ('typing','activity') OR p_active IS NULL OR p_plural IS NULL OR\n    (p_event='typing' AND (p_kind IS NOT NULL OR p_stage IS NOT NULL)) OR\n    (p_event='activity' AND p_active AND (p_kind IS NULL OR p_kind NOT IN ('recording','photo','video','media'))) OR\n    (p_kind IS NOT NULL AND p_kind NOT IN ('recording','photo','video','media')) OR\n    (p_stage IS NOT NULL AND p_stage NOT IN ('preparing','uploading')) THEN\n  RAISE EXCEPTION 'Invalid activity' USING ERRCODE='22023';\n END IF;\n -- Serialize one user's source quota/cleanup without locking conversation membership.\n PERFORM pg_advisory_xact_lock(hashtextextended(v_uid::text, 41617));\n IF NOT chat_activity_private.can_use(p_conversation_id,true) THEN\n  RAISE EXCEPTION 'Activity unavailable' USING ERRCODE='42501';\n END IF;\n DELETE FROM public.chat_activity WHERE user_id=v_uid AND expires_at < v_now - interval '1 minute';\n IF NOT EXISTS(SELECT 1 FROM public.chat_activity WHERE conversation_id=p_conversation_id AND user_id=v_uid AND source_id=p_source_id AND event=p_event)\n    AND (SELECT count(*) FROM public.chat_activity WHERE user_id=v_uid) >= 128 THEN\n  RAISE EXCEPTION 'Activity source limit' USING ERRCODE='54000';\n END IF;\n INSERT INTO public.chat_activity(conversation_id,user_id,source_id,event,kind,stage,plural,active,sequence,updated_at,expires_at)\n VALUES(p_conversation_id,v_uid,p_source_id,p_event,p_kind,p_stage,p_plural,p_active,p_sequence,v_now,\n        v_now + CASE WHEN p_event='typing' THEN interval '4 seconds' ELSE interval '7 seconds' END)\n ON CONFLICT(conversation_id,user_id,source_id,event) DO UPDATE\n SET kind=excluded.kind,stage=excluded.stage,plural=excluded.plural,active=excluded.active,\n     sequence=excluded.sequence,updated_at=excluded.updated_at,expires_at=excluded.expires_at\n WHERE public.chat_activity.sequence < excluded.sequence;\n GET DIAGNOSTICS v_count=ROW_COUNT;\n RETURN v_count=1;\nEND;\n$function$;\nREVOKE ALL ON FUNCTION chat_activity_private.publish(uuid,uuid,bigint,text,text,text,boolean,boolean) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION chat_activity_private.publish(uuid,uuid,bigint,text,text,text,boolean,boolean) TO authenticated;\n\nCREATE OR REPLACE FUNCTION public.publish_chat_activity(\n p_conversation_id uuid,p_source_id uuid,p_sequence bigint,p_event text,\n p_kind text DEFAULT NULL,p_stage text DEFAULT NULL,p_plural boolean DEFAULT false,p_active boolean DEFAULT true)\nRETURNS boolean LANGUAGE sql VOLATILE SECURITY INVOKER SET search_path=''\nAS $function$\n SELECT chat_activity_private.publish(p_conversation_id,p_source_id,p_sequence,p_event,p_kind,p_stage,p_plural,p_active);\n$function$;\nREVOKE ALL ON FUNCTION public.publish_chat_activity(uuid,uuid,bigint,text,text,text,boolean,boolean) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.publish_chat_activity(uuid,uuid,bigint,text,text,text,boolean,boolean) TO authenticated;\n\n-- An authorized snapshot restores state after reconnect; table RLS also applies to direct REST.\nCREATE OR REPLACE FUNCTION public.get_chat_activity(p_conversation_id uuid)\nRETURNS SETOF public.chat_activity LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path=''\nAS $function$\nBEGIN\n IF NOT public.can_read_chat_activity(p_conversation_id) THEN\n  RAISE EXCEPTION 'Activity unavailable' USING ERRCODE='42501';\n END IF;\n RETURN QUERY SELECT a.* FROM public.chat_activity a WHERE a.conversation_id=p_conversation_id\n  AND a.active AND a.expires_at > statement_timestamp();\nEND;\n$function$;\nREVOKE ALL ON FUNCTION public.get_chat_activity(uuid) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.get_chat_activity(uuid) TO authenticated;\n\nDO $publication$\nBEGIN\n IF NOT EXISTS(SELECT 1 FROM pg_publication WHERE pubname='supabase_realtime' AND puballtables)\n    AND NOT EXISTS(SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='chat_activity') THEN\n  ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_activity;\n END IF;\nEND\n$publication$;\n\n-- No server activity uses Broadcast. Deny both directions on the obsolete namespace,\n-- even if another permissive policy is installed. A public topic may still join;\n-- the new client listens only to RLS-filtered postgres_changes, NEVER Broadcast.\nDROP POLICY IF EXISTS chat_activity_receive ON realtime.messages;\nDROP POLICY IF EXISTS chat_activity_send ON realtime.messages;\nDROP POLICY IF EXISTS chat_activity_receive_guard ON realtime.messages;\nDROP POLICY IF EXISTS chat_activity_send_guard ON realtime.messages;\nDROP POLICY IF EXISTS chat_activity_anon_guard ON realtime.messages;\nCREATE POLICY chat_activity_receive_guard ON realtime.messages AS RESTRICTIVE FOR SELECT TO anon,authenticated\nUSING(coalesce((SELECT realtime.topic()),'') NOT LIKE 'chat-activity:%');\nCREATE POLICY chat_activity_send_guard ON realtime.messages AS RESTRICTIVE FOR INSERT TO anon,authenticated\nWITH CHECK(coalesce((SELECT realtime.topic()),'') NOT LIKE 'chat-activity:%');\n-- Keep the approved legacy function name fail-closed; it no longer authorizes Broadcast.\nCREATE OR REPLACE FUNCTION public.can_use_chat_activity(p_topic text)\nRETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path=''\nAS $function$ SELECT false; $function$;\nREVOKE ALL ON FUNCTION public.can_use_chat_activity(text) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.can_use_chat_activity(text) TO authenticated;\n-- Private join is an admission check only. Postgres Changes still checks row RLS\n-- for every event after admission, so a cached join does not preserve data access.\nCREATE OR REPLACE FUNCTION public.can_join_chat_activity(p_topic text)\nRETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER SET search_path=''\nAS $function$\n SELECT CASE WHEN p_topic ~ '^chat-activity-db:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'\n  THEN public.can_read_chat_activity(substr(p_topic,18)::uuid) ELSE false END;\n$function$;\nREVOKE ALL ON FUNCTION public.can_join_chat_activity(text) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.can_join_chat_activity(text) TO authenticated;\nDROP POLICY IF EXISTS chat_activity_db_join ON realtime.messages;\nCREATE POLICY chat_activity_db_join ON realtime.messages FOR SELECT TO authenticated\nUSING(extension='broadcast' AND public.can_join_chat_activity((SELECT realtime.topic())));\nDROP POLICY IF EXISTS chat_activity_db_receive_guard ON realtime.messages;\nCREATE POLICY chat_activity_db_receive_guard ON realtime.messages AS RESTRICTIVE FOR SELECT TO authenticated\nUSING(coalesce((SELECT realtime.topic()),'') NOT LIKE 'chat-activity-db:%' OR\n      (extension='broadcast' AND public.can_join_chat_activity((SELECT realtime.topic()))));\nDROP POLICY IF EXISTS chat_activity_db_send_guard ON realtime.messages;\nCREATE POLICY chat_activity_db_send_guard ON realtime.messages AS RESTRICTIVE FOR INSERT TO anon,authenticated\nWITH CHECK(coalesce((SELECT realtime.topic()),'') NOT LIKE 'chat-activity-db:%');\nDROP POLICY IF EXISTS chat_activity_db_anon_guard ON realtime.messages;\nCREATE POLICY chat_activity_db_anon_guard ON realtime.messages AS RESTRICTIVE FOR ALL TO anon\nUSING(coalesce((SELECT realtime.topic()),'') NOT LIKE 'chat-activity-db:%')\nWITH CHECK(coalesce((SELECT realtime.topic()),'') NOT LIKE 'chat-activity-db:%');\n\nNOTIFY pgrst,'reload schema';\nCOMMIT;\n"
+        ]
+      },
+      {
+        "name": "chat_receipts_metadata_hardening",
+        "version": "20261120113401",
+        "statements": [
+          "-- REVIEW ONLY. Requires 20261116172043_chat_activity_authorization first.\n-- Changes authorization only; no historical message/receipt/member rows are rewritten.\nBEGIN;\nSET LOCAL lock_timeout='5s';\nSET LOCAL statement_timeout='30s';\nDO $preflight$\nBEGIN\n IF to_regprocedure('chat_activity_private.can_use(uuid,boolean)') IS NULL OR\n    to_regclass('public.message_reads') IS NULL OR to_regclass('public.group_join_requests') IS NULL OR\n    NOT EXISTS(SELECT 1 FROM pg_class WHERE oid='public.message_reads'::regclass AND relrowsecurity) THEN\n  RAISE EXCEPTION 'Expected activity hardening and existing receipt RLS';\n END IF;\nEND $preflight$;\n\n-- Internal lookup avoids legacy receipt/message RLS recursion. The actor is JWT-derived.\nCREATE OR REPLACE FUNCTION chat_activity_private.can_read_receipt(p_message_id uuid)\nRETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=''\nAS $function$\n SELECT auth.uid() IS NOT NULL AND EXISTS(\n  SELECT 1 FROM public.messages m JOIN public.conversations c ON c.id=m.conversation_id\n  WHERE m.id=p_message_id AND CASE\n   WHEN coalesce(c.is_note,false) THEN c.owner_id=auth.uid()\n   WHEN coalesce(c.is_group,false) THEN EXISTS(\n    SELECT 1 FROM public.conversation_members cm WHERE cm.conversation_id=c.id AND cm.user_id=auth.uid())\n   ELSE (c.user1_id=auth.uid() OR c.user2_id=auth.uid())\n    AND NOT public.is_blocked_between(c.user1_id,c.user2_id) END\n );\n$function$;\nREVOKE ALL ON FUNCTION chat_activity_private.can_read_receipt(uuid) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION chat_activity_private.can_read_receipt(uuid) TO authenticated;\n\nDROP POLICY IF EXISTS \"members can view reads\" ON public.message_reads;\nCREATE POLICY \"members can view reads\" ON public.message_reads FOR SELECT TO authenticated\nUSING(chat_activity_private.can_read_receipt(message_id));\nDROP POLICY IF EXISTS reads_insert_policy ON public.message_reads;\nCREATE POLICY reads_insert_policy ON public.message_reads FOR INSERT TO authenticated\nWITH CHECK(user_id=auth.uid() AND chat_activity_private.can_read_receipt(message_id));\n-- The existing client upserts; permit its own authorized conflict update, including concurrent tabs.\nDROP POLICY IF EXISTS chat_reads_update ON public.message_reads;\nCREATE POLICY chat_reads_update ON public.message_reads FOR UPDATE TO authenticated\nUSING(user_id=auth.uid() AND chat_activity_private.can_read_receipt(message_id))\nWITH CHECK(user_id=auth.uid() AND chat_activity_private.can_read_receipt(message_id));\nDROP POLICY IF EXISTS chat_reads_select_guard ON public.message_reads;\nCREATE POLICY chat_reads_select_guard ON public.message_reads AS RESTRICTIVE FOR SELECT TO authenticated\nUSING(chat_activity_private.can_read_receipt(message_id));\nDROP POLICY IF EXISTS chat_reads_insert_guard ON public.message_reads;\nCREATE POLICY chat_reads_insert_guard ON public.message_reads AS RESTRICTIVE FOR INSERT TO authenticated\nWITH CHECK(user_id=auth.uid() AND chat_activity_private.can_read_receipt(message_id));\nDROP POLICY IF EXISTS chat_reads_update_guard ON public.message_reads;\nCREATE POLICY chat_reads_update_guard ON public.message_reads AS RESTRICTIVE FOR UPDATE TO authenticated\nUSING(user_id=auth.uid() AND chat_activity_private.can_read_receipt(message_id))\nWITH CHECK(user_id=auth.uid() AND chat_activity_private.can_read_receipt(message_id));\nDROP POLICY IF EXISTS chat_reads_delete_guard ON public.message_reads;\nCREATE POLICY chat_reads_delete_guard ON public.message_reads AS RESTRICTIVE FOR DELETE TO authenticated USING(false);\nDROP POLICY IF EXISTS chat_reads_anon_guard ON public.message_reads;\nCREATE POLICY chat_reads_anon_guard ON public.message_reads AS RESTRICTIVE FOR ALL TO anon USING(false) WITH CHECK(false);\nGRANT SELECT,INSERT,UPDATE ON public.message_reads TO authenticated;\n\nCREATE OR REPLACE FUNCTION chat_activity_private.protect_receipt_identity()\nRETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=''\nAS $function$\nBEGIN\n IF current_user IN ('anon','authenticated') THEN\n  IF TG_OP='UPDATE' THEN\n   IF ROW(NEW.message_id,NEW.user_id) IS DISTINCT FROM ROW(OLD.message_id,OLD.user_id) THEN\n    RAISE EXCEPTION 'Receipt identity is immutable' USING ERRCODE='42501';\n   END IF;\n   NEW.read_at := coalesce(OLD.read_at,statement_timestamp());\n  ELSE NEW.read_at := statement_timestamp();\n  END IF;\n END IF;\n RETURN NEW;\nEND $function$;\nREVOKE ALL ON FUNCTION chat_activity_private.protect_receipt_identity() FROM PUBLIC,anon,authenticated;\nDROP TRIGGER IF EXISTS chat_protect_receipt_identity ON public.message_reads;\nCREATE TRIGGER chat_protect_receipt_identity BEFORE INSERT OR UPDATE ON public.message_reads\nFOR EACH ROW EXECUTE FUNCTION chat_activity_private.protect_receipt_identity();\n\n-- Preserve existing RPC signatures while closing missing-permission defaults and PUBLIC execution.\nCREATE OR REPLACE FUNCTION chat_activity_private.update_group_info(p_conversation_id uuid,p_name text,p_description text,p_avatar text)\nRETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=''\nAS $function$\nDECLARE v_role text; v_permission text;\nBEGIN\n SELECT m.role,coalesce(c.permissions->>'edit_group_info','admins') INTO v_role,v_permission\n FROM public.conversation_members m JOIN public.conversations c ON c.id=m.conversation_id\n WHERE m.conversation_id=p_conversation_id AND m.user_id=auth.uid() AND c.is_group AND NOT coalesce(c.is_note,false) FOR UPDATE OF m;\n IF auth.uid() IS NULL OR v_role IS NULL OR (v_permission<>'everyone' AND v_role NOT IN ('owner','admin')) THEN\n  RAISE EXCEPTION 'Group edit not authorized' USING ERRCODE='42501';\n END IF;\n UPDATE public.conversations SET group_name=coalesce(p_name,group_name),group_description=coalesce(p_description,group_description),\n group_avatar=coalesce(p_avatar,group_avatar),updated_at=statement_timestamp() WHERE id=p_conversation_id;\nEND $function$;\nREVOKE ALL ON FUNCTION chat_activity_private.update_group_info(uuid,text,text,text) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION chat_activity_private.update_group_info(uuid,text,text,text) TO authenticated;\nCREATE OR REPLACE FUNCTION public.update_group_info(p_conversation_id uuid,p_name text DEFAULT NULL,p_description text DEFAULT NULL,p_avatar text DEFAULT NULL)\nRETURNS void LANGUAGE sql SECURITY INVOKER SET search_path=''\nAS $function$ SELECT chat_activity_private.update_group_info(p_conversation_id,p_name,p_description,p_avatar); $function$;\nREVOKE ALL ON FUNCTION public.update_group_info(uuid,text,text,text) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.update_group_info(uuid,text,text,text) TO authenticated;\n\nCREATE OR REPLACE FUNCTION chat_activity_private.get_or_create_invite_code(p_conversation_id uuid)\nRETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path=''\nAS $function$\nDECLARE v_role text; v_permission text; v_code text;\nBEGIN\n SELECT m.role,coalesce(c.permissions->>'invite_via_link','admins') INTO v_role,v_permission\n FROM public.conversation_members m JOIN public.conversations c ON c.id=m.conversation_id\n WHERE m.conversation_id=p_conversation_id AND m.user_id=auth.uid() AND c.is_group AND NOT coalesce(c.is_note,false) FOR UPDATE OF m;\n IF auth.uid() IS NULL OR v_role IS NULL OR (v_permission<>'everyone' AND v_role NOT IN ('owner','admin')) THEN\n  RAISE EXCEPTION 'Group invite not authorized' USING ERRCODE='42501';\n END IF;\n SELECT invite_code INTO v_code FROM public.conversations WHERE id=p_conversation_id FOR UPDATE;\n IF v_code IS NULL THEN\n  v_code:=replace(gen_random_uuid()::text,'-','');\n  UPDATE public.conversations SET invite_code=v_code WHERE id=p_conversation_id;\n END IF;\n RETURN v_code;\nEND $function$;\nREVOKE ALL ON FUNCTION chat_activity_private.get_or_create_invite_code(uuid) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION chat_activity_private.get_or_create_invite_code(uuid) TO authenticated;\nCREATE OR REPLACE FUNCTION public.get_or_create_invite_code(p_conversation_id uuid)\nRETURNS text LANGUAGE sql SECURITY INVOKER SET search_path=''\nAS $function$ SELECT chat_activity_private.get_or_create_invite_code(p_conversation_id); $function$;\nREVOKE ALL ON FUNCTION public.get_or_create_invite_code(uuid) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.get_or_create_invite_code(uuid) TO authenticated;\n\nCREATE OR REPLACE FUNCTION chat_activity_private.join_group_via_code(p_invite_code text)\nRETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''\nAS $function$\nDECLARE v_id uuid; v_approval boolean; v_uid uuid:=auth.uid();\nBEGIN\n IF v_uid IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE='42501'; END IF;\n SELECT id,coalesce((permissions->>'approve_new_members')::boolean,false) INTO v_id,v_approval\n FROM public.conversations WHERE invite_code=p_invite_code AND invite_enabled=true AND is_group=true AND NOT coalesce(is_note,false) FOR UPDATE;\n IF v_id IS NULL THEN RAISE EXCEPTION 'Invalid or expired invite link' USING ERRCODE='42501'; END IF;\n IF EXISTS(SELECT 1 FROM public.conversation_members WHERE conversation_id=v_id AND user_id=v_uid) THEN\n  RETURN jsonb_build_object('status','already_member','conversation_id',v_id);\n END IF;\n IF v_approval THEN\n  INSERT INTO public.group_join_requests(conversation_id,user_id) VALUES(v_id,v_uid)\n  ON CONFLICT(conversation_id,user_id) DO UPDATE SET status='pending',created_at=statement_timestamp();\n  RETURN jsonb_build_object('status','pending_approval','conversation_id',v_id);\n END IF;\n INSERT INTO public.conversation_members(conversation_id,user_id,role) VALUES(v_id,v_uid,'member') ON CONFLICT(conversation_id,user_id) DO NOTHING;\n RETURN jsonb_build_object('status','joined','conversation_id',v_id);\nEND $function$;\nREVOKE ALL ON FUNCTION chat_activity_private.join_group_via_code(text) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION chat_activity_private.join_group_via_code(text) TO authenticated;\nCREATE OR REPLACE FUNCTION public.join_group_via_code(p_invite_code text)\nRETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path=''\nAS $function$ SELECT chat_activity_private.join_group_via_code(p_invite_code); $function$;\nREVOKE ALL ON FUNCTION public.join_group_via_code(text) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.join_group_via_code(text) TO authenticated;\n\nCREATE OR REPLACE FUNCTION chat_activity_private.resolve_join_request(p_request_id uuid,p_approve boolean)\nRETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=''\nAS $function$\nDECLARE v_conv uuid; v_user uuid; v_role text; v_status text;\nBEGIN\n IF auth.uid() IS NULL OR p_approve IS NULL THEN RAISE EXCEPTION 'Invalid approval request' USING ERRCODE='42501'; END IF;\n SELECT conversation_id,user_id,status INTO v_conv,v_user,v_status FROM public.group_join_requests WHERE id=p_request_id FOR UPDATE;\n IF v_user IS NULL OR v_status IS DISTINCT FROM 'pending' THEN RAISE EXCEPTION 'No pending request' USING ERRCODE='42501'; END IF;\n SELECT m.role INTO v_role FROM public.conversation_members m JOIN public.conversations c ON c.id=m.conversation_id\n WHERE m.conversation_id=v_conv AND m.user_id=auth.uid() AND c.is_group=true AND NOT coalesce(c.is_note,false) FOR UPDATE OF m;\n IF v_role IS NULL OR v_role NOT IN ('owner','admin') THEN RAISE EXCEPTION 'Only current administrators can resolve requests' USING ERRCODE='42501'; END IF;\n IF p_approve THEN\n  INSERT INTO public.conversation_members(conversation_id,user_id,role) VALUES(v_conv,v_user,'member') ON CONFLICT(conversation_id,user_id) DO NOTHING;\n END IF;\n UPDATE public.group_join_requests SET status=CASE WHEN p_approve THEN 'approved' ELSE 'rejected' END WHERE id=p_request_id;\nEND $function$;\nREVOKE ALL ON FUNCTION chat_activity_private.resolve_join_request(uuid,boolean) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION chat_activity_private.resolve_join_request(uuid,boolean) TO authenticated;\nCREATE OR REPLACE FUNCTION public.resolve_join_request(p_request_id uuid,p_approve boolean)\nRETURNS void LANGUAGE sql SECURITY INVOKER SET search_path=''\nAS $function$ SELECT chat_activity_private.resolve_join_request(p_request_id,p_approve); $function$;\nREVOKE ALL ON FUNCTION public.resolve_join_request(uuid,boolean) FROM PUBLIC,anon,authenticated;\nGRANT EXECUTE ON FUNCTION public.resolve_join_request(uuid,boolean) TO authenticated;\n\nCREATE OR REPLACE FUNCTION chat_activity_private.protect_conversation_metadata()\nRETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=''\nAS $function$\nDECLARE v_uid uuid := auth.uid(); v_role text; v_field text;\nBEGIN\n -- Existing reviewed SECURITY DEFINER group-info/invite RPCs remain trusted operations.\n IF current_user NOT IN ('anon','authenticated') THEN RETURN NEW; END IF;\n IF v_uid IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE='42501'; END IF;\n IF coalesce(OLD.is_note,false) THEN\n  IF OLD.owner_id IS DISTINCT FROM v_uid THEN RAISE EXCEPTION 'Not note owner' USING ERRCODE='42501'; END IF;\n ELSIF coalesce(OLD.is_group,false) THEN\n  SELECT role INTO v_role FROM public.conversation_members WHERE conversation_id=OLD.id AND user_id=v_uid;\n  IF v_role IS NULL THEN RAISE EXCEPTION 'Not a current group member' USING ERRCODE='42501'; END IF;\n ELSE\n  IF NOT coalesce(v_uid=OLD.user1_id OR v_uid=OLD.user2_id,false) OR public.is_blocked_between(OLD.user1_id,OLD.user2_id) THEN\n   RAISE EXCEPTION 'Conversation unavailable' USING ERRCODE='42501';\n  END IF;\n END IF;\n IF ROW(NEW.id,NEW.created_at,NEW.user1_id,NEW.user2_id,NEW.is_group,NEW.is_note,NEW.owner_id,NEW.created_by,NEW.typing_users)\n  IS DISTINCT FROM ROW(OLD.id,OLD.created_at,OLD.user1_id,OLD.user2_id,OLD.is_group,OLD.is_note,OLD.owner_id,OLD.created_by,OLD.typing_users) THEN\n  RAISE EXCEPTION 'Protected conversation identity' USING ERRCODE='42501';\n END IF;\n IF NOT coalesce(OLD.is_note,false) AND\n  ROW(NEW.permissions,NEW.invite_code,NEW.invite_enabled) IS DISTINCT FROM ROW(OLD.permissions,OLD.invite_code,OLD.invite_enabled)\n  AND (NOT coalesce(OLD.is_group,false) OR v_role IS NULL OR v_role NOT IN ('owner','admin')) THEN\n  RAISE EXCEPTION 'Only current administrators can change group administration' USING ERRCODE='42501';\n END IF;\n IF coalesce(OLD.is_group,false) AND NOT coalesce(OLD.is_note,false) AND v_role NOT IN ('owner','admin') THEN\n  IF NEW.disappearing_duration IS DISTINCT FROM OLD.disappearing_duration OR\n   (coalesce(OLD.permissions->>'edit_group_info','admins') <> 'everyone' AND\n    ROW(NEW.group_name,NEW.group_avatar,NEW.group_description) IS DISTINCT FROM ROW(OLD.group_name,OLD.group_avatar,OLD.group_description)) THEN\n   RAISE EXCEPTION 'Group administrator permission required' USING ERRCODE='42501';\n  END IF;\n END IF;\n -- A participant may change only their own per-user preference entries, not another user's state.\n FOREACH v_field IN ARRAY ARRAY['muted_by','archived_by','pinned_by','hidden_by'] LOOP\n  IF ARRAY(SELECT value FROM jsonb_array_elements_text(coalesce(nullif(to_jsonb(NEW)->v_field,'null'::jsonb),'[]'::jsonb)) AS x(value) WHERE value<>v_uid::text ORDER BY value)\n   IS DISTINCT FROM ARRAY(SELECT value FROM jsonb_array_elements_text(coalesce(nullif(to_jsonb(OLD)->v_field,'null'::jsonb),'[]'::jsonb)) AS x(value) WHERE value<>v_uid::text ORDER BY value) THEN\n   RAISE EXCEPTION 'Cannot modify another participant preference' USING ERRCODE='42501';\n  END IF;\n END LOOP;\n IF ROW(NEW.last_message_id,NEW.last_sender_id,NEW.last_message_at) IS DISTINCT FROM ROW(OLD.last_message_id,OLD.last_sender_id,OLD.last_message_at)\n  AND pg_trigger_depth() < 2 THEN\n  RAISE EXCEPTION 'Last message metadata is server maintained' USING ERRCODE='42501';\n END IF;\n IF NEW.pinned_message_id IS DISTINCT FROM OLD.pinned_message_id AND NEW.pinned_message_id IS NOT NULL AND NOT EXISTS(\n  SELECT 1 FROM public.messages m WHERE m.id=NEW.pinned_message_id AND m.conversation_id=OLD.id) THEN\n  RAISE EXCEPTION 'Pinned message must belong to this conversation' USING ERRCODE='42501';\n END IF;\n RETURN NEW;\nEND $function$;\nREVOKE ALL ON FUNCTION chat_activity_private.protect_conversation_metadata() FROM PUBLIC,anon,authenticated;\nDROP TRIGGER IF EXISTS chat_protect_conversation_metadata ON public.conversations;\nCREATE TRIGGER chat_protect_conversation_metadata BEFORE UPDATE ON public.conversations\nFOR EACH ROW EXECUTE FUNCTION chat_activity_private.protect_conversation_metadata();\nNOTIFY pgrst,'reload schema';\nCOMMIT;\n"
+        ]
+      }
+    ],
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "qual": "is_member_of_conversation(conversation_id)",
+        "roles": [
+          "public"
+        ],
+        "tablename": "conversation_members",
+        "permissive": "PERMISSIVE",
+        "policyname": "Users can view members of their conversations",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "DELETE",
+        "qual": "((EXISTS ( SELECT 1\n   FROM conversation_members admin_check\n  WHERE ((admin_check.conversation_id = conversation_members.conversation_id) AND (admin_check.user_id = auth.uid()) AND (admin_check.role = 'admin'::text)))) OR (user_id = auth.uid()))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "conversation_members",
+        "permissive": "PERMISSIVE",
+        "policyname": "admins can remove group members",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "conversation_members",
+        "permissive": "PERMISSIVE",
+        "policyname": "conversation_members_insert_policy",
+        "schemaname": "public",
+        "with_check": "(((user_id = auth.uid()) AND (role = 'owner'::text) AND conversation_created_by(conversation_id, auth.uid()) AND (NOT conversation_has_any_members(conversation_id))) OR ((role = 'member'::text) AND conversation_created_by(conversation_id, auth.uid()) AND (NOT conversation_has_any_members(conversation_id))) OR ((role = ANY (ARRAY['member'::text, 'admin'::text])) AND is_owner_or_admin_of_conversation(conversation_id)))"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "(user_id = auth.uid())",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "conversation_members",
+        "permissive": "PERMISSIVE",
+        "policyname": "members can view own memberships",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "ALL",
+        "qual": "(COALESCE(( SELECT realtime.topic() AS topic), ''::text) !~~ 'chat-activity-db:%'::text)",
+        "roles": [
+          "anon"
+        ],
+        "tablename": "messages",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_db_anon_guard",
+        "schemaname": "realtime",
+        "with_check": "(COALESCE(( SELECT realtime.topic() AS topic), ''::text) !~~ 'chat-activity-db:%'::text)"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "((extension = 'broadcast'::text) AND can_join_chat_activity(( SELECT realtime.topic() AS topic)))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "messages",
+        "permissive": "PERMISSIVE",
+        "policyname": "chat_activity_db_join",
+        "schemaname": "realtime",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "((COALESCE(( SELECT realtime.topic() AS topic), ''::text) !~~ 'chat-activity-db:%'::text) OR ((extension = 'broadcast'::text) AND can_join_chat_activity(( SELECT realtime.topic() AS topic))))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "messages",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_db_receive_guard",
+        "schemaname": "realtime",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "tablename": "messages",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_db_send_guard",
+        "schemaname": "realtime",
+        "with_check": "(COALESCE(( SELECT realtime.topic() AS topic), ''::text) !~~ 'chat-activity-db:%'::text)"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "(COALESCE(( SELECT realtime.topic() AS topic), ''::text) !~~ 'chat-activity:%'::text)",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "tablename": "messages",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_receive_guard",
+        "schemaname": "realtime",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "tablename": "messages",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_send_guard",
+        "schemaname": "realtime",
+        "with_check": "(COALESCE(( SELECT realtime.topic() AS topic), ''::text) !~~ 'chat-activity:%'::text)"
+      },
+      {
+        "cmd": "ALL",
+        "qual": "false",
+        "roles": [
+          "anon"
+        ],
+        "tablename": "chat_activity",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_anon_guard",
+        "schemaname": "public",
+        "with_check": "false"
+      },
+      {
+        "cmd": "DELETE",
+        "qual": "false",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "chat_activity",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_delete_guard",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "chat_activity",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_insert_guard",
+        "schemaname": "public",
+        "with_check": "false"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "can_read_chat_activity(conversation_id)",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "chat_activity",
+        "permissive": "PERMISSIVE",
+        "policyname": "chat_activity_read",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "(can_read_chat_activity(conversation_id) AND (expires_at > statement_timestamp()))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "chat_activity",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_read_guard",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "false",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "chat_activity",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_activity_update_guard",
+        "schemaname": "public",
+        "with_check": "false"
+      },
+      {
+        "cmd": "ALL",
+        "qual": "false",
+        "roles": [
+          "anon"
+        ],
+        "tablename": "message_reads",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_reads_anon_guard",
+        "schemaname": "public",
+        "with_check": "false"
+      },
+      {
+        "cmd": "DELETE",
+        "qual": "false",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "message_reads",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_reads_delete_guard",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "message_reads",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_reads_insert_guard",
+        "schemaname": "public",
+        "with_check": "((user_id = auth.uid()) AND chat_activity_private.can_read_receipt(message_id))"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "chat_activity_private.can_read_receipt(message_id)",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "message_reads",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_reads_select_guard",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "((user_id = auth.uid()) AND chat_activity_private.can_read_receipt(message_id))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "message_reads",
+        "permissive": "PERMISSIVE",
+        "policyname": "chat_reads_update",
+        "schemaname": "public",
+        "with_check": "((user_id = auth.uid()) AND chat_activity_private.can_read_receipt(message_id))"
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "((user_id = auth.uid()) AND chat_activity_private.can_read_receipt(message_id))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "message_reads",
+        "permissive": "RESTRICTIVE",
+        "policyname": "chat_reads_update_guard",
+        "schemaname": "public",
+        "with_check": "((user_id = auth.uid()) AND chat_activity_private.can_read_receipt(message_id))"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "chat_activity_private.can_read_receipt(message_id)",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "message_reads",
+        "permissive": "PERMISSIVE",
+        "policyname": "members can view reads",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "message_reads",
+        "permissive": "PERMISSIVE",
+        "policyname": "reads_insert_policy",
+        "schemaname": "public",
+        "with_check": "((user_id = auth.uid()) AND chat_activity_private.can_read_receipt(message_id))"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "(user_id = auth.uid())",
+        "roles": [
+          "public"
+        ],
+        "tablename": "message_reads",
+        "permissive": "PERMISSIVE",
+        "policyname": "reads_select_policy",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "((auth.uid() = user1_id) OR (auth.uid() = user2_id))",
+        "roles": [
+          "public"
+        ],
+        "tablename": "conversations",
+        "permissive": "PERMISSIVE",
+        "policyname": "Users can update their own conversations",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "((auth.uid() = user1_id) OR (auth.uid() = user2_id) OR (EXISTS ( SELECT 1\n   FROM conversation_members cm\n  WHERE ((cm.conversation_id = conversations.id) AND (cm.user_id = auth.uid())))))",
+        "roles": [
+          "public"
+        ],
+        "tablename": "conversations",
+        "permissive": "PERMISSIVE",
+        "policyname": "conversation participants can update",
+        "schemaname": "public",
+        "with_check": "((auth.uid() = user1_id) OR (auth.uid() = user2_id) OR (EXISTS ( SELECT 1\n   FROM conversation_members cm\n  WHERE ((cm.conversation_id = conversations.id) AND (cm.user_id = auth.uid()) AND true))))"
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "conversations",
+        "permissive": "PERMISSIVE",
+        "policyname": "conversations_insert_policy",
+        "schemaname": "public",
+        "with_check": "(((COALESCE(is_group, false) = false) AND (COALESCE(is_note, false) = false) AND ((user1_id = auth.uid()) OR (user2_id = auth.uid())) AND (NOT is_blocked_between(user1_id, user2_id))) OR (((COALESCE(is_group, false) = true) OR (COALESCE(is_note, false) = true)) AND (created_by = auth.uid()) AND (owner_id = auth.uid())))"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "(((COALESCE(is_group, false) = false) AND (COALESCE(is_note, false) = false) AND ((user1_id = auth.uid()) OR (user2_id = auth.uid()))) OR ((COALESCE(is_group, false) = true) AND (EXISTS ( SELECT 1\n   FROM conversation_members cm\n  WHERE ((cm.conversation_id = conversations.id) AND (cm.user_id = auth.uid()))))) OR ((COALESCE(is_note, false) = true) AND (owner_id = auth.uid())))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "conversations",
+        "permissive": "PERMISSIVE",
+        "policyname": "conversations_select_policy",
+        "schemaname": "public",
+        "with_check": null
+      }
+    ],
+    "triggers": [
+      {
+        "name": "chat_activity_protect_conversation_identity",
+        "definition": "CREATE TRIGGER chat_activity_protect_conversation_identity BEFORE UPDATE OF user1_id, user2_id, is_group, is_note, owner_id, created_by, permissions ON public.conversations FOR EACH ROW EXECUTE FUNCTION chat_activity_private.protect_conversation_identity()",
+        "table_name": "conversations"
+      },
+      {
+        "name": "chat_protect_conversation_metadata",
+        "definition": "CREATE TRIGGER chat_protect_conversation_metadata BEFORE UPDATE ON public.conversations FOR EACH ROW EXECUTE FUNCTION chat_activity_private.protect_conversation_metadata()",
+        "table_name": "conversations"
+      },
+      {
+        "name": "trigger_conversation_updated_at",
+        "definition": "CREATE TRIGGER trigger_conversation_updated_at BEFORE UPDATE ON public.conversations FOR EACH ROW EXECUTE FUNCTION update_conversation_updated_at()",
+        "table_name": "conversations"
+      },
+      {
+        "name": "chat_protect_receipt_identity",
+        "definition": "CREATE TRIGGER chat_protect_receipt_identity BEFORE INSERT OR UPDATE ON public.message_reads FOR EACH ROW EXECUTE FUNCTION chat_activity_private.protect_receipt_identity()",
+        "table_name": "message_reads"
+      }
+    ],
+    "functions": [
+      {
+        "acl": [
+          "postgres=X/postgres"
+        ],
+        "name": "protect_conversation_identity",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.protect_conversation_identity()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nBEGIN\n IF current_user IN ('anon','authenticated') THEN\n  IF ROW(NEW.user1_id,NEW.user2_id,NEW.is_group,NEW.is_note,NEW.owner_id,NEW.created_by)\n      IS DISTINCT FROM ROW(OLD.user1_id,OLD.user2_id,OLD.is_group,OLD.is_note,OLD.owner_id,OLD.created_by) THEN\n   RAISE EXCEPTION 'Conversation identity requires an authorized server operation' USING ERRCODE='42501';\n  END IF;\n  IF NEW.permissions IS DISTINCT FROM OLD.permissions AND coalesce(OLD.is_group,false) AND\n     NOT (coalesce(OLD.is_note,false) AND OLD.owner_id=auth.uid()) AND NOT EXISTS(\n      SELECT 1 FROM public.conversation_members m WHERE m.conversation_id=OLD.id\n       AND m.user_id=auth.uid() AND m.role IN ('owner','admin')) THEN\n   RAISE EXCEPTION 'Only current group administrators can change permissions' USING ERRCODE='42501';\n  END IF;\n END IF;\n RETURN NEW;\nEND;\n$function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "set_member_role",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": true,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.set_member_role(p_conversation_id uuid, p_target_user_id uuid, p_new_role text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nDECLARE v_role text; v_target text;\nBEGIN\n IF auth.uid() IS NULL OR p_new_role IS NULL OR p_new_role NOT IN ('admin','member') THEN\n  RAISE EXCEPTION 'Invalid group-role request' USING ERRCODE='42501';\n END IF;\n SELECT m.role INTO v_role FROM public.conversation_members m JOIN public.conversations c ON c.id=m.conversation_id\n WHERE m.conversation_id=p_conversation_id AND m.user_id=auth.uid()\n  AND coalesce(c.is_group,false) AND NOT coalesce(c.is_note,false) FOR UPDATE OF m;\n IF v_role IS DISTINCT FROM 'owner' THEN\n  RAISE EXCEPTION 'Only the current group owner can change roles' USING ERRCODE='42501';\n END IF;\n SELECT m.role INTO v_target FROM public.conversation_members m\n WHERE m.conversation_id=p_conversation_id AND m.user_id=p_target_user_id FOR UPDATE;\n IF v_target IS NULL OR v_target='owner' THEN\n  RAISE EXCEPTION 'Invalid target group member' USING ERRCODE='42501';\n END IF;\n UPDATE public.conversation_members SET role=p_new_role\n WHERE conversation_id=p_conversation_id AND user_id=p_target_user_id;\nEND;\n$function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "can_use",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": true,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.can_use(p_conversation_id uuid, p_sending boolean)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n SELECT auth.uid() IS NOT NULL AND EXISTS (\n  SELECT 1 FROM public.conversations c WHERE c.id=p_conversation_id\n   AND NOT coalesce(c.is_note,false)\n   AND CASE WHEN coalesce(c.is_group,false) THEN\n    EXISTS(SELECT 1 FROM public.conversation_members m WHERE m.conversation_id=c.id AND m.user_id=auth.uid())\n    AND (NOT p_sending OR public.can_send_in_conversation(c.id))\n   ELSE (auth.uid()=c.user1_id OR auth.uid()=c.user2_id)\n    AND NOT public.is_blocked_between(c.user1_id,c.user2_id) END\n );\n$function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "can_read_chat_activity",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.can_read_chat_activity(p_conversation_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$ SELECT chat_activity_private.can_use(p_conversation_id,false); $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "update_group_info",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.update_group_info(p_conversation_id uuid, p_name text DEFAULT NULL::text, p_description text DEFAULT NULL::text, p_avatar text DEFAULT NULL::text)\n RETURNS void\n LANGUAGE sql\n SET search_path TO ''\nAS $function$ SELECT chat_activity_private.update_group_info(p_conversation_id,p_name,p_description,p_avatar); $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "set_member_role",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.set_member_role(p_conversation_id uuid, p_target_user_id uuid, p_new_role text)\n RETURNS void\n LANGUAGE sql\n SET search_path TO ''\nAS $function$ SELECT chat_activity_private.set_member_role(p_conversation_id,p_target_user_id,p_new_role); $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "publish",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": true,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.publish(p_conversation_id uuid, p_source_id uuid, p_sequence bigint, p_event text, p_kind text, p_stage text, p_plural boolean, p_active boolean)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nDECLARE v_uid uuid := auth.uid(); v_now timestamptz := clock_timestamp(); v_count integer;\nBEGIN\n IF NOT chat_activity_private.can_use(p_conversation_id,true) THEN\n  RAISE EXCEPTION 'Activity unavailable' USING ERRCODE='42501';\n END IF;\n IF p_source_id IS NULL OR p_sequence IS NULL OR p_sequence NOT BETWEEN 1 AND 9007199254740991 OR\n    p_event IS NULL OR p_event NOT IN ('typing','activity') OR p_active IS NULL OR p_plural IS NULL OR\n    (p_event='typing' AND (p_kind IS NOT NULL OR p_stage IS NOT NULL)) OR\n    (p_event='activity' AND p_active AND (p_kind IS NULL OR p_kind NOT IN ('recording','photo','video','media'))) OR\n    (p_kind IS NOT NULL AND p_kind NOT IN ('recording','photo','video','media')) OR\n    (p_stage IS NOT NULL AND p_stage NOT IN ('preparing','uploading')) THEN\n  RAISE EXCEPTION 'Invalid activity' USING ERRCODE='22023';\n END IF;\n -- Serialize one user's source quota/cleanup without locking conversation membership.\n PERFORM pg_advisory_xact_lock(hashtextextended(v_uid::text, 41617));\n IF NOT chat_activity_private.can_use(p_conversation_id,true) THEN\n  RAISE EXCEPTION 'Activity unavailable' USING ERRCODE='42501';\n END IF;\n DELETE FROM public.chat_activity WHERE user_id=v_uid AND expires_at < v_now - interval '1 minute';\n IF NOT EXISTS(SELECT 1 FROM public.chat_activity WHERE conversation_id=p_conversation_id AND user_id=v_uid AND source_id=p_source_id AND event=p_event)\n    AND (SELECT count(*) FROM public.chat_activity WHERE user_id=v_uid) >= 128 THEN\n  RAISE EXCEPTION 'Activity source limit' USING ERRCODE='54000';\n END IF;\n INSERT INTO public.chat_activity(conversation_id,user_id,source_id,event,kind,stage,plural,active,sequence,updated_at,expires_at)\n VALUES(p_conversation_id,v_uid,p_source_id,p_event,p_kind,p_stage,p_plural,p_active,p_sequence,v_now,\n        v_now + CASE WHEN p_event='typing' THEN interval '4 seconds' ELSE interval '7 seconds' END)\n ON CONFLICT(conversation_id,user_id,source_id,event) DO UPDATE\n SET kind=excluded.kind,stage=excluded.stage,plural=excluded.plural,active=excluded.active,\n     sequence=excluded.sequence,updated_at=excluded.updated_at,expires_at=excluded.expires_at\n WHERE public.chat_activity.sequence < excluded.sequence;\n GET DIAGNOSTICS v_count=ROW_COUNT;\n RETURN v_count=1;\nEND;\n$function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "can_read_receipt",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": true,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.can_read_receipt(p_message_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n SELECT auth.uid() IS NOT NULL AND EXISTS(\n  SELECT 1 FROM public.messages m JOIN public.conversations c ON c.id=m.conversation_id\n  WHERE m.id=p_message_id AND CASE\n   WHEN coalesce(c.is_note,false) THEN c.owner_id=auth.uid()\n   WHEN coalesce(c.is_group,false) THEN EXISTS(\n    SELECT 1 FROM public.conversation_members cm WHERE cm.conversation_id=c.id AND cm.user_id=auth.uid())\n   ELSE (c.user1_id=auth.uid() OR c.user2_id=auth.uid())\n    AND NOT public.is_blocked_between(c.user1_id,c.user2_id) END\n );\n$function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres"
+        ],
+        "name": "protect_receipt_identity",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.protect_receipt_identity()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nBEGIN\n IF current_user IN ('anon','authenticated') THEN\n  IF TG_OP='UPDATE' THEN\n   IF ROW(NEW.message_id,NEW.user_id) IS DISTINCT FROM ROW(OLD.message_id,OLD.user_id) THEN\n    RAISE EXCEPTION 'Receipt identity is immutable' USING ERRCODE='42501';\n   END IF;\n   NEW.read_at := coalesce(OLD.read_at,statement_timestamp());\n  ELSE NEW.read_at := statement_timestamp();\n  END IF;\n END IF;\n RETURN NEW;\nEND $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "publish_chat_activity",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.publish_chat_activity(p_conversation_id uuid, p_source_id uuid, p_sequence bigint, p_event text, p_kind text DEFAULT NULL::text, p_stage text DEFAULT NULL::text, p_plural boolean DEFAULT false, p_active boolean DEFAULT true)\n RETURNS boolean\n LANGUAGE sql\n SET search_path TO ''\nAS $function$\n SELECT chat_activity_private.publish(p_conversation_id,p_source_id,p_sequence,p_event,p_kind,p_stage,p_plural,p_active);\n$function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "get_chat_activity",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.get_chat_activity(p_conversation_id uuid)\n RETURNS SETOF chat_activity\n LANGUAGE plpgsql\n STABLE\n SET search_path TO ''\nAS $function$\nBEGIN\n IF NOT public.can_read_chat_activity(p_conversation_id) THEN\n  RAISE EXCEPTION 'Activity unavailable' USING ERRCODE='42501';\n END IF;\n RETURN QUERY SELECT a.* FROM public.chat_activity a WHERE a.conversation_id=p_conversation_id\n  AND a.active AND a.expires_at > statement_timestamp();\nEND;\n$function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "can_use_chat_activity",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.can_use_chat_activity(p_topic text)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$ SELECT false; $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "can_join_chat_activity",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.can_join_chat_activity(p_topic text)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n SELECT CASE WHEN p_topic ~ '^chat-activity-db:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'\n  THEN public.can_read_chat_activity(substr(p_topic,18)::uuid) ELSE false END;\n$function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "update_group_info",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": true,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.update_group_info(p_conversation_id uuid, p_name text, p_description text, p_avatar text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nDECLARE v_role text; v_permission text;\nBEGIN\n SELECT m.role,coalesce(c.permissions->>'edit_group_info','admins') INTO v_role,v_permission\n FROM public.conversation_members m JOIN public.conversations c ON c.id=m.conversation_id\n WHERE m.conversation_id=p_conversation_id AND m.user_id=auth.uid() AND c.is_group AND NOT coalesce(c.is_note,false) FOR UPDATE OF m;\n IF auth.uid() IS NULL OR v_role IS NULL OR (v_permission<>'everyone' AND v_role NOT IN ('owner','admin')) THEN\n  RAISE EXCEPTION 'Group edit not authorized' USING ERRCODE='42501';\n END IF;\n UPDATE public.conversations SET group_name=coalesce(p_name,group_name),group_description=coalesce(p_description,group_description),\n group_avatar=coalesce(p_avatar,group_avatar),updated_at=statement_timestamp() WHERE id=p_conversation_id;\nEND $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "get_or_create_invite_code",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": true,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.get_or_create_invite_code(p_conversation_id uuid)\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nDECLARE v_role text; v_permission text; v_code text;\nBEGIN\n SELECT m.role,coalesce(c.permissions->>'invite_via_link','admins') INTO v_role,v_permission\n FROM public.conversation_members m JOIN public.conversations c ON c.id=m.conversation_id\n WHERE m.conversation_id=p_conversation_id AND m.user_id=auth.uid() AND c.is_group AND NOT coalesce(c.is_note,false) FOR UPDATE OF m;\n IF auth.uid() IS NULL OR v_role IS NULL OR (v_permission<>'everyone' AND v_role NOT IN ('owner','admin')) THEN\n  RAISE EXCEPTION 'Group invite not authorized' USING ERRCODE='42501';\n END IF;\n SELECT invite_code INTO v_code FROM public.conversations WHERE id=p_conversation_id FOR UPDATE;\n IF v_code IS NULL THEN\n  v_code:=replace(gen_random_uuid()::text,'-','');\n  UPDATE public.conversations SET invite_code=v_code WHERE id=p_conversation_id;\n END IF;\n RETURN v_code;\nEND $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "get_or_create_invite_code",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.get_or_create_invite_code(p_conversation_id uuid)\n RETURNS text\n LANGUAGE sql\n SET search_path TO ''\nAS $function$ SELECT chat_activity_private.get_or_create_invite_code(p_conversation_id); $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "join_group_via_code",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": true,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.join_group_via_code(p_invite_code text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nDECLARE v_id uuid; v_approval boolean; v_uid uuid:=auth.uid();\nBEGIN\n IF v_uid IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE='42501'; END IF;\n SELECT id,coalesce((permissions->>'approve_new_members')::boolean,false) INTO v_id,v_approval\n FROM public.conversations WHERE invite_code=p_invite_code AND invite_enabled=true AND is_group=true AND NOT coalesce(is_note,false) FOR UPDATE;\n IF v_id IS NULL THEN RAISE EXCEPTION 'Invalid or expired invite link' USING ERRCODE='42501'; END IF;\n IF EXISTS(SELECT 1 FROM public.conversation_members WHERE conversation_id=v_id AND user_id=v_uid) THEN\n  RETURN jsonb_build_object('status','already_member','conversation_id',v_id);\n END IF;\n IF v_approval THEN\n  INSERT INTO public.group_join_requests(conversation_id,user_id) VALUES(v_id,v_uid)\n  ON CONFLICT(conversation_id,user_id) DO UPDATE SET status='pending',created_at=statement_timestamp();\n  RETURN jsonb_build_object('status','pending_approval','conversation_id',v_id);\n END IF;\n INSERT INTO public.conversation_members(conversation_id,user_id,role) VALUES(v_id,v_uid,'member') ON CONFLICT(conversation_id,user_id) DO NOTHING;\n RETURN jsonb_build_object('status','joined','conversation_id',v_id);\nEND $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "join_group_via_code",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.join_group_via_code(p_invite_code text)\n RETURNS jsonb\n LANGUAGE sql\n SET search_path TO ''\nAS $function$ SELECT chat_activity_private.join_group_via_code(p_invite_code); $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "resolve_join_request",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": true,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.resolve_join_request(p_request_id uuid, p_approve boolean)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nDECLARE v_conv uuid; v_user uuid; v_role text; v_status text;\nBEGIN\n IF auth.uid() IS NULL OR p_approve IS NULL THEN RAISE EXCEPTION 'Invalid approval request' USING ERRCODE='42501'; END IF;\n SELECT conversation_id,user_id,status INTO v_conv,v_user,v_status FROM public.group_join_requests WHERE id=p_request_id FOR UPDATE;\n IF v_user IS NULL OR v_status IS DISTINCT FROM 'pending' THEN RAISE EXCEPTION 'No pending request' USING ERRCODE='42501'; END IF;\n SELECT m.role INTO v_role FROM public.conversation_members m JOIN public.conversations c ON c.id=m.conversation_id\n WHERE m.conversation_id=v_conv AND m.user_id=auth.uid() AND c.is_group=true AND NOT coalesce(c.is_note,false) FOR UPDATE OF m;\n IF v_role IS NULL OR v_role NOT IN ('owner','admin') THEN RAISE EXCEPTION 'Only current administrators can resolve requests' USING ERRCODE='42501'; END IF;\n IF p_approve THEN\n  INSERT INTO public.conversation_members(conversation_id,user_id,role) VALUES(v_conv,v_user,'member') ON CONFLICT(conversation_id,user_id) DO NOTHING;\n END IF;\n UPDATE public.group_join_requests SET status=CASE WHEN p_approve THEN 'approved' ELSE 'rejected' END WHERE id=p_request_id;\nEND $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "name": "resolve_join_request",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "public",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION public.resolve_join_request(p_request_id uuid, p_approve boolean)\n RETURNS void\n LANGUAGE sql\n SET search_path TO ''\nAS $function$ SELECT chat_activity_private.resolve_join_request(p_request_id,p_approve); $function$\n"
+      },
+      {
+        "acl": [
+          "postgres=X/postgres"
+        ],
+        "name": "protect_conversation_metadata",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "chat_activity_private",
+        "definer": false,
+        "definition": "CREATE OR REPLACE FUNCTION chat_activity_private.protect_conversation_metadata()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nDECLARE v_uid uuid := auth.uid(); v_role text; v_field text;\nBEGIN\n -- Existing reviewed SECURITY DEFINER group-info/invite RPCs remain trusted operations.\n IF current_user NOT IN ('anon','authenticated') THEN RETURN NEW; END IF;\n IF v_uid IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE='42501'; END IF;\n IF coalesce(OLD.is_note,false) THEN\n  IF OLD.owner_id IS DISTINCT FROM v_uid THEN RAISE EXCEPTION 'Not note owner' USING ERRCODE='42501'; END IF;\n ELSIF coalesce(OLD.is_group,false) THEN\n  SELECT role INTO v_role FROM public.conversation_members WHERE conversation_id=OLD.id AND user_id=v_uid;\n  IF v_role IS NULL THEN RAISE EXCEPTION 'Not a current group member' USING ERRCODE='42501'; END IF;\n ELSE\n  IF NOT coalesce(v_uid=OLD.user1_id OR v_uid=OLD.user2_id,false) OR public.is_blocked_between(OLD.user1_id,OLD.user2_id) THEN\n   RAISE EXCEPTION 'Conversation unavailable' USING ERRCODE='42501';\n  END IF;\n END IF;\n IF ROW(NEW.id,NEW.created_at,NEW.user1_id,NEW.user2_id,NEW.is_group,NEW.is_note,NEW.owner_id,NEW.created_by,NEW.typing_users)\n  IS DISTINCT FROM ROW(OLD.id,OLD.created_at,OLD.user1_id,OLD.user2_id,OLD.is_group,OLD.is_note,OLD.owner_id,OLD.created_by,OLD.typing_users) THEN\n  RAISE EXCEPTION 'Protected conversation identity' USING ERRCODE='42501';\n END IF;\n IF NOT coalesce(OLD.is_note,false) AND\n  ROW(NEW.permissions,NEW.invite_code,NEW.invite_enabled) IS DISTINCT FROM ROW(OLD.permissions,OLD.invite_code,OLD.invite_enabled)\n  AND (NOT coalesce(OLD.is_group,false) OR v_role IS NULL OR v_role NOT IN ('owner','admin')) THEN\n  RAISE EXCEPTION 'Only current administrators can change group administration' USING ERRCODE='42501';\n END IF;\n IF coalesce(OLD.is_group,false) AND NOT coalesce(OLD.is_note,false) AND v_role NOT IN ('owner','admin') THEN\n  IF NEW.disappearing_duration IS DISTINCT FROM OLD.disappearing_duration OR\n   (coalesce(OLD.permissions->>'edit_group_info','admins') <> 'everyone' AND\n    ROW(NEW.group_name,NEW.group_avatar,NEW.group_description) IS DISTINCT FROM ROW(OLD.group_name,OLD.group_avatar,OLD.group_description)) THEN\n   RAISE EXCEPTION 'Group administrator permission required' USING ERRCODE='42501';\n  END IF;\n END IF;\n -- A participant may change only their own per-user preference entries, not another user's state.\n FOREACH v_field IN ARRAY ARRAY['muted_by','archived_by','pinned_by','hidden_by'] LOOP\n  IF ARRAY(SELECT value FROM jsonb_array_elements_text(coalesce(nullif(to_jsonb(NEW)->v_field,'null'::jsonb),'[]'::jsonb)) AS x(value) WHERE value<>v_uid::text ORDER BY value)\n   IS DISTINCT FROM ARRAY(SELECT value FROM jsonb_array_elements_text(coalesce(nullif(to_jsonb(OLD)->v_field,'null'::jsonb),'[]'::jsonb)) AS x(value) WHERE value<>v_uid::text ORDER BY value) THEN\n   RAISE EXCEPTION 'Cannot modify another participant preference' USING ERRCODE='42501';\n  END IF;\n END LOOP;\n IF ROW(NEW.last_message_id,NEW.last_sender_id,NEW.last_message_at) IS DISTINCT FROM ROW(OLD.last_message_id,OLD.last_sender_id,OLD.last_message_at)\n  AND pg_trigger_depth() < 2 THEN\n  RAISE EXCEPTION 'Last message metadata is server maintained' USING ERRCODE='42501';\n END IF;\n IF NEW.pinned_message_id IS DISTINCT FROM OLD.pinned_message_id AND NEW.pinned_message_id IS NOT NULL AND NOT EXISTS(\n  SELECT 1 FROM public.messages m WHERE m.id=NEW.pinned_message_id AND m.conversation_id=OLD.id) THEN\n  RAISE EXCEPTION 'Pinned message must belong to this conversation' USING ERRCODE='42501';\n END IF;\n RETURN NEW;\nEND $function$\n"
+      }
+    ],
+    "relations": [
+      {
+        "rls": true,
+        "name": "conversation_members",
+        "owner": "postgres",
+        "schema": "public",
+        "replica_identity": "d"
+      },
+      {
+        "rls": true,
+        "name": "messages",
+        "owner": "supabase_realtime_admin",
+        "schema": "realtime",
+        "replica_identity": "d"
+      },
+      {
+        "rls": true,
+        "name": "chat_activity",
+        "owner": "postgres",
+        "schema": "public",
+        "replica_identity": "d"
+      },
+      {
+        "rls": true,
+        "name": "conversations",
+        "owner": "postgres",
+        "schema": "public",
+        "replica_identity": "d"
+      },
+      {
+        "rls": true,
+        "name": "message_reads",
+        "owner": "postgres",
+        "schema": "public",
+        "replica_identity": "d"
+      }
+    ],
+    "publication": [
+      {
+        "pubname": "supabase_realtime",
+        "tablename": "chat_activity",
+        "schemaname": "public"
+      },
+      {
+        "pubname": "supabase_realtime",
+        "tablename": "conversation_members",
+        "schemaname": "public"
+      },
+      {
+        "pubname": "supabase_realtime",
+        "tablename": "message_reads",
+        "schemaname": "public"
+      },
+      {
+        "pubname": "supabase_realtime",
+        "tablename": "messages",
+        "schemaname": "public"
+      },
+      {
+        "pubname": "supabase_realtime",
+        "tablename": "conversations",
+        "schemaname": "public"
+      }
+    ]
+  }
+}

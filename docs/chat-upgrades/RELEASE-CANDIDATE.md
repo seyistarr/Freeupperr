@@ -1,3 +1,5 @@
+> Superseded by [HOSTED-READINESS.md](HOSTED-READINESS.md): production migrations are applied under their recorded versions. The pre-apply report below is historical; do not replay its SQL.
+
 # Advanced Chat release candidate — 2026-11-19
 
 **Production is not released. Production SQL and merging each require the explicit approvals requested in the release brief.** No hosted project was modified during this review. PR #41 retains the approved UI; PR #40's duplicate client-authored Broadcast is excluded.
