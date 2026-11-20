@@ -1,9 +1,11 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {createHash} from 'node:crypto';import vm from 'node:vm';
 // Immutable approved-main fingerprints work with Actions' shallow checkout.
 const approved=JSON.parse(await readFile(new URL('./fixtures/gallery-main-baseline.json',import.meta.url),'utf8'));
+const cacheReview=JSON.parse(await readFile(new URL('./fixtures/unified-cache-approved-integration.json',import.meta.url),'utf8'));
 const sha=value=>createHash('sha256').update(value).digest('hex');
-test('latest main authentication, identity, Chat, publishing and backend remain byte-identical',async()=>{
- for(const [file,expected] of Object.entries(approved.files))assert.equal(sha(await readFile(file)),expected,file);
+test('main authentication, identity, Chat and backend remain pinned with reviewed cache integration',async()=>{
+ assert.deepEqual(Object.keys(cacheReview.files).sort(),['global.js','search.js']);
+ for(const [file,expected] of Object.entries(approved.files))assert.equal(sha(await readFile(file)),cacheReview.files[file]?.sha256||expected,file);
 });
 test('shared Home renderer is extracted exactly from current main',async()=>{
  const actual={};vm.runInNewContext(await readFile('post-card.js','utf8'),{window:actual});
@@ -17,6 +19,6 @@ test('shared Video uses latest main CSS and DOM; Gallery changes are a separate 
 test('cache manifest preserves every main pin and adds shared static assets only',async()=>{
  const source=await readFile('service-worker.js','utf8');
  const urls=s=>Array.from(s.matchAll(/  '(\.\/[^']+)'/g),m=>m[1]);for(const url of approved.cacheUrls)assert(urls(source).includes(url),url);
- assert(source.includes('freeupper-pwa-v36-gallery-navigation'));
+ assert.match(source,/const CACHE_NAME = 'freeupper-pwa-v[0-9]+-unified'/);
  for(const file of ['posts.js?v=notes-gallery-v1','foryou.js?v=author-header-v3-notes-gallery','post-card.js','inline-video.js','video-player.js','video-player.css','gallery-viewer.html'])assert(source.includes(file));
 });

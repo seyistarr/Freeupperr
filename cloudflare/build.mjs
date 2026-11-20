@@ -1,5 +1,6 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { prepareCacheRelease } from './cache-release.mjs';
 
 const output = new URL('./generated/', import.meta.url);
 await rm(output, { recursive: true, force: true });
@@ -7,14 +8,11 @@ await mkdir(new URL('public/', output), { recursive: true });
 // Publish only tracked browser assets; never the repository, API source or env files.
 const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0');
 const files = tracked.filter(p => !p.includes('/') && /\.(html|js|css|png|ico|svg|webmanifest)$/.test(p));
+if (!files.includes('offline.html')) files.push('offline.html');
 files.push('robots.txt', 'sitemap.xml');
 for (const path of files) await cp(path, new URL('public/' + path, output));
 // Both composer and Studio enforce authenticated server-side beta readiness.
 // Do not override their gates in generated assets.
-const swFile = new URL('public/service-worker.js', output);
-let sw = await readFile(swFile, 'utf8');
-sw = sw.replace(/const CACHE_NAME = '([^']+)'/, (_, version) => `const CACHE_NAME = '${version}-cloudflare-v1'`);
-await writeFile(swFile, sw);
 for (const dir of ['assets', 'themes', 'js', 'locales']) await cp(dir, new URL('public/' + dir, output), { recursive: true });
 // A pre-migration page can lazily request a navigation script with its old
 // version query. Bundle the shared helper into dependency entry points so that
@@ -25,6 +23,8 @@ for (const path of ['router.js', 'profile-shell.js', 'bottom-nav.js', 'side-nav.
   const source = await readFile(target, 'utf8');
   await writeFile(target, `if (!globalThis.FreeUpperRoutes) {\n${routeSource}\n}\n${source}`);
 }
+const cacheRelease = await prepareCacheRelease(new URL('public/', output));
+console.log('Verified shell release', cacheRelease);
 await writeFile(new URL('public/_headers', output), `/manifest.webmanifest\n  Content-Type: application/manifest+json\n  Cache-Control: public, max-age=0, must-revalidate\n/service-worker.js\n  Cache-Control: no-cache\n  Service-Worker-Allowed: /\n/firebase-messaging-sw.js\n  Cache-Control: no-cache\n  Service-Worker-Allowed: /\n/*\n  X-Content-Type-Options: nosniff\n`);
 // This is the existing browser-public anon key, never a service-role credential.
 const auth = await readFile('auth.js', 'utf8');

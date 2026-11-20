@@ -6,16 +6,19 @@ const galleryFrame=async page=>(await page.locator('iframe[title="Gallery viewer
 async function openProfile(h,notes=false){
  await h.page.goto(h.origin+'/@fixture_creator?tab=posts&content='+(notes?'notes':'gallery'),{waitUntil:'domcontentloaded'});
  await h.page.waitForSelector('.profile-content-tabs');
+ if(h.enableServiceWorker)assert(await h.page.evaluate(()=>!!navigator.serviceWorker.controller),'Profile must be SW controlled');
 }
 async function openVideo(h,index=2){
  await h.page.locator('[data-gallery-index]').nth(index).click();
  await h.page.waitForSelector('iframe[title="Gallery viewer"]');
  const frame=await galleryFrame(h.page);assert(frame,'Gallery has its own frame');
+ if(h.enableServiceWorker)assert(await frame.evaluate(()=>!!navigator.serviceWorker.controller),'Gallery must be SW controlled');
  await frame.waitForFunction(id=>window.FreeUpperVideoPlayer?.snapshot()?.post===id,h.posts[index].id);
  return frame;
 }
-test(`${engine}: built Profile keeps its document/player through Gallery, boundaries, Sounds and history`,{timeout:90000},async()=>{
- const h=await builtGalleryHarness();const {page}=h;
+for(const enableServiceWorker of [false,true]){
+test(`${engine}${enableServiceWorker?" [SW enabled]":""}: built Profile keeps its document/player through Gallery, boundaries, Sounds and history`,{timeout:90000},async()=>{
+ const h=await builtGalleryHarness({enableServiceWorker});const {page}=h;
  try{
  await openProfile(h,true);
  await page.waitForFunction(()=>document.querySelector('iframe[title="Profile Notes"]')?.contentDocument?.querySelector('.feed-post'));
@@ -45,7 +48,9 @@ test(`${engine}: built Profile keeps its document/player through Gallery, bounda
  assert(scopedReads.length>0);assert(scopedReads.every(r=>r.owner==='eq.'+owner),'Gallery queries only this profile');
  await frame.locator('#card-2').evaluate(el=>el.scrollIntoView());
  await frame.waitForFunction(id=>FreeUpperVideoPlayer.snapshot().post===id,selected);
- if(await frame.locator('#vid-2').evaluate(v=>v.paused))await frame.locator('#tap-2').click({position:{x:100,y:180}});
+ // Ask native media to play explicitly: a toggle tap can race the card's
+ // autoplay observer and pause it. Nonzero native playback remains required.
+ await frame.locator('#vid-2').evaluate(video=>video.play());
  await frame.waitForFunction(()=>document.getElementById('vid-2').currentTime>.7);
  await frame.evaluate(()=>{const original=FreeUpperVideoPlayer.snapshot;FreeUpperVideoPlayer.snapshot=()=>{const state=original();window.soundPosition ||= state;return state;};});
  await frame.locator('#card-2 .v-disc-wrap').click();await frame.waitForSelector('iframe[title="Sound details"]');
@@ -71,8 +76,8 @@ test(`${engine}: built Profile keeps its document/player through Gallery, bounda
  assert.deepEqual(h.errors,[]);
  }finally{await h.close();}
 });
-test(`${engine}: built authenticated Gallery still clears its launch heap and media on sign-out`,{timeout:60000},async()=>{
- const h=await builtGalleryHarness({authenticated:true});const {page}=h;
+test(`${engine}${enableServiceWorker?" [SW enabled]":""}: built authenticated Gallery still clears its launch heap and media on sign-out`,{timeout:60000},async()=>{
+ const h=await builtGalleryHarness({authenticated:true,enableServiceWorker});const {page}=h;
  try{
  await openProfile(h);
  await page.waitForFunction(id=>AuthUser.getCurrentUser().id===id&&FreeUpperProfileShell.getSession()?.viewer===id,owner);
@@ -85,8 +90,17 @@ test(`${engine}: built authenticated Gallery still clears its launch heap and me
  const before=h.documents.filter(p=>p==='/profile.html').length;
  await page.evaluate(()=>{void sb.auth.signOut();});
  await page.waitForFunction(()=>window.AuthUser&&!window.privateHeapMarker&&!AuthUser.getCurrentUser().isLoggedIn);
+ if(h.enableServiceWorker){
+  // AuthUser initializes before DOMContentLoaded. Wait for the actual new
+  // document's initialization trace rather than racing its binding delivery.
+  await page.waitForLoadState('domcontentloaded');
+  const deadline=Date.now()+5000;
+  while(h.documents.filter(p=>p==='/profile.html').length<=before&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
+ }
  assert(h.documents.filter(p=>p==='/profile.html').length>before,'real authenticated boundary resets launch heap');
  assert.equal(await page.evaluate(()=>document.body.classList.contains('is-owner')),false);
  assert(h.trace.some(e=>e.event==='viewer-disposed'&&e.paused),'media is paused on authenticated disposal');
  }catch(error){console.error('Built auth-boundary state',await page.evaluate(()=>({profile:ProfileMounted.status(),viewer:{id:AuthUser.getCurrentUser().id,loggedIn:AuthUser.getCurrentUser().isLoggedIn},tabs:[...document.querySelectorAll('.profile-content-tabs button')].map(b=>({name:b.textContent,selected:b.getAttribute('aria-selected')})),panel:document.getElementById('panel-posts').textContent.slice(0,200)})));console.error('Browser errors',h.errors);console.error('Lifecycle trace',h.trace.filter(e=>e.event==='auth-event'||e.event==='gallery-removed').slice(-16));throw error;}finally{await h.close();}
 });
+
+}

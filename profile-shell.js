@@ -105,6 +105,11 @@
     clearTimeout(entry.timeout); entry.state='Uninitialized'; entry.loaded=false;
   }
   function makeRoom() { return frames.size < MAX_FRAMES; }
+  function trimSuspended() {
+    for (const kind of ['search','video']) {
+      if (kind !== active && kind !== desired && frames.has(kind) && stateFor(kind).loaded) evict(kind);
+    }
+  }
 
   // A cold document can be delayed by HTML, scripts or the network. These
   // controls belong to this coordinator and hand their state to the real page.
@@ -328,7 +333,7 @@
     try { const result=await sb.auth.getSession(); if (bound===sb) accept(result.data?.session); } catch (_) { if (!valid()) clear(true); }
   }
   window.FreeUpperProfileShell={
-    request, clear, ready,
+    request, clear, ready, trimSuspended,
     setOverlay(win,covered){
       if(!valid() || win!==winFor(active))return;
       document.documentElement.toggleAttribute('data-nav-overlay',!!covered);
@@ -364,13 +369,18 @@
   document.addEventListener('themeChanged',() => { for (const frame of frames.values()) syncTheme(frame); });
   const resize=()=>{for(const frame of frames.values())syncLayout(frame);};
   window.addEventListener('resize',resize);window.visualViewport?.addEventListener('resize',resize);
+  window.addEventListener('fu-memory-pressure',trimSuspended);
   window.addEventListener('fu-app-hydrated',schedulePrefetch);
   window.addEventListener('fu-profile-view-ready',schedulePrefetch);
   document.addEventListener('profileUpdated',bind); document.addEventListener('userRefreshed',bind);
-  // Owned guest renderers refresh the local profile mirror too. With no
-  // authenticated lease/screens, that is not an account boundary to reset.
+  // Guest mirror refresh is not a real authenticated account boundary.
   window.addEventListener('storage',e => { if (e.key==='freeupper_user_profile' || /auth-token/.test(e.key||'')) { if (!valid() && (session || frames.size)) clear(true); bind(); } });
-  document.addEventListener('visibilitychange',() => { if (!valid() && session) clear(true); });
+  let backgroundAt = 0;
+  document.addEventListener('visibilitychange',() => {
+    if (!valid() && session) clear(true);
+    if (document.hidden) backgroundAt = Date.now();
+    else if (backgroundAt && Date.now() - backgroundAt > 120000) { trimSuspended(); backgroundAt = 0; }
+  });
   window.AuthUser?.onChange?.(() => { if (!valid() && session) clear(true); bind(); });
   if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind,{once:true}); else bind();
 })();

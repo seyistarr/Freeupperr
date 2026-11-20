@@ -1,7 +1,7 @@
 importScripts('/js/freeupper-routes.js?v=clean-urls-v1');
 
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v36-gallery-navigation';
+const CACHE_NAME = 'freeupper-pwa-v37-unified';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -20,6 +20,7 @@ const URLS_TO_CACHE = [
   './video-shell.js?v=gallery-v1',
 
   './',
+  './offline.html',
   './index.html',
   './create.html',
   './profile.html',
@@ -61,75 +62,182 @@ const URLS_TO_CACHE = [
   './theme.js?v=2',
   './theme.css?v=2',
   './manifest.webmanifest',
+  './freeupper.png',
+  './favicon.ico',
   './icon-192.png',      // generated icons
   './icon-512.png',
   './apple-touch-icon.png'
 ];
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(URLS_TO_CACHE))
-  );
-});
-
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
-        .map(key => caches.delete(key))
-    ))
-  );
-});
-
-// Only bundled static assets may enter the runtime cache. Never cache HTML
-// fetched for a viewer, media responses, previews, or unknown same-origin URLs.
-function staticAsset(path) {
-  return /^\/[^/]+\.(?:js|css|png|ico|svg)$/.test(path) ||
-    /^\/js\/[A-Za-z0-9_./-]+\.(?:js|css)$/.test(path) ||
-    /^\/locales\/[A-Za-z0-9_-]+\.json$/.test(path) ||
-    /^\/(?:assets|themes)\/[A-Za-z0-9_./-]+\.(?:png|jpg|jpeg|webp|svg)$/.test(path) ||
-    path === '/manifest.webmanifest';
+// The Cloudflare build replaces these declarations with a content-derived
+// release and SHA-256 inventory after all browser transformations are complete.
+const RELEASE_INTEGRITY = null;
+const RUNTIME_CACHE = CACHE_NAME + '-public-images';
+const IMAGE_LIMIT = 48;
+const IMAGE_BYTES = 2 * 1024 * 1024;
+const IMAGE_TTL = 24 * 60 * 60 * 1000;
+const shellPaths = new Set([...URLS_TO_CACHE.map(path => new URL(path, self.location.origin).pathname), ...Object.keys(RELEASE_INTEGRITY || {})]);
+function eligible(response) {
+  return response.status === 200 && response.type !== 'opaque' &&
+    !response.redirected && !/no-store|private/i.test(response.headers.get('Cache-Control') || '') &&
+    !response.headers.has('Set-Cookie') && !response.headers.has('Content-Range') &&
+    !/authorization|cookie|\*/i.test(response.headers.get('Vary') || '');
 }
-
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-  const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
-  if (url.pathname === '/api' || url.pathname.startsWith('/api/') ||
-      /^\/(?:u|p|v)(?:\/|$)/.test(url.pathname) || url.pathname.startsWith('/@') ||
-      event.request.headers.has('Authorization')) return;
-
-  const documentPath = self.FreeUpperRoutes.documentPath(url.pathname);
-  if (event.request.mode === 'navigate' || documentPath || url.pathname.endsWith('.html')) {
-    // Cache only install-time static shells. Search parameters choose app state,
-    // never a different cached viewer. Unknown pages get no Home fallback.
-    // Managed tabs use install-time public HTML shells immediately. Runtime
-    // viewer HTML is never cached, and deep links keep their network routing.
-    if (url.searchParams.get('fuMounted') === '1' && documentPath) {
-      event.respondWith((async () => {
-        const cache = await caches.open(CACHE_NAME);
-        return (await cache.match(documentPath)) || fetch(event.request);
-      })());
-      return;
+async function verified(response, path) {
+  if (!eligible(response)) throw new Error('Unsafe shell response');
+  if (RELEASE_INTEGRITY) {
+    const digest = await crypto.subtle.digest('SHA-256', await response.clone().arrayBuffer());
+    const hex = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    if (hex !== RELEASE_INTEGRITY[path]) throw new Error('Release mismatch');
+  }
+  return response;
+}
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const alreadyExisted = (await caches.keys()).includes(CACHE_NAME);
+    const cache = await caches.open(CACHE_NAME);
+    if (!RELEASE_INTEGRITY) {
+      if (!['localhost', '127.0.0.1', '[::1]'].includes(self.location.hostname)) throw new Error('Build a verified shell release before publishing');
+      return cache.addAll(URLS_TO_CACHE);
     }
-    event.respondWith(fetch(event.request).catch(async () => {
-      if (!documentPath) return Response.error();
-      const cache = await caches.open(CACHE_NAME);
-      return (await cache.match(documentPath)) || Response.error();
-    }));
+    try {
+      const paths = URLS_TO_CACHE.map(path => new URL(path, self.location.origin).pathname);
+      for (let i = 0; i < paths.length; i += 4) {
+        await Promise.all(paths.slice(i, i + 4).map(async path => {
+          const response = await fetch(new Request(new URL(path, self.location.origin), {
+            credentials: 'omit', cache: 'reload', redirect: 'error'
+          }));
+          await cache.put(path, await verified(response, path));
+        }));
+      }
+    } catch (error) {
+      // An app-only/Firebase entry-point switch can install the same release
+      // again. Never delete an existing active cache if that reinstall fails.
+      if (!alreadyExisted) await caches.delete(CACHE_NAME);
+      throw error;
+    }
+  })());
+});
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys
+    .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME && key !== RUNTIME_CACHE)
+    .map(key => caches.delete(key)))));
+});
+// No forced activation or claim: a waiting release must not replace a running
+// composer or mix its dependencies with another release.
+async function releaseResource(path, request) {
+  // Storage is an optimization. Open/read/delete failures must not suppress a
+  // network response whose bytes still belong to this verified release.
+  let cache;
+  try {
+    cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(path, {ignoreSearch: !RELEASE_INTEGRITY});
+    if (cached) {
+      try { return RELEASE_INTEGRITY ? await verified(cached, path) : cached; }
+      catch (_) { try { await cache.delete(path); } catch (_) {} }
+    }
+  } catch (_) {}
+  try {
+    const networkRequest = RELEASE_INTEGRITY
+      ? new Request(new URL(path, self.location.origin), {credentials:'omit', cache:'reload', redirect:'error'})
+      : request;
+    const response = await verified(await fetch(networkRequest), path);
+    try { await cache?.put(path, response.clone()); } catch (_) {}
+    return response;
+  } catch (_) {
+    if (path.endsWith('.html')) {
+      try {
+        const fallback = await cache?.match('/offline.html');
+        if (fallback) return await verified(fallback, '/offline.html');
+      } catch (_) {}
+    }
+    return Response.error();
+  }
+}
+// Human public-identity URLs load the same verified static Profile shell;
+// viewer data still comes from authorized APIs. Crawler/preview APIs bypass SW.
+function releaseDocument(path) {
+  return self.FreeUpperRoutes.documentPath(path) ||
+    (/^\/(?:@[^/]+|u\/[^/]+)\/?$/.test(path) ? '/profile.html' : null) ||
+    (shellPaths.has(path) && path.endsWith('.html') ? path : null);
+}
+async function releaseAsset(event, path) {
+  if (event.clientId && self.clients?.get) {
+    try {
+      const client = await self.clients.get(event.clientId);
+      // Dynamic share/unknown documents are network-backed, so their mutable
+      // assets must also bypass old pinned bytes (including HTTP cache reuse).
+      if (!client) return Response.error();
+      if (!releaseDocument(new URL(client.url).pathname)) {
+        return fetch(new Request(event.request, {cache:'reload'}));
+      }
+    } catch (_) { return Response.error(); }
+  }
+  return releaseResource(path, event.request);
+}
+// Reserved opt-in namespace. No existing user/avatar/media endpoint qualifies.
+let imageQueue = Promise.resolve();
+async function publicImage(request) {
+  const cache = await caches.open(RUNTIME_CACHE);
+  const cached = await cache.match(request);
+  const stored = Number(cached?.headers.get('X-FreeUpper-Cached-At'));
+  if (cached && stored > 0 && Date.now() - stored < IMAGE_TTL && Date.now() < Number(cached.headers.get('X-FreeUpper-Expires-At'))) return cached;
+  if (cached) await cache.delete(request);
+  const response = await fetch(request);
+  const control = response.headers.get('Cache-Control') || '';
+  if (eligible(response) && response.headers.get('X-FreeUpper-Public-Cache') === 'image-v1' &&
+      /\bpublic\b/i.test(control) && /max-age=[1-9]/i.test(control) &&
+      !/no-cache/i.test(control) && !response.headers.has('Vary') &&
+      /^image\/(?:png|jpeg|webp|avif|gif)$/.test(response.headers.get('Content-Type') || '')) {
+    const reader = response.clone().body.getReader();
+    const chunks = []; let size = 0;
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > IMAGE_BYTES) { reader.cancel().catch(() => {}); return response; }
+      chunks.push(value);
+    }
+    const headers = new Headers(response.headers);
+    headers.set('X-FreeUpper-Cached-At', String(Date.now()));
+    const ttl = Math.min(IMAGE_TTL, Number(control.match(/(?:^|[,\s])max-age=(\d+)/i)?.[1] || 0) * 1000);
+    headers.set('X-FreeUpper-Expires-At', String(Date.now() + ttl));
+    imageQueue = imageQueue.catch(() => {}).then(async () => {
+      try {
+        await cache.delete(request);
+        const keys = await cache.keys();
+        for (const key of keys.slice(0, Math.max(0, keys.length - IMAGE_LIMIT + 1))) await cache.delete(key);
+        await cache.put(request, new Response(new Blob(chunks), {headers}));
+      } catch (_) { await caches.delete(RUNTIME_CACHE).catch(() => {}); }
+    });
+    await imageQueue;
+  }
+  return response;
+}
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || request.headers.has('Authorization') || request.headers.has('Cookie') ||
+      request.headers.has('Range') || request.headers.has('Upgrade') || request.cache === 'no-store' ||
+      /^\/api(?:\/|$)/.test(url.pathname)) return;
+  const isIdentity = /^\/(?:@[^/]+|u\/[^/]+)\/?$/.test(url.pathname);
+  if (/^\/(?:u|p|v)(?:\/|$)/.test(url.pathname) || url.pathname.startsWith('/@')) {
+    if (!(request.mode === 'navigate' && isIdentity)) return;
+  }
+  const documentPath = request.mode === 'navigate' ? releaseDocument(url.pathname)
+    : self.FreeUpperRoutes.documentPath(url.pathname);
+  if (documentPath) {
+    event.respondWith(releaseResource(documentPath, request));
     return;
   }
-  if (!staticAsset(url.pathname)) return;
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    const cached = await cache.match(event.request);
-    if (cached) return cached;
-    const response = await fetch(event.request);
-    if (response.status === 200 && response.type === 'basic' &&
-        !/no-store|private/i.test(response.headers.get('Cache-Control') || '')) {
-      // Extend the event lifetime; do not leave cache writes floating.
-      event.waitUntil(cache.put(event.request, response.clone()));
-    }
-    return response;
-  })());
+  if (shellPaths.has(url.pathname) || (!RELEASE_INTEGRITY && /^\/locales\/[A-Za-z0-9_-]+\.json$/.test(url.pathname))) {
+    event.respondWith(releaseAsset(event, url.pathname));
+    return;
+  }
+  if (url.pathname.startsWith('/public-cache/images/') && !url.search && request.credentials === 'omit') {
+    event.respondWith(publicImage(request).catch(() => fetch(request)));
+    return;
+  }
+  if (request.mode === 'navigate') event.respondWith(fetch(request).catch(() => Response.error()));
 });
