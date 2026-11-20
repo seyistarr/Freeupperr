@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {chromium} from '@playwright/test';
+import {chromium,webkit} from '@playwright/test';
+const chatEngine=process.env.FREEUPPER_CHAT_ENGINE||'chromium';
+assert(['chromium','webkit'].includes(chatEngine),'Unsupported chat browser engine');
 const html=readFileSync('chat.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'');
 let js=readFileSync('chat.js','utf8');
 js=js.slice(0,js.lastIndexOf('    waitForSupabase(function(client)'))+`
@@ -26,7 +28,7 @@ const convs=[{id:'a',otherUserId:'peer',otherUser:{id:'peer',display_name:'Ada'}
  {id:'b',otherUserId:'other',otherUser:{id:'other',display_name:'Bob'},is_group:false}];
 const msg=(id,fields={})=>({id,conversation_id:'a',sender_id:'self',created_at:'2026-11-15T10:00:00Z',text:'Hello',message_type:'text',message_reads:[],...fields});
 async function fixture(viewport,run){
- const browser=await chromium.launch({executablePath:process.env.FREEUPPER_CHROMIUM||undefined,args:['--no-sandbox']});
+ const browser=await (chatEngine==='webkit'?webkit:chromium).launch({executablePath:chatEngine==='chromium'?(process.env.FREEUPPER_CHROMIUM||undefined):undefined,args:chatEngine==='chromium'?['--no-sandbox']:[]});
  try{
   const page=await browser.newPage({viewport});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));

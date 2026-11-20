@@ -3,7 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { chromium } from '@playwright/test';
+import { chromium, webkit } from '@playwright/test';
+const chatEngine=process.env.FREEUPPER_CHAT_ENGINE||'chromium';
+assert(['chromium','webkit'].includes(chatEngine),'Unsupported chat browser engine');
 
 const [html, js] = await Promise.all([
   readFile('chat.html', 'utf8'), readFile('chat.js', 'utf8')
@@ -44,8 +46,8 @@ const harness = `
 ` + productionHandlers;
 
 async function withPage(viewport, callback, reducedMotion = 'no-preference') {
-  const browser = await chromium.launch({ headless: true,
-    executablePath: process.env.FREEUPPER_CHROMIUM || undefined, args: ['--no-sandbox'] });
+  const browser = await (chatEngine==='webkit'?webkit:chromium).launch({ headless: true,
+    executablePath: chatEngine==='chromium'?(process.env.FREEUPPER_CHROMIUM || undefined):undefined, args: chatEngine==='chromium'?['--no-sandbox']:[] });
   try {
     const page = await browser.newPage({ viewport, reducedMotion });
     const errors = [];
