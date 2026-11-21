@@ -516,12 +516,7 @@
             type === 'document' ? '📄 Document' : 'Media';
     }
 
-    function getVerifiedBadge(status) {
-        if (!status || status === 'none' || status === 'pending') return '';
-        const label = status === 'official' ? 'Official' : status === 'staff' ? 'Staff' : status === 'business' ?
-            'Business' : 'Verified';
-        return `<span class="mini-badge" title="${label}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>`;
-    }
+    function getVerifiedBadge(status) { return window.getVerifiedBadgeHTML(status, 'sm'); }
 
     // ═══════════════════════════════════════════════════════════════════
     // ═══ CHANGE A: chat-space helpers (online + receipts + emoji run) ═══
