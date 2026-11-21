@@ -1,0 +1,179 @@
+{
+  "project": "jmjtqidirpmnegzvmiaq",
+  "method": "SELECT-only",
+  "privileges": {
+    "columns": [
+      {
+        "data_type": "uuid",
+        "column_name": "id",
+        "is_nullable": "NO"
+      },
+      {
+        "data_type": "uuid",
+        "column_name": "conversation_id",
+        "is_nullable": "NO"
+      },
+      {
+        "data_type": "uuid",
+        "column_name": "user_id",
+        "is_nullable": "NO"
+      },
+      {
+        "data_type": "uuid",
+        "column_name": "source_id",
+        "is_nullable": "NO"
+      },
+      {
+        "data_type": "text",
+        "column_name": "event",
+        "is_nullable": "NO"
+      },
+      {
+        "data_type": "text",
+        "column_name": "kind",
+        "is_nullable": "YES"
+      },
+      {
+        "data_type": "text",
+        "column_name": "stage",
+        "is_nullable": "YES"
+      },
+      {
+        "data_type": "boolean",
+        "column_name": "plural",
+        "is_nullable": "NO"
+      },
+      {
+        "data_type": "boolean",
+        "column_name": "active",
+        "is_nullable": "NO"
+      },
+      {
+        "data_type": "bigint",
+        "column_name": "sequence",
+        "is_nullable": "NO"
+      },
+      {
+        "data_type": "timestamp with time zone",
+        "column_name": "updated_at",
+        "is_nullable": "NO"
+      },
+      {
+        "data_type": "timestamp with time zone",
+        "column_name": "expires_at",
+        "is_nullable": "NO"
+      }
+    ],
+    "indexes": [
+      {
+        "indexdef": "CREATE UNIQUE INDEX chat_activity_pkey ON public.chat_activity USING btree (id)",
+        "indexname": "chat_activity_pkey"
+      },
+      {
+        "indexdef": "CREATE UNIQUE INDEX chat_activity_conversation_id_user_id_source_id_event_key ON public.chat_activity USING btree (conversation_id, user_id, source_id, event)",
+        "indexname": "chat_activity_conversation_id_user_id_source_id_event_key"
+      },
+      {
+        "indexdef": "CREATE INDEX chat_activity_user_expiry_idx ON public.chat_activity USING btree (user_id, expires_at)",
+        "indexname": "chat_activity_user_expiry_idx"
+      },
+      {
+        "indexdef": "CREATE INDEX chat_activity_expiry_idx ON public.chat_activity USING btree (expires_at)",
+        "indexname": "chat_activity_expiry_idx"
+      }
+    ],
+    "constraints": [
+      {
+        "name": "chat_activity_check",
+        "definition": "CHECK (((expires_at > updated_at) AND (expires_at <= (updated_at + '00:00:07'::interval))))"
+      },
+      {
+        "name": "chat_activity_check1",
+        "definition": "CHECK ((((event = 'typing'::text) AND (kind IS NULL) AND (stage IS NULL)) OR ((event = 'activity'::text) AND ((active AND (kind IS NOT NULL)) OR (NOT active)))))"
+      },
+      {
+        "name": "chat_activity_conversation_id_fkey",
+        "definition": "FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "chat_activity_conversation_id_user_id_source_id_event_key",
+        "definition": "UNIQUE (conversation_id, user_id, source_id, event)"
+      },
+      {
+        "name": "chat_activity_event_check",
+        "definition": "CHECK ((event = ANY (ARRAY['typing'::text, 'activity'::text])))"
+      },
+      {
+        "name": "chat_activity_kind_check",
+        "definition": "CHECK ((kind = ANY (ARRAY['recording'::text, 'photo'::text, 'video'::text, 'media'::text])))"
+      },
+      {
+        "name": "chat_activity_pkey",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "chat_activity_sequence_check",
+        "definition": "CHECK (((sequence >= 1) AND (sequence <= '9007199254740991'::bigint)))"
+      },
+      {
+        "name": "chat_activity_stage_check",
+        "definition": "CHECK ((stage = ANY (ARRAY['preparing'::text, 'uploading'::text])))"
+      },
+      {
+        "name": "chat_activity_user_id_fkey",
+        "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+      }
+    ],
+    "table_privileges": [
+      {
+        "role": "anon",
+        "table": "public.chat_activity",
+        "delete": false,
+        "insert": false,
+        "select": false,
+        "update": false
+      },
+      {
+        "role": "anon",
+        "table": "public.message_reads",
+        "delete": false,
+        "insert": false,
+        "select": false,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "table": "public.chat_activity",
+        "delete": false,
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "table": "public.message_reads",
+        "delete": true,
+        "insert": true,
+        "select": true,
+        "update": true
+      }
+    ],
+    "schema_privileges": [
+      {
+        "role": "anon",
+        "usage": false,
+        "create": false
+      },
+      {
+        "role": "authenticated",
+        "usage": true,
+        "create": false
+      }
+    ]
+  },
+  "canary_inventory": {
+    "tagged_accounts": [],
+    "candidate_conversations": []
+  },
+  "inventory_scope": "Known chat_canary_run/purpose markers and chatcanary naming; not an assertion about differently named fixtures"
+}

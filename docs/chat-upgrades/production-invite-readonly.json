@@ -1,0 +1,12 @@
+{
+  "project": "jmjtqidirpmnegzvmiaq",
+  "method": "SELECT-only catalog",
+  "functions": [
+    {
+      "proname": "get_or_create_invite_code",
+      "definition": "CREATE OR REPLACE FUNCTION public.get_or_create_invite_code(p_conversation_id uuid)\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\r\ndeclare\r\n  v_role text;\r\n  v_can_invite text;\r\n  v_code text;\r\nbegin\r\n  select role into v_role from public.conversation_members\r\n  where conversation_id = p_conversation_id and user_id = auth.uid();\r\n\r\n  if v_role is null then\r\n    raise exception 'Not a member of this group';\r\n  end if;\r\n\r\n  select permissions->>'invite_via_link' into v_can_invite\r\n  from public.conversations where id = p_conversation_id;\r\n\r\n  if v_can_invite = 'admins' and v_role not in ('owner', 'admin') then\r\n    raise exception 'Only admins can generate an invite link';\r\n  end if;\r\n\r\n  select invite_code into v_code from public.conversations where id = p_conversation_id;\r\n\r\n  if v_code is null then\r\n    v_code := substr(md5(random()::text || clock_timestamp()::text), 1, 10);\r\n    update public.conversations set invite_code = v_code where id = p_conversation_id;\r\n  end if;\r\n\r\n  return v_code;\r\nend;\r\n$function$\n",
+      "proacl": "{=X/postgres,postgres=X/postgres,authenticated=X/postgres}",
+      "proconfig": null
+    }
+  ]
+}

@@ -3,7 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { chromium } from '@playwright/test';
+import { chromium, webkit } from '@playwright/test';
+const chatEngine=process.env.FREEUPPER_CHAT_ENGINE||'chromium';
+assert(['chromium','webkit'].includes(chatEngine),'Unsupported chat browser engine');
 
 const [html, js] = await Promise.all([
   readFile('chat.html', 'utf8'), readFile('chat.js', 'utf8')
@@ -16,7 +18,7 @@ function requireFragment(pattern, label) {
 // Use the real page's inline styles, rather than a replacement UI stylesheet.
 const inlineStyles = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)]
   .map(m => m[1]).join('\n');
-const tabs = requireFragment(/<div class="cl-tabs" id="clTabs"[\s\S]*?<\/div>/, 'chat tabs');
+const tabs = requireFragment(/<div class="cl-tabs-wrap" id="clTabsWrap"[\s\S]*?<\/button><\/div>/, 'chat tabs');
 const search = requireFragment(/<div class="search-box" id="sbSearchBox">[\s\S]*?<\/div>/, 'chat search');
 const newActions = requireFragment(/<div class="nm-actions">[\s\S]*?<\/div>/, 'New Message actions');
 const header = requireFragment(/<header class="chat-header">[\s\S]*?<\/header>/, 'chat header');
@@ -26,7 +28,7 @@ const tabEnd = js.indexOf('    function isIncomingRequest(', tabStart);
 const switchStart = js.indexOf('    window.setChatTab = function(tab)');
 const switchEnd = js.indexOf('    function updateChatTabCounts()', switchStart);
 assert.ok(tabStart >= 0 && tabEnd > tabStart && switchStart >= 0 && switchEnd > switchStart);
-const productionHandlers = js.slice(tabStart, tabEnd) + '\n' + js.slice(switchStart, switchEnd);
+const productionHandlers = js.slice(tabStart, tabEnd) + '\n' + js.slice(switchStart, switchEnd) + '\n' + js.slice(js.indexOf('    let chatTabsSync ='), js.indexOf('    function renderConversations('));
 const markup = '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
   '<style>' + inlineStyles + '</style><body>' + header + '<div class="conversations-sidebar">' + sidebarTop +
   tabs + search + '<div id="conversationList"></div>' +
@@ -44,8 +46,8 @@ const harness = `
 ` + productionHandlers;
 
 async function withPage(viewport, callback, reducedMotion = 'no-preference') {
-  const browser = await chromium.launch({ headless: true,
-    executablePath: process.env.FREEUPPER_CHROMIUM || undefined, args: ['--no-sandbox'] });
+  const browser = await (chatEngine==='webkit'?webkit:chromium).launch({ headless: true,
+    executablePath: chatEngine==='chromium'?(process.env.FREEUPPER_CHROMIUM || undefined):undefined, args: chatEngine==='chromium'?['--no-sandbox']:[] });
   try {
     const page = await browser.newPage({ viewport, reducedMotion });
     const errors = [];
@@ -161,7 +163,7 @@ test('New Message renders one pair of shortcut actions and no duplicate search r
   const render = js.slice(js.indexOf('    function renderUserSearchDefault()'),
     js.indexOf('    function userRowHtml(', js.indexOf('    function renderUserSearchDefault()')));
   assert.doesNotMatch(render, /openCreateGroupModal\(|openOrCreateFreeUpperNote\(/);
-  assert.match(html, /chat\.js\?v=chat-ui-scroll-v2/);
+  assert.match(html, /chat\.js\?v=chat-security-v4/);
 });
 test('Archive reuses themed, ordered, independent 3D conversation cards', async () => {
   assert.match(html, /#fuArchivedModal \.conv-swipe-wrap\{/);

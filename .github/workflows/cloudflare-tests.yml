@@ -6,10 +6,11 @@ on:
 permissions:
   contents: read
 jobs:
-  worker:
+  regressions:
     # Playwright 1.56 WebKit is not supported on the ubuntu-26.04 latest image.
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # Full browser/SQL regressions plus fresh WebKit dependencies exceed 10 minutes.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,12 +29,6 @@ jobs:
         env:
           FREEUPPER_TEST_BUNDLE: .wrangler/test-build
           FREEUPPER_CHROMIUM: /usr/bin/google-chrome
-      - name: Install iPhone-compatible WebKit
-        run: npx playwright install --with-deps webkit
-      - name: Verify retained navigation in mobile WebKit
-        run: node --test --test-isolation=none tests/five-tab-navigation.test.js tests/profile-mounted-navigation.test.js
-        env:
-          FREEUPPER_PROFILE_ENGINE: webkit
       - name: Verify static assets and disabled routes in workerd
         run: |
           npx wrangler dev --local --port 8787 > /tmp/freeupper-dev.log 2>&1 &
@@ -46,6 +41,43 @@ jobs:
           FREEUPPER_TEST_ORIGIN=http://localhost:8787 FREEUPPER_CHROMIUM=/usr/bin/google-chrome npm run test:cloudflare
         env:
           WRANGLER_SEND_METRICS: 'false'
+
+  mobile-webkit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Match the locked Playwright package. Browsers and OS libraries are preinstalled.
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify chat and retained navigation in mobile WebKit
+        run: node --test --test-isolation=none tests/five-tab-navigation.test.js tests/profile-mounted-navigation.test.js tests/chat-premium-browser.acceptance.mjs tests/chat-upgrades-browser.test.js
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+          FREEUPPER_PROFILE_ENGINE: webkit
+          FREEUPPER_CHAT_ENGINE: webkit
+
+  # Preserve the existing required status and production dependency. Both suites must pass.
+  worker:
+    if: always()
+    needs: [regressions, mobile-webkit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require regression/runtime and WebKit success
+        env:
+          REGRESSIONS_RESULT: ${{ needs.regressions.result }}
+          WEBKIT_RESULT: ${{ needs.mobile-webkit.result }}
+        run: |
+          test "$REGRESSIONS_RESULT" = success
+          test "$WEBKIT_RESULT" = success
 
   deploy-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

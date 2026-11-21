@@ -74,6 +74,304 @@
     let typingExpiryTimers = new Map();
     let myTypingActive = false;
 
+    // ═══ FIX 7: live activity (recording / sending media) ═══
+    const ACTIVITY_KINDS = ['recording', 'photo', 'video', 'media'];
+    const ACTIVITY_STAGES = ['preparing', 'uploading'];
+    const ACTIVITY_HEARTBEAT_MS = 3000;
+    const ACTIVITY_TTL_MS = 7000;
+    const activityMap = new Map();
+    const activityProfileCache = new Map();
+    const activityEventVersions = new Map();
+    let activityAllowedIds = null;
+    let activitySession = 0;
+    let activityConnected = false;
+    let activityChannelConvId = null;
+    let myActivity = null;
+    const activitySourceId = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+    let activitySequence = 0;
+    let activitySendQueue = Promise.resolve();
+    let activityRecheckTimer = null;
+    const activitySources = new Map();
+    const activityRowSequences = new Map();
+
+    function sendActivityEvent(channel, event, payload, convId = activityChannelConvId) {
+        if (!channel || !convId || !sb || typeof sb.rpc !== 'function') return Promise.resolve();
+        // Identity is assigned by the authenticated RPC, never from payload.userId.
+        const args = { p_conversation_id: convId, p_source_id: activitySourceId,
+            p_sequence: ++activitySequence, p_event: event,
+            p_kind: event === 'activity' ? payload.kind || null : null,
+            p_stage: event === 'activity' ? payload.stage || null : null,
+            p_plural: event === 'activity' && !!payload.plural,
+            p_active: event === 'typing' ? !!payload.isTyping : !!payload.kind };
+        const senderId = currentUserId;
+        const queuedAt = Date.now();
+        // Keep start/stop order even when requests take different amounts of time.
+        activitySendQueue = activitySendQueue.catch(() => {}).then(async () => {
+            if (currentUserId !== senderId || (args.p_active && Date.now() - queuedAt > ACTIVITY_TTL_MS)) return;
+            const { error } = await sb.rpc('publish_chat_activity', args);
+            if (error) throw error;
+        }).catch(() => { /* cosmetic activity fails closed; messaging is independent */ });
+        return activitySendQueue;
+    }
+    function broadcastActivity(kind, stage, plural, operation = myActivity) {
+        if (!operation || !currentUserId || operation.session !== activitySession ||
+            operation.channel !== typingChannel || !activityConnected) return;
+        sendActivityEvent(operation.channel, 'activity', {
+            kind: kind || null, stage: stage || null, plural: !!plural
+        }, operation.convId);
+    }
+    function startActivity(kind, stage, plural, convId = selectedConversationId) {
+        const conv = conversations.find(c => c.id === convId);
+        if (!ACTIVITY_KINDS.includes(kind) || !typingChannel || !conv || conv.is_note ||
+            convId !== selectedConversationId || convId !== activityChannelConvId) return null;
+        stopActivity();
+        const operation = { kind, stage: stage || null, plural: !!plural,
+            channel: typingChannel, session: activitySession, convId, timer: null };
+        myActivity = operation;
+        broadcastActivity(kind, operation.stage, operation.plural, operation);
+        operation.timer = setInterval(() => {
+            broadcastActivity(operation.kind, operation.stage, operation.plural, operation);
+        }, ACTIVITY_HEARTBEAT_MS);
+        return operation;
+    }
+    function setActivityStage(stage, operation = myActivity) {
+        if (!operation || operation !== myActivity || operation.session !== activitySession ||
+            !ACTIVITY_STAGES.includes(stage) || operation.stage === stage) return;
+        operation.stage = stage;
+        broadcastActivity(operation.kind, stage, operation.plural, operation);
+    }
+    function stopActivity(operation = myActivity) {
+        if (!operation) return;
+        clearInterval(operation.timer);
+        operation.timer = null;
+        if (operation !== myActivity) return;
+        broadcastActivity(null, null, false, operation);
+        myActivity = null;
+    }
+    function activityPeerAllowed(uid) {
+        const conv = currentConv();
+        if (!conv || conv.is_note || conv.id !== activityChannelConvId) return false;
+        if (conv.is_group) return !!activityAllowedIds && activityAllowedIds.has(uid);
+        return uid === conv.otherUserId;
+    }
+    async function activityProfile(uid) {
+        const conv = currentConv();
+        if (conv && !conv.is_group && conv.otherUser && conv.otherUserId === uid) return conv.otherUser;
+        if (activityProfileCache.has(uid)) return activityProfileCache.get(uid);
+        const { data } = await sb.from('profiles').select('id, display_name, username, avatar_url').eq('id', uid).maybeSingle();
+        if (data) activityProfileCache.set(uid, data);
+        return data || null;
+    }
+    function refreshActivityUI() {
+        renderTypingIndicator();
+        const c = currentConv();
+        if (c && !c.is_note) renderPartnerStatus(c);
+    }
+    function dropActivity(uid) {
+        const a = activityMap.get(uid);
+        if (a) { clearTimeout(a.timer); activityMap.delete(uid); }
+        refreshActivityUI();
+    }
+    function clearActivityFor(uid) {
+        activitySources.forEach((state, key) => {
+            if (state.user_id === uid) { clearTimeout(state.timer); activitySources.delete(key); }
+        });
+        // Invalidate pending profile fetches as well as rendered state.
+        for (const event of ['typing', 'activity']) {
+            const key = event + ':' + uid;
+            activityEventVersions.set(key, (activityEventVersions.get(key) || 0) + 1);
+        }
+        const a = activityMap.get(uid);
+        if (a) { clearTimeout(a.timer); activityMap.delete(uid); }
+        typingUsersMap.delete(uid);
+        clearTimeout(typingExpiryTimers.get(uid)); typingExpiryTimers.delete(uid);
+        refreshActivityUI();
+    }
+    function clearAllActivity() {
+        clearInterval(activityRecheckTimer); activityRecheckTimer = null;
+        activitySources.forEach(state => clearTimeout(state.timer)); activitySources.clear();
+        activityRowSequences.clear();
+        activityMap.forEach(a => clearTimeout(a.timer)); activityMap.clear();
+        typingExpiryTimers.forEach(t => clearTimeout(t)); typingExpiryTimers.clear();
+        typingUsersMap.clear();
+        activityEventVersions.forEach((v, k) => activityEventVersions.set(k, v + 1));
+        refreshActivityUI();
+    }
+    async function applyActivityEvent(payload, session) {
+        if (session !== activitySession || !activityConnected || !payload || typeof payload.userId !== 'string' || payload.userId === currentUserId) return;
+        const uid = payload.userId;
+        if (!activityPeerAllowed(uid)) return;
+        const key = 'activity:' + uid, version = (activityEventVersions.get(key) || 0) + 1;
+        activityEventVersions.set(key, version);
+        if (!payload.kind) { dropActivity(uid); return; }
+        if (!ACTIVITY_KINDS.includes(payload.kind) || (payload.stage && !ACTIVITY_STAGES.includes(payload.stage))) return;
+        const receivedAt = Date.now();
+        let profile = activityMap.get(uid)?.profile || await activityProfile(uid);
+        if (session !== activitySession || !activityConnected || !activityPeerAllowed(uid) ||
+            activityEventVersions.get(key) !== version || !profile) return;
+        const remaining = Math.min(ACTIVITY_TTL_MS, payload.ttlMs ?? ACTIVITY_TTL_MS) - (Date.now() - receivedAt);
+        if (remaining <= 0) return;
+        const prev = activityMap.get(uid);
+        if (prev) clearTimeout(prev.timer);
+        activityMap.set(uid, {
+            profile, kind: payload.kind, stage: payload.stage || null, plural: !!payload.plural,
+            timer: setTimeout(() => { if (session === activitySession) dropActivity(uid); }, remaining)
+        });
+        refreshActivityUI();
+    }
+    async function onRemoteTyping(payload, session) {
+        if (session !== activitySession || !activityConnected || !payload || typeof payload.userId !== 'string' || payload.userId === currentUserId) return;
+        const uid = payload.userId;
+        if (!activityPeerAllowed(uid)) return;
+        const key = 'typing:' + uid, version = (activityEventVersions.get(key) || 0) + 1;
+        activityEventVersions.set(key, version);
+        if (payload.isTyping === true) {
+            const receivedAt = Date.now();
+            const profile = typingUsersMap.get(uid) || await activityProfile(uid);
+            if (session !== activitySession || !activityConnected || !activityPeerAllowed(uid) || activityEventVersions.get(key) !== version) return;
+            const remaining = Math.min(4000, payload.ttlMs ?? 4000) - (Date.now() - receivedAt);
+            if (remaining <= 0) return;
+            typingUsersMap.set(uid, profile || { id: uid, display_name: 'Member' });
+            clearTimeout(typingExpiryTimers.get(uid));
+            typingExpiryTimers.set(uid, setTimeout(() => {
+                if (session !== activitySession) return;
+                typingUsersMap.delete(uid); typingExpiryTimers.delete(uid); refreshActivityUI();
+            }, remaining));
+        } else {
+            typingUsersMap.delete(uid);
+            clearTimeout(typingExpiryTimers.get(uid)); typingExpiryTimers.delete(uid);
+        }
+        refreshActivityUI();
+    }
+    function renderActivitySources(uid, session) {
+        if (session !== activitySession || !activityConnected) return;
+        const states = [...activitySources.values()].filter(s => s.user_id === uid && s.active && s.deadline > Date.now());
+        const activity = states.filter(s => s.event === 'activity').sort((a,b) => b.timestamp - a.timestamp)[0];
+        applyActivityEvent({ userId: uid, kind: activity?.kind || null, stage: activity?.stage || null,
+            plural: !!activity?.plural, ttlMs: activity ? activity.deadline - Date.now() : 0 }, session).catch(() => {});
+        const typing = states.filter(s => s.event === 'typing').sort((a,b) => b.deadline - a.deadline)[0];
+        onRemoteTyping({ userId: uid, isTyping: !!typing, ttlMs: typing ? typing.deadline - Date.now() : 0 }, session).catch(() => {});
+    }
+    function receiveActivityRow(row, session) {
+        if (session !== activitySession || !activityConnected || !row || row.conversation_id !== selectedConversationId ||
+            row.user_id === currentUserId || typeof row.user_id !== 'string' || typeof row.source_id !== 'string' ||
+            !activityPeerAllowed(row.user_id) || !['typing','activity'].includes(row.event) ||
+            !Number.isSafeInteger(row.sequence) || row.sequence < 1) return;
+        const key = row.user_id + ':' + row.source_id + ':' + row.event;
+        if ((activityRowSequences.get(key) || 0) >= row.sequence) return;
+        activityRowSequences.set(key, row.sequence);
+        const previous = activitySources.get(key);
+        if (previous) clearTimeout(previous.timer);
+        const expires = Date.parse(row.expires_at), timestamp = Date.parse(row.updated_at);
+        const ttl = Math.min(row.event === 'typing' ? 4000 : ACTIVITY_TTL_MS, expires - Date.now());
+        const state = { ...row, active: row.active === true && ttl > 0, timestamp,
+            deadline: Date.now() + Math.max(0, ttl), receivedAt: Date.now(), timer: null };
+        activitySources.set(key, state);
+        if (state.active) state.timer = setTimeout(() => {
+            state.active = false; renderActivitySources(row.user_id, session);
+        }, ttl);
+        renderActivitySources(row.user_id, session);
+    }
+    async function readActivitySnapshot(convId, session) {
+        const started = Date.now();
+        const { data, error } = await sb.rpc('get_chat_activity', { p_conversation_id: convId });
+        if (session !== activitySession || convId !== selectedConversationId) return false;
+        if (error || !Array.isArray(data)) {
+            // Authorization failures terminate our subscription; transient errors clear display only.
+            clearAllActivity();
+            if (error?.code === '42501') {
+                const old = typingChannel;
+                stopActivity(); myTypingActive = false; activityConnected = false;
+                typingChannel = null; activityChannelConvId = null;
+                if (old) Promise.resolve(sb.removeChannel(old)).catch(() => {});
+            }
+            return false;
+        }
+        const present = new Set(data.map(row => row.user_id + ':' + row.source_id + ':' + row.event));
+        activitySources.forEach((state,key) => {
+            if (state.receivedAt <= started && !present.has(key)) {
+                clearTimeout(state.timer); state.active = false; renderActivitySources(state.user_id,session);
+            }
+        });
+        data.forEach(row => receiveActivityRow(row, session));
+        return true;
+    }
+
+    function activityEntries() {
+        const out = [];
+        activityMap.forEach((a, uid) => out.push({ uid, name: getDisplayName(a.profile), avatar: getAvatar(a.profile),
+            kind: a.kind, stage: a.stage, plural: a.plural }));
+        typingUsersMap.forEach((p, uid) => { if (!activityMap.has(uid))
+            out.push({ uid, name: getDisplayName(p), avatar: getAvatar(p), kind: 'typing', stage: null, plural: false }); });
+        return out;
+    }
+    function activityPhrase(e) {
+        switch (e.kind) {
+            case 'recording': return 'is recording a voice note';
+            case 'photo': return (e.stage === 'preparing' ? 'is preparing ' : 'is sending ') + (e.plural ? 'photos' : 'a photo');
+            case 'video': return e.plural ? 'is sending videos' : 'is sending a video';
+            case 'media': return e.stage === 'preparing' ? 'is preparing media' : 'is sending media';
+            default: return 'is typing';
+        }
+    }
+    const ACTIVITY_PLURAL = { recording: 'are recording voice notes', photo: 'are sending photos',
+        video: 'are sending videos', media: 'are sending media', typing: 'are typing' };
+    function activitySummary(es) {
+        if (es.length === 1) return es[0].name + ' ' + activityPhrase(es[0]) + '…';
+        const kinds = [...new Set(es.map(e => e.kind))];
+        const who = es.length === 2 ? es[0].name + ' and ' + es[1].name
+            : es.length === 3 ? es[0].name + ', ' + es[1].name + ' and ' + es[2].name
+            : es[0].name + ', ' + es[1].name + ' and ' + (es.length - 2) + ' others';
+        if (kinds.length === 1) return who + ' ' + ACTIVITY_PLURAL[kinds[0]] + '…';
+        if (es.length === 2) return es[0].name + ' ' + activityPhrase(es[0]) + ', ' + es[1].name + ' ' + activityPhrase(es[1]) + '…';
+        return who + ' are active…';
+    }
+    function headerActivityText(es) {
+        const conv = currentConv();
+        if (conv && conv.is_group) return activitySummary(es);
+        const k = es[0].kind;
+        return window.fuT(k === 'recording' ? 'Recording voice note…'
+            : k === 'video' ? 'Sending video…' : k === 'media' ? 'Sending media…' : k === 'photo' ? 'Sending photo…' : 'Typing…');
+    }
+    const ACTIVITY_ICONS = {
+        recording: '<span class="act-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>',
+        photo: '<span class="act-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>',
+        video: '<span class="act-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>',
+        typing: '<span class="dots" aria-hidden="true"><span></span><span></span><span></span></span>'
+    };
+    ACTIVITY_ICONS.media = ACTIVITY_ICONS.photo;
+    function ensureActivityBar() {
+        let bar = document.getElementById('fuActivityBar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'fuActivityBar'; bar.className = 'act-bar'; bar.hidden = true;
+            bar.setAttribute('role', 'status'); bar.setAttribute('aria-live', 'polite');
+            messagesArea.insertAdjacentElement('afterend', bar);
+        }
+        return bar;
+    }
+
+
+
+    function renderTypingIndicator() {
+        const bar = ensureActivityBar();
+        const es = activityEntries();
+        if (!es.length) { bar.hidden = true; bar.innerHTML = ''; bar.dataset.key = ''; return; }
+        const text = activitySummary(es);
+        const kinds = [...new Set(es.map(e => e.kind))];
+        const iconKind = kinds.length === 1 ? kinds[0] : 'typing';
+        const key = text + '|' + iconKind + '|' + es.map(e => e.uid).join(',');
+        if (!bar.hidden && bar.dataset.key === key) return;
+        const nearBottom = messagesArea.scrollHeight - messagesArea.scrollTop - messagesArea.clientHeight < 90;
+        bar.dataset.key = key;
+        bar.innerHTML =
+            '<div class="act-avatars">' + es.slice(0, 3).map(e => '<img src="' + escapeChatAttribute(e.avatar) + '" alt="" ' + avatarErrAttr() + '>').join('') + '</div>' +
+            '<div class="act-pill">' + ACTIVITY_ICONS[iconKind] + '<span class="act-text">' + escapeHtml(text) + '</span></div>';
+        bar.hidden = false;
+        if (nearBottom) scrollToBottom();
+    }
+
     const viewOnceStateByMsg = new Map();
 
     function senderColorFor(userId) {
@@ -156,6 +454,10 @@
         return div.innerHTML;
     }
 
+    function escapeChatAttribute(value) {
+        return escapeHtml(String(value ?? '')).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function formatTime(iso) {
         if (window.FreeUpperTime) {
             return window.FreeUpperTime.formatLocalTime(iso, { hour: '2-digit', minute: '2-digit' });
@@ -232,9 +534,12 @@
 
     function receiptHtml(msg) {
         if (msg.failed) return '';
+        if (String(msg.id).startsWith('temp-')) {
+            return '<span class="read-receipt pending" title="Sending"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg></span>';
+        }
         const seen = (msg.message_reads || []).some(r => r.user_id !== currentUserId);
         return seen
-            ? '<span class="read-receipt read" title="Seen"><svg viewBox="0 0 24 24"><path d="M2 12.5l4.5 4.5L17 7"/><path d="M11.5 16.5l1 1L23 7"/></svg></span>'
+            ? '<span class="read-receipt read" title="Seen by a recipient"><svg viewBox="0 0 24 24"><path d="M2 12.5l4.5 4.5L17 7"/><path d="M11.5 16.5l1 1L23 7"/></svg></span>'
             : '<span class="read-receipt" title="Sent"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>';
     }
 
@@ -495,6 +800,15 @@
     function privateViewOnceEnabled() {
         return window.FREEUPPER_PRIVATE_VIEWONCE_ENABLED === true;
     }
+    async function verifyPrivateViewOnceCapability() {
+        if (!privateViewOnceEnabled() || !sb || typeof sb.rpc !== 'function') return false;
+        try {
+            const { data, error } = await sb.rpc('chat_private_view_once_capabilities');
+            return !error && data?.enabled === true && data.protocol_version === 1 &&
+                data.encrypted_storage === true && data.atomic_claim === true &&
+                data.atomic_reply === true && data.server_expiry === true;
+        } catch (e) { return false; }
+    }
     function markViewOnceConsumed(id, index = 0) {
         if (!viewOnceStateByMsg.has(id)) viewOnceStateByMsg.set(id, new Set());
         viewOnceStateByMsg.get(id).add(index);
@@ -541,6 +855,7 @@
     }
 
     async function loadViewOnceConsumptions(convId) {
+        const session = activitySession;
         viewOnceStateByMsg.clear();
         if (!currentUserId) return;
         const voMsgIds = messages
@@ -552,6 +867,7 @@
             .select('message_id, media_index')
             .eq('viewer_id', currentUserId)
             .in('message_id', voMsgIds);
+        if (session !== activitySession || convId !== selectedConversationId) return;
         if (error) { console.warn('view-once consumption load failed:', error); return; }
         (data || []).forEach(row => {
             if (!viewOnceStateByMsg.has(row.message_id)) viewOnceStateByMsg.set(row.message_id, new Set());
@@ -585,6 +901,8 @@
         document.getElementById('fuViewOnceConfirm')?.classList.remove('open');
         const msg = messages.find(m => m.id === messageId);
         if (!msg) return;
+        const openSession = activitySession;
+        const openConversationId = selectedConversationId;
         const item = msg.metadata?.media_items?.[index];
         if (!item) { showToast(window.fuT('Media unavailable'), 'r'); return; }
         if (msg.sender_id === currentUserId) {
@@ -592,13 +910,13 @@
             return;
         }
         if (msg.metadata?.private_asset === true) {
-            if (!privateViewOnceEnabled()) {
+            if (!await verifyPrivateViewOnceCapability()) {
                 showToast(window.fuT('Private media is temporarily unavailable'), 'o');
                 return;
             }
-            if (index !== 0) return;
+            if (index !== 0 || openSession !== activitySession || openConversationId !== selectedConversationId) return;
             try {
-                const { data, error } = await sb.functions.invoke('view-once-open', {
+                const { data, error, response } = await sb.functions.invoke('view-once-open', {
                     body: { message_id: messageId, media_index: 0 }
                 });
                 if (error) {
@@ -615,12 +933,18 @@
                     !/^(image\/(jpeg|png|webp)|video\/(mp4|quicktime|webm))$/.test(data.type)) {
                     throw new Error('Invalid private-media response');
                 }
+                if (openSession !== activitySession || openConversationId !== selectedConversationId) return;
+                const expiresAt = response?.headers?.get('x-freeupper-view-once-expires-at');
+                const expiry = Date.parse(expiresAt || '');
+                if (!Number.isFinite(expiry) || expiry <= Date.now() || expiry > Date.now() + 30000) {
+                    throw new Error('Missing or invalid private-media expiry');
+                }
                 const localUrl = URL.createObjectURL(data);
                 markViewOnceConsumed(messageId);
                 try {
                     openMediaLightbox([{ url: localUrl, type: item.type }], 0, messageId,
                         resolveMsgSenderName(msg.sender_id), msg.created_at,
-                        { viewOnce: true, expiresAt: null, blobUrl: localUrl });
+                        { viewOnce: true, expiresAt, blobUrl: localUrl });
                 } catch (e) {
                     URL.revokeObjectURL(localUrl);
                     throw e;
@@ -638,6 +962,7 @@
                 p_message_id: messageId, p_media_index: index
             });
             if (error) throw error;
+            if (openSession !== activitySession || openConversationId !== selectedConversationId) return;
             if (!data || data.status === 'already_viewed') {
                 markViewOnceConsumed(messageId, index);
                 showToast(window.fuT('This media has already been opened'), 'o');
@@ -932,11 +1257,12 @@
     };
 
     window.sendLbReply = function() {
+        const convId = selectedConversationId;
         const input = document.getElementById('lbReplyInput');
         const text = input.value.trim();
         if (!text || !lbMsgId) return;
         sendMessageToConv(text, 'text', null, lbMsgId).then(() => {
-            sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', selectedConversationId);
+            sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId);
             loadConversations();
         });
         input.value = '';
@@ -1178,6 +1504,8 @@
             const active = button.dataset.tab === tab;
             button.classList.toggle('active', active);
             button.setAttribute('aria-selected', String(active));
+            button.tabIndex = active ? 0 : -1;
+            if (active) { revealTab(button); convList.setAttribute('aria-labelledby', button.id); }
         });
         document.getElementById('sbTitle').textContent = TAB_META[tab].title;
         document.getElementById('sbSub').textContent = TAB_META[tab].sub;
@@ -1202,6 +1530,7 @@
             el.textContent = count > 99 ? '99+' : String(count);
             el.classList.toggle('hidden', count === 0);
         });
+        chatTabsSync();
     }
     // Do not allow client-side request transition until authorized database
     // RPCs are deployed; direct UPDATE would inherit overly broad legacy RLS.
@@ -1254,6 +1583,52 @@
     }
     convList.addEventListener('scroll', scheduleChat3D, { passive: true });
     window.addEventListener('resize', scheduleChat3D);
+    let chatTabsSync = function() {};
+    function revealTab(btn) {
+        const box = document.getElementById('clTabs');
+        if (!box || !btn) return;
+        const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        box.scrollTo({ left: Math.max(0, btn.offsetLeft - (box.clientWidth - btn.offsetWidth) / 2), behavior: reduce ? 'auto' : 'smooth' });
+    }
+    (function initChatTabs() {
+        const box = document.getElementById('clTabs'), wrap = document.getElementById('clTabsWrap');
+        if (!box || !wrap) return;
+        const prev = document.getElementById('clTabsPrev'), next = document.getElementById('clTabsNext');
+        const list = () => Array.from(box.querySelectorAll('.cl-tab'));
+        const smooth = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+        chatTabsSync = function() {
+            const max = box.scrollWidth - box.clientWidth;
+            wrap.classList.toggle('can-prev', box.scrollLeft > 2);
+            wrap.classList.toggle('can-next', box.scrollLeft < max - 2);
+        };
+        box.addEventListener('scroll', chatTabsSync, { passive: true });
+        window.addEventListener('resize', chatTabsSync);
+        prev.addEventListener('click', () => box.scrollBy({ left: -box.clientWidth * 0.6, behavior: smooth() }));
+        next.addEventListener('click', () => box.scrollBy({ left: box.clientWidth * 0.6, behavior: smooth() }));
+        box.addEventListener('wheel', e => {
+            const max = box.scrollWidth - box.clientWidth;
+            if (max <= 0 || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+            if ((e.deltaY > 0 && box.scrollLeft >= max - 1) || (e.deltaY < 0 && box.scrollLeft <= 0)) return;
+            e.preventDefault();
+            box.scrollBy({ left: e.deltaY, behavior: 'auto' });
+        }, { passive: false });
+        box.addEventListener('keydown', e => {
+            const tabs = list(), cur = tabs.indexOf(document.activeElement);
+            if (cur < 0) return;
+            let idx;
+            if (e.key === 'ArrowRight') idx = (cur + 1) % tabs.length;
+            else if (e.key === 'ArrowLeft') idx = (cur - 1 + tabs.length) % tabs.length;
+            else if (e.key === 'Home') idx = 0;
+            else if (e.key === 'End') idx = tabs.length - 1;
+            else return;
+            e.preventDefault();
+            tabs.forEach((t, i) => { t.tabIndex = i === idx ? 0 : -1; });
+            tabs[idx].focus();
+            revealTab(tabs[idx]);
+        });
+        chatTabsSync();
+    })();
+
 
     function renderConversations(filter = '') {
         updateChatTabCounts();
@@ -1314,8 +1689,10 @@
                     const vo = (c.lastMessage.metadata && c.lastMessage.metadata.view_once) ? '🔒 ' : '';
                     if (chatTab !== 'requests') lastMsg = prefix + vo + (c.lastMessage.text || mediaLabel(c.lastMessage.message_type));
                     if (mine) {
-                        readTick =
-                            `<svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--p);fill:none;stroke-width:2.4;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>`;
+                        const seen = (c.lastMessage.message_reads || []).some(r => r.user_id !== currentUserId);
+                        readTick = seen
+                            ? '<svg aria-label="Seen by a recipient" viewBox="0 0 24 24" style="width:16px;height:16px;stroke:#7c3aed;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;"><path d="M2 12.5l4.5 4.5L17 7"/><path d="M11.5 16.5l1 1L23 7"/></svg>'
+                            : '<svg aria-label="Sent" viewBox="0 0 24 24" style="width:15px;height:15px;stroke:var(--cl-muted);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;"><path d="M20 6L9 17l-5-5"/></svg>';
                     }
                 }
                 // ═══ CHANGE 2A ═══
@@ -1404,6 +1781,15 @@
     window.openMyProfile = function() { if (currentUserId && window.Router && window.Router.openProfile) window.Router.openProfile(currentUserId); };
 
     window.selectConversation = async function(convId) {
+        window.cancelVoiceRecording?.();
+        stopActivity();
+        stopTypingBroadcast();
+        activitySession++;
+        activityConnected = false;
+        activityChannelConvId = null;
+        clearAllActivity();
+        cancelReplyPreview();
+        const selection = activitySession;
         if (chatSearch.open) closeChatSearch();
         selectedConversationId = convId;
         const conv = conversations.find(c => c.id === convId);
@@ -1417,6 +1803,7 @@
                     .select('id, display_name, username, avatar_url, verified_status, is_online, last_seen_at')
                     .eq('id', selectedPartnerId)
                     .single();
+                if (selection !== activitySession || selectedConversationId !== convId) return;
                 if (error) {
                     console.error('partner profile fetch error:', error);
                 } else if (profile) {
@@ -1463,6 +1850,7 @@
         if (!conv.is_group) {
             status = await getBlockStatus(selectedPartnerId);
         }
+        if (selection !== activitySession || selectedConversationId !== convId) return;
         isBlockedConversation = status.blocked;
 
         if (isBlockedConversation) {
@@ -1478,7 +1866,9 @@
             sendBtn = document.getElementById('sendBtn');
         }
 
-        canSendMessages = await canSendInConversation(conv);
+        const allowed = await canSendInConversation(conv);
+        if (selection !== activitySession || selectedConversationId !== convId) return;
+        canSendMessages = allowed;
 
         if (!canSendMessages) {
             if (!messageInputArea.dataset.defaultHtml) {
@@ -1494,6 +1884,7 @@
         }
 
         await loadMessages(convId);
+        if (selection !== activitySession || selectedConversationId !== convId) return;
         renderPinnedBar();
         renderConversations(convSearch.value);
 
@@ -1505,7 +1896,8 @@
         const dot = byId('chatOnlineDot');
         if (!conv || conv.is_note) { if (dot) dot.classList.add('hidden'); return; }
         if (selectedConversationId !== conv.id) return;
-        if (typingUsersMap.size > 0) { chatPartnerStatus.textContent = window.fuT('Typing…'); return; }
+        const live = activityEntries();
+        if (live.length) { chatPartnerStatus.textContent = headerActivityText(live); return; }
         if (conv.is_group) {
             if (dot) dot.classList.add('hidden');
             populateGroupHeaderSubtitle(conv.id);
@@ -1531,7 +1923,7 @@
             let label = names.join(', ');
             if (extra > 0) label += ` +${extra} more`;
             if (!label) label = `${members.length} member${members.length !== 1 ? 's' : ''}`;
-            if (selectedConversationId === convId) chatPartnerStatus.textContent = label;
+            if (selectedConversationId === convId && !activityEntries().length) chatPartnerStatus.textContent = label;
         } catch (e) {
             if (selectedConversationId === convId) chatPartnerStatus.textContent = window.fuT('Group chat');
         }
@@ -1559,6 +1951,7 @@
     }
 
     async function loadMessages(convId) {
+        const session = activitySession;
         try {
             const { data, error } = await sb
                 .from('messages')
@@ -1571,15 +1964,22 @@
                 .order('created_at', { ascending: true });
 
             if (error) throw error;
+            if (convId !== selectedConversationId || session !== activitySession) return;
+            const local = [...new Map([...messages.filter(m => String(m.id).startsWith('temp-') && m.conversation_id === convId),
+                ...[...pendingUploads.values()].filter(m => m.conversation_id === convId)].map(m => [m.id, m])).values()];
             messages = (data || []).filter(m => !(m.deleted_for || []).includes(currentUserId) &&
                 (m.expires_at === null || new Date(m.expires_at) > new Date()));
+            messages.push(...local);
             await loadMyPollVotes(messages);
+            if (convId !== selectedConversationId || session !== activitySession) return;
             await loadViewOnceConsumptions(convId);
+            if (convId !== selectedConversationId || session !== activitySession) return;
             const conv = conversations.find(c => c.id === convId);
             if (conv && conv.is_group) {
                 const senderIds = [...new Set(messages.map(m => m.sender_id))];
                 await ensureGroupSenderNames(convId, senderIds);
             }
+            if (convId !== selectedConversationId || session !== activitySession) return;
             renderMessages();
             scrollToBottom();
             markVisibleMessagesRead(convId);
@@ -1775,6 +2175,64 @@
         `;
     }
 
+    function localDayKey(d) { return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+
+    function replyPreviewInfo(m) {
+        const out = { thumb: '', label: '', count: 0, video: false };
+        const text = (m.text || '').trim();
+        if (m.metadata && m.metadata.view_once) { out.label = '🔒 View once'; return out; }
+        let items = [];
+        const mi = m.metadata && m.metadata.media_items;
+        if (m.message_type === 'media' && mi && mi.length) {
+            items = mi.map(it => ({ type: it.type, thumb: it.type === 'video' ? (it.thumb || videoThumbUrl(it.url)) : it.url }));
+        } else if (m.message_type === 'image') {
+            const urls = m.media_urls && m.media_urls.length ? m.media_urls : (m.media_url ? [m.media_url] : []);
+            items = urls.map(u => ({ type: 'image', thumb: u }));
+        } else if (m.message_type === 'video' && m.media_url) {
+            items = [{ type: 'video', thumb: videoThumbUrl(m.media_url) }];
+        }
+        if (items.length) {
+            const n = items.length;
+            const allImg = items.every(i => i.type === 'image');
+            const allVid = items.every(i => i.type === 'video');
+            out.thumb = items[0].thumb; out.count = n; out.video = items[0].type === 'video';
+            out.label = text || ((allImg ? '📷 ' : allVid ? '🎬 ' : '🖼️ ') +
+                (allImg ? (n > 1 ? n + ' photos' : 'Photo') : allVid ? (n > 1 ? n + ' videos' : 'Video') : n + ' items'));
+            return out;
+        }
+        if (m.message_type === 'voice') out.label = text || '🎤 Voice message (' + formatVoiceTime(m.voice_duration || 0) + ')';
+        else if (m.message_type === 'document') out.label = text || '📄 ' + ((m.metadata && m.metadata.name) || 'Document');
+        else if (m.message_type === 'poll' && m.poll_data) {
+            try { const p = typeof m.poll_data === 'string' ? JSON.parse(m.poll_data) : m.poll_data; out.label = '📊 ' + (p.question || 'Poll'); }
+            catch (e) { out.label = '📊 Poll'; }
+        } else out.label = text;
+        return out;
+    }
+
+    function replyThumbHtml(info) {
+        if (!info.thumb) return '';
+        return '<div class="rp-thumb"><img src="' + escapeChatAttribute(info.thumb) + '" alt="" onerror="this.style.visibility=&#39;hidden&#39;">' +
+            (info.video ? '<span class="rp-play">▶</span>' : '') +
+            (info.count > 1 ? '<span class="rp-count">' + info.count + '</span>' : '') + '</div>';
+    }
+
+    function replyQuoteHtml(msg) {
+        const replied = messages.find(m => m.id === msg.reply_to);
+        if (!replied) return '<div class="reply-quote"><div class="rq-body"><div class="rq-text">Original message unavailable</div></div></div>';
+        const info = replyPreviewInfo(replied);
+        return '<div class="reply-quote" role="button" tabindex="0" aria-label="Jump to original message" data-reply-jump="' + escapeChatAttribute(replied.id) + '"><div class="rq-body">' +
+            '<div class="rq-who">' + escapeHtml(resolveMsgSenderName(replied.sender_id)) + '</div>' +
+            '<div class="rq-text">' + escapeHtml(info.label) + '</div></div>' + replyThumbHtml(info) + '</div>';
+    }
+
+    function jumpToMessage(id) {
+        const el = messagesArea.querySelector('[data-msg-id="' + CSS.escape(id) + '"]');
+        if (!el) { showToast('Original message not available', 'o'); return; }
+        el.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+        el.classList.add('flash-hit');
+        setTimeout(() => el.classList.remove('flash-hit'), 1600);
+    }
+
     function renderMessages() {
         if (!messages.length) {
             const conv = conversations.find(c => c.id === selectedConversationId);
@@ -1790,24 +2248,21 @@
         }
 
         let html = '';
-        let lastDate = null;
+        let lastDayKey = null;
+        // de-dupe by id and sort, so a realtime/insert race can never repeat a message or a separator
+        const seenIds = new Set();
+        const ordered = messages
+            .filter(m => { if (seenIds.has(m.id)) return false; seenIds.add(m.id); return true; })
+            .map((m, i) => ({ m, i, t: (window.FreeUpperTime.parseTimestamp(m.created_at) || new Date(0)).getTime() }))
+            .sort((a, b) => a.t - b.t || a.i - b.i)
+            .map(x => x.m);
 
-        messages.forEach(msg => {
+        ordered.forEach(msg => {
             const msgDate = window.FreeUpperTime.parseTimestamp(msg.created_at);
-            const dateKey = msgDate ? msgDate.toDateString() : null;
-            if (msgDate && dateKey !== lastDate) {
-                lastDate = dateKey;
-                const now = new Date();
-                const isToday = dateKey === now.toDateString();
-                const yesterday = new Date(now);
-                yesterday.setDate(now.getDate() - 1);
-                const isYesterday = dateKey === yesterday.toDateString();
-                let label;
-                if (isToday) label = 'Today';
-                else if (isYesterday) label = 'Yesterday';
-                else label = msgDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric',
-                    year: msgDate.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
-                html += `<div class="date-divider-row"><div class="date-divider">${label}</div></div>`;
+            const dayKey = msgDate ? localDayKey(msgDate) : null;
+            if (dayKey && dayKey !== lastDayKey) {
+                lastDayKey = dayKey;
+                html += `<div class="date-divider-row" data-day="${dayKey}"><div class="date-divider">${escapeHtml(dayLabel(msgDate))}</div></div>`;
             }
 
             if (msg.is_system) {
@@ -1910,40 +2365,7 @@
                 }
             }
 
-            let replyHtml = '';
-            if (msg.reply_to) {
-                const replied = messages.find(m => m.id === msg.reply_to);
-                if (replied) {
-                    const replyAuthor = resolveMsgSenderName(replied.sender_id);
-                    let replyThumb = '';
-                    let replyLabel = escapeHtml(replied.text || '');
-                    if (replied.message_type === 'image' && replied.media_url) {
-                        replyThumb =
-                            `<img src="${replied.media_url}" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;">`;
-                        replyLabel = replyLabel || '📷 Photo';
-                    } else if (replied.message_type === 'video' && replied.media_url) {
-                        replyThumb =
-                            `<img src="${videoThumbUrl(replied.media_url)}" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;">`;
-                        replyLabel = replyLabel || '🎬 Video';
-                    } else if (replied.message_type === 'media') {
-                        replyLabel = replyLabel || '🖼️ Media';
-                    } else if (replied.message_type === 'voice') {
-                        replyLabel = replyLabel || '🎤 Voice message';
-                    } else if (replied.message_type === 'document') {
-                        replyLabel = replyLabel || '📄 Document';
-                    }
-                    if (replied.metadata && replied.metadata.view_once) replyLabel = '🔒 ' + (replyLabel || 'View once');
-                    replyHtml = `
-                                <div style="display:flex;align-items:center;gap:8px;font-size:.75rem;opacity:.8;padding:4px 0 6px;border-left:2px solid var(--p);padding-left:8px;margin-bottom:4px;">
-                                    ${replyThumb}
-                                    <div style="min-width:0;overflow:hidden;">
-                                        <div style="font-weight:700;">${escapeHtml(replyAuthor)}</div>
-                                        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${replyLabel}</div>
-                                    </div>
-                                </div>
-                            `;
-                }
-            }
+            const replyHtml = msg.reply_to ? replyQuoteHtml(msg) : '';
 
             const msgLevelReactions = (msg.message_reactions || []).filter(r => r.media_index === null || r
             .media_index === undefined);
@@ -1998,6 +2420,7 @@
                             ${senderNameHtml}
                             ${replyHtml}
                             ${contentHtml}
+                            ${msg.uploading && msg.message_type === 'media' ? uploadRowHtml(msg) : ''}
                             ${reactionsHtml ? `<div class="msg-reactions-row">${reactionsHtml}</div>` : ''}
                             ${footerHtml}
                         </div>`;
@@ -2058,7 +2481,7 @@
     let voiceRAF = null;
 
     // ═══ CHANGE F: bump waveform bar count ═══
-    const VOICE_WAVE_BAR_COUNT = 44;
+    const VOICE_WAVE_BAR_COUNT = 32;
     // ═══ end CHANGE F ═══
     const voiceWaveCache = {};
 
@@ -2175,6 +2598,7 @@
     let pendingVoteRemoval = null;
 
     async function loadMyPollVotes(pollMessages) {
+        const session = activitySession;
         pollVotesByMessage.clear();
         const pollIds = (pollMessages || [])
             .filter(m => m.message_type === 'poll' && m.poll_data)
@@ -2188,6 +2612,7 @@
             console.error('Failed to load poll votes:', error);
             return;
         }
+        if (session !== activitySession) return;
         (data || []).forEach(vote => {
             pollVotesByMessage.set(vote.message_id, vote.option_index);
         });
@@ -2509,37 +2934,20 @@
 
     function renderReplyPreviewBar() {
         let bar = document.getElementById('replyPreviewBar');
+        if (!replyTargetMessage) { if (bar) bar.remove(); return; }
         if (!bar) {
             bar = document.createElement('div');
             bar.id = 'replyPreviewBar';
-            bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--bg3);border-top:1px solid var(--brd);';
+            bar.className = 'reply-bar';
             messageInputArea.parentElement.insertBefore(bar, messageInputArea);
         }
-        if (!replyTargetMessage) { bar.remove(); return; }
         const m = replyTargetMessage;
-        let thumb = '';
-        let label = escapeHtml(m.text || '');
-        if (m.message_type === 'image' && m.media_url) {
-            thumb = `<img src="${m.media_url}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;">`;
-            label = label || '📷 Photo';
-        } else if (m.message_type === 'video' && m.media_url) {
-            thumb = `<img src="${videoThumbUrl(m.media_url)}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;">`;
-            label = label || '🎬 Video';
-        } else if (m.message_type === 'media') {
-            label = label || '🖼️ Media';
-        } else if (m.message_type === 'voice') {
-            label = label || '🎤 Voice message';
-        } else if (m.message_type === 'document') {
-            label || '📄 Document';
-        }
-        bar.innerHTML = `
-                ${thumb}
-                <div style="flex:1;min-width:0;border-left:2.5px solid var(--p);padding-left:8px;">
-                    <div style="font-size:.78rem;font-weight:700;color:var(--p);">Replying to ${m.sender_id === currentUserId ? 'yourself' : 'them'}</div>
-                    <div style="font-size:.8rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
-                </div>
-                <button onclick="cancelReplyPreview()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;"><svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-            `;
+        const info = replyPreviewInfo(m);
+        bar.innerHTML =
+            '<div class="rp-body"><div class="rp-who">' + escapeHtml(resolveMsgSenderName(m.sender_id)) + '</div>' +
+            '<div class="rp-text">' + escapeHtml(info.label) + '</div></div>' +
+            replyThumbHtml(info) +
+            '<button type="button" class="rp-x" onclick="cancelReplyPreview()" aria-label="Cancel reply"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
     }
 
     window.copyMessage = function(msgId) {
@@ -2998,6 +3406,7 @@
     };
 
     window.sendMessage = async function() {
+        const convId = selectedConversationId;
         if (isBlockedConversation || !canSendMessages) return;
         const input = document.getElementById('messageInput');
         const text = input.value.trim();
@@ -3012,7 +3421,7 @@
                 if (error) throw error;
                 input.value = '';
                 input.dispatchEvent(new Event('input'));
-                await loadMessages(selectedConversationId);
+                await loadMessages(convId);
                 showToast(window.fuT('Message edited'), 'g');
             } catch (err) { showToast(window.fuT('Failed to edit message'), 'r'); }
             return;
@@ -3032,16 +3441,17 @@
 
         sendMessageToConv(text, 'text', null, replyTo).then(() => {
             sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
-                selectedConversationId);
+                convId);
             loadConversations();
         });
     };
 
     async function sendMessageToConv(text, type = 'text', mediaUrl = null, replyTo = null, pollData = null,
-        mediaUrls = null, voiceDurationSecs = null, mediaMeta = null) {
-        if (!selectedConversationId || isBlockedConversation || !canSendMessages) return;
+        mediaUrls = null, voiceDurationSecs = null, mediaMeta = null, convId = selectedConversationId) {
+        if (!convId) return;
+        if (convId === selectedConversationId && (isBlockedConversation || !canSendMessages)) return;
         const payload = {
-            conversation_id: selectedConversationId,
+            conversation_id: convId,
             sender_id: currentUserId,
             text: text || '',
             message_type: type,
@@ -3054,9 +3464,9 @@
         };
         const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
         const tempMsg = { ...payload, id: tempId, created_at: new Date().toISOString() };
-        messages.push(tempMsg);
-        renderMessages();
-        scrollToBottom();
+        if (selectedConversationId === convId) {
+            messages.push(tempMsg); renderMessages(); scrollToBottom();
+        }
 
         try {
             const { data, error } = await sb.from('messages').insert(payload).select().single();
@@ -3065,10 +3475,15 @@
                     '');
                 throw error;
             }
+            if (selectedConversationId !== convId) return;
             const idx = messages.findIndex(m => m.id === tempId);
-            if (idx !== -1) messages[idx] = data;
+            if (idx !== -1) {
+                if (messages.some(m => m.id === data.id)) messages.splice(idx, 1);
+                else messages[idx] = data;
+            }
             renderMessages();
         } catch (err) {
+            if (selectedConversationId !== convId) return;
             const idx = messages.findIndex(m => m.id === tempId);
             if (idx !== -1) messages[idx].failed = true;
             renderMessages();
@@ -3083,7 +3498,7 @@
         messages.splice(idx, 1);
         renderMessages();
         sendMessageToConv(msg.text, msg.message_type, msg.media_url, msg.reply_to, msg.poll_data, msg
-        .media_urls, msg.voice_duration, msg.metadata);
+        .media_urls, msg.voice_duration, msg.metadata, msg.conversation_id);
     };
 
     function subscribeToMessages() {
@@ -3097,6 +3512,7 @@
                 const isOpenConv = newMsg.conversation_id === selectedConversationId;
 
                 if (isOpenConv) {
+                    if (newMsg.sender_id !== currentUserId) clearActivityFor(newMsg.sender_id);
                     if (!messages.some(m => m.id === newMsg.id)) {
                         messages.push(newMsg);
                         renderMessages();
@@ -3244,68 +3660,69 @@
     // ═══ end CHANGE H ═══
 
     async function setupTypingChannel(convId) {
-        if (typingChannel) {
-            try { await sb.removeChannel(typingChannel); } catch (e) {}
-            typingChannel = null;
-        }
-        typingUsersMap.forEach((_, uid) => clearTimeout(typingExpiryTimers.get(uid)));
-        typingUsersMap.clear();
-        typingExpiryTimers.clear();
+        stopActivity();
+        stopTypingBroadcast();
+        const session = ++activitySession;
+        const old = typingChannel;
+        typingChannel = null;
+        activityChannelConvId = null;
+        activityConnected = false;
+        clearAllActivity();
         myTypingActive = false;
-        renderTypingIndicator(false);
-        const c0 = currentConv();
-        if (c0 && !c0.is_note) renderPartnerStatus(c0);
-
-        if (!convId) return;
+        activityAllowedIds = null;
+        if (old) { try { await sb.removeChannel(old); } catch (e) {} }
+        if (session !== activitySession || convId !== selectedConversationId) return;
+        const conv = conversations.find(c => c.id === convId);
+        if (!convId || !conv || conv.is_note || isBlockedConversation) return;
         try {
-            typingChannel = sb.channel(`typing:${convId}`, {
-                config: { broadcast: { self: false } }
+            if (conv.is_group) {
+                const members = await loadGroupMembers(convId);
+                if (session !== activitySession || convId !== selectedConversationId) return;
+                activityAllowedIds = new Set(members.map(m => m.user_id));
+                if (!activityAllowedIds.has(currentUserId)) return;
+            }
+            // Bind Postgres Changes to the authenticated session; no Broadcast fallback.
+            await sb.realtime.setAuth();
+            if (session !== activitySession || convId !== selectedConversationId) return;
+            // Private join gates admission; every database event ALSO checks current
+            // table RLS after joining. No Broadcast handlers or client Broadcast sends.
+            const { error: accessError } = await sb.rpc('get_chat_activity', { p_conversation_id: convId });
+            if (accessError || session !== activitySession || convId !== selectedConversationId) return;
+            const ch = sb.channel('chat-activity-db:' + convId, {
+                config: { private: true, broadcast: { self: false } }
             });
-            typingChannel.on('broadcast', { event: 'typing' }, async ({ payload }) => {
-                if (!payload || payload.userId === currentUserId) return;
-                const uid = payload.userId;
-                if (payload.isTyping) {
-                    if (!typingUsersMap.has(uid)) {
-                        const { data } = await sb.from('profiles')
-                            .select('id, display_name, username, avatar_url')
-                            .eq('id', uid).maybeSingle();
-                        typingUsersMap.set(uid, data || { id: uid, display_name: 'Member' });
-                    }
-                    clearTimeout(typingExpiryTimers.get(uid));
-                    typingExpiryTimers.set(uid, setTimeout(() => {
-                        typingUsersMap.delete(uid);
-                        typingExpiryTimers.delete(uid);
-                        renderTypingIndicator(typingUsersMap.size > 0);
-                        const c = currentConv();
-                        if (c && !c.is_note) renderPartnerStatus(c);
-                    }, 4000));
-                    renderTypingIndicator(true);
-                    const c = currentConv();
-                    if (c && !c.is_note) renderPartnerStatus(c);
-                } else {
-                    typingUsersMap.delete(uid);
-                    clearTimeout(typingExpiryTimers.get(uid));
-                    typingExpiryTimers.delete(uid);
-                    renderTypingIndicator(typingUsersMap.size > 0);
-                    const c = currentConv();
-                    if (c && !c.is_note) renderPartnerStatus(c);
+            for (const event of ['INSERT','UPDATE']) ch.on('postgres_changes', {
+                event, schema: 'public', table: 'chat_activity', filter: 'conversation_id=eq.' + convId
+            }, ({ new: row }) => receiveActivityRow(row, session));
+            typingChannel = ch;
+            activityChannelConvId = convId;
+            ch.subscribe(status => {
+                if (session !== activitySession || typingChannel !== ch) return;
+                activityConnected = status === 'SUBSCRIBED';
+                if (activityConnected) {
+                    readActivitySnapshot(convId, session).catch(() => { if (session === activitySession) clearAllActivity(); });
+                    clearInterval(activityRecheckTimer);
+                    activityRecheckTimer = setInterval(() => {
+                        readActivitySnapshot(convId, session).catch(() => { if (session === activitySession) clearAllActivity(); });
+                    }, 4000);
+                    if (myActivity) broadcastActivity(myActivity.kind, myActivity.stage, myActivity.plural, myActivity);
+                    return;
                 }
+                // A reconnect can resume a still-running operation, but a terminated room cannot.
+                if (status === 'CLOSED') stopActivity();
+                myTypingActive = false;
+                clearAllActivity();
+                if (status === 'CHANNEL_ERROR') console.warn('chat activity unavailable: check table RLS/publication');
             });
-            await typingChannel.subscribe();
         } catch (err) {
-            console.warn('typing channel setup failed:', err);
+            if (session === activitySession) { stopActivity(); activityConnected = false; clearAllActivity(); }
+            console.warn('activity channel setup failed:', err);
         }
     }
 
     function broadcastTyping(isTyping) {
-        if (!typingChannel || !currentUserId) return;
-        try {
-            typingChannel.send({
-                type: 'broadcast',
-                event: 'typing',
-                payload: { userId: currentUserId, isTyping: !!isTyping }
-            });
-        } catch (e) { /* ignore */ }
+        if (!typingChannel || !currentUserId || !activityConnected || activityChannelConvId !== selectedConversationId) return;
+        sendActivityEvent(typingChannel, 'typing', { isTyping: !!isTyping }, activityChannelConvId);
     }
 
     function startTypingBroadcast() {
@@ -3320,33 +3737,9 @@
         broadcastTyping(false);
     }
 
-    function renderTypingIndicator(isTyping) {
-        let el = document.getElementById('fuTypingIndicator');
-        const count = typingUsersMap.size;
-        if (!isTyping || count === 0) {
-            if (el) el.remove();
-            return;
-        }
-        const users = Array.from(typingUsersMap.values());
-        const avatarsHtml = users.slice(0, 3).map(u => `
-            <img src="${getAvatar(u)}" alt="" ${avatarErrAttr()}>
-        `).join('');
-        const inner = `
-            <div class="typing-avatars">${avatarsHtml}</div>
-            <div class="typing-bubble">
-                <div class="dots"><span></span><span></span><span></span></div>
-            </div>`;
-        if (!el) {
-            el = document.createElement('div');
-            el.id = 'fuTypingIndicator';
-            el.className = 'typing-indicator';
-            messagesArea.appendChild(el);
-        }
-        el.innerHTML = inner;
-        scrollToBottom();
-    }
 
-    function uploadToCloudinary(file, resourceType = 'image', onProgress) {
+
+    function uploadToCloudinary(file, resourceType = 'image', onProgress, signal) {
         return new Promise((resolve, reject) => {
             let preset = CLOUDINARY_IMAGE_PRESET;
             let type = 'image';
@@ -3369,6 +3762,11 @@
             formData.append('upload_preset', preset);
 
             const xhr = new XMLHttpRequest();
+            if (signal?.aborted) { reject(new DOMException('Upload cancelled', 'AbortError')); return; }
+            const abort = () => xhr.abort();
+            signal?.addEventListener('abort', abort, { once: true });
+            xhr.onloadend = () => signal?.removeEventListener('abort', abort);
+            xhr.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'));
             xhr.open('POST', url);
             xhr.timeout = 300000;
 
@@ -3452,48 +3850,64 @@
     }
 
     window.startVoiceRecording = async function() {
+        const convId = selectedConversationId;
+        const replyTo = replyTargetMessage?.id || null;
+        const session = activitySession;
+        if (!convId || isBlockedConversation || !canSendMessages || (mediaRecorder && mediaRecorder.state !== 'inactive')) return;
+        let operation = null;
+        let recorderTimer = null;
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (session !== activitySession || convId !== selectedConversationId) { stream.getTracks().forEach(t => t.stop()); return; }
             recordedChunks = [];
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder._cancelled = false;
+            const recorder = new MediaRecorder(stream);
+            mediaRecorder = recorder;
+            const chunks = [];
+            recorder._cancelled = false;
 
             recAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const audioContext = recAudioCtx;
             const source = recAudioCtx.createMediaStreamSource(stream);
             recAnalyser = recAudioCtx.createAnalyser();
             recAnalyser.fftSize = 512;
             source.connect(recAnalyser);
             recWaveBars = [];
 
-            mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+            recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
-            mediaRecorder.onstop = async () => {
+            recorder.onstop = async () => {
+                stopActivity(operation);
                 stream.getTracks().forEach(t => t.stop());
-                clearInterval(recordTimerInterval);
-                cancelAnimationFrame(recAnimFrame);
-                if (recAudioCtx) { recAudioCtx.close(); recAudioCtx = null; }
-                recAnalyser = null;
-                document.getElementById('voiceRecordBar').classList.remove('active');
-                document.getElementById('messageInputArea').classList.remove('recording-mode');
+                clearInterval(recorderTimer);
+                if (mediaRecorder === recorder) cancelAnimationFrame(recAnimFrame);
+                audioContext.close();
+                if (recAudioCtx === audioContext) recAudioCtx = null;
+                if (mediaRecorder === recorder) recAnalyser = null;
+                if (convId === selectedConversationId && session === activitySession) {
+                    document.getElementById('voiceRecordBar').classList.remove('active');
+                    document.getElementById('messageInputArea').classList.remove('recording-mode');
+                }
 
-                if (mediaRecorder._cancelled || recordedChunks.length === 0) { recordedChunks = []; return; }
+                if (recorder._cancelled || chunks.length === 0) return;
 
-                const blob = new Blob(recordedChunks, { type: 'audio/webm' });
-                const durationSecs = Math.floor((Date.now() - recordStartTime) / 1000);
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const durationSecs = Math.floor((Date.now() - startedAt) / 1000);
                 try {
                     showToast(window.fuT('Sending voice note…'), 'p');
                     const result = await uploadToCloudinary(blob, 'video');
-                    await sendMessageToConv('', 'voice', result.url, null, null, null, durationSecs);
+                    await sendMessageToConv('', 'voice', result.url, replyTo, null, null, durationSecs, null, convId);
                 } catch (err) {
                     showToast(window.fuT('Failed to send voice note'), 'r');
                 }
             };
 
-            mediaRecorder.start();
+            const startedAt = Date.now();
+            recorder.start();
+            operation = startActivity('recording', null, false, convId);
             recordStartTime = Date.now();
             document.getElementById('voiceRecordBar').classList.add('active');
             document.getElementById('messageInputArea').classList.add('recording-mode');
-            recordTimerInterval = setInterval(() => {
+            recorderTimer = recordTimerInterval = setInterval(() => {
                 const secs = Math.floor((Date.now() - recordStartTime) / 1000);
                 const m = Math.floor(secs / 60);
                 const s = String(secs % 60).padStart(2, '0');
@@ -3506,6 +3920,10 @@
     };
 
     window.cancelVoiceRecording = function() {
+        document.getElementById('voiceRecordBar')?.classList.remove('active');
+        document.getElementById('messageInputArea')?.classList.remove('recording-mode');
+        clearInterval(recordTimerInterval);
+        cancelAnimationFrame(recAnimFrame);
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
             mediaRecorder._cancelled = true;
             mediaRecorder.stop();
@@ -3543,6 +3961,7 @@
         pollOptionsList.appendChild(row);
     };
     window.sendPoll = function() {
+        const convId = selectedConversationId;
         const question = pollQuestion.value.trim();
         if (!question) { showToast(window.fuT('Please enter a question'), 'o'); return; }
         const inputs = pollOptionsList.querySelectorAll('.poll-opt-input');
@@ -3555,7 +3974,7 @@
         closePollModal();
         sendMessageToConv('', 'poll', null, null, pollData).then(() => {
             sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id',
-                selectedConversationId);
+                convId);
             loadConversations();
         });
     };
@@ -5596,10 +6015,17 @@
 
     // ═══ CHANGE 1c + 1d ═══
     window.closeChatView = function() {
+        window.cancelVoiceRecording?.();
         const shouldReturnToArchived = returnToArchivedAfterChat;
         returnToArchivedAfterChat = false;
 
         if (chatSearch.open) closeChatSearch();
+        stopActivity();
+        stopTypingBroadcast();
+        activitySession++;
+        activityConnected = false;
+        activityChannelConvId = null;
+        cancelReplyPreview();
         if (typingChannel) {
             try { sb.removeChannel(typingChannel); } catch (e) {}
             typingChannel = null;
@@ -5608,6 +6034,7 @@
         typingExpiryTimers.forEach(t => clearTimeout(t));
         typingExpiryTimers.clear();
         myTypingActive = false;
+        clearAllActivity();
 
         selectedConversationId = null;
         selectedPartnerId = null;
@@ -5963,7 +6390,13 @@
     window.brShare = async function() {
         try { if (navigator.share) await navigator.share({ url: brCurrentUrl }); else window.brCopy(); } catch (e) {}
     };
+    messagesArea.addEventListener('keydown', function(e) {
+        const rq = e.target.closest('[data-reply-jump]');
+        if (rq && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); jumpToMessage(rq.dataset.replyJump); }
+    });
     messagesArea.addEventListener('click', function(e) {
+        const rq = e.target.closest('[data-reply-jump]');
+        if (rq) { e.stopPropagation(); jumpToMessage(rq.dataset.replyJump); return; }
         const a = e.target.closest('a.msg-link');
         if (a) { e.preventDefault(); e.stopPropagation(); openInAppBrowser(a.dataset.url); return; }
         const lp = e.target.closest('[data-open-url]');
@@ -6298,92 +6731,125 @@
         const items = composerItems.slice();
         const convId = selectedConversationId;
         const viewOnce = composerViewOnce;
+        const replyTo = replyTargetMessage?.id || null;
         if (!convId || isBlockedConversation || !canSendMessages) return;
+        if (viewOnce && !await verifyPrivateViewOnceCapability()) {
+            showToast(window.fuT('Private view once is temporarily unavailable'), 'o');
+            return;
+        }
+        if (convId !== selectedConversationId) return;
         closeComposer();
+        cancelReplyPreview();
 
         if (items[0].kind === 'doc') {
-            await sendDocumentItem(items[0], caption);
+            await sendDocumentItem(items[0], caption, convId, replyTo);
         } else {
-            await sendMixedMediaItems(items, caption, viewOnce);
+            await sendMixedMediaItems(items, caption, viewOnce, convId, replyTo);
         }
         await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId);
         loadConversations();
     };
 
-    async function sendMixedMediaItems(items, caption, viewOnce) {
-        if (viewOnce && privateViewOnceEnabled()) return sendPrivateViewOnceItem(items, caption);
+    const pendingUploads = new Map();
+    const uploadControllers = new Map();
+    function setTempUploadProgress(id, pct, convId) {
+        const m = pendingUploads.get(id);
+        if (!m || m.conversation_id !== convId || !Number.isFinite(pct)) return;
+        m.uploadPct = Math.max(0, Math.min(100, pct));
+        if (selectedConversationId !== convId) return;
+        const el = messagesArea.querySelector('[data-msg-id="' + CSS.escape(id) + '"] .upl-pct');
+        if (el) el.textContent = m.uploadPct + '%';
+    }
+    function uploadRowHtml(msg) {
+        const label = typeof msg.uploadPct === 'number' ? msg.uploadPct + '%' : msg.metadata?.private_asset ? 'Sending…' : 'Preparing…';
+        return '<div class="upl-row" aria-busy="true"><span class="upl-ring"></span><span class="upl-pct">' + label + '</span></div>';
+    }
+    window.cancelMediaUpload = function(id) { uploadControllers.get(id)?.abort(); };
+
+    async function sendMixedMediaItems(items, caption, viewOnce, convId = selectedConversationId,
+        replyTo = replyTargetMessage?.id || null) {
+        if (!convId || !items.length) return;
+        if (viewOnce) {
+            if (!privateViewOnceEnabled()) {
+                showToast(window.fuT('Private view once is temporarily unavailable'), 'o');
+                return;
+            }
+            return sendPrivateViewOnceItem(items, caption, convId, replyTo);
+        }
         const tempItems = items.map(item => ({ url: item.url, type: item.kind }));
         const tempMeta = { media_items: tempItems };
-        if (viewOnce) tempMeta.view_once = true;
+
         const tempId = pushTemp({
-            message_type: 'media',
-            media_url: tempItems[0].url,
-            media_urls: tempItems.map(item => item.url),
-            metadata: tempMeta,
-            text: caption
+            conversation_id: convId, reply_to: replyTo,
+            message_type: 'media', media_url: tempItems[0].url,
+            media_urls: tempItems.map(item => item.url), metadata: tempMeta, text: caption
         });
+        const controller = new AbortController();
+        uploadControllers.set(tempId, controller);
+        const hasVideo = items.some(i => i.kind === 'video');
+        const hasImage = items.some(i => i.kind === 'image');
+        const operation = startActivity(hasVideo && hasImage ? 'media' : hasVideo ? 'video' : 'photo', 'preparing', items.length > 1, convId);
+        const sizes = items.map(i => i.file.size || 1);
+        const totalSize = sizes.reduce((a, b) => a + b, 0);
+        const pcts = items.map(() => 0);
+        const progressFor = idx => pct => {
+            if (controller.signal.aborted) return;
+            pcts[idx] = pct;
+            setActivityStage('uploading', operation);
+            setTempUploadProgress(tempId, Math.round(pcts.reduce((sum, v, k) => sum + v * sizes[k], 0) / totalSize), convId);
+        };
         try {
-            const uploaded = await Promise.all(items.map(async item => {
-                // Keep the historical view-once Cloudinary path for existing users
-                // until the private backend is verified and explicitly enabled.
-                const uploadKind = viewOnce
-                    ? (item.kind === 'video' ? 'viewonce_video' : 'viewonce_image')
-                    : (item.kind === 'video' ? 'video' : 'image');
-                const result = await uploadToCloudinary(item.file, uploadKind);
+            const uploaded = await Promise.all(items.map(async (item, idx) => {
+                const uploadKind = item.kind === 'video' ? 'video' : 'image';
+                const result = await uploadToCloudinary(item.file, uploadKind, progressFor(idx), controller.signal);
                 return {
-                    url: result.url,
-                    type: item.kind,
+                    url: result.url, type: item.kind,
                     thumb: item.kind === 'video' ? videoThumbUrl(result.url) : result.url,
-                    name: item.file.name || '',
-                    size: item.file.size || 0
+                    name: item.file.name || '', size: item.file.size || 0
                 };
             }));
+            if (controller.signal.aborted) return;
             dropTemp(tempId);
-            renderMessages();
             const urls = uploaded.map(item => item.url);
             const finalMeta = { media_items: uploaded };
-            if (viewOnce) finalMeta.view_once = true;
-            await sendMessageToConv(
-                caption,
-                'media',
-                urls[0],
-                null,
-                null,
-                urls,
-                null,
-                finalMeta
-            );
+
+            await sendMessageToConv(caption, 'media', urls[0], replyTo, null, urls, null, finalMeta, convId);
         } catch (err) {
+            controller.abort(); // abort sibling XHRs; their progress cannot revive the indicator
             dropTemp(tempId);
-            renderMessages();
-            showToast('Media upload failed: ' + err.message, 'r');
+            if (err.name !== 'AbortError') showToast('Media upload failed: ' + err.message, 'r');
+        } finally {
+            uploadControllers.delete(tempId);
+            stopActivity(operation);
+            if (selectedConversationId === convId) renderMessages();
         }
     }
 
-    async function sendPrivateViewOnceItem(items, caption) {
-        if (!privateViewOnceEnabled() || items.length !== 1 ||
+    async function sendPrivateViewOnceItem(items, caption, convId = selectedConversationId, replyTo = null) {
+        if (!await verifyPrivateViewOnceCapability() || items.length !== 1 ||
             !['image', 'video'].includes(items[0]?.kind)) {
             showToast(window.fuT('Only one private photo or video is allowed'), 'o');
             return;
         }
-        const convId = selectedConversationId;
-        const conv = currentConv();
+        const conv = conversations.find(c => c.id === convId);
         if (!conv || conv.is_group || conv.is_note) {
             showToast(window.fuT('Private view once is currently available in direct chats only'), 'o');
             return;
         }
         const item = items[0];
         const tempId = pushTemp({
-            text: caption, message_type: 'media', media_url: null, media_urls: null,
+            conversation_id: convId, reply_to: replyTo, text: caption, message_type: 'media', media_url: null, media_urls: null,
             metadata: { view_once: true, private_asset: true,
                 media_items: [{ type: item.kind }] }
         });
+        const operation = startActivity(item.kind === 'video' ? 'video' : 'photo', 'uploading', false, convId);
         try {
             // No database message exists before the server uploads the file.
             // The Edge Function publishes message + private asset in one transaction.
             const form = new FormData();
             form.append('conversation_id', convId);
             form.append('caption', caption);
+            if (replyTo) form.append('reply_to', replyTo);
             form.append('file', item.file);
             const { data, error } = await sb.functions.invoke('chat-private-upload', { body: form });
             if (error || data?.status !== 'published' || !data.message_id) {
@@ -6395,6 +6861,7 @@
             if (selectedConversationId === convId) {
                 const { data: stored, error: readError } = await sb.from('messages')
                     .select('*').eq('id', data.message_id).maybeSingle();
+                if (selectedConversationId !== convId) return;
                 if (!readError && stored) {
                     const i = messages.findIndex(m => m.id === stored.id);
                     if (i !== -1) messages[i] = stored;
@@ -6404,24 +6871,27 @@
             }
         } catch (err) {
             dropTemp(tempId);
-            renderMessages();
+            if (selectedConversationId === convId) renderMessages();
             console.warn('Private view-once send failed', err);
-            showToast(window.fuT('Private media could not be sent'), 'r');
-        }
+            showToast(err.message || window.fuT('Private media could not be sent'), 'r');
+        } finally { stopActivity(operation); }
     }
 
     function pushTemp(extra) {
         const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-        messages.push(Object.assign({
-            id: tempId, sender_id: currentUserId, created_at: new Date().toISOString(),
+        const msg = Object.assign({
+            id: tempId, conversation_id: selectedConversationId, sender_id: currentUserId, created_at: new Date().toISOString(),
             uploading: true, message_reactions: [], message_reads: [], reply_to: null, poll_data: null
-        }, extra));
-        renderMessages(); scrollToBottom();
+        }, extra);
+        pendingUploads.set(tempId, msg);
+        if (selectedConversationId === msg.conversation_id) {
+            messages.push(msg); renderMessages(); scrollToBottom();
+        }
         return tempId;
     }
-    function dropTemp(id) { messages = messages.filter(m => m.id !== id); }
+    function dropTemp(id) { pendingUploads.delete(id); messages = messages.filter(m => m.id !== id); }
 
-    async function sendImageGroup(imgs, caption) {
+    async function sendImageGroup(imgs, caption, convId = selectedConversationId, replyTo = replyTargetMessage?.id || null) {
         const tempId = pushTemp({
             message_type: 'image', media_url: imgs[0].url, text: caption,
             media_urls: imgs.length > 1 ? imgs.map(i => i.url) : null
@@ -6430,34 +6900,34 @@
             const results = await Promise.all(imgs.map(i => uploadToCloudinary(i.file, 'image')));
             const urls = results.map(r => r.url);
             dropTemp(tempId);
-            await sendMessageToConv(caption, 'image', urls[0], null, null, urls.length > 1 ? urls : null);
+            await sendMessageToConv(caption, 'image', urls[0], replyTo, null, urls.length > 1 ? urls : null, null, null, convId);
         } catch (err) {
-            dropTemp(tempId); renderMessages();
+            dropTemp(tempId); if (selectedConversationId === convId) renderMessages();
             showToast('Upload failed: ' + err.message, 'r');
         }
     }
-    async function sendVideoItem(v, caption) {
+    async function sendVideoItem(v, caption, convId = selectedConversationId, replyTo = replyTargetMessage?.id || null) {
         const tempId = pushTemp({ message_type: 'video', media_url: v.url, text: caption });
         try {
             const r = await uploadToCloudinary(v.file, 'video');
             dropTemp(tempId);
-            await sendMessageToConv(caption, 'video', r.url);
+            await sendMessageToConv(caption, 'video', r.url, replyTo, null, null, null, null, convId);
         } catch (err) {
-            dropTemp(tempId); renderMessages();
+            dropTemp(tempId); if (selectedConversationId === convId) renderMessages();
             showToast('Upload failed: ' + err.message, 'r');
         }
     }
-    async function sendDocumentItem(it, caption) {
+    async function sendDocumentItem(it, caption, convId = selectedConversationId, replyTo = replyTargetMessage?.id || null) {
         const tempId = pushTemp({ message_type: 'document', media_url: it.url, metadata: it.meta, text: caption });
         try {
             const up = await uploadToCloudinary(it.file, 'raw');
             let thumb = null;
             if (it.thumbBlob) { try { thumb = (await uploadToCloudinary(it.thumbBlob, 'image')).url; } catch (e) {} }
             dropTemp(tempId);
-            await sendMessageToConv(caption, 'document', up.url, null, null, null, null,
-                Object.assign({}, it.meta, thumb ? { thumb } : {}));
+            await sendMessageToConv(caption, 'document', up.url, replyTo, null, null, null,
+                Object.assign({}, it.meta, thumb ? { thumb } : {}), convId);
         } catch (err) {
-            dropTemp(tempId); renderMessages();
+            dropTemp(tempId); if (selectedConversationId === convId) renderMessages();
             showToast('Document upload failed: ' + err.message, 'r');
         }
     }
@@ -6740,6 +7210,9 @@
         window.addEventListener('pagehide', () => {
             sb.from('profiles').update({ is_online: false, last_seen_at: new Date().toISOString() }).eq('id', currentUserId);
             stopTypingBroadcast();
+            stopActivity();
+            clearAllActivity();
+            uploadControllers.forEach(controller => controller.abort());
         });
 
         setupFreeUpperNotifications();

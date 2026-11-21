@@ -1,7 +1,7 @@
 importScripts('/js/freeupper-routes.js?v=clean-urls-v1');
 
 // Bump this version when precached app assets change so installed PWAs refresh.
-const CACHE_NAME = 'freeupper-pwa-v36-gallery-navigation';
+const CACHE_NAME = 'freeupper-pwa-v38-chat-security';
 const CACHE_PREFIX = 'freeupper-pwa-';
 
 const URLS_TO_CACHE = [
@@ -29,7 +29,7 @@ const URLS_TO_CACHE = [
   './chat.html',
   './notification.html',
   './js/freeupper-routes.js?v=clean-urls-v1',
-  './chat.js?v=clean-urls-v1',
+  './chat.js?v=chat-security-v4',
   './ui-sounds.js?v=4',
   './auth.js?v=interaction-sounds-v4',
   './settings.js?v=interaction-sounds-v4',

@@ -193,7 +193,7 @@ test('the existing chat INSERT callback passes incoming and own messages through
   const handler = chat.slice(chat.indexOf('    function subscribeToMessages() {'), chat.indexOf('    async function notifyIncomingMessage'));
   Object.assign(f.sandbox, { sb: f.sandbox.window.sb, messageSubscription: null, currentUserId: 'alice',
     selectedConversationId: 'c1', messages: [], renderMessages() {}, scrollToBottom() {}, markVisibleMessagesRead() {},
-    loadConversations() {}, notifyIncomingMessage() {} });
+    loadConversations() {}, notifyIncomingMessage() {}, clearActivityFor() {} });
   vm.runInContext(handler + '\nsubscribeToMessages();', f.sandbox);
   assert.equal(f.channels.length, 1);
   const insert = f.channels[0].callbacks[0].cb;
@@ -311,7 +311,7 @@ test('coupled sound consumers bypass pre-upgrade PWA cache entries', () => {
   })) {
     const html = readFileSync(page, 'utf8');
     for (const file of files) assert.ok(
-      html.includes(file + '?v=interaction-sounds-v4') || html.includes(file + '?v=sounds-v3') || html.includes(file + '?v=clean-urls-v1') || (page === 'chat.html' && file === 'chat.js' && /(?:src=["'])\/?chat\.js\?v=(?:chat-ui-polish-20261110|chat-ui-scroll-v2|chat-poll-media-v3)(?:["'])/.test(html)),
+      html.includes(file + '?v=interaction-sounds-v4') || html.includes(file + '?v=sounds-v3') || html.includes(file + '?v=clean-urls-v1') || (page === 'chat.html' && file === 'chat.js' && /(?:src=["'])\/?chat\.js\?v=(?:chat-ui-polish-20261110|chat-ui-scroll-v2|chat-poll-media-v3|chat-security-v4)(?:["'])/.test(html)),
       page + ': ' + file
     );
   }

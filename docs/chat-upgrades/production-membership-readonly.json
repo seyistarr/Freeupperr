@@ -1,0 +1,84 @@
+{
+  "project": "jmjtqidirpmnegzvmiaq",
+  "method": "SELECT-only schema catalog",
+  "functions": [
+    {
+      "proname": "join_group_via_code",
+      "definition": "CREATE OR REPLACE FUNCTION public.join_group_via_code(p_invite_code text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\r\ndeclare\r\n  v_conv_id uuid;\r\n  v_requires_approval boolean;\r\n  v_already_member boolean;\r\nbegin\r\n  select id, (permissions->>'approve_new_members')::boolean\r\n    into v_conv_id, v_requires_approval\r\n  from public.conversations\r\n  where invite_code = p_invite_code and invite_enabled = true;\r\n\r\n  if v_conv_id is null then\r\n    raise exception 'Invalid or expired invite link';\r\n  end if;\r\n\r\n  select exists(\r\n    select 1 from public.conversation_members\r\n    where conversation_id = v_conv_id and user_id = auth.uid()\r\n  ) into v_already_member;\r\n\r\n  if v_already_member then\r\n    return jsonb_build_object('status', 'already_member', 'conversation_id', v_conv_id);\r\n  end if;\r\n\r\n  if v_requires_approval then\r\n    insert into public.group_join_requests (conversation_id, user_id)\r\n    values (v_conv_id, auth.uid())\r\n    on conflict (conversation_id, user_id) do update set status = 'pending', created_at = now();\r\n    return jsonb_build_object('status', 'pending_approval', 'conversation_id', v_conv_id);\r\n  else\r\n    insert into public.conversation_members (conversation_id, user_id, role)\r\n    values (v_conv_id, auth.uid(), 'member');\r\n    return jsonb_build_object('status', 'joined', 'conversation_id', v_conv_id);\r\n  end if;\r\nend;\r\n$function$\n",
+      "proacl": "{=X/postgres,postgres=X/postgres,authenticated=X/postgres}",
+      "proconfig": null
+    },
+    {
+      "proname": "resolve_join_request",
+      "definition": "CREATE OR REPLACE FUNCTION public.resolve_join_request(p_request_id uuid, p_approve boolean)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\r\ndeclare\r\n  v_conv_id uuid;\r\n  v_target_user uuid;\r\n  v_caller_role text;\r\nbegin\r\n  select conversation_id, user_id into v_conv_id, v_target_user\r\n  from public.group_join_requests where id = p_request_id;\r\n\r\n  select role into v_caller_role from public.conversation_members\r\n  where conversation_id = v_conv_id and user_id = auth.uid();\r\n\r\n  if v_caller_role not in ('owner', 'admin') then\r\n    raise exception 'Only admins can approve join requests';\r\n  end if;\r\n\r\n  if p_approve then\r\n    insert into public.conversation_members (conversation_id, user_id, role)\r\n    values (v_conv_id, v_target_user, 'member')\r\n    on conflict do nothing;\r\n    update public.group_join_requests set status = 'approved' where id = p_request_id;\r\n  else\r\n    update public.group_join_requests set status = 'rejected' where id = p_request_id;\r\n  end if;\r\nend;\r\n$function$\n",
+      "proacl": "{=X/postgres,postgres=X/postgres,authenticated=X/postgres}",
+      "proconfig": null
+    }
+  ],
+  "join_requests": {
+    "columns": [
+      {
+        "data_type": "uuid",
+        "column_name": "id",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "data_type": "uuid",
+        "column_name": "conversation_id",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "data_type": "uuid",
+        "column_name": "user_id",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "data_type": "text",
+        "column_name": "status",
+        "is_nullable": "YES",
+        "column_default": "'pending'::text"
+      },
+      {
+        "data_type": "timestamp with time zone",
+        "column_name": "created_at",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "qual": "((EXISTS ( SELECT 1\n   FROM conversation_members cm\n  WHERE ((cm.conversation_id = group_join_requests.conversation_id) AND (cm.user_id = auth.uid())))) OR (user_id = auth.uid()))",
+        "roles": [
+          "public"
+        ],
+        "tablename": "group_join_requests",
+        "permissive": "PERMISSIVE",
+        "policyname": "members can view join requests",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "public"
+        ],
+        "tablename": "group_join_requests",
+        "permissive": "PERMISSIVE",
+        "policyname": "users can request to join",
+        "schemaname": "public",
+        "with_check": "(user_id = auth.uid())"
+      }
+    ],
+    "constraints": [
+      "FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE",
+      "UNIQUE (conversation_id, user_id)",
+      "PRIMARY KEY (id)",
+      "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+    ]
+  }
+}

@@ -68,6 +68,8 @@ function fixture() {
     return query;
   } };
   const ctx = {
+    activitySession: 0, activityConnected: false, activityChannelConvId: null,
+    stopActivity() {}, stopTypingBroadcast() {}, clearAllActivity() {}, cancelReplyPreview() {},
     currentUserId: 'a', conversations: [], selectedConversationId: null, selectedPartnerId: null,
     chatSearch: { open: false }, isBlockedConversation: false, canSendMessages: true,
     currentUserProfile: profiles[0], DEFAULT_AVATAR: 'avatar', DEFAULT_GROUP_AVATAR: 'group-avatar',
