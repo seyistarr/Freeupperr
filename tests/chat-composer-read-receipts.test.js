@@ -21,3 +21,8 @@ test('read acknowledgement drains messages that arrive during an in-flight upser
   assert.match(source, /onConflict: 'message_id,user_id'/);
   assert.match(source, /await loadConversations\(\)/);
 });
+
+test('read worker schedules another pass if unread messages remain after releasing lock', () => {
+  assert.match(source, /if \(markReadInFlight\.get\(convId\) === task\)[\s\S]*?markReadInFlight\.delete\(convId\)[\s\S]*?const hasUnread = stillSelected && messages\.some/);
+  assert.match(source, /if \(hasUnread\)[\s\S]*?markVisibleMessagesRead\(convId\)/);
+});
