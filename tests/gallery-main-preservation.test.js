@@ -20,7 +20,7 @@ test('cache manifest preserves unrelated main pins and uses the reviewed chat ca
  const source=await readFile('service-worker.js','utf8');
  const urls=s=>Array.from(s.matchAll(/  '(\.\/[^']+)'/g),m=>m[1]);for(const url of approved.cacheUrls)assert(urls(source).includes(approved.chatUpgrade.cacheReplacements[url] || url),url);
  assert(!urls(source).includes('./chat.js?v=clean-urls-v1'));
- assert((await readFile('chat.html','utf8')).includes('chat.js?v=chat-security-v4'));
+ assert((await readFile('chat.html','utf8')).includes('chat.js?v=global-verification-badge-v1'));
  assert(source.includes(approved.chatUpgrade.cacheName));
  for(const file of ['posts.js?v=notes-gallery-v1','foryou.js?v=author-header-v3-notes-gallery','post-card.js','inline-video.js','video-player.js','video-player.css','gallery-viewer.html'])assert(source.includes(file));
 });
