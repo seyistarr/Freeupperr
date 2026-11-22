@@ -2106,7 +2106,27 @@
             } catch (error) {
                 console.warn('Mark messages read failed:', error);
             } finally {
-                if (markReadInFlight.get(convId) === task) markReadInFlight.delete(convId);
+                if (markReadInFlight.get(convId) === task) {
+                    markReadInFlight.delete(convId);
+                    // A realtime message can arrive after the drain loop observes
+                    // an empty queue but while loadConversations()/badge sync awaits.
+                    // Its caller will have joined this task, so schedule a fresh
+                    // worker after releasing the lock if unread rows remain.
+                    const stillSelected = session === activitySession &&
+                        convId === selectedConversationId && userId === currentUserId;
+                    const hasUnread = stillSelected && messages.some(m =>
+                        m.conversation_id === convId && m.sender_id !== userId &&
+                        !String(m.id).startsWith('temp-') &&
+                        !(m.message_reads || []).some(read => read.user_id === userId));
+                    if (hasUnread) {
+                        queueMicrotask(() => {
+                            if (session === activitySession && convId === selectedConversationId &&
+                                userId === currentUserId && !markReadInFlight.has(convId)) {
+                                markVisibleMessagesRead(convId);
+                            }
+                        });
+                    }
+                }
             }
         });
         markReadInFlight.set(convId, task);
