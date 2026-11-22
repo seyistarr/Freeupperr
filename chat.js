@@ -427,6 +427,15 @@
     const messagesArea = document.getElementById('messagesArea');
     let messageInput = document.getElementById('messageInput');
     let sendBtn = document.getElementById('sendBtn');
+    function refreshComposerElements() {
+        // Composer HTML is replaced when blocked states are entered/exited. Never
+        // retain references to detached controls after those replacements.
+        const input = document.getElementById('messageInput');
+        const button = document.getElementById('sendBtn');
+        if (input) messageInput = input;
+        if (button) sendBtn = button;
+        return { input: input || null, button: button || null };
+    }
     const chatPartnerName = document.getElementById('chatPartnerName');
     const chatPartnerAvatar = document.getElementById('chatPartnerAvatar');
     const chatPartnerStatus = document.getElementById('chatPartnerStatus');
@@ -1859,9 +1868,8 @@
             const saved = messageInputArea.dataset.defaultHtml;
             if (saved) messageInputArea.innerHTML = saved;
             messageInputArea.classList.remove('blocked-input');
-            messageInput = document.getElementById('messageInput');
-            sendBtn = document.getElementById('sendBtn');
         }
+        refreshComposerElements();
 
         const allowed = await canSendInConversation(conv);
         if (selection !== activitySession || selectedConversationId !== convId) return;
@@ -1991,19 +1999,13 @@
         if (!currentUserId || !sb) return result;
 
         try {
+            // This authenticated wrapper derives the user from auth.uid(). The
+            // UUID-argument overload is intentionally not called from the client:
+            // it is service-role-only and must never accept a caller-selected user.
             const { data: messageCount, error: messageError } =
-                await sb.rpc('get_unread_message_count', { p_user_id: currentUserId });
-            if (!messageError) {
-                result.unreadMessages = Math.max(0, Math.floor(Number(messageCount) || 0));
-            } else {
-                const { data: fallback, error: fallbackError } =
-                    await sb.rpc('get_my_unread_message_count');
-                if (!fallbackError) {
-                    result.unreadMessages = Math.max(0, Math.floor(Number(fallback) || 0));
-                } else {
-                    console.warn('Unread message RPC failed:', messageError, fallbackError);
-                }
-            }
+                await sb.rpc('get_my_unread_message_count');
+            if (messageError) throw messageError;
+            result.unreadMessages = Math.max(0, Math.floor(Number(messageCount) || 0));
         } catch (e) {
             console.warn('Unread message count failed:', e);
         }
@@ -2049,43 +2051,84 @@
     let markReadInFlight = new Map();
     async function markVisibleMessagesRead(convId) {
         if (!currentUserId || !sb || convId !== selectedConversationId) return;
-        // Serialize repeated calls for this conversation and snapshot the exact messages
-        // being acknowledged so a late response cannot mutate a newly selected chat.
+        // One worker per conversation. It drains unread batches until no new
+        // messages arrived while the previous acknowledgement was in flight.
         if (markReadInFlight.has(convId)) return markReadInFlight.get(convId);
         const session = activitySession, userId = currentUserId;
-        const unread = messages.filter(m => m.conversation_id === convId &&
-            m.sender_id !== userId && !String(m.id).startsWith('temp-') &&
-            !(m.message_reads || []).some(r => r.user_id === userId));
-        if (!unread.length) { await syncFreeUpperUnreadBadge(); return; }
-        const task = (async () => {
+        const task = Promise.resolve().then(async () => {
             try {
-                const now = new Date().toISOString();
-                const rows = unread.map(m => ({ message_id: m.id, user_id: userId, read_at: now }));
-                const { error } = await sb.from('message_reads').upsert(rows, { onConflict: 'message_id,user_id' });
-                if (error) { console.warn('Mark messages read failed:', error); return; }
-                if (session !== activitySession || convId !== selectedConversationId || userId !== currentUserId) return;
-                const readIds = new Set(unread.map(m => m.id));
-                messages.forEach(m => {
-                    if (readIds.has(m.id)) m.message_reads = [
-                        ...(m.message_reads || []).filter(r => r.user_id !== userId),
-                        { user_id: userId, read_at: now }
-                    ];
-                });
-                const conv = conversations.find(c => c.id === convId);
-                if (conv) {
-                    conv.unreadCount = Math.max(0, (conv.unreadCount || 0) - readIds.size);
-                    (conv.messages || []).forEach(m => {
+                let acknowledgedAny = false;
+                while (session === activitySession && convId === selectedConversationId &&
+                    userId === currentUserId) {
+                    const unread = messages.filter(m => m.conversation_id === convId &&
+                        m.sender_id !== userId && !String(m.id).startsWith('temp-') &&
+                        !(m.message_reads || []).some(r => r.user_id === userId));
+                    if (!unread.length) break;
+
+                    const now = new Date().toISOString();
+                    const rows = unread.map(m => ({ message_id: m.id, user_id: userId, read_at: now }));
+                    const { error } = await sb.from('message_reads').upsert(rows, {
+                        onConflict: 'message_id,user_id'
+                    });
+                    if (error) {
+                        console.warn('Mark messages read failed:', error);
+                        break;
+                    }
+                    acknowledgedAny = true;
+                    if (session !== activitySession || convId !== selectedConversationId ||
+                        userId !== currentUserId) break;
+
+                    const readIds = new Set(unread.map(m => m.id));
+                    const applyRead = m => {
                         if (readIds.has(m.id)) m.message_reads = [
                             ...(m.message_reads || []).filter(r => r.user_id !== userId),
                             { user_id: userId, read_at: now }
                         ];
-                    });
+                    };
+                    messages.forEach(applyRead);
+                    const conv = conversations.find(c => c.id === convId);
+                    if (conv) {
+                        conv.unreadCount = Math.max(0, (conv.unreadCount || 0) - readIds.size);
+                        (conv.messages || []).forEach(applyRead);
+                    }
+                    // Loop re-reads the current message array after each network
+                    // response, so inserts received during an in-flight upsert
+                    // are acknowledged before this worker exits.
                 }
-                renderConversations(convSearch.value);
-                await syncFreeUpperUnreadBadge();
-            } catch (error) { console.warn('Mark messages read failed:', error); }
-            finally { markReadInFlight.delete(convId); }
-        })();
+                if (session === activitySession && convId === selectedConversationId &&
+                    userId === currentUserId) {
+                    if (acknowledgedAny) {
+                        renderConversations(convSearch.value);
+                        await loadConversations();
+                    }
+                    await syncFreeUpperUnreadBadge();
+                }
+            } catch (error) {
+                console.warn('Mark messages read failed:', error);
+            } finally {
+                if (markReadInFlight.get(convId) === task) {
+                    markReadInFlight.delete(convId);
+                    // A realtime message can arrive after the drain loop observes
+                    // an empty queue but while loadConversations()/badge sync awaits.
+                    // Its caller will have joined this task, so schedule a fresh
+                    // worker after releasing the lock if unread rows remain.
+                    const stillSelected = session === activitySession &&
+                        convId === selectedConversationId && userId === currentUserId;
+                    const hasUnread = stillSelected && messages.some(m =>
+                        m.conversation_id === convId && m.sender_id !== userId &&
+                        !String(m.id).startsWith('temp-') &&
+                        !(m.message_reads || []).some(read => read.user_id === userId));
+                    if (hasUnread) {
+                        queueMicrotask(() => {
+                            if (session === activitySession && convId === selectedConversationId &&
+                                userId === currentUserId && !markReadInFlight.has(convId)) {
+                                markVisibleMessagesRead(convId);
+                            }
+                        });
+                    }
+                }
+            }
+        });
         markReadInFlight.set(convId, task);
         return task;
     }
@@ -6050,11 +6093,12 @@
             messageInputArea.classList.remove('blocked-input');
             messageInputArea.innerHTML = messageInputArea.dataset.defaultHtml;
         }
-        const inp = document.getElementById('messageInput');
-        if (inp) inp.disabled = true;
-        const btn = document.getElementById('sendBtn');
-        if (btn) { btn.disabled = true;
-            btn.classList.remove('visible'); }
+        const composer = refreshComposerElements();
+        if (composer.input) composer.input.disabled = true;
+        if (composer.button) {
+            composer.button.disabled = true;
+            composer.button.classList.remove('visible');
+        }
         document.getElementById('conversationsSidebar').classList.remove('hidden');
         renderConversations(convSearch.value);
         applyChatBackground(null);
