@@ -12,7 +12,7 @@ function section(start, end) {
   return source.slice(a, b);
 }
 const functions = [
-  section('    function refreshComposerElements()', '    const chatPartnerName ='),
+  section('    const messagesArea =', '    const chatPartnerName ='),
   section('    function getDisplayName(', '    function mediaLabel('),
   section('    async function loadConversations()', '    // Review-branch tab navigation:'),
   section('    window.selectConversation =', '    function renderPartnerStatus('),
