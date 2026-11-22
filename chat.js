@@ -1855,8 +1855,10 @@
         }
 
         if (messageInputArea.classList.contains('blocked-input')) {
+            // Restore from the original composer snapshot and refresh all cached references.
+            const saved = messageInputArea.dataset.defaultHtml;
+            if (saved) messageInputArea.innerHTML = saved;
             messageInputArea.classList.remove('blocked-input');
-            messageInputArea.innerHTML = messageInputArea.dataset.defaultHtml || messageInputArea.innerHTML;
             messageInput = document.getElementById('messageInput');
             sendBtn = document.getElementById('sendBtn');
         }
@@ -2044,50 +2046,48 @@
         await updateFreeUpperAppBadge();
     }
 
+    let markReadInFlight = new Map();
     async function markVisibleMessagesRead(convId) {
-        if (!currentUserId) return;
-        const unread = messages.filter(
-            m => m.sender_id !== currentUserId &&
-                !(m.message_reads || []).some(r => r.user_id === currentUserId)
-        );
+        if (!currentUserId || !sb || convId !== selectedConversationId) return;
+        // Serialize repeated calls for this conversation and snapshot the exact messages
+        // being acknowledged so a late response cannot mutate a newly selected chat.
+        if (markReadInFlight.has(convId)) return markReadInFlight.get(convId);
+        const session = activitySession, userId = currentUserId;
+        const unread = messages.filter(m => m.conversation_id === convId &&
+            m.sender_id !== userId && !String(m.id).startsWith('temp-') &&
+            !(m.message_reads || []).some(r => r.user_id === userId));
         if (!unread.length) { await syncFreeUpperUnreadBadge(); return; }
-        try {
-            const now = new Date().toISOString();
-            const rows = unread.map(m => ({ message_id: m.id, user_id: currentUserId, read_at: now }));
-            const { error } = await sb.from('message_reads').upsert(rows, { onConflict: 'message_id,user_id' });
-            if (error) { console.warn('Mark messages read failed:', error); return; }
-
-            // ═══ CHANGE 2e ═══
-            const readIds = new Set(unread.map(m => m.id));
-            messages.forEach(m => {
-                if (readIds.has(m.id)) {
-                    m.message_reads = [
-                        ...(m.message_reads || []).filter(r => r.user_id !== currentUserId),
-                        { user_id: currentUserId, read_at: now }
+        const task = (async () => {
+            try {
+                const now = new Date().toISOString();
+                const rows = unread.map(m => ({ message_id: m.id, user_id: userId, read_at: now }));
+                const { error } = await sb.from('message_reads').upsert(rows, { onConflict: 'message_id,user_id' });
+                if (error) { console.warn('Mark messages read failed:', error); return; }
+                if (session !== activitySession || convId !== selectedConversationId || userId !== currentUserId) return;
+                const readIds = new Set(unread.map(m => m.id));
+                messages.forEach(m => {
+                    if (readIds.has(m.id)) m.message_reads = [
+                        ...(m.message_reads || []).filter(r => r.user_id !== userId),
+                        { user_id: userId, read_at: now }
                     ];
-                }
-            });
-            const conv = conversations.find(c => c.id === convId);
-            if (conv) {
-                conv.unreadCount = Math.max(
-                    0,
-                    (conv.unreadCount || 0) - unread.length
-                );
-                (conv.messages || []).forEach(m => {
-                    if (readIds.has(m.id)) {
-                        m.message_reads = [
-                            ...(m.message_reads || []).filter(
-                                r => r.user_id !== currentUserId
-                            ),
-                            { user_id: currentUserId, read_at: now }
-                        ];
-                    }
                 });
-            }
-            renderConversations(convSearch.value);
-            // ═══ end CHANGE 2e ═══
-        } catch (error) { console.warn('Mark messages read failed:', error); return; }
-        await syncFreeUpperUnreadBadge();
+                const conv = conversations.find(c => c.id === convId);
+                if (conv) {
+                    conv.unreadCount = Math.max(0, (conv.unreadCount || 0) - readIds.size);
+                    (conv.messages || []).forEach(m => {
+                        if (readIds.has(m.id)) m.message_reads = [
+                            ...(m.message_reads || []).filter(r => r.user_id !== userId),
+                            { user_id: userId, read_at: now }
+                        ];
+                    });
+                }
+                renderConversations(convSearch.value);
+                await syncFreeUpperUnreadBadge();
+            } catch (error) { console.warn('Mark messages read failed:', error); }
+            finally { markReadInFlight.delete(convId); }
+        })();
+        markReadInFlight.set(convId, task);
+        return task;
     }
 
     function renderLinkPreview(preview, isSent) {
