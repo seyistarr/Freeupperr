@@ -12,6 +12,7 @@ function section(start, end) {
   return source.slice(a, b);
 }
 const functions = [
+  section('    function refreshComposerElements()', '    const chatPartnerName ='),
   section('    function getDisplayName(', '    function mediaLabel('),
   section('    async function loadConversations()', '    // Review-branch tab navigation:'),
   section('    window.selectConversation =', '    function renderPartnerStatus('),
@@ -98,6 +99,8 @@ function fixture() {
   };
   for (const name of ['chatPartnerName', 'chatPartnerAvatar', 'chatPartnerStatus', 'messagesArea',
     'messageInputArea', 'messageInput', 'sendBtn', 'convSearch']) ctx[name] = node(name);
+  // The extracted production helper closes over these composer references in chat.js.
+  // Expose equivalent fixture bindings so its real implementation can be exercised.
   ctx.window = ctx;
   vm.createContext(ctx);
   vm.runInContext(functions, ctx);
@@ -174,9 +177,9 @@ test('chat search result rows render current names/handles and navigate by UUID'
   const custom = f.ctx.userRowHtml(f.tables.profiles[1], false);
   assert.match(initial, /FreeUpper User/);
   assert.match(initial, /@fu111111111111/);
-  assert.match(initial, /startConversationWith\('b'\)/);
+  assert.match(initial, /startConversationWith\\('b'\\)/);
   assert.match(custom, /Custom Public Name/);
   assert.match(custom, /@custom_handle/);
-  assert.match(custom, /startConversationWith\('c'\)/);
+  assert.match(custom, /startConversationWith\\('c'\\)/);
   assert.doesNotMatch(initial + custom, /@[^< ]+@/);
 });
